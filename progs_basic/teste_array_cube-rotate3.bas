@@ -1,0 +1,69 @@
+100 TEXT
+105 W = 140 : H = 90 : SL = 50
+110 TH = 0 : IX=0
+120 SCR = 0
+125 GOSUB 1000
+130 GOSUB 5400
+135 GOSUB 7000
+140 GOSUB 5100
+150 GOSUB 5100
+155 TH = TH + 0.05 : IX = IX + 1
+160 REM IF IX < 3 THEN GOTO 130
+170 END
+
+1000 DIM PT(8,3)
+1005 DIM RZ(8,3)
+1006 DIM RY(8,3)
+1007 DIM RX(8,3)
+1020 PT(0,0) = -1 : PT(0,1) = -1 : PT(0,2) = -1
+1030 PT(1,0) =  1 : PT(1,1) = -1 : PT(1,2) = -1
+1040 PT(2,0) =  1 : PT(2,1) =  1 : PT(2,2) = -1
+1050 PT(3,0) = -1 : PT(3,1) =  1 : PT(3,2) = -1
+1060 PT(4,0) = -1 : PT(4,1) = -1 : PT(4,2) =  1
+1070 PT(5,0) =  1 : PT(5,1) = -1 : PT(5,2) =  1
+1080 PT(6,0) =  1 : PT(6,1) =  1 : PT(6,2) =  1
+1090 PT(7,0) = -1 : PT(7,1) =  1 : PT(7,2) =  1
+1100 RETURN
+
+
+5100 REM DRAW SQUARE
+5120 A = 0 : B = 1 : GOSUB 6000
+5130 A = 1 : B = 2 : GOSUB 6000
+5140 A = 2 : B = 3 : GOSUB 6000
+5150 A = 3 : B = 0 : GOSUB 6000
+5160 A = 4 : B = 5 : GOSUB 6000
+5170 A = 5 : B = 6 : GOSUB 6000
+5180 A = 6 : B = 7 : GOSUB 6000
+5190 A = 7 : B = 4 : GOSUB 6000
+5200 A = 0 : B = 4 : GOSUB 6000
+5210 A = 1 : B = 5 : GOSUB 6000
+5220 A = 2 : B = 6 : GOSUB 6000
+5230 A = 3 : B = 7 : GOSUB 6000
+5240 RETURN
+
+5400 REM SWAP SCREENS
+5410 REM SCR = NOT SCR
+5420 REM POKE 49236+(NOT SCR),0 : REM SHOW OTHER PAGE
+5430 REM POKE 230,32*(SCR+1) : REM SWITCH TO THIS PAGE
+5440 REM CALL 62450
+5470 RETURN
+
+6000 X1 = SL * RX(A,0) + W : Y1 = SL * RX(A,1) + H
+6010 X2 = SL * RX(B,0) + W : Y2 = SL * RX(B,1) + H
+6020 PRINT X1;" ";X2;" ";Y1;" ";Y2
+6030 PRINT RX(A,0);" ";RX(A,1);" ";RX(B,0);" ";RX(B,1)
+6030 RETURN
+
+7000 CS = COS(TH) : SN = SIN(TH)
+7005 FOR I = 0 TO 8
+7010 RZ(I,0) =  CS * PT(I,0) - SN * PT(I,1) +  0 * PT(I,2)
+7020 RZ(I,1) =  SN * PT(I,0) + CS * PT(I,1) +  0 * PT(I,2)
+7030 RZ(I,2) =   0 * PT(I,0) +  0 * PT(I,1) +  1 * PT(I,2)
+7040 RY(I,0) =  CS * RZ(I,0) +  0 * RZ(I,1) + SN * RZ(I,2)
+7050 RY(I,1) =   0 * RZ(I,0) +  1 * RZ(I,1) +  0 * RZ(I,2)
+7060 RY(I,2) = -SN * RZ(I,0) +  0 * RZ(I,1) + CS * RZ(I,2)
+7070 RX(I,0) =   1 * RY(I,0) +  0 * RY(I,1) +  0 * RY(I,2)
+7080 RX(I,1) =   0 * RY(I,0) + CS * RY(I,1) + SN * RY(I,2)
+7090 RX(I,2) =   0 * RY(I,0) + SN * RY(I,1) + CS * RY(I,2)
+7100 NEXT I
+7200 RETURN

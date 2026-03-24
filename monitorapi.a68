@@ -1,0 +1,45 @@
+;            org     $00810000           ; Endere�o Inicial do Programa
+;            move.l    A7,($00FFEF00)
+;            lea       $00FFDFFE,A7
+           section     code
+
+;        xref __allocp
+;        xref _videoFontes
+
+start:
+             lea (PC),A5
+             move.l A5,D0
+             SUB.l #2,D0
+             move.l D0,A5
+             bra _main
+
+__exit:                                ; exit() functions
+_exit:
+           lea         __stack,A7      ; reset stack
+           trap        #15
+           dc.w        0               ; IDE68K system call 0 -> EXIT (no return)
+           jsr         _main           ; when re-started after exit() call
+
+           section     const
+           align
+const      equ         *               ; constant data & string data
+
+           section     data
+           align
+data       equ         *               ; initialized data
+           xdef      __heap
+__heap:
+           dc.l      heap              ; begin of free memory
+
+           section     bss
+           align
+           org         $610000
+bss        equ         *               ; un-initialized data
+           ds.w        512             ; stack for main() function
+__stack    equ         *
+__ungetbuf:
+           ds.l        1               ; ungetbuffer for stdio functions
+           section     heap
+           align
+           org         $8F0000
+heap       equ         *               ; start of free memory

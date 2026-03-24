@@ -1,0 +1,79 @@
+            org     $00800000           ; Endere�o Inicial do Programa
+;            move.l    A7,($00FFEF00)
+;            lea       $00FFDFFE,A7
+           section     code
+
+        xref __allocp
+        xref _videoFontes
+
+start:
+             or.w  #$0700,SR          ; disable interruptions
+             move.l  #_spritePointer,D1 ; colocar endereco da variavel que vai ser de ponteiro para a posicao do sprite apos a compilacao
+             move.l  D1,_mousePointer
+             move.l  #_spriteHourGlass,D1 ; colocar endereco da variavel que vai ser de ampulheta para a posicao do sprite apos a compilacao
+             move.l  D1,_mouseHourGlass
+             move.l  #_iconesMenu,D1 ; colocar endereco da variavel que vai ser de de opções do menu
+             move.l  D1,_iconesMenuSys
+             clr.l __allocp
+             bra _main
+
+mmsjos_func_table:
+            dc.l _fsGetDirAtuData
+            dc.l _fsSetClusterDir
+            dc.l _fsGetClusterDir
+            dc.l _fsSectorWrite
+            dc.l _fsSectorRead
+            dc.l _fsFindDirPath
+            dc.l _fsOsCommand
+            dc.l _fsCreateFile
+            dc.l _fsOpenFile
+            dc.l _fsCloseFile
+            dc.l _fsInfoFile
+            dc.l _fsFree
+            dc.l _fsReadFile
+            dc.l _fsWriteFile
+            dc.l _fsDelFile
+            dc.l _fsRenameFile
+            dc.l _loadFile
+            dc.l _fsMakeDir
+            dc.l _fsChangeDir
+            dc.l _fsRemoveDir
+            dc.l _OSTimeDlyHMSM
+            dc.l _fsFindInDir
+            dc.l _fsMalloc
+            dc.l _fsFindNextCluster
+            dc.l _fsFindClusterFree
+
+__exit:                                ; exit() functions
+_exit:
+           lea         __stack,A7      ; reset stack
+           trap        #15
+           dc.w        0               ; IDE68K system call 0 -> EXIT (no return)
+           jsr         _main           ; when re-started after exit() call
+
+_uCOSII_TICK:
+           dc.l _OSTickISR
+
+           section     const
+           align
+const      equ         *               ; constant data & string data
+
+           section     data
+           align
+data       equ         *               ; initialized data
+           xdef      __heap
+__heap:
+           dc.l      heap              ; begin of free memory
+
+           section     bss
+           align
+           org         $602000
+bss        equ         *               ; un-initialized data
+           ds.w        512             ; stack for main() function
+__stack    equ         *
+__ungetbuf:
+           ds.l        1               ; ungetbuffer for stdio functions
+           section     heap
+           align
+           org         $818000
+heap       equ         *               ; start of free memory

@@ -1,0 +1,15 @@
+{
+    "C_Cpp.errorSquiggles": "disabled",
+    "files.associations": {
+        "*.a68": "vasmmot",
+        "mmsj320api.h": "c",
+        "monitor.h": "c",
+        "mmsj320mfp.h": "c",
+        "malloc.h": "c",
+        "mmsj320vdp.h": "c",
+        "ctype.h": "c",
+        "string.h": "c",
+        "stdlib.h": "c",
+        "files.h": "c"
+    }
+}

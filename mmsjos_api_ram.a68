@@ -1,0 +1,12 @@
+_ltoa:
+            jmp 0x0080000C
+_itoa:
+            jmp 0x00800012
+_strcpy:
+            jmp 0x00800018
+_strcat:
+            jmp 0x0080001E
+_toupper:
+            jmp 0x00800012
+_memset:
+            jmp 0x00800018
