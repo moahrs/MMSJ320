@@ -84,6 +84,7 @@ void main(void)
     *firstLineNumber = 0;
     *addrFirstLineNumber = 0;
     *traceOn = 0;
+    *debugOn = 0;
     *lastHgrX = 0;
     *lastHgrY = 0;
     //vdpcolor = vdp_get_color();
@@ -547,6 +548,14 @@ void processLine(void)
             else if (!strcmp(linhacomando,"NOTRACE") && iy == 7)
             {
                 *traceOn = 0;
+            }
+            else if (!strcmp(linhacomando,"DEBUG") && iy == 5)
+            {
+                *debugOn = 1;
+            }
+            else if (!strcmp(linhacomando,"NODEBUG") && iy == 7)
+            {
+                *debugOn = 0;
             }
             // *************************************************
             // ESSE COMANDO NAO VAI EXISTIR QUANDO FOR PRA BIOS
@@ -2099,6 +2108,44 @@ int basXBasLoad(void)
 
 #ifndef __TESTE_TOKENIZE__
 //-----------------------------------------------------------------------------
+// Calcula o endereco do valor dentro da area de dados de uma variavel array.
+// Retorna 0 em caso de erro de limite e ajusta vErroProc.
+//-----------------------------------------------------------------------------
+static unsigned char* getArrayValuePointer(unsigned char ixDim, unsigned char* vLista, unsigned char* vDim, unsigned char vTamValue)
+{
+    int ix;
+    int iw;
+    unsigned char ixDimAnt;
+    unsigned char* vPosValueVar;
+    unsigned short iDim;
+    unsigned long vOffSet;
+
+    iw = (ixDim - 1);
+    ixDimAnt = 1;
+    vPosValueVar = 0;
+
+    for (ix = ((ixDim - 1) * 2 ); ix >= 0; ix -= 2)
+    {
+        iDim = ((vLista[ix + 8] << 8) | vLista[ix + 9]);
+
+        if (vDim[iw] > iDim)
+        {
+            *vErroProc = 21;
+            return 0;
+        }
+
+        vPosValueVar = vPosValueVar + ((vDim[iw] - 1 ) * ixDimAnt * vTamValue);
+        ixDimAnt = ixDimAnt * iDim;
+        iw--;
+    }
+
+    vOffSet = vLista;
+    vPosValueVar = vPosValueVar + (vOffSet + 8 + (ixDim * 2));
+
+    return vPosValueVar;
+}
+
+//-----------------------------------------------------------------------------
 // Retornos: -1 - Erro, 0 - Nao Existe, 1 - eh um valor numeral
 //           [endereco > 1] - Endereco da variavel
 //
@@ -2109,28 +2156,20 @@ long findVariable(unsigned char* pVariable)
 {
     unsigned char* vLista = pStartSimpVar;
     unsigned char* vTemp = pStartSimpVar;
-    unsigned char* vListaAtu;
-    long vEnder = 0, vVal = 0, vVal1 = 0, vVal2 = 0, vVal3 = 0, vVal4 = 0;
-    int ix = 0, iy = 0, iz = 0, iw = 0;
-    unsigned char sqtdtam[10];
+    long vEnder = 0;
+    int ix = 0, iy = 0, iz = 0;
     unsigned char vDim[88];
     unsigned int vTempDim = 0;
     unsigned long vOffSet;
-    unsigned char ixDim = 0, ixDimAnt = 0;
+    unsigned char ixDim = 0;
     unsigned char vArray = 0;
     unsigned long vPosNextVar = 0;
     unsigned char* vPosValueVar = 0;
     unsigned char vTamValue = 4;
     unsigned char *vTempPointer;
-    unsigned short iDim = 0;
-    unsigned int xxxttt;
+    unsigned char sqtdtam[20];
 
     // Verifica se eh array (tem parenteses logo depois do nome da variavel)
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0-[");
-writeLongSerial(pVariable);
-writeLongSerial("]\r\n");
-#endif
 
     vTempPointer = *pointerRunProg;
     if (*vTempPointer == 0x28)
@@ -2151,156 +2190,48 @@ writeLongSerial("]\r\n");
 
         do
         {
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.1-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
             nextToken();
             if (*vErroProc) return 0;
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.2-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
+
             if (*token_type == QUOTE) { // is string, error
                 *vErroProc = 16;
                 return 0;
             }
             else { // is expression
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.3-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
+
                 putback();
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.4-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
 
                 getExp(&vTempDim);
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.5-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
+
                 if (*vErroProc) return 0;
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.6-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-xxxttt = &vDim[0];
-itoa(xxxttt,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
+
                 if (*value_type == '$')
                 {
                     *vErroProc = 16;
                     return 0;
                 }
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.1-[");
-itoa(vTempDim,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-xxxttt = &vDim[0];
-itoa(xxxttt,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
 
                 if (*value_type == '#')
                 {
                     vTempDim = fppInt(vTempDim);
                     *value_type = '%';
                 }
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.7-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-xxxttt = &vDim[0];
-itoa(xxxttt,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
 
                 vDim[ixDim] = vTempDim + 1;
 
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.2-[");
-itoa(vTempDim,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(ixDim,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vDim[ixDim],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
                 ixDim++;
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.8-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
             }
 
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.9-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
             if (*token == ',')
             {
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.A-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
                 *pointerRunProg = *pointerRunProg + 1;
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.B-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
+
                 vTempPointer = *pointerRunProg;
             }
             else
                 break;
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.C-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
+
         } while(1);
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.0.0.D-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
 
         // Deve ter pelo menos 1 elemento
         if (ixDim < 1)
@@ -2328,62 +2259,14 @@ writeLongSerial("]\r\n");
 
     while(1)
     {
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.1-[");
-itoa(*(vLista + 3),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(*(vLista + 4),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(*(vLista + 5),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(*(vLista + 6),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
         vPosNextVar  = (((unsigned long)*(vLista + 3) << 24) & 0xFF000000);
         vPosNextVar |= (((unsigned long)*(vLista + 4) << 16) & 0x00FF0000);
         vPosNextVar |= (((unsigned long)*(vLista + 5) << 8) & 0x0000FF00);
         vPosNextVar |= ((unsigned long)*(vLista + 6) & 0x000000FF);
         *value_type = *vLista;
 
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.2-[");
-itoa(vLista,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vPosNextVar,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pVariable[0],sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pVariable[1],sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
         if (*(vLista + 1) == pVariable[0] && *(vLista + 2) ==  pVariable[1])
         {
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.3-[");
-itoa(*(vLista + 1),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(*(vLista + 2),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(ixDim,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vDim[0],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vDim[1],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
             // Pega endereco da variavel pra delvover
             if (vArray)
             {
@@ -2397,73 +2280,10 @@ writeLongSerial("]\r\n");
                     return 0;
                 }
 
-                // Verifica se as posicoes informadas sao iguais ou menores que as da variavel, e ja calcula a nova posicao
-                iw = (ixDim - 1);
-                iz = ((ixDim - 1) * 2 );
-                for (ix = iz; ix >= 0; ix -= 2)
-                {
-                    // Verifica tamanho posicao
-                    iDim = ((vLista[ix + 8] << 8) | vLista[ix + 9]);
+                vPosValueVar = getArrayValuePointer(ixDim, vLista, vDim, vTamValue);
+                if (*vErroProc)
+                    return 0;
 
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.4-[");
-itoa(ix,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vLista,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vLista[ix + 8],sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vLista[ix + 9],sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vDim[iw],sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(iDim,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(iw,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
-                    if (vDim[iw] > iDim)
-                    {
-                        *vErroProc = 21;
-                        return 0;
-                    }
-
-                    // Calcular a posicao do conteudo da variavel
-                    if (ix == iz)
-                    {
-                        ixDimAnt = iDim;
-                        vPosValueVar = (vDim[iw] - 1 ) * vTamValue;
-                    }
-                    else
-                    {
-                        vPosValueVar = vPosValueVar + ((vDim[iw] - 1 ) * ixDimAnt * vTamValue);
-                        ixDimAnt = ixDimAnt * iDim;
-                    }
-
-                    iw--;
-                }
-
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.5-[");
-itoa(vLista,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa((ixDim * 2),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vPosValueVar,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
-                vOffSet = vLista;
-                vPosValueVar = vPosValueVar + (vOffSet + 8 + (ixDim * 2));
                 vEnder = vPosValueVar;
             }
             else
@@ -2472,50 +2292,77 @@ writeLongSerial("]\r\n");
                 vEnder = vLista;
             }
 
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.6-[");
-itoa(vLista,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa((ixDim * 2),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vPosValueVar,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
             // Pelo tipo da variavel, ja retorna na variavel de nome o conteudo da variavel
             if (*vLista == '$')
             {
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.0-[");
+writeSerial(*vLista);
+writeLongSerial("]-[");
+itoa(vPosValueVar,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");                
+}
                 vOffSet  = (((unsigned long)*(vPosValueVar + 1) << 24) & 0xFF000000);
                 vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
                 vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
                 vOffSet |= ((unsigned long)*(vPosValueVar + 4) & 0x000000FF);
                 vTemp = vOffSet;
 
-#ifdef __DEBUG_ARRAYS__
-writeLongSerial("Aqui 444.666.7-[");
-itoa(vTemp,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa((ixDim * 2),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vPosValueVar,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-#endif
-
                 iy = *vPosValueVar;
                 iz = 0;
 
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.1-[");
+itoa(vTemp,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+}
                 for (ix = 0; ix < iy; ix++)
                 {
+if (*debugOn)
+{
+itoa(ix,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(iz,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*(vTemp + ix),sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+}
                     pVariable[iz++] = *(vTemp + ix); // Numero gerado
                     pVariable[iz] = 0x00;
                 }
+if (*debugOn)
+{
+writeLongSerial("]\r\n");               
+}
 
                 pVariable[iz++] = 0x00;
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.2-[");
+itoa(vOffSet,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pVariable[0],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pVariable[1],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pVariable[2],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pVariable[3],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");               
+}
             }
             else
             {

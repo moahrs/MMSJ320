@@ -83,6 +83,7 @@ unsigned long *changedPointer       = 0x008FEE42; // Se ouve mudanca de endereç
 unsigned char *token                = 0x008FED6E; // 
 unsigned char *varName              = 0x008FEC6E; // ja esta ok
 unsigned char *traceOn              = 0x008FEC66; // Mostra numero linhas durante execucao, para debug
+unsigned char *debugOn              = 0x008FEC64; // Mostra debug, para debug
 unsigned long *gosubStack           = 0x008FE966; // ja esta ok stack for gosub/return
 unsigned long *vDataFirst           = 0x008FE962; // 
 unsigned long *vDataLineAtu         = 0x008FE95E; // 

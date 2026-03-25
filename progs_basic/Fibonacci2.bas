@@ -1,0 +1,16 @@
+10  REM FIBONACCI SPIRAL
+20  HGR : HCOLOR= 3 : REM HIGH-RES, WHITE
+30  SC% = 3 : REM SC% FACTOR
+40  X% = 140:Y% = 90 : REM CENTER
+50  A% = 1:B% = 1 : REM FIBONACCI START
+60  FOR I% = 1 TO 8
+70  F% = A% + B% : REM NEXT FIBONACCI
+80  REM DRAW SQUARE
+90  HPLOT X%,Y% TO (X% + (B% * SC%)),Y%
+100 HPLOT (X% + (B% * SC%)),Y% TO (X% + (B% * SC%)),(Y% + (B% * SC%))
+110 HPLOT (X% + (B% * SC%)),(Y% + (B% * SC%)) TO X%,(Y% + (B% * SC%))
+120 HPLOT X%,(Y% + (B% * SC%)) TO X%,Y%
+130 REM PREPARE FOR NEXT
+140 A% = B%:B% = F%
+150 NEXT I%
+160 TEXT :HOME:PRINT "DONE"
