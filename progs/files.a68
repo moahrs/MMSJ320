@@ -1,0 +1,70 @@
+            section code
+            align
+
+            xdef _MMSJOS_RELOC_HEADER
+            xdef _MMSJOS_FUNC_RELOC
+            xref _linhastatusDef
+            xref _SearchFileDef
+            xref _carregaDirDef
+            xref _listaDirDef
+            xref _strcpy
+            xref _strcat
+            xref _memset
+            xref _toupper
+            xref _itoa
+            xref _ltoa
+            xref _vRetAlloc
+
+MMSJOS_RELOC_HEADER:
+_MMSJOS_RELOC_HEADER:
+            dc.l 11
+
+MMSJOS_FUNC_RELOC:
+_MMSJOS_FUNC_RELOC:
+            dc.l _linhastatusDef
+            dc.l _SearchFileDef
+            dc.l _carregaDirDef
+            dc.l _listaDirDef
+            dc.l _strcpy
+            dc.l _strcat
+            dc.l _memset
+            dc.l _toupper
+            dc.l _itoa
+            dc.l _ltoa
+            dc.l _vRetAlloc
+
+            align
+
+                xdef _filesInitReloc
+                xref _linhastatus
+                xref _SearchFile
+                xref _carregaDir
+                xref _listaDir
+                xref _mystrcpy
+                xref _mystrcat
+                xref _mymemset
+                xref _mytoupper
+                xref _myitoa
+                xref _myltoa
+                xref _myvRetAlloc
+
+    _filesInitReloc:
+                lea _MMSJOS_FUNC_RELOC,A0
+                move.l 0(A0),A1
+                sub.l  A5,A1
+                move.l A1,_linhastatusDef
+                move.l 4(A0),A1
+                sub.l  A5,A1
+                move.l A1,_SearchFileDef
+                move.l 8(A0),A1
+                sub.l  A5,A1
+                move.l A1,_carregaDirDef
+                move.l 12(A0),_listaDirDef
+                move.l 16(A0),_strcpy
+                move.l 20(A0),_strcat
+                move.l 24(A0),_memset
+                move.l 28(A0),_toupper
+                move.l 32(A0),_itoa
+                move.l 36(A0),_ltoa
+                move.l 40(A0),_vRetAlloc
+                rts

@@ -72,7 +72,7 @@
 6135 NEXT I%
 6140 RETURN
 7000 CS = COS(TH) : SN = SIN(TH)
-7005 FOR I = 0 TO 8
+7005 FOR I% = 0 TO 8
 7010 RZ(I%,0) =  (CS * PT%(I%,0)) - (SN * PT%(I%,1))
 7020 RZ(I%,1) =  (SN * PT%(I%,0)) + (CS * PT%(I%,1))
 7030 RZ(I%,2) =  (1 * PT%(I%,2))
@@ -82,5 +82,5 @@
 7070 RX(I%,0) =   1 * RY(I%,0)
 7080 RX(I%,1) =   (CS * RY(I%,1)) + (SN * RY(I%,2))
 7090 RX(I%,2) =   (SN * RY(I%,1)) + (CS * RY(I%,2))
-7100 NEXT I
+7100 NEXT I%
 7200 RETURN

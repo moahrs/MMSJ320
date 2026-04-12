@@ -17,35 +17,6 @@ start:
              clr.l __allocp
              bra _main
 
-; Reserva da antiga tabela de funcoes (25 entradas x 4 bytes = 100 bytes)
-; Mantem o layout do codigo estavel para nao deslocar ISR/vetores fixos.
-            dcb.w 50,$4E71
-
-__exit:                                ; exit() functions
-_exit:
-           lea         __stack,A7      ; reset stack
-           trap        #15
-           dc.w        0               ; IDE68K system call 0 -> EXIT (no return)
-           jsr         _main           ; when re-started after exit() call
-
-_uCOSII_TICK:
-           dc.l _OSTickISR
-
-           section     const
-           align
-const      equ         *               ; constant data & string data
-
-           section     data
-           align
-data       equ         *               ; initialized data
-           xdef      __heap
-__heap:
-           dc.l      heap              ; begin of free memory
-
-           section     mjsapi
-           align
-           org         $00817F00
-           xdef      mmsjos_func_table
 mmsjos_func_table:
             dc.l _fsGetDirAtuData
             dc.l _fsSetClusterDir
@@ -72,8 +43,29 @@ mmsjos_func_table:
             dc.l _fsMalloc
             dc.l _fsFindNextCluster
             dc.l _fsFindClusterFree
-            dc.l _fsSetMfp
-            dc.l _fsGetMfp
+;            dc.l _fsSetMfp
+;            dc.l _fsGetMfp
+
+__exit:                                ; exit() functions
+_exit:
+           lea         __stack,A7      ; reset stack
+           trap        #15
+           dc.w        0               ; IDE68K system call 0 -> EXIT (no return)
+           jsr         _main           ; when re-started after exit() call
+
+_uCOSII_TICK:
+           dc.l _OSTickISR
+
+           section     const
+           align
+const      equ         *               ; constant data & string data
+
+           section     data
+           align
+data       equ         *               ; initialized data
+           xdef      __heap
+__heap:
+           dc.l      heap              ; begin of free memory
 
            section     bss
            align
@@ -85,5 +77,5 @@ __ungetbuf:
            ds.l        1               ; ungetbuffer for stdio functions
            section     heap
            align
-           org         $820000
+           org         $818000
 heap       equ         *               ; start of free memory

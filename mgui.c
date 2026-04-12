@@ -393,6 +393,7 @@ void RestoreScreen(MGUI_SAVESCR pEnderSave) {
 
     saverPat = pEnderSave.pat;
     saverCor = pEnderSave.cor;
+
     xi = pEnderSave.xi;
     xf = pEnderSave.xf;
     yi = pEnderSave.yi;
@@ -1924,6 +1925,8 @@ void menuTask(void *pData)
                                 runFromMGUI(vEndExec);
                             else
                                 message("Loading Error...\0", BTCLOSE, 0);
+
+                            free(vEndExec);
                         }
                         else
                             message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);

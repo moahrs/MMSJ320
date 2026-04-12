@@ -1,6 +1,8 @@
 #ifndef   MMSJ_OS_H
 #define   MMSJ_OS_H
 
+#define __SO_ST_MFP__ 1
+
 /*typedef void                    VOID;
 typedef char                    CHAR;
 typedef unsigned char           BYTE;                           // 8-bit unsigned
@@ -300,6 +302,11 @@ extern void strncpy2( char* _dst, const char* _src, int _n );
 extern int isValidFilename(char *filename) ;
 extern unsigned char matches_wildcard(const char *pattern, const char *filename);
 extern unsigned char contains_wildcards(const char *pattern);
+
+#ifdef __SO_ST_MFP__
+extern void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char TypeSet = 1);
+extern unsigned int fsGetMfp(unsigned int Config);
+#endif
 
 // Funcoes de Alocacao de Memoria
 extern void memInit(void);

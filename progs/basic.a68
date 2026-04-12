@@ -1,0 +1,28 @@
+            section code
+            align
+
+            xdef _MMSJOS_RELOC_HEADER
+            xdef _MMSJOS_FUNC_RELOC
+            xref _clearScrW
+            xref _basText
+
+MMSJOS_RELOC_HEADER:
+_MMSJOS_RELOC_HEADER:
+            dc.l 2
+
+MMSJOS_FUNC_RELOC:
+_MMSJOS_FUNC_RELOC:
+            dc.l _clearScrW
+            dc.l _basText
+
+            align
+
+                xdef _filesInitReloc
+                xref _clearScrWPtr
+                xref _basTextPtr
+
+    _filesInitReloc:
+                lea _MMSJOS_FUNC_RELOC,A0
+                move.l 0(A0),_clearScrW
+;                move.l 4(A0),_SearchFile
+                rts

@@ -1,23 +1,11 @@
 /********************************************************************************
 *    Programa    : basic.c
-*    Objetivo    : MMSJ-Basic para o MMSJ320
-*    Criado em   : 10/10/2022
+*    Objetivo    : MMSJ-xBasic para o MMSJ320 like MSX
+*    Criado em   : 26/03/2026
 *    Programador : Moacir Jr.
 *--------------------------------------------------------------------------------
 * Data        Versao  Responsavel  Motivo
-* 10/10/2022  0.1     Moacir Jr.   Criacao Versao Beta
-* 26/06/2023  0.4     Moacir Jr.   Simplificacoes e ajustres
-* 27/06/2023  0.4a    Moacir Jr.   Adaptar processos de for-next e if-then-else
-* 01/07/2023  0.4b    Moacir Jr.   Ajuste de Bugs
-* 03/07/2023  0.5     Moacir Jr.   Colocar Logica Ponto Flutuante
-* 10/07/2023  0.5a    Moacir Jr.   Colocar Funcoes Graficas
-* 11/07/2023  0.5b    Moacir Jr.   Colocar DATA-READ
-* 20/07/2023  1.0     Moacir Jr.   Versao para publicacao
-* 21/07/2023  1.0a    Moacir Jr.   Ajustes de memoria e bugs
-* 23/07/2023  1.0b    Moacir Jr.   Ajustes bugs no for...next e if...then
-* 24/07/2023  1.0c    Moacir Jr.   Retirada "BYE" message. Ajustes de bugs no gosub...return
-* 25/07/2023  1.0d    Moacir Jr.   Ajuste no basInputGet, quando Get, mandar 1 pro inputLine e sem manipulacoa cursor
-* 20/01/2024  1.0e    Moacir Jr.   Colocar para iniciar direto no Basic
+* 26/03/2026  0.1     Moacir Jr.   Conversão Basico Apple2 para MSX
 *--------------------------------------------------------------------------------
 * Variables Simples: start at 00800000
 *   --------------------------------------------------------
@@ -46,12 +34,21 @@
 #include <stdlib.h>
 #include "../mmsj320api.h"
 #include "../mmsj320vdp.h"
-#include "../mmsj320mfp.h"
 #include "../monitor.h"
+#include "../mmsjos.h"
+#include "../mgui.h"
 #include "../monitorapi.h"
+#include "../mmsjosapi.h"
 #include "basic.h"
 
-#define versionBasic "1.0e"
+/*
+ * In relocatable modules loaded via malloc, do not use Reg_* extern symbols
+ * from mmsj320mfp.h. Pass literal MFP register offsets to OS API wrappers.
+ */
+#define MFP_REG_TACR 0x19
+#define MFP_REG_TADR 0x1F
+
+#define versionBasic "0.1"
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
@@ -63,20 +60,62 @@ void main(void)
     unsigned char vRetInput;
     VDP_COLOR vdpcolor;
     unsigned char countTec = 0;
+    unsigned int mgui_pattern_table2 = 0;
+    unsigned int mgui_color_table2 = 0;
+    unsigned char vbufInput[256];
+    unsigned char sqtdtam[20];
+    unsigned long ix;
 
     // Timer para o Random
-    *(vmfp + Reg_TADR) = 0xF5;  // 245
-    *(vmfp + Reg_TACR) = 0x02;  // prescaler de 10. total 2,4576Mhz/10*245 = 1003KHz
+    fsSetMfp(MFP_REG_TADR, 0xF5, 1);  // 245
+    fsSetMfp(MFP_REG_TACR, 0x02, 1);  // prescaler de 10. total 2,4576Mhz/10*245 = 1003KHz
 
+    printText("Aqui 0 :-)\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
+
+    clearScrWPtr = MMSJOS_FUNC_RELOC[FILES_RELOC_CLRSCRW_DEF];
+    basTextPtr = MMSJOS_FUNC_RELOC[FILES_RELOC_BASTEXT_DEF];
+
+    basTextPtr();
+
+    printText("Aqui 1 :-)\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
+    
+    vdp_get_cfg(&mgui_pattern_table2, &mgui_color_table2);
+
+    printText("Aqui 2 :-)\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
+    
+    mgui_pattern_table = mgui_pattern_table2;
+    printText("Aqui 3 :-)\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
+    
+    mgui_color_table = mgui_color_table2;
+
+    printText("Aqui 4 :-)\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
+    
     clearScr();
 
-    printText("MMSJ-BASIC v"versionBasic);
-    printText("\r\n\0");
+    printText("MMSJ-xBASIC v"versionBasic"\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
 
-    printText("Utility (c) 2022-2026\r\n\0");
+    printText("Utility (c) 2026\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
 
     printText("OK\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
 
+    pStartSimpVar = fsMalloc(8192);
+    pStartArrayVar = fsMalloc(24576);
+    pStartString = fsMalloc(32768);
+    pStartProg = fsMalloc(65536);
+    pStartXBasLoad = fsMalloc(65536);
+    pStartStack = fsMalloc(8192);
+
+    printText("Aqui 5 :-)\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
+    
     vbufInput[0] = '\0';
     *pProcess = 0x01;
     *pTypeLine = 0x00;
@@ -96,15 +135,18 @@ void main(void)
     vdpMaxCols = 39;
     vdpMaxRows = 23;
 
+    printText("Aqui 6 :-)\r\n\0");
+    for(ix=0; ix < 100000; ix++); // Delay pra dar tempo de ler o timer
+    
     while (*pProcess)
     {
-        vRetInput = inputLineBasic(128,'$');
+        vRetInput = inputLineBasic(&vbufInput, 128,'$');
 
         if (vbufInput[0] != 0x00 && (vRetInput == 0x0D || vRetInput == 0x0A))
         {
             printText("\r\n\0");
 
-            processLine();
+            processLine(&vbufInput);
 
             if (!*pTypeLine && *pProcess)
                 printText("\r\nOK\0");
@@ -118,6 +160,13 @@ void main(void)
         }
     }
 
+    fsFree(pStartSimpVar);
+    fsFree(pStartArrayVar);
+    fsFree(pStartString);
+    fsFree(pStartProg);
+    fsFree(pStartXBasLoad);
+    fsFree(pStartStack);
+
     printText("\r\n\0");
 }
 
@@ -127,9 +176,9 @@ void main(void)
 //                  input : $ - String, % - Inteiro (sem ponto), # - Real (com ponto), @ - Sem Cursor e Qualquer Coisa e sem enter
 //                   edit : S - String, I - Inteiro (sem ponto), R - Real (com ponto)
 //-----------------------------------------------------------------------------
-unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
+unsigned char inputLineBasic(unsigned char *vbufInput, unsigned int pQtdInput, unsigned char pTipo)
 {
-    unsigned char *vbufptr = &vbufInput;
+    unsigned char *vbufptr = vbufInput;
     unsigned char vtec, vtecant;
     int vRetProcCmd, iw, ix;
     int countCursor = 0;
@@ -141,7 +190,7 @@ unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
         pQtdInput = 512;
 
     vtecant = 0x00;
-    vbufptr = &vbufInput;
+    vbufptr = vbufInput;
 
     // Se for Linha editavel apresenta a linha na tela
     if (pTipo == 'S' || pTipo == 'I' || pTipo == 'R')
@@ -168,19 +217,24 @@ unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
         // Piscar Cursor
         if (pTipo != '@')
         {
-            switch (countCursor)
+            if (basVideoCursorShow)
             {
-                case 6000:
-                    hideCursor();
-                    if (pEdit)
-                        printChar(vbufInput[iPos],0);
-                    break;
-                case 12000:
-                    showCursor();
-                    countCursor = 0;
-                    break;
+                switch (countCursor)
+                {
+                    case 6000:
+                        hideCursor();
+                        if (pEdit)
+                            printChar(vbufInput[iPos],0);
+                        break;
+                    case 12000:
+                        showCursor();
+                        countCursor = 0;
+                        break;
+                }
+                countCursor++;
             }
-            countCursor++;
+            else
+                hideCursor();
         }
 
         // Inicia leitura
@@ -221,7 +275,7 @@ unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
                 if (!pEdit)
                 {
                     // Digitcao Normal
-                    if (vbufptr > &vbufInput + pQtdInput)
+                    if (vbufptr > vbufInput + pQtdInput)
                     {
                         *vbufptr--;
 
@@ -385,7 +439,7 @@ unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
                     if (pTipo != '@')
                         printChar(0x08, 1);
 
-                    if (pTipo != '@')
+                    if (pTipo != '@' && basVideoCursorShow)
                         showCursor();
                 }
                 hideCursor();
@@ -412,10 +466,10 @@ unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
 //-----------------------------------------------------------------------------
 //
 //-----------------------------------------------------------------------------
-void processLine(void)
+void processLine(unsigned char *vbufInput)
 {
     unsigned char linhacomando[32], vloop, vToken;
-    unsigned char *blin = &vbufInput;
+    unsigned char *blin = vbufInput;
     unsigned short varg = 0;
     unsigned short ix, iy, iz, ikk, kt;
     unsigned short vbytepic = 0, vrecfim;
@@ -492,7 +546,7 @@ void processLine(void)
                 linhacomando[iz] = toupper(linhacomando[iz]);
 
             // Comando Direto
-            if (!strcmp(linhacomando,"HOME") && iy == 4)
+            if (!strcmp(linhacomando,"CLS") && iy == 3)
             {
                 clearScr();
             }
@@ -522,7 +576,7 @@ void processLine(void)
             {
                 runProg(vLinhaArg);
             }
-            else if (!strcmp(linhacomando,"DEL") && iy == 3)
+            else if (!strcmp(linhacomando,"DELETE") && iy == 3)
             {
                 delLine(vLinhaArg);
             }
@@ -533,7 +587,7 @@ void processLine(void)
             else if (!strcmp(linhacomando,"TIMER") && iy == 5)
             {
                 // Ler contador A do 68901
-                vTimer = *(vmfp + Reg_TADR);
+                vTimer = fsGetMfp(MFP_REG_TADR);
 
                 // Devolve pra tela
                 itoa(vTimer,vBuffer,10);
@@ -541,19 +595,19 @@ void processLine(void)
                 printText(vBuffer);
                 printText("ms\r\n\0");
             }
-            else if (!strcmp(linhacomando,"TRACE") && iy == 5)
+            else if (!strcmp(linhacomando,"TRON") && iy == 4)
             {
                 *traceOn = 1;
             }
-            else if (!strcmp(linhacomando,"NOTRACE") && iy == 7)
+            else if (!strcmp(linhacomando,"TROFF") && iy == 5)
             {
                 *traceOn = 0;
             }
-            else if (!strcmp(linhacomando,"DEBUG") && iy == 5)
+            else if (!strcmp(linhacomando,"DEBUGON") && iy == 7)
             {
                 *debugOn = 1;
             }
-            else if (!strcmp(linhacomando,"NODEBUG") && iy == 7)
+            else if (!strcmp(linhacomando,"DEBUGOFF") && iy == 8)
             {
                 *debugOn = 0;
             }
@@ -619,7 +673,7 @@ void processLine(void)
                 *ftos=0;
                 *gtos=0;
                 *vErroProc = 0;
-                *randSeed = *(vmfp + Reg_TADR);
+                *randSeed = fsGetMfp(MFP_REG_TADR);
                 do
                 {
                     *doisPontos = 0;
@@ -922,6 +976,7 @@ void listProg(unsigned char *pArg, unsigned short pPause)
     unsigned char vLinhaList[255], sNumPar[10], vToken;
     int iw, ix, iy, iz, vPauseRowCounter;
     unsigned char sqtdtam[20];
+    unsigned char vbufInput[256];
 
     if (pArg[0] != 0x00 && strchr(pArg,'-') != 0x00)
     {
@@ -1074,7 +1129,7 @@ writeLongSerial("]\r\n");*/
             if (pPause && vPauseRowCounter >= vdpMaxRows)
             {
                 printText("press any key to continue\0");
-                vtec = inputLineBasic(1,"@");
+                vtec = inputLineBasic(&vbufInput, 1,"@");
                 vPauseRowCounter = 0;
                 printText("\r\n\0");
                 if (vtec == 0x1B)   // ESC
@@ -1228,6 +1283,7 @@ void editLine(unsigned char *pNumber)
     unsigned char vRetInput;
     char sNumLin [sizeof(short)*8+1], vFirstByte;
     unsigned char vLinhaList[255], sNumPar[10], vToken;
+    unsigned char vbufInput[256];
 
     if (pNumber[0] != 0x00)
     {
@@ -1324,7 +1380,7 @@ void editLine(unsigned char *pNumber)
     vbufInput[ix] = '\0';
 
     // Edita a linha no buffer, usando o inputLineBasic do monitor.c
-    vRetInput = inputLineBasic(128,'S'); // S - String Linha Editavel
+    vRetInput = inputLineBasic(&vbufInput, 128,'S'); // S - String Linha Editavel
 
     if (vbufInput[0] != 0x00 && (vRetInput == 0x0D || vRetInput == 0x0A))
     {
@@ -1345,7 +1401,7 @@ void editLine(unsigned char *pNumber)
         delLine(pNumber);
 
         // Reinsere a linha editada
-        processLine();
+        processLine(vbufInput);
 
         printText("\r\nOK\0");
 
@@ -1416,7 +1472,7 @@ void runProg(unsigned char *pNumber)
     *gtos=0;
     *changedPointer = 0;
     *vDataPointer = 0;
-    *randSeed = *(vmfp + Reg_TADR);
+    *randSeed = fsGetMfp(MFP_REG_TADR);
     *onErrGoto = 0;
 
     while (1)
@@ -1643,7 +1699,7 @@ int executeToken(unsigned char pToken)
         case 0x90:  // Nao fax nada, soh teste, pode ser retirado
             vReta = 0;
             break;
-        case 0x91:  // DIM
+        case 0x91:  // ON
             vReta = basOnVar();
             break;
         case 0x92:  // Input
@@ -1652,13 +1708,28 @@ int executeToken(unsigned char pToken)
         case 0x93:  // Get
             vReta = basInputGet(1);
             break;
-        case 0x94:  // vTAB
-            vReta = basVtab();
+        case 0x94:  // LOCATE
+            vReta = basLocate();
             break;
         case 0x95:  // HTAB
             vReta = basHtab();
             break;
         case 0x96:  // Home
+            switch(vdpModeBas)
+            {
+                case VDP_MODE_TEXT:
+                    clearScr();
+                    break;
+                case VDP_MODE_G1:
+                    clearScr();
+                    break;
+                case VDP_MODE_G2:
+                    clearScrW(bgcolorBas);
+                    break;
+                case VDP_MODE_MULTICOLOR:
+                    clearScrW(bgcolorBas);
+                    break;
+            }
             clearScr();
             break;
         case 0x97:  // CLEAR - Clear all variables
@@ -1688,8 +1759,8 @@ int executeToken(unsigned char pToken)
         case 0x9F:  // STOP
             vReta = basStop();
             break;
-        case 0xB0:  // TEXT
-            vReta = basText();
+        case 0xB0:  // Screen
+            vReta = basScreen();
             break;
         case 0xB1:  // GR
             vReta = basGr();
@@ -2060,7 +2131,8 @@ int basXBasLoad(void)
     unsigned char vRet = 0;
     unsigned char vByte = 0;
     unsigned char *vTemp = pStartXBasLoad;
-    unsigned char *vBufptr = &vbufInput;
+    unsigned char vbufInput[256];
+    unsigned char *vBufptr = vbufInput;
 
     printText("Loading Basic Program...\r\n");
 
@@ -2085,8 +2157,8 @@ int basXBasLoad(void)
                 {
                     vTemp++;
                     *vBufptr = 0x00;
-                    vBufptr = &vbufInput;
-                    processLine();
+                    vBufptr = vbufInput;
+                    processLine(vbufInput);
                 }
             }
             else
@@ -5282,7 +5354,8 @@ int basInputGet(unsigned char pSize)
     char vTemTexto = 0;
     int len=0, spaces;
     char last_delim;
-    unsigned char *buffptr = &vbufInput;
+    unsigned char vbufInput[256];
+    unsigned char *buffptr = vbufInput;
     long vRetFV;
     unsigned char varTipo;
     char vArray = 0;
@@ -5369,7 +5442,7 @@ int basInputGet(unsigned char pSize)
             else
             {
                 // INPUT
-                vtec = inputLineBasic(255,varTipo);
+                vtec = inputLineBasic(&vbufInput, 255,varTipo);
 
                 if (vbufInput[0] != 0x00 && (vtec == 0x0D || vtec == 0x0A))
                 {
@@ -6244,10 +6317,10 @@ int basRnd(void)
     }
     else if (vReal >= -1 && vReal < 0)
     {
-        vRand = *(vmfp + Reg_TADR);
+        vRand = fsGetMfp(MFP_REG_TADR);
         vRand = (vRand << 3);
         vRand += 0x466;
-        vRand -= ((*(vmfp + Reg_TADR)) * 3);
+        vRand -= ((fsGetMfp(MFP_REG_TADR)) * 3);
         *randSeed = vRand;
     }
     else if (vReal > 0 && vReal <= 1)
@@ -6255,7 +6328,7 @@ int basRnd(void)
         vRand = *randSeed;
         vRand = (vRand << 3);
         vRand += 0x466;
-        vRand -= ((*(vmfp + Reg_TADR)) * 3);
+        vRand -= ((fsGetMfp(MFP_REG_TADR)) * 3);
         *randSeed = vRand;
     }
     else
@@ -6284,28 +6357,118 @@ int basRnd(void)
 }
 
 //--------------------------------------------------------------------------------------
-// Seta posicao vertical (linha em texto e y em grafico)
+// Seta posicao screen 0
 // Syntaxe:
-//          VTAB <numero>
+//          LOCATE <Col>,<Row>,[Show Cursor = 1]
 //--------------------------------------------------------------------------------------
-int basVtab(void)
+int basLocate(void)
 {
-    unsigned int vRow = 0;
+    unsigned int vCol = 0, vRow = 0;
+    unsigned char vShowCursor = 1;
+    unsigned char answer[20];
+    char *iVal = answer;
 
-    getExp(&vRow);
-
-    if (*value_type == '$') {
-        *vErroProc = 16;
+    if (vdpModeBas != VDP_MODE_TEXT)
+    {
+        *vErroProc = 24;
         return 0;
     }
 
-    if (*value_type == '#')
-    {
-        vRow = fppInt(vRow);
-        *value_type = '%';
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type == QUOTE) { /* is string, error */
+        *vErroProc = 16;
+        return 0;
+    }
+    else { /* is expression */
+        putback();
+
+        getExp(&answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type == '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
+        }
     }
 
-    vdp_set_cursor(videoCursorPosColX, vRow);
+    vCol=(char)*iVal;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type == QUOTE) { /* is string, error */
+        *vErroProc = 16;
+        return 0;
+    }
+    else { /* is expression */
+        //putback();
+
+        getExp(&answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type == '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
+        }
+    }
+
+    vRow=(char)*iVal;
+
+    if (*token == ',')  // Optional show cursor
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        if (*token_type == QUOTE) { /* is string, error */
+            *vErroProc = 16;
+            return 0;
+        }
+        else { /* is expression */
+            //putback();
+
+            getExp(&answer);
+            if (*vErroProc) return 0;
+
+            if (*value_type == '$')
+            {
+                *vErroProc = 16;
+                return 0;
+            }
+
+            if (*value_type == '#')
+            {
+                *iVal = fppInt(*iVal);
+                *value_type = '%';
+            }
+        }
+
+        vShowCursor=(char)*iVal;
+    }
+
+    basVideoCursorShow = vShowCursor;
+    vdp_set_cursor(vCol, vRow);
 
     return 0;
 }
@@ -6516,9 +6679,111 @@ int basTab(void)
 }
 
 //--------------------------------------------------------------------------------------
+// Screen Mode Switch
+// Syntaxe:
+//          SCREEN [mode (0 to 3)],[sprite size (0 to 3)]
+//--------------------------------------------------------------------------------------
+int basScreen(void)
+{
+    int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
+    unsigned char answer[20];
+    int  *iVal = answer;
+    unsigned char vModeAux = 99;
+    unsigned char sqtdtam[10];
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type == QUOTE) { /* is string, error */
+        *vErroProc = 16;
+        return 0;
+    }
+    else if (*token != ',')
+        { /* is expression */
+            putback();
+
+            getExp(&answer);
+            if (*vErroProc) return 0;
+
+            if (*value_type == '$')
+            {
+                *vErroProc = 16;
+                return 0;
+            }
+
+            if (*value_type == '#')
+            {
+                *iVal = fppInt(*iVal);
+                *value_type = '%';
+            }
+
+            vModeAux=(char)*iVal;
+
+            switch (vModeAux)
+            {
+                case 0:
+                    basText();
+                    break;
+                case 1:
+                    basGr1();
+                    break;
+                case 2:
+                    basHgr();
+                    break;
+                case 3:
+                    basGr();
+                    break;
+                default:
+                    *vErroProc = 5;
+                    return 0;
+            }
+        }
+    else if (*token == ',')
+        nextToken();
+
+    if (vModeAux == 99 && *token != ',') // If not have first parameter, and not have ",", error
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    if (vModeAux != 99)
+        nextToken();
+
+    if (*vErroProc) return 0;
+
+    if (*token_type == QUOTE) { /* is string, error */
+        *vErroProc = 16;
+        return 0;
+    }
+    else { /* is expression */
+        //putback();
+
+        getExp(&answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type == '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
+        }
+
+        basVideoSpriteSize = (char)*iVal;
+    }
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
 // Text Screen Mode (40 cols x 24 rows)
 // Syntaxe:
-//          TEXT
+//          Screen 0 - Text
 //--------------------------------------------------------------------------------------
 int basText(void)
 {
@@ -6533,23 +6798,26 @@ int basText(void)
 }
 
 //--------------------------------------------------------------------------------------
-// Low Resolution Screen Mode (64x48)
+// Text Screen Mode (32 cols x 24 rows)
 // Syntaxe:
-//          GR
+//          Screen 1 - Low Res
 //--------------------------------------------------------------------------------------
-int basGr(void)
+int basGr1(void)
 {
-    vdp_init(VDP_MODE_MULTICOLOR, 0, 0, 0);
-    vdpMaxCols = 63;
-    vdpMaxRows = 47;
-    vdpModeBas = VDP_MODE_MULTICOLOR;
+    fgcolorBas = VDP_WHITE;
+    bgcolorBas = VDP_BLACK;
+    vdp_init(VDP_MODE_G1, (fgcolorBas<<4) | (bgcolorBas & 0x0f), 0, 0);
+    vdpMaxCols = 32;
+    vdpMaxRows = 23;
+    vdpModeBas = VDP_MODE_G1;
+    clearScr();
     return 0;
 }
 
 //--------------------------------------------------------------------------------------
 // High Resolution Screen Mode (256x192)
 // Syntaxe:
-//          HGR
+//          Screen 2 - High Res
 //--------------------------------------------------------------------------------------
 int basHgr(void)
 {
@@ -6559,6 +6827,20 @@ int basHgr(void)
     vdpModeBas = VDP_MODE_G2;
     vdp_set_bdcolor(VDP_BLACK);
     bgcolorBas = VDP_BLACK;
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// MultiColor Resolution Screen Mode (256x192 com 4 Blocos = 64x48)
+// Syntaxe:
+//          Screen 3 - MultiColor
+//--------------------------------------------------------------------------------------
+int basGr(void)
+{
+    vdp_init(VDP_MODE_MULTICOLOR, 0, 0, 0);
+    vdpMaxCols = 63;
+    vdpMaxRows = 47;
+    vdpModeBas = VDP_MODE_MULTICOLOR;
     return 0;
 }
 
@@ -7438,5 +7720,27 @@ int basRestore(void)
     *vDataPointer = (*vDataLineAtu + 6);
 
     return 0;
+}
+
+
+//-----------------------------------------------------------------------------
+void clearScrW(unsigned char color)
+{
+    unsigned int ix, iy;
+
+    color &= 0x0F;
+
+    setWriteAddress(mgui_pattern_table);
+    for (iy = 0; iy < 192; iy++)
+    {
+        for (ix = 0; ix < 32; ix++)
+            *vvdgd = 0x00;
+    }
+    setWriteAddress(mgui_color_table);
+    for (iy = 0; iy < 192; iy++)
+    {
+        for (ix = 0; ix < 32; ix++)
+            *vvdgd = color;
+    }
 }
 #endif

@@ -1,7 +1,33 @@
+FILES_RELOC_TBL_OFFSET  equ $00000022   ; FICTICIO: offset do cabecalho de relocacao (qtd de funcoes)
+
 _runFromOsCmd:
        xref _runOSMemory
        movem.l   D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5,-(A7)
        move.l    _runOSMemory,A0
+
+       ; Ajusta tabela de relocacao do programa carregado (MMSJOS_FUNC_RELOC)
+       ; D0 = base de carga do programa
+;       move.l    A0,D0
+;       move.l    A0,A1
+;       adda.l    #FILES_RELOC_TBL_OFFSET,A1
+
+       ; Le cabecalho: quantidade de funcoes para relocar
+;       move.l    (A1)+,D7
+;       beq.s     _runFromOsCmd_reloc_done
+
+       ; Evita dupla-relocacao: se 1a entrada ja for >= base, assume tabela ja ajustada
+;       move.l    (A1),D1
+;       cmp.l     D0,D1
+;       bcc.s     _runFromOsCmd_reloc_done
+
+;       subq.l    #1,D7
+_runFromOsCmd_reloc_loop:
+;       move.l    (A1),D1
+;       add.l     D0,D1
+;       move.l    D1,(A1)+
+;       dbra      D7,_runFromOsCmd_reloc_loop
+
+_runFromOsCmd_reloc_done:
        jsr       (A0)       ; Jump to position ram memory
        movem.l   (A7)+,D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5
        rts

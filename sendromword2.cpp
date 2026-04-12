@@ -100,7 +100,7 @@ int main(int argc, char *argv[])
     	printf(">Iniciando Programa��o do Modulo via porta Serial. Usando %s.\n", argv[1]);
 
     if (showVerb)
-	    printf(">Inicializando Porta Serial (COM4, 19200, 8, N, 1).\n");
+	    printf(">Inicializando Porta Serial (COM3, 19200, 8, N, 1).\n");
 	IniciaSerial();
 
 	if (showVerb)
@@ -266,7 +266,7 @@ void delay(unsigned int ttempo)
 
 // inicializa porta serial
 int IniciaSerial(){ 
-	char *NomePorta = "COM4"; //COM1, COM2... 
+	char *NomePorta = "COM3"; //COM1, COM2... 
 
 	hSerial = CreateFile(NomePorta,	 //Nome da porta. 
  						 GENERIC_READ|GENERIC_WRITE, //Para leitura e escrita. 
