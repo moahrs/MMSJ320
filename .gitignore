@@ -1,10 +1,35 @@
-basic.bin
-basic.hex
-basic.lst
-basic.src
-monitor.bin
-monitor.hex
-monitor.lst
-monitor.src
-HD_ATU/MGUI/PROGS/basic.BIN
-HD_ATU/MGUI/PROGS/basic.BIN
+# Build artifacts / binaries
+*.bin
+*.hex
+*.exe
+*.dll
+*.lib
+*.obj
+*.o
+*.elf
+*.map
+*.tds
+*.zip
+
+# IDE68K generated outputs
+*.lst
+*.src
+*.p
+
+# Temporary / backup files
+*.bak
+*.tmp
+*.temp
+*.BACKUP_*
+*.RESTORED_BACKUP
+* - Copia.*
+
+# Temp folders
+TEMP/
+Teste/
+**/TEMP/
+HD_ATU/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
