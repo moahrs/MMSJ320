@@ -81,6 +81,7 @@ void fsGetDirAtuData(FAT32_DIR *pDir);
 unsigned long fsMalloc(unsigned long vMemSize);
 void fsFree(unsigned long vAddress);
 void runFromMGUI(unsigned long vEnderExec);
+static unsigned char fsCheckDirEmpty(unsigned long vdircluster);
 
 // Funcoes de Manipulacao de Diretorios
 unsigned char fsMakeDir(char * vdirname);
@@ -203,6 +204,7 @@ void printDiskError(unsigned char pError)
       case ERRO_B_WRITE_FILE        : printText("Writing file"); break;
       case ERRO_B_DIR_FOUND         : printText("Directory already exist"); break;
       case ERRO_B_CREATE_DIR        : printText("Creating directory"); break;
+      case ERRO_B_DIR_NOT_EMPTY     : printText("Directory not empty"); break;
       case ERRO_B_NOT_FOUND         : printText("Not found"); break;
       default                       :
         itoa(pError, sqtdtam, 10);
@@ -1921,8 +1923,8 @@ unsigned short fsReadFile(char * vfilename, unsigned long voffset, unsigned char
 	if (vclusterini >= ERRO_D_START)
 		return 0;	// Erro na abertura/Arquivo nao existe
 
-	// Verifica se o offset eh maior que o tamanho do arquivo
-	if (voffset > vdir.Size)
+	// Verifica se o offset eh maior ou igual ao tamanho do arquivo
+	if (voffset >= vdir.Size)
 		return 0;
 
 	// Verifica se offset vai precisar gravar mais de 1 setor (entre 2 setores)
@@ -2197,6 +2199,8 @@ unsigned char fsChangeDir(char * vdirname)
 //-------------------------------------------------------------------------
 unsigned char fsRemoveDir(char * vdirname)
 {
+    unsigned char vretEmpty;
+
     if (fsFindDirPath(vdirname, FIND_PATH_PART) == FIND_PATH_RET_ERROR)
         return ERRO_B_DIR_NOT_FOUND;
 
@@ -2205,6 +2209,19 @@ unsigned char fsRemoveDir(char * vdirname)
     /*printText("Aqui 2 - ");
     printText(vretpath.Name);
     printText("\r\n");*/
+
+	if (fsFindInDir(vretpath.Name, TYPE_DIRECTORY) >= ERRO_D_START)
+    {
+        vclusterdir = vretpath.ClusterDirAtu;
+		return ERRO_B_DIR_NOT_FOUND;
+    }
+
+	vretEmpty = fsCheckDirEmpty(vdir.FirstCluster);
+    if (vretEmpty != RETURN_OK)
+    {
+        vclusterdir = vretpath.ClusterDirAtu;
+        return vretEmpty;
+    }
 
 	// Apaga o diretorio conforme especificado
 	if (fsFindInDir(vretpath.Name, TYPE_DEL_DIR) >= ERRO_D_START)
@@ -2236,6 +2253,61 @@ unsigned char fsPwdDir(unsigned char *vdirpath) {
 void fsGetDirAtuData(FAT32_DIR *pDir)
 {
     memcpy(pDir, &vdir, sizeof(FAT32_DIR));
+}
+
+//-------------------------------------------------------------------------
+static unsigned char fsCheckDirEmpty(unsigned long vdircluster)
+{
+    unsigned long vclusteratual, vclusternext, vdata, vtemp1, vtemp2;
+    unsigned short ix, iz;
+
+    vclusteratual = vdircluster;
+
+    while (1)
+    {
+        vtemp1 = ((vclusteratual - 2) * vdisk.SecPerClus);
+        vtemp2 = vdisk.data;
+        vdata = vtemp1 + vtemp2;
+
+        for (iz = 0; iz < vdisk.SecPerClus; iz++)
+        {
+            if (!fsSectorRead(vdata, gDataBuffer))
+                return ERRO_B_READ_DISK;
+
+            for (ix = 0; ix < vdisk.sectorSize; ix += 32)
+            {
+                if (gDataBuffer[ix] == DIR_EMPTY)
+                    return RETURN_OK;
+
+                if (gDataBuffer[ix] == DIR_DEL)
+                    continue;
+
+                if (gDataBuffer[ix + 11] == ATTR_LONG_NAME)
+                    return ERRO_B_DIR_NOT_EMPTY;
+
+                if (gDataBuffer[ix] == '.' && gDataBuffer[ix + 1] == 0x20)
+                    continue;
+
+                if (gDataBuffer[ix] == '.' && gDataBuffer[ix + 1] == '.' && gDataBuffer[ix + 2] == 0x20)
+                    continue;
+
+                return ERRO_B_DIR_NOT_EMPTY;
+            }
+
+            vdata++;
+        }
+
+        vclusternext = fsFindNextCluster(vclusteratual, NEXT_FIND);
+        if (vclusternext >= ERRO_D_START)
+            return ERRO_B_READ_DISK;
+
+        if (vclusternext == LAST_CLUSTER_FAT32)
+            break;
+
+        vclusteratual = vclusternext;
+    }
+
+    return RETURN_OK;
 }
 
 //-------------------------------------------------------------------------

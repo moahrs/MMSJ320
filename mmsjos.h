@@ -232,6 +232,7 @@ extern MEM_ALOC vMemAloc;
 #define ERRO_B_WRITE_FILE     0xED
 #define ERRO_B_DIR_FOUND      0xEE
 #define ERRO_B_CREATE_DIR     0xEF
+#define ERRO_B_DIR_NOT_EMPTY  0xF0
 #define ERRO_B_NOT_FOUND      0xFF
 
 #define RETURN_OK             0x00

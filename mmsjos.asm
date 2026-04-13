@@ -77,6 +77,7 @@
 ; unsigned long fsMalloc(unsigned long vMemSize);
 ; void fsFree(unsigned long vAddress);
 ; void runFromMGUI(unsigned long vEnderExec);
+; static unsigned char fsCheckDirEmpty(unsigned long vdircluster);
 ; // Funcoes de Manipulacao de Diretorios
 ; unsigned char fsMakeDir(char * vdirname);
 ; unsigned char fsChangeDir(char * vdirname);
@@ -213,63 +214,66 @@ _printDiskError:
 ; switch( pError )
        move.b    11(A6),D0
        and.l     #255,D0
-       cmp.l     #232,D0
-       beq       printDiskError_11
-       bhi       printDiskError_21
+       cmp.l     #233,D0
+       beq       printDiskError_12
+       bhi       printDiskError_22
        cmp.l     #228,D0
        beq       printDiskError_7
-       bhi.s     printDiskError_22
+       bhi.s     printDiskError_23
        cmp.l     #226,D0
        beq       printDiskError_5
-       bhi.s     printDiskError_23
+       bhi.s     printDiskError_24
        cmp.l     #225,D0
        beq       printDiskError_4
        bhi       printDiskError_1
        cmp.l     #224,D0
        beq       printDiskError_3
        bra       printDiskError_1
-printDiskError_23:
+printDiskError_24:
        cmp.l     #227,D0
        beq       printDiskError_6
        bra       printDiskError_1
-printDiskError_22:
+printDiskError_23:
+       cmp.l     #231,D0
+       beq       printDiskError_10
+       bhi.s     printDiskError_25
        cmp.l     #230,D0
        beq       printDiskError_9
-       bhi.s     printDiskError_24
+       bhi       printDiskError_1
        cmp.l     #229,D0
        beq       printDiskError_8
        bra       printDiskError_1
-printDiskError_24:
-       cmp.l     #231,D0
-       beq       printDiskError_10
-       bra       printDiskError_1
-printDiskError_21:
-       cmp.l     #237,D0
-       beq       printDiskError_16
-       bhi.s     printDiskError_25
-       cmp.l     #235,D0
-       beq       printDiskError_14
-       bhi.s     printDiskError_26
-       cmp.l     #234,D0
-       beq       printDiskError_13
-       bhi       printDiskError_1
-       cmp.l     #233,D0
-       beq       printDiskError_12
-       bra       printDiskError_1
-printDiskError_26:
-       cmp.l     #236,D0
-       beq       printDiskError_15
-       bra       printDiskError_1
 printDiskError_25:
-       cmp.l     #239,D0
-       beq       printDiskError_18
-       bhi.s     printDiskError_27
+       cmp.l     #232,D0
+       beq       printDiskError_11
+       bra       printDiskError_1
+printDiskError_22:
        cmp.l     #238,D0
        beq       printDiskError_17
+       bhi.s     printDiskError_26
+       cmp.l     #236,D0
+       beq       printDiskError_15
+       bhi.s     printDiskError_27
+       cmp.l     #235,D0
+       beq       printDiskError_14
+       bhi       printDiskError_1
+       cmp.l     #234,D0
+       beq       printDiskError_13
        bra       printDiskError_1
 printDiskError_27:
-       cmp.l     #255,D0
+       cmp.l     #237,D0
+       beq       printDiskError_16
+       bra       printDiskError_1
+printDiskError_26:
+       cmp.l     #240,D0
        beq       printDiskError_19
+       bhi.s     printDiskError_28
+       cmp.l     #239,D0
+       beq       printDiskError_18
+       bra       printDiskError_1
+printDiskError_28:
+       cmp.l     #255,D0
+       beq       printDiskError_20
        bra       printDiskError_1
 printDiskError_3:
 ; {
@@ -385,8 +389,15 @@ printDiskError_18:
        addq.w    #4,A7
        bra       printDiskError_2
 printDiskError_19:
-; case ERRO_B_NOT_FOUND         : printText("Not found"); break;
+; case ERRO_B_DIR_NOT_EMPTY     : printText("Directory not empty"); break;
        pea       @mmsjos_21.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+       bra       printDiskError_2
+printDiskError_20:
+; case ERRO_B_NOT_FOUND         : printText("Not found"); break;
+       pea       @mmsjos_22.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -407,7 +418,7 @@ printDiskError_1:
        jsr       (A0)
        addq.w    #4,A7
 ; printText(" - Unknown Code");
-       pea       @mmsjos_22.L
+       pea       @mmsjos_23.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -415,7 +426,7 @@ printDiskError_1:
 printDiskError_2:
 ; }
 ; printText("!\r\n\0");
-       pea       @mmsjos_23.L
+       pea       @mmsjos_24.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -446,12 +457,12 @@ _main:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Powered by uC/OS-II v2.91\r\n\0");
-       pea       @mmsjos_24.L
+       pea       @mmsjos_25.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Utility (c) 2014-2026\r\n\0");
-       pea       @mmsjos_25.L
+       pea       @mmsjos_26.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -460,16 +471,16 @@ _main:
 ; memInit();
        jsr       _memInit
 ; fsChangeDir("/");
-       pea       @mmsjos_26.L
+       pea       @mmsjos_27.L
        jsr       _fsChangeDir
        addq.w    #4,A7
 ; printText("Ok\r\n\0");
-       pea       @mmsjos_27.L
+       pea       @mmsjos_28.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("#>");
-       pea       @mmsjos_28.L
+       pea       @mmsjos_29.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -623,7 +634,7 @@ inputTask_16:
        jsr       (A0)
        addq.w    #4,A7
 ; vRetProcCmd = fsOsCommand("\0");
-       pea       @mmsjos_29.L
+       pea       @mmsjos_30.L
        jsr       _fsOsCommand
        addq.w    #4,A7
        move.l    D0,D4
@@ -1135,7 +1146,7 @@ fsOsCommand_29:
        beq       fsOsCommand_292
 ; {
 ; if (!strcmp(linhacomando,"CLS") && iy == 3)
-       pea       @mmsjos_30.L
+       pea       @mmsjos_31.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -1151,7 +1162,7 @@ fsOsCommand_29:
 fsOsCommand_33:
 ; }
 ; else if (!strcmp(linhacomando,"CLEAR") && iy == 5)
-       pea       @mmsjos_31.L
+       pea       @mmsjos_32.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -1167,7 +1178,7 @@ fsOsCommand_33:
 fsOsCommand_35:
 ; }
 ; else if (!strcmp(linhacomando,"QUIT") && iy == 4)
-       pea       @mmsjos_32.L
+       pea       @mmsjos_33.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -1182,7 +1193,7 @@ fsOsCommand_35:
 fsOsCommand_37:
 ; }
 ; else if (!strcmp(linhacomando,"VER") && iy == 3)
-       pea       @mmsjos_33.L
+       pea       @mmsjos_34.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -1197,7 +1208,7 @@ fsOsCommand_37:
 fsOsCommand_40:
 ; }
 ; else if (!strcmp(linhacomando,"MGUI") && iy == 4)
-       pea       @mmsjos_34.L
+       pea       @mmsjos_35.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -1219,7 +1230,7 @@ fsOsCommand_40:
 fsOsCommand_42:
 ; }
 ; else if (!strcmp(linhacomando,"PWD") && iy == 3)
-       pea       @mmsjos_35.L
+       pea       @mmsjos_36.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -1244,12 +1255,6 @@ fsOsCommand_44:
 ; else if (iy == 2 && (!strcmp(linhacomando,"LS") ||
        cmp.w     #2,D4
        bne       fsOsCommand_46
-       pea       @mmsjos_36.L
-       move.l    A2,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-       tst.l     D0
-       beq.s     fsOsCommand_48
        pea       @mmsjos_37.L
        move.l    A2,-(A7)
        jsr       (A5)
@@ -1257,6 +1262,12 @@ fsOsCommand_44:
        tst.l     D0
        beq.s     fsOsCommand_48
        pea       @mmsjos_38.L
+       move.l    A2,-(A7)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.l     D0
+       beq.s     fsOsCommand_48
+       pea       @mmsjos_39.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -1313,7 +1324,7 @@ fsOsCommand_54:
        move.b    (A0),D0
        bne.s     fsOsCommand_55
 ; printText("File not found.\r\n\0");
-       pea       @mmsjos_39.L
+       pea       @mmsjos_40.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1405,7 +1416,7 @@ fsOsCommand_50:
        blo.s     fsOsCommand_69
 ; {
 ; printText("File not found..\r\n\0");
-       pea       @mmsjos_40.L
+       pea       @mmsjos_41.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1506,7 +1517,7 @@ fsOsCommand_84:
 fsOsCommand_80:
 ; }
 ; if (!strcmp(linhacomando,"LS"))
-       pea       @mmsjos_36.L
+       pea       @mmsjos_37.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2064,7 +2075,7 @@ fsOsCommand_88:
 ; }
 ; }
 ; else if (!strcmp(linhacomando,"RM"))
-       pea       @mmsjos_37.L
+       pea       @mmsjos_38.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2286,7 +2297,7 @@ fsOsCommand_142:
 ; }
 ; }
 ; else if (!strcmp(linhacomando,"CP"))
-       pea       @mmsjos_38.L
+       pea       @mmsjos_39.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2553,7 +2564,7 @@ fsOsCommand_46:
 ; else
 ; {
 ; if (!strcmp(linhacomando,"REN") && iy == 3) // Arquivo (somente 1, nao uar wildcard)
-       pea       @mmsjos_41.L
+       pea       @mmsjos_42.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2576,7 +2587,7 @@ fsOsCommand_46:
        move.b    (A0),D0
        bne.s     fsOsCommand_217
 ; printText("file not found.\r\n\0");
-       pea       @mmsjos_42.L
+       pea       @mmsjos_43.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2618,7 +2629,7 @@ fsOsCommand_220:
 fsOsCommand_213:
 ; }
 ; else if (!strcmp(linhacomando,"MD") && iy == 2)
-       pea       @mmsjos_43.L
+       pea       @mmsjos_44.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2637,7 +2648,7 @@ fsOsCommand_213:
 fsOsCommand_221:
 ; }
 ; else if (!strcmp(linhacomando,"CD") && iy == 2)
-       pea       @mmsjos_44.L
+       pea       @mmsjos_45.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2656,7 +2667,7 @@ fsOsCommand_221:
 fsOsCommand_223:
 ; }
 ; else if (!strcmp(linhacomando,"RD") && iy == 2)
-       pea       @mmsjos_45.L
+       pea       @mmsjos_46.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2675,7 +2686,7 @@ fsOsCommand_223:
 fsOsCommand_225:
 ; }
 ; else if (!strcmp(linhacomando,"STOF") && iy == 4) // Arquivo (usa 1 soh)
-       pea       @mmsjos_46.L
+       pea       @mmsjos_47.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2685,7 +2696,7 @@ fsOsCommand_225:
        bne.s     fsOsCommand_227
 ; {
 ; vretfat = fsLoadSerialToFile(linhaarg, "810000");  // Carrega da Serial para o Arquivo
-       pea       @mmsjos_47.L
+       pea       @mmsjos_48.L
        pea       -532(A6)
        jsr       _fsLoadSerialToFile
        addq.w    #8,A7
@@ -2695,7 +2706,7 @@ fsOsCommand_225:
 fsOsCommand_227:
 ; }
 ; else if (!strcmp(linhacomando,"STOR") && iy == 4) // Arquivo (usa 1 soh)
-       pea       @mmsjos_48.L
+       pea       @mmsjos_49.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2714,7 +2725,7 @@ fsOsCommand_227:
 fsOsCommand_229:
 ; }
 ; else if (!strcmp(linhacomando,"DATE") && iy == 4)
-       pea       @mmsjos_49.L
+       pea       @mmsjos_50.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2728,7 +2739,7 @@ fsOsCommand_229:
        bra       fsOsCommand_242
 fsOsCommand_231:
 ; else if (!strcmp(linhacomando,"TIME") && iy == 4)
-       pea       @mmsjos_50.L
+       pea       @mmsjos_51.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2742,7 +2753,7 @@ fsOsCommand_231:
        bra       fsOsCommand_242
 fsOsCommand_233:
 ; else if (!strcmp(linhacomando,"FORMAT") && iy == 6)
-       pea       @mmsjos_51.L
+       pea       @mmsjos_52.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2762,7 +2773,7 @@ fsOsCommand_233:
 fsOsCommand_235:
 ; }
 ; else if (!strcmp(linhacomando,"MODE") && iy == 4)
-       pea       @mmsjos_52.L
+       pea       @mmsjos_53.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2778,7 +2789,7 @@ fsOsCommand_235:
 fsOsCommand_237:
 ; }
 ; else if (!strcmp(linhacomando,"CAT") && iy == 3) // Arquivo (usa 1 soh)
-       pea       @mmsjos_53.L
+       pea       @mmsjos_54.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -2855,7 +2866,7 @@ fsOsCommand_239:
        move.b    (A0),D0
        bne.s     fsOsCommand_245
 ; printText("No memory to load file...\r\n\0");
-       pea       @mmsjos_54.L
+       pea       @mmsjos_55.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2872,7 +2883,7 @@ fsOsCommand_243:
        jsr       _itoa
        add.w     #12,A7
 ; printText("Loading File in \0");
-       pea       @mmsjos_55.L
+       pea       @mmsjos_56.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2882,7 +2893,7 @@ fsOsCommand_243:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("h\r\n\0");
-       pea       @mmsjos_56.L
+       pea       @mmsjos_57.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2917,7 +2928,7 @@ fsOsCommand_247:
        move.b    (A0),D0
        bne.s     fsOsCommand_249
 ; printText("Loading File Error...\r\n\0");
-       pea       @mmsjos_57.L
+       pea       @mmsjos_58.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2937,7 +2948,7 @@ fsOsCommand_241:
        move.b    (A0),D0
        bne.s     fsOsCommand_251
 ; printText("Invalid Command or File Name\r\n\0");
-       pea       @mmsjos_58.L
+       pea       @mmsjos_59.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3023,7 +3034,7 @@ fsOsCommand_260:
 ; else
 ; {
 ; if (!strcmp(linhacomando,"CD"))
-       pea       @mmsjos_44.L
+       pea       @mmsjos_45.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -3141,7 +3152,7 @@ fsOsCommand_268:
 ; }
 ; }
 ; else if (!strcmp(linhacomando,"DATE"))
-       pea       @mmsjos_49.L
+       pea       @mmsjos_50.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -3158,7 +3169,7 @@ fsOsCommand_268:
        lea       -334(A6),A0
        clr.b     0(A0,D2.L)
 ; printText("  Date is \0");
-       pea       @mmsjos_59.L
+       pea       @mmsjos_60.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3176,7 +3187,7 @@ fsOsCommand_268:
 fsOsCommand_286:
 ; }
 ; else if (!strcmp(linhacomando,"TIME"))
-       pea       @mmsjos_50.L
+       pea       @mmsjos_51.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -3193,7 +3204,7 @@ fsOsCommand_286:
        lea       -334(A6),A0
        clr.b     0(A0,D2.L)
 ; printText("  Time is \0");
-       pea       @mmsjos_60.L
+       pea       @mmsjos_61.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3211,7 +3222,7 @@ fsOsCommand_286:
 fsOsCommand_288:
 ; }
 ; else if (!strcmp(linhacomando,"FORMAT"))
-       pea       @mmsjos_51.L
+       pea       @mmsjos_52.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
@@ -3223,7 +3234,7 @@ fsOsCommand_288:
        move.b    (A0),D0
        bne.s     fsOsCommand_292
 ; printText("Format disk was successfully\r\n\0");
-       pea       @mmsjos_61.L
+       pea       @mmsjos_62.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4414,7 +4425,7 @@ _fsLoadSerialToFile:
        bne.s     fsLoadSerialToFile_1
 ; {
 ; printText("Error, file name must be provided!!\r\n\0");
-       pea       @mmsjos_62.L
+       pea       @mmsjos_63.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4456,7 +4467,7 @@ fsLoadSerialToFile_4:
 ; {
 ; // Abre Arquivo
 ; printText("Opening File...\r\n\0");
-       pea       @mmsjos_63.L
+       pea       @mmsjos_64.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4466,7 +4477,7 @@ fsLoadSerialToFile_4:
        addq.w    #4,A7
 ; // Grava no Arquivo
 ; printText("Writing File...\r\n\0");
-       pea       @mmsjos_64.L
+       pea       @mmsjos_65.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4660,7 +4671,7 @@ fsLoadSerialToFile_19:
        addq.w    #8,A7
 ; // Fecha Arquivo
 ; printText("\r\nClosing File...\r\n\0");
-       pea       @mmsjos_65.L
+       pea       @mmsjos_66.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4675,7 +4686,7 @@ fsLoadSerialToFile_6:
 ; else
 ; {
 ; printText("Serial Load Error...");
-       pea       @mmsjos_66.L
+       pea       @mmsjos_67.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4724,7 +4735,7 @@ _fsLoadSerialToRun:
        jsr       _itoa
        add.w     #12,A7
 ; printText("Running at \0");
-       pea       @mmsjos_67.L
+       pea       @mmsjos_68.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4734,7 +4745,7 @@ _fsLoadSerialToRun:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("h\r\n\0");
-       pea       @mmsjos_56.L
+       pea       @mmsjos_57.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4752,7 +4763,7 @@ fsLoadSerialToRun_1:
 ; else
 ; {
 ; printText("Serial Load Error...");
-       pea       @mmsjos_66.L
+       pea       @mmsjos_67.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5097,10 +5108,10 @@ _fsReadFile:
        clr.w     D0
        bra       fsReadFile_3
 fsReadFile_1:
-; // Verifica se o offset eh maior que o tamanho do arquivo
-; if (voffset > vdir.Size)
+; // Verifica se o offset eh maior ou igual ao tamanho do arquivo
+; if (voffset >= vdir.Size)
        cmp.l     _vdir+26.L,D2
-       bls.s     fsReadFile_4
+       blo.s     fsReadFile_4
 ; return 0;
        clr.w     D0
        bra       fsReadFile_3
@@ -5758,9 +5769,10 @@ fsChangeDir_3:
        xdef      _fsRemoveDir
 _fsRemoveDir:
        link      A6,#0
-       movem.l   A2/A3,-(A7)
+       movem.l   D2/A2/A3,-(A7)
        lea       _vretpath.L,A2
        lea       _vclusterdir.L,A3
+; unsigned char vretEmpty;
 ; if (fsFindDirPath(vdirname, FIND_PATH_PART) == FIND_PATH_RET_ERROR)
        clr.l     -(A7)
        move.l    8(A6),-(A7)
@@ -5771,16 +5783,15 @@ _fsRemoveDir:
        bne.s     fsRemoveDir_1
 ; return ERRO_B_DIR_NOT_FOUND;
        move.b    #229,D0
-       bra.s     fsRemoveDir_3
+       bra       fsRemoveDir_3
 fsRemoveDir_1:
 ; vclusterdir = vretpath.ClusterDir;
        move.l    14(A2),(A3)
 ; /*printText("Aqui 2 - ");
 ; printText(vretpath.Name);
 ; printText("\r\n");*/
-; // Apaga o diretorio conforme especificado
-; if (fsFindInDir(vretpath.Name, TYPE_DEL_DIR) >= ERRO_D_START)
-       pea       7
+; if (fsFindInDir(vretpath.Name, TYPE_DIRECTORY) >= ERRO_D_START)
+       pea       1
        move.l    A2,-(A7)
        jsr       _fsFindInDir
        addq.w    #8,A7
@@ -5791,15 +5802,47 @@ fsRemoveDir_1:
        move.l    18(A2),(A3)
 ; return ERRO_B_DIR_NOT_FOUND;
        move.b    #229,D0
-       bra.s     fsRemoveDir_3
+       bra       fsRemoveDir_3
 fsRemoveDir_4:
+; }
+; vretEmpty = fsCheckDirEmpty(vdir.FirstCluster);
+       move.l    _vdir+22.L,-(A7)
+       jsr       @mmsjos_fsCheckDirEmpty
+       addq.w    #4,A7
+       move.b    D0,D2
+; if (vretEmpty != RETURN_OK)
+       tst.b     D2
+       beq.s     fsRemoveDir_6
+; {
+; vclusterdir = vretpath.ClusterDirAtu;
+       move.l    18(A2),(A3)
+; return vretEmpty;
+       move.b    D2,D0
+       bra.s     fsRemoveDir_3
+fsRemoveDir_6:
+; }
+; // Apaga o diretorio conforme especificado
+; if (fsFindInDir(vretpath.Name, TYPE_DEL_DIR) >= ERRO_D_START)
+       pea       7
+       move.l    A2,-(A7)
+       jsr       _fsFindInDir
+       addq.w    #8,A7
+       cmp.l     #-16,D0
+       blo.s     fsRemoveDir_8
+; {
+; vclusterdir = vretpath.ClusterDirAtu;
+       move.l    18(A2),(A3)
+; return ERRO_B_DIR_NOT_FOUND;
+       move.b    #229,D0
+       bra.s     fsRemoveDir_3
+fsRemoveDir_8:
 ; }
 ; vclusterdir = vretpath.ClusterDirAtu;
        move.l    18(A2),(A3)
 ; return RETURN_OK;
        clr.b     D0
 fsRemoveDir_3:
-       movem.l   (A7)+,A2/A3
+       movem.l   (A7)+,D2/A2/A3
        unlk      A6
        rts
 ; }
@@ -5850,6 +5893,166 @@ _fsGetDirAtuData:
        move.l    8(A6),-(A7)
        jsr       _memcpy
        add.w     #12,A7
+       unlk      A6
+       rts
+; }
+; //-------------------------------------------------------------------------
+; static unsigned char fsCheckDirEmpty(unsigned long vdircluster)
+; {
+@mmsjos_fsCheckDirEmpty:
+       link      A6,#-8
+       movem.l   D2/D3/D4/D5/D6/A2/A3,-(A7)
+       lea       _gDataBuffer.L,A2
+       lea       _vdisk.L,A3
+; unsigned long vclusteratual, vclusternext, vdata, vtemp1, vtemp2;
+; unsigned short ix, iz;
+; vclusteratual = vdircluster;
+       move.l    8(A6),D4
+; while (1)
+@mmsjos_fsCheckDirEmpty_1:
+; {
+; vtemp1 = ((vclusteratual - 2) * vdisk.SecPerClus);
+       move.l    D4,D0
+       subq.l    #2,D0
+       move.b    31(A3),D1
+       and.l     #255,D1
+       move.l    D0,-(A7)
+       move.l    D1,-(A7)
+       jsr       ULMUL
+       move.l    (A7),D0
+       addq.w    #8,A7
+       move.l    D0,-8(A6)
+; vtemp2 = vdisk.data;
+       move.l    12(A3),-4(A6)
+; vdata = vtemp1 + vtemp2;
+       move.l    -8(A6),D0
+       add.l     -4(A6),D0
+       move.l    D0,D6
+; for (iz = 0; iz < vdisk.SecPerClus; iz++)
+       clr.w     D5
+@mmsjos_fsCheckDirEmpty_4:
+       move.b    31(A3),D0
+       and.w     #255,D0
+       cmp.w     D0,D5
+       bhs       @mmsjos_fsCheckDirEmpty_6
+; {
+; if (!fsSectorRead(vdata, gDataBuffer))
+       move.l    A2,-(A7)
+       move.l    D6,-(A7)
+       jsr       _fsSectorRead
+       addq.w    #8,A7
+       tst.b     D0
+       bne.s     @mmsjos_fsCheckDirEmpty_7
+; return ERRO_B_READ_DISK;
+       move.b    #225,D0
+       bra       @mmsjos_fsCheckDirEmpty_9
+@mmsjos_fsCheckDirEmpty_7:
+; for (ix = 0; ix < vdisk.sectorSize; ix += 32)
+       clr.w     D2
+@mmsjos_fsCheckDirEmpty_10:
+       cmp.w     22(A3),D2
+       bhs       @mmsjos_fsCheckDirEmpty_12
+; {
+; if (gDataBuffer[ix] == DIR_EMPTY)
+       and.l     #65535,D2
+       move.b    0(A2,D2.L),D0
+       bne.s     @mmsjos_fsCheckDirEmpty_13
+; return RETURN_OK;
+       clr.b     D0
+       bra       @mmsjos_fsCheckDirEmpty_9
+@mmsjos_fsCheckDirEmpty_13:
+; if (gDataBuffer[ix] == DIR_DEL)
+       and.l     #65535,D2
+       move.b    0(A2,D2.L),D0
+       and.w     #255,D0
+       cmp.w     #229,D0
+       bne.s     @mmsjos_fsCheckDirEmpty_15
+; continue;
+       bra       @mmsjos_fsCheckDirEmpty_11
+@mmsjos_fsCheckDirEmpty_15:
+; if (gDataBuffer[ix + 11] == ATTR_LONG_NAME)
+       and.l     #65535,D2
+       move.l    D2,A0
+       move.b    11(A0,A2.L),D0
+       cmp.b     #15,D0
+       bne.s     @mmsjos_fsCheckDirEmpty_17
+; return ERRO_B_DIR_NOT_EMPTY;
+       move.b    #240,D0
+       bra       @mmsjos_fsCheckDirEmpty_9
+@mmsjos_fsCheckDirEmpty_17:
+; if (gDataBuffer[ix] == '.' && gDataBuffer[ix + 1] == 0x20)
+       and.l     #65535,D2
+       move.b    0(A2,D2.L),D0
+       cmp.b     #46,D0
+       bne.s     @mmsjos_fsCheckDirEmpty_19
+       and.l     #65535,D2
+       move.l    D2,A0
+       move.b    1(A0,A2.L),D0
+       cmp.b     #32,D0
+       bne.s     @mmsjos_fsCheckDirEmpty_19
+; continue;
+       bra       @mmsjos_fsCheckDirEmpty_11
+@mmsjos_fsCheckDirEmpty_19:
+; if (gDataBuffer[ix] == '.' && gDataBuffer[ix + 1] == '.' && gDataBuffer[ix + 2] == 0x20)
+       and.l     #65535,D2
+       move.b    0(A2,D2.L),D0
+       cmp.b     #46,D0
+       bne.s     @mmsjos_fsCheckDirEmpty_21
+       and.l     #65535,D2
+       move.l    D2,A0
+       move.b    1(A0,A2.L),D0
+       cmp.b     #46,D0
+       bne.s     @mmsjos_fsCheckDirEmpty_21
+       and.l     #65535,D2
+       move.l    D2,A0
+       move.b    2(A0,A2.L),D0
+       cmp.b     #32,D0
+       bne.s     @mmsjos_fsCheckDirEmpty_21
+; continue;
+       bra.s     @mmsjos_fsCheckDirEmpty_11
+@mmsjos_fsCheckDirEmpty_21:
+; return ERRO_B_DIR_NOT_EMPTY;
+       move.b    #240,D0
+       bra       @mmsjos_fsCheckDirEmpty_9
+@mmsjos_fsCheckDirEmpty_11:
+       add.w     #32,D2
+       bra       @mmsjos_fsCheckDirEmpty_10
+@mmsjos_fsCheckDirEmpty_12:
+; }
+; vdata++;
+       addq.l    #1,D6
+       addq.w    #1,D5
+       bra       @mmsjos_fsCheckDirEmpty_4
+@mmsjos_fsCheckDirEmpty_6:
+; }
+; vclusternext = fsFindNextCluster(vclusteratual, NEXT_FIND);
+       pea       5
+       move.l    D4,-(A7)
+       jsr       _fsFindNextCluster
+       addq.w    #8,A7
+       move.l    D0,D3
+; if (vclusternext >= ERRO_D_START)
+       cmp.l     #-16,D3
+       blo.s     @mmsjos_fsCheckDirEmpty_23
+; return ERRO_B_READ_DISK;
+       move.b    #225,D0
+       bra.s     @mmsjos_fsCheckDirEmpty_9
+@mmsjos_fsCheckDirEmpty_23:
+; if (vclusternext == LAST_CLUSTER_FAT32)
+       cmp.l     #268435455,D3
+       bne.s     @mmsjos_fsCheckDirEmpty_25
+; break;
+       bra.s     @mmsjos_fsCheckDirEmpty_3
+@mmsjos_fsCheckDirEmpty_25:
+; vclusteratual = vclusternext;
+       move.l    D3,D4
+       bra       @mmsjos_fsCheckDirEmpty_1
+@mmsjos_fsCheckDirEmpty_3:
+; }
+; return RETURN_OK;
+       clr.b     D0
+@mmsjos_fsCheckDirEmpty_9:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/A2/A3
        unlk      A6
        rts
 ; }
@@ -9020,7 +9223,7 @@ catFile_3:
        tst.l     D3
        bne.s     catFile_4
 ; printText("No memory to load file...\r\n\0");
-       pea       @mmsjos_54.L
+       pea       @mmsjos_55.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -9055,7 +9258,7 @@ catFile_9:
        cmp.b     #13,D0
        bne.s     catFile_12
 ; printText("\r\0");
-       pea       @mmsjos_68.L
+       pea       @mmsjos_69.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -9131,7 +9334,7 @@ catFile_7:
 ; }
 ; else {
 ; printText("Loading file error...\r\n\0");
-       pea       @mmsjos_69.L
+       pea       @mmsjos_70.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -9569,7 +9772,7 @@ _isValidFilename:
        clr.l     D4
        clr.l     D6
 ; strcpy(valid_chars,"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$&'()@^_`{}~");
-       pea       @mmsjos_70.L
+       pea       @mmsjos_71.L
        pea       -74(A6)
        jsr       _strcpy
        addq.w    #8,A7
@@ -10075,127 +10278,130 @@ _fsGetMfp:
        dc.b      67,114,101,97,116,105,110,103,32,100,105,114
        dc.b      101,99,116,111,114,121,0
 @mmsjos_21:
-       dc.b      78,111,116,32,102,111,117,110,100,0
+       dc.b      68,105,114,101,99,116,111,114,121,32,110,111
+       dc.b      116,32,101,109,112,116,121,0
 @mmsjos_22:
+       dc.b      78,111,116,32,102,111,117,110,100,0
+@mmsjos_23:
        dc.b      32,45,32,85,110,107,110,111,119,110,32,67,111
        dc.b      100,101,0
-@mmsjos_23:
-       dc.b      33,13,10,0
 @mmsjos_24:
+       dc.b      33,13,10,0
+@mmsjos_25:
        dc.b      80,111,119,101,114,101,100,32,98,121,32,117
        dc.b      67,47,79,83,45,73,73,32,118,50,46,57,49,13,10
        dc.b      0
-@mmsjos_25:
+@mmsjos_26:
        dc.b      85,116,105,108,105,116,121,32,40,99,41,32,50
        dc.b      48,49,52,45,50,48,50,54,13,10,0
-@mmsjos_26:
-       dc.b      47,0
 @mmsjos_27:
-       dc.b      79,107,13,10,0
+       dc.b      47,0
 @mmsjos_28:
-       dc.b      35,62,0
+       dc.b      79,107,13,10,0
 @mmsjos_29:
-       dc.b      0
+       dc.b      35,62,0
 @mmsjos_30:
-       dc.b      67,76,83,0
+       dc.b      0
 @mmsjos_31:
-       dc.b      67,76,69,65,82,0
+       dc.b      67,76,83,0
 @mmsjos_32:
-       dc.b      81,85,73,84,0
+       dc.b      67,76,69,65,82,0
 @mmsjos_33:
-       dc.b      86,69,82,0
+       dc.b      81,85,73,84,0
 @mmsjos_34:
-       dc.b      77,71,85,73,0
+       dc.b      86,69,82,0
 @mmsjos_35:
-       dc.b      80,87,68,0
+       dc.b      77,71,85,73,0
 @mmsjos_36:
-       dc.b      76,83,0
+       dc.b      80,87,68,0
 @mmsjos_37:
-       dc.b      82,77,0
+       dc.b      76,83,0
 @mmsjos_38:
-       dc.b      67,80,0
+       dc.b      82,77,0
 @mmsjos_39:
-       dc.b      70,105,108,101,32,110,111,116,32,102,111,117
-       dc.b      110,100,46,13,10,0
+       dc.b      67,80,0
 @mmsjos_40:
        dc.b      70,105,108,101,32,110,111,116,32,102,111,117
-       dc.b      110,100,46,46,13,10,0
+       dc.b      110,100,46,13,10,0
 @mmsjos_41:
-       dc.b      82,69,78,0
+       dc.b      70,105,108,101,32,110,111,116,32,102,111,117
+       dc.b      110,100,46,46,13,10,0
 @mmsjos_42:
+       dc.b      82,69,78,0
+@mmsjos_43:
        dc.b      102,105,108,101,32,110,111,116,32,102,111,117
        dc.b      110,100,46,13,10,0
-@mmsjos_43:
-       dc.b      77,68,0
 @mmsjos_44:
-       dc.b      67,68,0
+       dc.b      77,68,0
 @mmsjos_45:
-       dc.b      82,68,0
+       dc.b      67,68,0
 @mmsjos_46:
-       dc.b      83,84,79,70,0
+       dc.b      82,68,0
 @mmsjos_47:
-       dc.b      56,49,48,48,48,48,0
+       dc.b      83,84,79,70,0
 @mmsjos_48:
-       dc.b      83,84,79,82,0
+       dc.b      56,49,48,48,48,48,0
 @mmsjos_49:
-       dc.b      68,65,84,69,0
+       dc.b      83,84,79,82,0
 @mmsjos_50:
-       dc.b      84,73,77,69,0
+       dc.b      68,65,84,69,0
 @mmsjos_51:
-       dc.b      70,79,82,77,65,84,0
+       dc.b      84,73,77,69,0
 @mmsjos_52:
-       dc.b      77,79,68,69,0
+       dc.b      70,79,82,77,65,84,0
 @mmsjos_53:
-       dc.b      67,65,84,0
+       dc.b      77,79,68,69,0
 @mmsjos_54:
+       dc.b      67,65,84,0
+@mmsjos_55:
        dc.b      78,111,32,109,101,109,111,114,121,32,116,111
        dc.b      32,108,111,97,100,32,102,105,108,101,46,46,46
        dc.b      13,10,0
-@mmsjos_55:
+@mmsjos_56:
        dc.b      76,111,97,100,105,110,103,32,70,105,108,101
        dc.b      32,105,110,32,0
-@mmsjos_56:
-       dc.b      104,13,10,0
 @mmsjos_57:
+       dc.b      104,13,10,0
+@mmsjos_58:
        dc.b      76,111,97,100,105,110,103,32,70,105,108,101
        dc.b      32,69,114,114,111,114,46,46,46,13,10,0
-@mmsjos_58:
+@mmsjos_59:
        dc.b      73,110,118,97,108,105,100,32,67,111,109,109
        dc.b      97,110,100,32,111,114,32,70,105,108,101,32,78
        dc.b      97,109,101,13,10,0
-@mmsjos_59:
-       dc.b      32,32,68,97,116,101,32,105,115,32,0
 @mmsjos_60:
-       dc.b      32,32,84,105,109,101,32,105,115,32,0
+       dc.b      32,32,68,97,116,101,32,105,115,32,0
 @mmsjos_61:
+       dc.b      32,32,84,105,109,101,32,105,115,32,0
+@mmsjos_62:
        dc.b      70,111,114,109,97,116,32,100,105,115,107,32
        dc.b      119,97,115,32,115,117,99,99,101,115,115,102
        dc.b      117,108,108,121,13,10,0
-@mmsjos_62:
+@mmsjos_63:
        dc.b      69,114,114,111,114,44,32,102,105,108,101,32
        dc.b      110,97,109,101,32,109,117,115,116,32,98,101
        dc.b      32,112,114,111,118,105,100,101,100,33,33,13
        dc.b      10,0
-@mmsjos_63:
+@mmsjos_64:
        dc.b      79,112,101,110,105,110,103,32,70,105,108,101
        dc.b      46,46,46,13,10,0
-@mmsjos_64:
+@mmsjos_65:
        dc.b      87,114,105,116,105,110,103,32,70,105,108,101
        dc.b      46,46,46,13,10,0
-@mmsjos_65:
+@mmsjos_66:
        dc.b      13,10,67,108,111,115,105,110,103,32,70,105,108
        dc.b      101,46,46,46,13,10,0
-@mmsjos_66:
+@mmsjos_67:
        dc.b      83,101,114,105,97,108,32,76,111,97,100,32,69
        dc.b      114,114,111,114,46,46,46,0
-@mmsjos_67:
-       dc.b      82,117,110,110,105,110,103,32,97,116,32,0
 @mmsjos_68:
-       dc.b      13,0
+       dc.b      82,117,110,110,105,110,103,32,97,116,32,0
 @mmsjos_69:
+       dc.b      13,0
+@mmsjos_70:
        dc.b      76,111,97,100,105,110,103,32,102,105,108,101
        dc.b      32,101,114,114,111,114,46,46,46,13,10,0
-@mmsjos_70:
+@mmsjos_71:
        dc.b      65,66,67,68,69,70,71,72,73,74,75,76,77,78,79
        dc.b      80,81,82,83,84,85,86,87,88,89,90,48,49,50,51
        dc.b      52,53,54,55,56,57,33,35,36,38,39,40,41,64,94
