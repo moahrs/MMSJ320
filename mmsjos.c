@@ -11,7 +11,8 @@
 * 04/01/2025  0.3     Moacir Jr.   Receber pasta no nome do arquivo "<pasta>/<file>"
 * 08/01/2025  0.4     Moacir Jr.   Implementar wildcards "*?" para LS, RM e CP
 * 18/01/2025  0.5     Moacir Jr.   Adaptar uC/OS-II - RTOS
-* 13/04/2026  1.0a02  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
+* 13/04/2026  1.0a03  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
+*                                  Ajustes no cat, fat, rd, rm e prompt
 ********************************************************************************/
 
 #include <ucos_ii.h>
@@ -123,7 +124,7 @@ void memInit(void);
 
 HEADER *_allocp;
 
-#define versionMMSJOS "1.0a02"
+#define versionMMSJOS "1.0a03"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 
 #define STACKSIZE  1024
@@ -567,6 +568,7 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
         else if (!strcmp(linhacomando,"VER") && iy == 3)
         {
             fsVer();
+            printText("\r\n\0");
         }
         else if (!strcmp(linhacomando,"MGUI") && iy == 4)
         {

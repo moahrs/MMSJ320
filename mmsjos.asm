@@ -12,7 +12,8 @@
 ; * 04/01/2025  0.3     Moacir Jr.   Receber pasta no nome do arquivo "<pasta>/<file>"
 ; * 08/01/2025  0.4     Moacir Jr.   Implementar wildcards "*?" para LS, RM e CP
 ; * 18/01/2025  0.5     Moacir Jr.   Adaptar uC/OS-II - RTOS
-; * 13/04/2026  1.0a02  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
+; * 13/04/2026  1.0a03  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
+; *                                  Ajustes no cat, fat, rd, rm e prompt
 ; ********************************************************************************/
 ; #include <ucos_ii.h>
 ; #include <ctype.h>
@@ -111,7 +112,7 @@
 ; // Funcoes de Alocacao de Memoria
 ; void memInit(void);
 ; HEADER *_allocp;
-; #define versionMMSJOS "1.0a02"
+; #define versionMMSJOS "1.0a03"
 ; #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 ; #define STACKSIZE  1024
 ; #define STACKSIZEMGUI  2048
@@ -1208,6 +1209,11 @@ fsOsCommand_37:
 ; {
 ; fsVer();
        jsr       _fsVer
+; printText("\r\n\0");
+       pea       @mmsjos_1.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
        bra       fsOsCommand_308
 fsOsCommand_40:
 ; }
@@ -10417,7 +10423,7 @@ _fsGetMfp:
 @mmsjos_1:
        dc.b      13,10,0
 @mmsjos_2:
-       dc.b      77,77,83,74,45,79,83,32,118,49,46,48,97,48,50
+       dc.b      77,77,83,74,45,79,83,32,118,49,46,48,97,48,51
        dc.b      0
 @mmsjos_3:
        dc.b      80,111,119,101,114,101,100,32,98,121,32,117
