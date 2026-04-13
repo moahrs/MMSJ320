@@ -31,6 +31,7 @@
 ; * 10/01/2025  1.2     Moacir Jr.   Integrar com uC/CosII para o MMSJ320
 ; * 16/01/2025  1.3     Moacir Jr.   Voltar para teclado e mouse com arduino nano
 ; * 28/01/2025  1.3a    Moacir Jr.   Ajustes na leitura dos dados recebidos do Mouse
+; * 12/04/2026  1.4a02  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
 ; *--------------------------------------------------------------------------------
 ; *
 ; * Mapa de Memoria
@@ -103,7 +104,7 @@
 ; #include "mmsj320vdp.h"
 ; #include "mmsj320mfp.h"
 ; #include "monitor.h"
-; #define versionBios "1.3a"
+; #define versionBios "1.4a02"
 ; HEADER *_allocp;
 ; unsigned long runMemory;
 ; unsigned char kbdKeyPtrR; // Contador do ponteiro das teclas colocadas no buffer
@@ -135,6 +136,7 @@
 ; void writeLongSerial(unsigned char *msg);
 ; unsigned long lstmGetSize(void);
 ; unsigned char loadSerialToMem(unsigned char *pEnder, unsigned char ptipo);
+; unsigned char loadSerialToMem2(unsigned char *pEnder, unsigned char ptipo);
 ; void runMem(unsigned long pEnder);
 ; void runBasic(unsigned long pEnder);
 ; void pokeMem(unsigned char *pEnder, unsigned char *pByte);
@@ -1867,7 +1869,7 @@ processCmd_14:
 ; // Processar e definir o que fazer
 ; if (linhacomando[0] != 0)
        move.b    (A2),D0
-       beq       processCmd_61
+       beq       processCmd_65
 ; {
 ; if (!strcmp(linhacomando,"CLS") && iy == 3)
        pea       @monitor_8.L
@@ -1883,7 +1885,7 @@ processCmd_14:
        jsr       _clearScr
 ; vRet = 0;
        clr.l     -4(A6)
-       bra       processCmd_61
+       bra       processCmd_65
 processCmd_25:
 ; }
 ; else if (!strcmp(linhacomando,"CLEAR") && iy == 5)
@@ -1900,7 +1902,7 @@ processCmd_25:
        jsr       _clearScr
 ; vRet = 0;
        clr.l     -4(A6)
-       bra       processCmd_61
+       bra       processCmd_65
 processCmd_27:
 ; }
 ; else if (!strcmp(linhacomando,"VER") && iy == 3)
@@ -1917,7 +1919,7 @@ processCmd_27:
        pea       @monitor_1.L
        jsr       _printText
        addq.w    #4,A7
-       bra       processCmd_61
+       bra       processCmd_65
 processCmd_29:
 ; }
 ; else if (!strcmp(linhacomando,"LOAD") && iy == 4)
@@ -1948,19 +1950,23 @@ processCmd_33:
        move.l    D6,-(A7)
        jsr       _loadSerialToMem
        addq.w    #8,A7
-       bra       processCmd_61
+       bra       processCmd_65
 processCmd_31:
 ; }
-; else if (!strcmp(linhacomando,"RUN") && iy == 3)
+; else if (!strcmp(linhacomando,"LOAD2") && iy == 5)
        pea       @monitor_13.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processCmd_35
-       cmp.w     #3,D2
+       bne       processCmd_35
+       cmp.w     #5,D2
        bne.s     processCmd_35
 ; {
+; printText("Wait...\r\n\0");
+       pea       @monitor_12.L
+       jsr       _printText
+       addq.w    #4,A7
 ; if (linhaarg[0] != 0x00)
        move.b    (A4),D0
        beq.s     processCmd_37
@@ -1969,146 +1975,173 @@ processCmd_31:
        jsr       _hexToLong
        addq.w    #4,A7
        move.l    D0,D6
-       bra.s     processCmd_38
 processCmd_37:
-; else
-; vEndLoad = 0x00810000;
-       move.l    #8454144,D6
-processCmd_38:
-; runMem(vEndLoad);
+; loadSerialToMem2(vEndLoad, 1);
+       pea       1
        move.l    D6,-(A7)
-       jsr       _runMem
-       addq.w    #4,A7
-       bra       processCmd_61
+       jsr       _loadSerialToMem2
+       addq.w    #8,A7
+       bra       processCmd_65
 processCmd_35:
 ; }
-; else if (!strcmp(linhacomando,"BASIC") && iy == 5)
+; else if (!strcmp(linhacomando,"RUN") && iy == 3)
        pea       @monitor_14.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
        bne.s     processCmd_39
-       cmp.w     #5,D2
+       cmp.w     #3,D2
        bne.s     processCmd_39
 ; {
-; runBasic(linhaarg);
+; if (linhaarg[0] != 0x00)
+       move.b    (A4),D0
+       beq.s     processCmd_41
+; vEndLoad = hexToLong(linhaarg);
        move.l    A4,-(A7)
-       jsr       _runBasic
+       jsr       _hexToLong
        addq.w    #4,A7
-       bra       processCmd_61
+       move.l    D0,D6
+       bra.s     processCmd_42
+processCmd_41:
+; else
+; vEndLoad = 0x00810000;
+       move.l    #8454144,D6
+processCmd_42:
+; runMem(vEndLoad);
+       move.l    D6,-(A7)
+       jsr       _runMem
+       addq.w    #4,A7
+       bra       processCmd_65
 processCmd_39:
 ; }
-; else if (!strcmp(linhacomando,"MODE") && iy == 4)
+; else if (!strcmp(linhacomando,"BASIC") && iy == 5)
        pea       @monitor_15.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processCmd_41
-       cmp.w     #4,D2
-       bne.s     processCmd_41
+       bne.s     processCmd_43
+       cmp.w     #5,D2
+       bne.s     processCmd_43
 ; {
-; modeVideo(vparam);
-       move.l    A5,-(A7)
-       jsr       _modeVideo
+; runBasic(linhaarg);
+       move.l    A4,-(A7)
+       jsr       _runBasic
        addq.w    #4,A7
-       bra       processCmd_61
-processCmd_41:
+       bra       processCmd_65
+processCmd_43:
 ; }
-; else if (!strcmp(linhacomando,"POKE") && iy == 4)
+; else if (!strcmp(linhacomando,"MODE") && iy == 4)
        pea       @monitor_16.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processCmd_43
+       bne.s     processCmd_45
        cmp.w     #4,D2
-       bne.s     processCmd_43
+       bne.s     processCmd_45
+; {
+; modeVideo(vparam);
+       move.l    A5,-(A7)
+       jsr       _modeVideo
+       addq.w    #4,A7
+       bra       processCmd_65
+processCmd_45:
+; }
+; else if (!strcmp(linhacomando,"POKE") && iy == 4)
+       pea       @monitor_17.L
+       move.l    A2,-(A7)
+       jsr       (A3)
+       addq.w    #8,A7
+       tst.l     D0
+       bne.s     processCmd_47
+       cmp.w     #4,D2
+       bne.s     processCmd_47
 ; {
 ; pokeMem(vparam, vparam2);
        pea       -38(A6)
        move.l    A5,-(A7)
        jsr       _pokeMem
        addq.w    #8,A7
-       bra       processCmd_61
-processCmd_43:
+       bra       processCmd_65
+processCmd_47:
 ; }
 ; else if (!strcmp(linhacomando,"LOADSO") && iy == 6)
-       pea       @monitor_17.L
-       move.l    A2,-(A7)
-       jsr       (A3)
-       addq.w    #8,A7
-       tst.l     D0
-       bne.s     processCmd_45
-       cmp.w     #6,D2
-       bne.s     processCmd_45
-; {
-; carregaOSDisk();
-       jsr       _carregaOSDisk
-       bra       processCmd_61
-processCmd_45:
-; }
-; else if (!strcmp(linhacomando,"RUNSO") && iy == 5)
        pea       @monitor_18.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processCmd_47
-       cmp.w     #5,D2
-       bne.s     processCmd_47
+       bne.s     processCmd_49
+       cmp.w     #6,D2
+       bne.s     processCmd_49
 ; {
-; runSystemOper();
-       jsr       _runSystemOper
-       bra       processCmd_61
-processCmd_47:
+; carregaOSDisk();
+       jsr       _carregaOSDisk
+       bra       processCmd_65
+processCmd_49:
 ; }
-; else if (!strcmp(linhacomando,"DEBUG") && iy == 5)
+; else if (!strcmp(linhacomando,"RUNSO") && iy == 5)
        pea       @monitor_19.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processCmd_49
+       bne.s     processCmd_51
        cmp.w     #5,D2
-       bne.s     processCmd_49
+       bne.s     processCmd_51
+; {
+; runSystemOper();
+       jsr       _runSystemOper
+       bra       processCmd_65
+processCmd_51:
+; }
+; else if (!strcmp(linhacomando,"DEBUG") && iy == 5)
+       pea       @monitor_20.L
+       move.l    A2,-(A7)
+       jsr       (A3)
+       addq.w    #8,A7
+       tst.l     D0
+       bne.s     processCmd_53
+       cmp.w     #5,D2
+       bne.s     processCmd_53
 ; {
 ; if (debugMessages)
        tst.b     _debugMessages.L
-       beq.s     processCmd_51
+       beq.s     processCmd_55
 ; {
 ; debugMessages = 0;
        clr.b     _debugMessages.L
 ; printText("Debug Messages Off\r\n\0");
-       pea       @monitor_20.L
+       pea       @monitor_21.L
        jsr       _printText
        addq.w    #4,A7
-       bra.s     processCmd_52
-processCmd_51:
+       bra.s     processCmd_56
+processCmd_55:
 ; }
 ; else
 ; {
 ; debugMessages = 1;
        move.b    #1,_debugMessages.L
 ; printText("Debug Messages On\r\n\0");
-       pea       @monitor_21.L
+       pea       @monitor_22.L
        jsr       _printText
        addq.w    #4,A7
-processCmd_52:
-       bra       processCmd_61
-processCmd_49:
+processCmd_56:
+       bra       processCmd_65
+processCmd_53:
 ; }
 ; }
 ; else if (strcmp(linhacomando,"DUMP") == 0 && iy == 4)
-       pea       @monitor_22.L
+       pea       @monitor_23.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processCmd_53
+       bne.s     processCmd_57
        cmp.w     #4,D2
-       bne.s     processCmd_53
+       bne.s     processCmd_57
 ; {
 ; dumpMem(vparam, vparam2, vparam3);
        pea       -22(A6)
@@ -2116,61 +2149,61 @@ processCmd_49:
        move.l    A5,-(A7)
        jsr       _dumpMem
        add.w     #12,A7
-       bra       processCmd_61
-processCmd_53:
+       bra       processCmd_65
+processCmd_57:
 ; }
 ; else if (strcmp(linhacomando,"DDUUMMPP") == 0 && iy == 8)
-       pea       @monitor_23.L
+       pea       @monitor_24.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processCmd_55
+       bne.s     processCmd_59
        cmp.w     #8,D2
-       bne.s     processCmd_55
+       bne.s     processCmd_59
 ; {
 ; dumpMem("6020A0\0", "128\0", "\0");
+       pea       @monitor_27.L
        pea       @monitor_26.L
        pea       @monitor_25.L
-       pea       @monitor_24.L
        jsr       _dumpMem
        add.w     #12,A7
-       bra       processCmd_61
-processCmd_55:
+       bra       processCmd_65
+processCmd_59:
 ; }
 ; else if (strcmp(linhacomando,"DUMPS") == 0 && linhacomando[4] == 'S' && iy == 5)
-       pea       @monitor_27.L
+       pea       @monitor_28.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processCmd_57
+       bne.s     processCmd_61
        move.b    4(A2),D0
        cmp.b     #83,D0
-       bne.s     processCmd_57
+       bne.s     processCmd_61
        cmp.w     #5,D2
-       bne.s     processCmd_57
+       bne.s     processCmd_61
 ; {
 ; dumpMem2(vparam, vparam2);
        pea       -38(A6)
        move.l    A5,-(A7)
        jsr       _dumpMem2
        addq.w    #8,A7
-       bra       processCmd_61
-processCmd_57:
+       bra       processCmd_65
+processCmd_61:
 ; }
 ; else if (strcmp(linhacomando,"DUMPW") == 0 && linhacomando[4] == 'W' && iy == 5)
-       pea       @monitor_28.L
+       pea       @monitor_29.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processCmd_59
+       bne.s     processCmd_63
        move.b    4(A2),D0
        cmp.b     #87,D0
-       bne.s     processCmd_59
+       bne.s     processCmd_63
        cmp.w     #5,D2
-       bne.s     processCmd_59
+       bne.s     processCmd_63
 ; {
 ; dumpMemWin(vparam, vparam2, vparam3);
        pea       -22(A6)
@@ -2178,8 +2211,8 @@ processCmd_57:
        move.l    A5,-(A7)
        jsr       _dumpMemWin
        add.w     #12,A7
-       bra.s     processCmd_61
-processCmd_59:
+       bra.s     processCmd_65
+processCmd_63:
 ; }
 ; else
 ; {
@@ -2187,12 +2220,12 @@ processCmd_59:
        clr.b     -5(A6)
 ; if (!vresp)
        tst.b     -5(A6)
-       bne.s     processCmd_61
+       bne.s     processCmd_65
 ; printText("Unknown Command !!!\r\n\0");
-       pea       @monitor_29.L
+       pea       @monitor_30.L
        jsr       _printText
        addq.w    #4,A7
-processCmd_61:
+processCmd_65:
 ; }
 ; }
 ; return vRet;
@@ -2504,23 +2537,23 @@ modeVideo_2:
        bne.s     modeVideo_12
 ; {
 ; printText("usage: mode [code]\r\n\0");
-       pea       @monitor_30.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printText("   code: 0 = Text Mode 40x24\r\n\0");
        pea       @monitor_31.L
        jsr       (A2)
        addq.w    #4,A7
-; printText("         1 = Graphic Text Mode 32x24\r\n\0");
+; printText("   code: 0 = Text Mode 40x24\r\n\0");
        pea       @monitor_32.L
        jsr       (A2)
        addq.w    #4,A7
-; printText("         2 = Graphic 256x192\r\n\0");
+; printText("         1 = Graphic Text Mode 32x24\r\n\0");
        pea       @monitor_33.L
        jsr       (A2)
        addq.w    #4,A7
-; printText("         3 = Graphic 64x48\r\n\0");
+; printText("         2 = Graphic 256x192\r\n\0");
        pea       @monitor_34.L
+       jsr       (A2)
+       addq.w    #4,A7
+; printText("         3 = Graphic 64x48\r\n\0");
+       pea       @monitor_35.L
        jsr       (A2)
        addq.w    #4,A7
 modeVideo_12:
@@ -2791,7 +2824,7 @@ pokeMem_1:
        cmp.b     #3,D0
        bne.s     pokeMem_3
 ; printText("usage: poke <ender> <byte>\r\n\0");
-       pea       @monitor_35.L
+       pea       @monitor_36.L
        jsr       _printText
        addq.w    #4,A7
 pokeMem_3:
@@ -2844,15 +2877,15 @@ _dumpMem:
        bne.s     dumpMem_3
 ; {
 ; printText("usage: dump <ender> [qtd] [cols]\r\n\0");
-       pea       @monitor_36.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printText("    qtd: default 64\r\n\0");
        pea       @monitor_37.L
        jsr       (A2)
        addq.w    #4,A7
-; printText("   cols: default 8\r\n\0");
+; printText("    qtd: default 64\r\n\0");
        pea       @monitor_38.L
+       jsr       (A2)
+       addq.w    #4,A7
+; printText("   cols: default 8\r\n\0");
+       pea       @monitor_39.L
        jsr       (A2)
        addq.w    #4,A7
 dumpMem_3:
@@ -2993,7 +3026,7 @@ dumpMem_27:
 dumpMem_26:
 ; }
 ; printText("|\0");
-       pea       @monitor_39.L
+       pea       @monitor_40.L
        jsr       (A2)
        addq.w    #4,A7
 ; for (iy = 0; iy < vcols; iy++)
@@ -3083,7 +3116,7 @@ _dumpMem2:
        cmp.b     #3,D0
        bne.s     dumpMem2_3
 ; writeLongSerial("usage: dump <ender initial> [qtd (default 256)]\r\n\0");
-       pea       @monitor_40.L
+       pea       @monitor_41.L
        jsr       (A2)
        addq.w    #4,A7
 dumpMem2_3:
@@ -3157,7 +3190,7 @@ dumpMem2_16:
        jsr       (A2)
        addq.w    #4,A7
 ; writeLongSerial("h : ");
-       pea       @monitor_41.L
+       pea       @monitor_42.L
        jsr       (A2)
        addq.w    #4,A7
 ; for (iy = 0; iy < 16; iy++)
@@ -3201,7 +3234,7 @@ dumpMem2_20:
 dumpMem2_22:
 ; }
 ; writeLongSerial(" | \0");
-       pea       @monitor_42.L
+       pea       @monitor_43.L
        jsr       (A2)
        addq.w    #4,A7
 ; for (iy = 0; iy < 16; iy++)
@@ -3291,15 +3324,15 @@ _dumpMemWin:
        bne.s     dumpMemWin_3
 ; {
 ; printText("usage: dumpw <ender> [qtd] [cols]\r\n\0");
-       pea       @monitor_43.L
-       jsr       (A3)
-       addq.w    #4,A7
-; printText("    qtd: default 128\r\n\0");
        pea       @monitor_44.L
        jsr       (A3)
        addq.w    #4,A7
+; printText("    qtd: default 128\r\n\0");
+       pea       @monitor_45.L
+       jsr       (A3)
+       addq.w    #4,A7
 ; printText("   cols: default 8\r\n\0");
-       pea       @monitor_38.L
+       pea       @monitor_39.L
        jsr       (A3)
        addq.w    #4,A7
 dumpMemWin_3:
@@ -3318,7 +3351,7 @@ dumpMemWin_1:
        cmp.b     #3,D0
        bne.s     dumpMemWin_8
 ; printText("dumpw Only Works in 40 cols\r\n\0");
-       pea       @monitor_45.L
+       pea       @monitor_46.L
        jsr       (A3)
        addq.w    #4,A7
 dumpMemWin_8:
@@ -3349,7 +3382,7 @@ dumpMemWin_12:
 ; clearScr();
        jsr       _clearScr
 ; printText("             DUMPW v0.1                \r\n\0");
-       pea       @monitor_46.L
+       pea       @monitor_47.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(218,1);
@@ -3421,15 +3454,6 @@ dumpMemWin_22:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("Addr ");
-       pea       @monitor_47.L
-       jsr       (A3)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A2)
-       addq.w    #8,A7
-; printText("         Bytes         ");
        pea       @monitor_48.L
        jsr       (A3)
        addq.w    #4,A7
@@ -3438,8 +3462,17 @@ dumpMemWin_22:
        pea       179
        jsr       (A2)
        addq.w    #8,A7
-; printText(" ASCII ");
+; printText("         Bytes         ");
        pea       @monitor_49.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText(" ASCII ");
+       pea       @monitor_50.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -3552,7 +3585,7 @@ dumpMemWin_34:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" <-:Prev  ->:Next  <");
-       pea       @monitor_50.L
+       pea       @monitor_51.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(217,1);
@@ -3561,7 +3594,7 @@ dumpMemWin_34:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(":Addr  ESC:Exit ");
-       pea       @monitor_51.L
+       pea       @monitor_52.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -3721,7 +3754,7 @@ dumpMemWin_58:
 dumpMemWin_57:
 ; }
 ; printText("|\0");
-       pea       @monitor_39.L
+       pea       @monitor_40.L
        jsr       (A3)
        addq.w    #4,A7
 ; for (iy = 0; iy < vcols; iy++)
@@ -3814,7 +3847,7 @@ dumpMemWin_72:
        jsr       (A4)
        addq.w    #8,A7
 ; printText(" Address(HEX):                       \0");
-       pea       @monitor_52.L
+       pea       @monitor_53.L
        jsr       (A3)
        addq.w    #4,A7
 ; vdp_set_cursor(16, 21);
@@ -3834,7 +3867,7 @@ dumpMemWin_72:
        jsr       (A4)
        addq.w    #8,A7
 ; printText(" <-:Prev  ->:Next  <");
-       pea       @monitor_50.L
+       pea       @monitor_51.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(217,1);
@@ -3843,7 +3876,7 @@ dumpMemWin_72:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(":Addr  ESC:Exit ");
-       pea       @monitor_51.L
+       pea       @monitor_52.L
        jsr       (A3)
        addq.w    #4,A7
 ; if (vRetInput != 0x1B)
@@ -3963,6 +3996,869 @@ _lstmGetSize:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
+; static unsigned short xmodem_crc16_update(unsigned short crc, unsigned char data)
+; {
+@monitor_xmodem_crc16_update:
+       link      A6,#0
+       movem.l   D2/D3,-(A7)
+       move.w    10(A6),D2
+       and.l     #65535,D2
+; unsigned char i;
+; crc ^= ((unsigned short)data << 8);
+       move.b    15(A6),D0
+       and.w     #255,D0
+       lsl.w     #8,D0
+       eor.w     D0,D2
+; for (i = 0; i < 8; i++)
+       clr.b     D3
+@monitor_xmodem_crc16_update_1:
+       cmp.b     #8,D3
+       bhs.s     @monitor_xmodem_crc16_update_3
+; {
+; if (crc & 0x8000)
+       move.w    D2,D0
+       and.w     #32768,D0
+       beq.s     @monitor_xmodem_crc16_update_4
+; crc = (crc << 1) ^ 0x1021;
+       move.w    D2,D0
+       lsl.w     #1,D0
+       move.w    #4129,D1
+       eor.w     D1,D0
+       move.w    D0,D2
+       bra.s     @monitor_xmodem_crc16_update_5
+@monitor_xmodem_crc16_update_4:
+; else
+; crc = (crc << 1);
+       lsl.w     #1,D2
+@monitor_xmodem_crc16_update_5:
+       addq.b    #1,D3
+       bra       @monitor_xmodem_crc16_update_1
+@monitor_xmodem_crc16_update_3:
+; }
+; return crc;
+       move.w    D2,D0
+       movem.l   (A7)+,D2/D3
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; static unsigned char serialReadByteTimeout(unsigned char *pByte, unsigned long pTimeoutSpin)
+; {
+@monitor_serialReadByteTimeout:
+       link      A6,#0
+; while (pTimeoutSpin)
+@monitor_serialReadByteTimeout_1:
+       tst.l     12(A6)
+       beq       @monitor_serialReadByteTimeout_3
+; {
+; if (kbdKeyBuffer[kbdKeyPtrR] == 0x1B)  // ESC
+       move.b    _kbdKeyPtrR.L,D0
+       and.l     #255,D0
+       lea       _kbdKeyBuffer.L,A0
+       move.b    0(A0,D0.L),D0
+       cmp.b     #27,D0
+       bne.s     @monitor_serialReadByteTimeout_4
+; return 0;
+       clr.b     D0
+       bra       @monitor_serialReadByteTimeout_6
+@monitor_serialReadByteTimeout_4:
+; if ((*(vmfp + Reg_RSR) & 0x80))
+       move.l    _vmfp.L,A0
+       move.w    _Reg_RSR.L,D0
+       and.l     #65535,D0
+       move.b    0(A0,D0.L),D0
+       and.w     #255,D0
+       and.w     #128,D0
+       beq.s     @monitor_serialReadByteTimeout_7
+; {
+; *pByte = *(vmfp + Reg_UDR);
+       move.l    _vmfp.L,A0
+       move.w    _Reg_UDR.L,D0
+       and.l     #65535,D0
+       move.l    8(A6),A1
+       move.b    0(A0,D0.L),(A1)
+; return 1;
+       moveq     #1,D0
+       bra.s     @monitor_serialReadByteTimeout_6
+@monitor_serialReadByteTimeout_7:
+; }
+; pTimeoutSpin--;
+       subq.l    #1,12(A6)
+       bra       @monitor_serialReadByteTimeout_1
+@monitor_serialReadByteTimeout_3:
+; }
+; return 0;
+       clr.b     D0
+@monitor_serialReadByteTimeout_6:
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; static void serialDrainRx(unsigned long pIdleSpin)
+; {
+@monitor_serialDrainRx:
+       link      A6,#-4
+       move.l    D2,-(A7)
+       move.l    8(A6),D2
+; unsigned char vDummy;
+; while (pIdleSpin)
+@monitor_serialDrainRx_1:
+       tst.l     D2
+       beq.s     @monitor_serialDrainRx_3
+; {
+; if ((*(vmfp + Reg_RSR) & 0x80))
+       move.l    _vmfp.L,A0
+       move.w    _Reg_RSR.L,D0
+       and.l     #65535,D0
+       move.b    0(A0,D0.L),D0
+       and.w     #255,D0
+       and.w     #128,D0
+       beq.s     @monitor_serialDrainRx_4
+; {
+; vDummy = *(vmfp + Reg_UDR);
+       move.l    _vmfp.L,A0
+       move.w    _Reg_UDR.L,D0
+       and.l     #65535,D0
+       move.b    0(A0,D0.L),-1(A6)
+; pIdleSpin = 120000;
+       move.l    #120000,D2
+       bra.s     @monitor_serialDrainRx_5
+@monitor_serialDrainRx_4:
+; }
+; else
+; {
+; pIdleSpin--;
+       subq.l    #1,D2
+@monitor_serialDrainRx_5:
+       bra       @monitor_serialDrainRx_1
+@monitor_serialDrainRx_3:
+; }
+; }
+; vDummy = 0;
+       clr.b     -1(A6)
+       move.l    (A7)+,D2
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; // load2 <ender initial to save>
+; //----------------------------------------------------------------------------- 
+; // Uses XMODEM-CRC / XMODEM-1K (SOH=128 bytes, STX=1024 bytes)
+; // Faster and safer than checksum-only receiver.
+; //-----------------------------------------------------------------------------
+; unsigned char loadSerialToMem2(unsigned char *pEndStart, unsigned char ptipo)
+; {
+       xdef      _loadSerialToMem2
+_loadSerialToMem2:
+       link      A6,#-1092
+       movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
+       lea       _writeSerial.L,A2
+       move.l    8(A6),D3
+       lea       _printText.L,A3
+       lea       @monitor_serialDrainRx.L,A4
+       lea       @monitor_serialReadByteTimeout.L,A5
+       move.b    15(A6),D7
+       and.l     #255,D7
+; unsigned char *pEnder = pEndStart;
+       move.l    D3,D6
+; unsigned char *vEndSave;
+; unsigned char *pEndNew;
+; unsigned char vRx[1024];
+; unsigned long vSizeAlloc = 0;
+       clr.l     -58(A6)
+; unsigned long vSizeData = 0;
+       clr.l     -54(A6)
+; unsigned long vOffSave = 0;
+       clr.l     -50(A6)
+; unsigned long vTimeout;
+; unsigned short vCalcCrc;
+; unsigned short vRecvCrc;
+; unsigned short ix;
+; unsigned char ch = 0, blk = 0, nblk = 0;
+       clr.b     -38(A6)
+       clr.b     -37(A6)
+       clr.b     -36(A6)
+; unsigned char csum = 0;
+       clr.b     -35(A6)
+; unsigned char vCalcCsum = 0;
+       clr.b     -34(A6)
+; unsigned char expectedBlk = 1;
+       move.b    #1,-33(A6)
+; unsigned char retries = 0;
+       clr.b     D4
+; unsigned char handshakeTries = 0;
+       clr.b     -32(A6)
+; unsigned char useCrc = 1;
+       move.b    #1,-31(A6)
+; unsigned long handshakeTimeout = 700000;
+       move.l    #700000,-30(A6)
+; unsigned long blockByteTimeout = 400000;
+       move.l    #400000,-26(A6)
+; unsigned char maxRetries = 24;
+       move.b    #24,-21(A6)
+; unsigned short blockLen;
+; unsigned char sqtdtam[20];
+; if (ptipo)
+       tst.b     D7
+       beq.s     loadSerialToMem2_1
+; printText("Receiving (XMODEM-CRC/1K).\r\n<Esc> to Cancel...\r\n\0");
+       pea       @monitor_54.L
+       jsr       (A3)
+       addq.w    #4,A7
+loadSerialToMem2_1:
+; vSizeTotalRec = 0;
+       clr.l     _vSizeTotalRec.L
+; kbdKeyBuffer[kbdKeyPtrR] = 0x00;
+       move.b    _kbdKeyPtrR.L,D0
+       and.l     #255,D0
+       lea       _kbdKeyBuffer.L,A0
+       clr.b     0(A0,D0.L)
+; if (pEnder == 0)
+       tst.l     D6
+       bne.s     loadSerialToMem2_3
+; {
+; // Default fixed buffer avoids heap realloc failures during XMODEM-1K.
+; pEndStart = 0x00850000;
+       move.l    #8716288,D3
+; pEnder = pEndStart;
+       move.l    D3,D6
+loadSerialToMem2_3:
+; }
+; printText("Address loading: 0x");
+       pea       @monitor_55.L
+       jsr       (A3)
+       addq.w    #4,A7
+; itoa(pEndStart, sqtdtam, 16);
+       pea       16
+       pea       -20(A6)
+       move.l    D3,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; printText(sqtdtam);
+       pea       -20(A6)
+       jsr       (A3)
+       addq.w    #4,A7
+; printText(" \0");
+       pea       @monitor_56.L
+       jsr       (A3)
+       addq.w    #4,A7
+; vEndSave = pEndStart;
+       move.l    D3,-1090(A6)
+; // Start handshake requesting CRC mode.
+; writeSerial('C');
+       pea       67
+       jsr       (A2)
+       addq.w    #4,A7
+; while (1)
+loadSerialToMem2_5:
+; {
+; if (kbdKeyBuffer[kbdKeyPtrR] == 0x1B)
+       move.b    _kbdKeyPtrR.L,D0
+       and.l     #255,D0
+       lea       _kbdKeyBuffer.L,A0
+       move.b    0(A0,D0.L),D0
+       cmp.b     #27,D0
+       bne.s     loadSerialToMem2_8
+; {
+; if (pEnder == 0)
+       tst.l     D6
+       bne.s     loadSerialToMem2_10
+; free(pEndStart);
+       move.l    D3,-(A7)
+       jsr       _free
+       addq.w    #4,A7
+loadSerialToMem2_10:
+; if (ptipo)
+       tst.b     D7
+       beq.s     loadSerialToMem2_12
+; printText("\r\nLoading aborted.\r\n\0");
+       pea       @monitor_57.L
+       jsr       (A3)
+       addq.w    #4,A7
+loadSerialToMem2_12:
+; return 0xFD;
+       move.b    #253,D0
+       bra       loadSerialToMem2_14
+loadSerialToMem2_8:
+; }
+; if (!serialReadByteTimeout(&ch, handshakeTimeout))
+       move.l    -30(A6),-(A7)
+       pea       -38(A6)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.b     D0
+       bne       loadSerialToMem2_15
+; {
+; if (useCrc)
+       tst.b     -31(A6)
+       beq.s     loadSerialToMem2_17
+; writeSerial('C');
+       pea       67
+       jsr       (A2)
+       addq.w    #4,A7
+       bra.s     loadSerialToMem2_18
+loadSerialToMem2_17:
+; else
+; writeSerial(0x15);   // NAK -> checksum mode
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+loadSerialToMem2_18:
+; handshakeTries++;
+       addq.b    #1,-32(A6)
+; if (useCrc && handshakeTries > 8)
+       move.b    -31(A6),D0
+       and.l     #255,D0
+       beq.s     loadSerialToMem2_19
+       move.b    -32(A6),D0
+       cmp.b     #8,D0
+       bls.s     loadSerialToMem2_19
+; {
+; // Some senders (e.g. XMODEM-1K checksum) ignore 'C'.
+; useCrc = 0;
+       clr.b     -31(A6)
+; handshakeTries = 0;
+       clr.b     -32(A6)
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+loadSerialToMem2_19:
+; }
+; if (handshakeTries > 20)
+       move.b    -32(A6),D0
+       cmp.b     #20,D0
+       bls.s     loadSerialToMem2_21
+; {
+; if (pEnder == 0)
+       tst.l     D6
+       bne.s     loadSerialToMem2_23
+; free(pEndStart);
+       move.l    D3,-(A7)
+       jsr       _free
+       addq.w    #4,A7
+loadSerialToMem2_23:
+; if (ptipo)
+       tst.b     D7
+       beq.s     loadSerialToMem2_25
+; printText("\r\nTimeout waiting sender.\r\n\0");
+       pea       @monitor_58.L
+       jsr       (A3)
+       addq.w    #4,A7
+loadSerialToMem2_25:
+; return 0xFE;
+       move.b    #254,D0
+       bra       loadSerialToMem2_14
+loadSerialToMem2_21:
+; }
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_15:
+; }
+; handshakeTries = 0;
+       clr.b     -32(A6)
+; if (ch == 0x04)  // EOT
+       move.b    -38(A6),D0
+       cmp.b     #4,D0
+       bne.s     loadSerialToMem2_27
+; {
+; writeSerial(0x06); // ACK
+       pea       6
+       jsr       (A2)
+       addq.w    #4,A7
+; break;
+       bra       loadSerialToMem2_7
+loadSerialToMem2_27:
+; }
+; if (ch == 0x18) // CAN
+       move.b    -38(A6),D0
+       cmp.b     #24,D0
+       bne.s     loadSerialToMem2_29
+; {
+; if (pEnder == 0)
+       tst.l     D6
+       bne.s     loadSerialToMem2_31
+; free(pEndStart);
+       move.l    D3,-(A7)
+       jsr       _free
+       addq.w    #4,A7
+loadSerialToMem2_31:
+; if (ptipo)
+       tst.b     D7
+       beq.s     loadSerialToMem2_33
+; printText("\r\nTransfer canceled by sender.\r\n\0");
+       pea       @monitor_59.L
+       jsr       (A3)
+       addq.w    #4,A7
+loadSerialToMem2_33:
+; return 0xFC;
+       move.b    #252,D0
+       bra       loadSerialToMem2_14
+loadSerialToMem2_29:
+; }
+; if (ch == 0x01)
+       move.b    -38(A6),D0
+       cmp.b     #1,D0
+       bne.s     loadSerialToMem2_35
+; blockLen = 128;      // SOH
+       move.w    #128,D5
+       bra       loadSerialToMem2_38
+loadSerialToMem2_35:
+; else if (ch == 0x02)
+       move.b    -38(A6),D0
+       cmp.b     #2,D0
+       bne.s     loadSerialToMem2_37
+; blockLen = 1024;     // STX (XMODEM-1K)
+       move.w    #1024,D5
+       bra       loadSerialToMem2_38
+loadSerialToMem2_37:
+; else
+; {
+; writeSerial(0x15);   // NAK
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; if (retries > maxRetries)
+       cmp.b     -21(A6),D4
+       bls.s     loadSerialToMem2_39
+; {
+; if (pEnder == 0)
+       tst.l     D6
+       bne.s     loadSerialToMem2_41
+; free(pEndStart);
+       move.l    D3,-(A7)
+       jsr       _free
+       addq.w    #4,A7
+loadSerialToMem2_41:
+; if (ptipo)
+       tst.b     D7
+       beq.s     loadSerialToMem2_43
+; printText("\r\nToo many protocol errors.\r\n\0");
+       pea       @monitor_60.L
+       jsr       (A3)
+       addq.w    #4,A7
+loadSerialToMem2_43:
+; return 0xFD;
+       move.b    #253,D0
+       bra       loadSerialToMem2_14
+loadSerialToMem2_39:
+; }
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_38:
+; }
+; if (!serialReadByteTimeout(&blk, blockByteTimeout) || !serialReadByteTimeout(&nblk, blockByteTimeout))
+       move.l    -26(A6),-(A7)
+       pea       -37(A6)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.b     D0
+       beq.s     loadSerialToMem2_47
+       move.l    -26(A6),-(A7)
+       pea       -36(A6)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.b     D0
+       bne.s     loadSerialToMem2_45
+loadSerialToMem2_47:
+; {
+; serialDrainRx(120000);
+       pea       120000
+       jsr       (A4)
+       addq.w    #4,A7
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_45:
+; }
+; if ((unsigned char)(blk + nblk) != 0xFF)
+       move.b    -37(A6),D0
+       add.b     -36(A6),D0
+       and.w     #255,D0
+       cmp.w     #255,D0
+       beq.s     loadSerialToMem2_48
+; {
+; serialDrainRx(120000);
+       pea       120000
+       jsr       (A4)
+       addq.w    #4,A7
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_48:
+; }
+; for (ix = 0; ix < blockLen; ix++)
+       clr.w     D2
+loadSerialToMem2_50:
+       cmp.w     D5,D2
+       bhs.s     loadSerialToMem2_52
+; {
+; if (!serialReadByteTimeout(&vRx[ix], blockByteTimeout))
+       move.l    -26(A6),-(A7)
+       lea       -1082(A6),A0
+       and.l     #65535,D2
+       add.l     D2,A0
+       move.l    A0,-(A7)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.b     D0
+       bne.s     loadSerialToMem2_53
+; break;
+       bra.s     loadSerialToMem2_52
+loadSerialToMem2_53:
+       addq.w    #1,D2
+       bra       loadSerialToMem2_50
+loadSerialToMem2_52:
+; }
+; if (ix != blockLen)
+       cmp.w     D5,D2
+       beq.s     loadSerialToMem2_55
+; {
+; serialDrainRx(120000);
+       pea       120000
+       jsr       (A4)
+       addq.w    #4,A7
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_55:
+; }
+; if (useCrc)
+       tst.b     -31(A6)
+       beq       loadSerialToMem2_57
+; {
+; if (!serialReadByteTimeout(&ch, blockByteTimeout))
+       move.l    -26(A6),-(A7)
+       pea       -38(A6)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.b     D0
+       bne.s     loadSerialToMem2_59
+; {
+; serialDrainRx(120000);
+       pea       120000
+       jsr       (A4)
+       addq.w    #4,A7
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_59:
+; }
+; vRecvCrc = ((unsigned short)ch << 8);
+       move.b    -38(A6),D0
+       and.w     #255,D0
+       lsl.w     #8,D0
+       move.w    D0,-40(A6)
+; if (!serialReadByteTimeout(&ch, blockByteTimeout))
+       move.l    -26(A6),-(A7)
+       pea       -38(A6)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.b     D0
+       bne.s     loadSerialToMem2_61
+; {
+; serialDrainRx(120000);
+       pea       120000
+       jsr       (A4)
+       addq.w    #4,A7
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_61:
+; }
+; vRecvCrc |= ch;
+       move.b    -38(A6),D0
+       and.w     #255,D0
+       or.w      D0,-40(A6)
+; vCalcCrc = 0;
+       clr.w     -42(A6)
+; for (ix = 0; ix < blockLen; ix++)
+       clr.w     D2
+loadSerialToMem2_63:
+       cmp.w     D5,D2
+       bhs.s     loadSerialToMem2_65
+; vCalcCrc = xmodem_crc16_update(vCalcCrc, vRx[ix]);
+       and.l     #65535,D2
+       lea       -1082(A6),A0
+       move.b    0(A0,D2.L),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.w    -42(A6),D1
+       and.l     #65535,D1
+       move.l    D1,-(A7)
+       jsr       @monitor_xmodem_crc16_update
+       addq.w    #8,A7
+       move.w    D0,-42(A6)
+       addq.w    #1,D2
+       bra       loadSerialToMem2_63
+loadSerialToMem2_65:
+; if (vCalcCrc != vRecvCrc)
+       move.w    -42(A6),D0
+       cmp.w     -40(A6),D0
+       beq.s     loadSerialToMem2_66
+; {
+; serialDrainRx(120000);
+       pea       120000
+       jsr       (A4)
+       addq.w    #4,A7
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_66:
+       bra       loadSerialToMem2_73
+loadSerialToMem2_57:
+; }
+; }
+; else
+; {
+; if (!serialReadByteTimeout(&csum, blockByteTimeout))
+       move.l    -26(A6),-(A7)
+       pea       -35(A6)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.b     D0
+       bne.s     loadSerialToMem2_68
+; {
+; serialDrainRx(120000);
+       pea       120000
+       jsr       (A4)
+       addq.w    #4,A7
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_68:
+; }
+; vCalcCsum = 0;
+       clr.b     -34(A6)
+; for (ix = 0; ix < blockLen; ix++)
+       clr.w     D2
+loadSerialToMem2_70:
+       cmp.w     D5,D2
+       bhs.s     loadSerialToMem2_72
+; vCalcCsum += vRx[ix];
+       and.l     #65535,D2
+       lea       -1082(A6),A0
+       move.b    0(A0,D2.L),D0
+       add.b     D0,-34(A6)
+       addq.w    #1,D2
+       bra       loadSerialToMem2_70
+loadSerialToMem2_72:
+; if (vCalcCsum != csum)
+       move.b    -34(A6),D0
+       cmp.b     -35(A6),D0
+       beq.s     loadSerialToMem2_73
+; {
+; serialDrainRx(120000);
+       pea       120000
+       jsr       (A4)
+       addq.w    #4,A7
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_73:
+; }
+; }
+; // Duplicate block: ACK only (sender retry after lost ACK)
+; if ((unsigned char)(expectedBlk - 1) == blk)
+       move.b    -33(A6),D0
+       subq.b    #1,D0
+       cmp.b     -37(A6),D0
+       bne.s     loadSerialToMem2_75
+; {
+; writeSerial(0x06);
+       pea       6
+       jsr       (A2)
+       addq.w    #4,A7
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_75:
+; }
+; if (blk != expectedBlk)
+       move.b    -37(A6),D0
+       cmp.b     -33(A6),D0
+       beq.s     loadSerialToMem2_77
+; {
+; serialDrainRx(120000);
+       pea       120000
+       jsr       (A4)
+       addq.w    #4,A7
+; writeSerial(0x15);
+       pea       21
+       jsr       (A2)
+       addq.w    #4,A7
+; retries++;
+       addq.b    #1,D4
+; continue;
+       bra       loadSerialToMem2_6
+loadSerialToMem2_77:
+; }
+; // Grow dynamic buffer when needed.
+; if (pEnder == 0)
+       tst.l     D6
+       bne       loadSerialToMem2_83
+; {
+; while ((vSizeData + blockLen) > vSizeAlloc)
+loadSerialToMem2_81:
+       move.l    -54(A6),D0
+       and.l     #65535,D5
+       add.l     D5,D0
+       cmp.l     -58(A6),D0
+       bls       loadSerialToMem2_83
+; {
+; vOffSave = (unsigned long)(vEndSave - pEndStart);
+       move.l    -1090(A6),D0
+       sub.l     D3,D0
+       move.l    D0,-50(A6)
+; pEndNew = realloc(pEndStart, (vSizeAlloc + 2048));
+       move.l    -58(A6),D1
+       add.l     #2048,D1
+       move.l    D1,-(A7)
+       move.l    D3,-(A7)
+       jsr       _realloc
+       addq.w    #8,A7
+       move.l    D0,-1086(A6)
+; if (!pEndNew)
+       tst.l     -1086(A6)
+       bne.s     loadSerialToMem2_84
+; {
+; free(pEndStart);
+       move.l    D3,-(A7)
+       jsr       _free
+       addq.w    #4,A7
+; if (ptipo)
+       tst.b     D7
+       beq.s     loadSerialToMem2_86
+; printText("\r\nNo memory while receiving.\r\n\0");
+       pea       @monitor_61.L
+       jsr       (A3)
+       addq.w    #4,A7
+loadSerialToMem2_86:
+; return 0xFB;
+       move.b    #251,D0
+       bra       loadSerialToMem2_14
+loadSerialToMem2_84:
+; }
+; pEndStart = pEndNew;
+       move.l    -1086(A6),D3
+; vEndSave = pEndStart + vOffSave;
+       move.l    D3,D0
+       add.l     -50(A6),D0
+       move.l    D0,-1090(A6)
+; vSizeAlloc += 2048;
+       add.l     #2048,-58(A6)
+       bra       loadSerialToMem2_81
+loadSerialToMem2_83:
+; }
+; }
+; for (ix = 0; ix < blockLen; ix++)
+       clr.w     D2
+loadSerialToMem2_88:
+       cmp.w     D5,D2
+       bhs.s     loadSerialToMem2_90
+; *vEndSave++ = vRx[ix];
+       and.l     #65535,D2
+       lea       -1082(A6),A0
+       move.l    -1090(A6),A1
+       addq.l    #1,-1090(A6)
+       move.b    0(A0,D2.L),(A1)
+       addq.w    #1,D2
+       bra       loadSerialToMem2_88
+loadSerialToMem2_90:
+; vSizeData += blockLen;
+       and.l     #65535,D5
+       add.l     D5,-54(A6)
+; vSizeTotalRec = vSizeData;
+       move.l    -54(A6),_vSizeTotalRec.L
+; expectedBlk++;
+       addq.b    #1,-33(A6)
+; retries = 0;
+       clr.b     D4
+; writeSerial(0x06); // ACK
+       pea       6
+       jsr       (A2)
+       addq.w    #4,A7
+loadSerialToMem2_6:
+       bra       loadSerialToMem2_5
+loadSerialToMem2_7:
+; }
+; if (ptipo)
+       tst.b     D7
+       beq       loadSerialToMem2_91
+; {
+; printText("\r\nFile loaded in to memory successfuly.\r\n\0");
+       pea       @monitor_62.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printText("Address loaded: 0x");
+       pea       @monitor_63.L
+       jsr       (A3)
+       addq.w    #4,A7
+; itoa(pEndStart, sqtdtam, 16);
+       pea       16
+       pea       -20(A6)
+       move.l    D3,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; printText(sqtdtam);
+       pea       -20(A6)
+       jsr       (A3)
+       addq.w    #4,A7
+; printText("\r\n\0");
+       pea       @monitor_2.L
+       jsr       (A3)
+       addq.w    #4,A7
+loadSerialToMem2_91:
+; }
+; return 0x00;
+       clr.b     D0
+loadSerialToMem2_14:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
 ; // load <ender initial to save>
 ; //-----------------------------------------------------------------------------
 ; //         Uses XMODEM Protocol
@@ -3973,30 +4869,37 @@ _lstmGetSize:
 ; {
        xdef      _loadSerialToMem
 _loadSerialToMem:
-       link      A6,#-48
+       link      A6,#-56
        movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
+       move.l    8(A6),D2
        lea       _printText.L,A2
-       move.l    8(A6),D4
        lea       _vdp_write.L,A3
-       lea       _vSizeTotalRec.L,A4
 ; unsigned long vTamanho;
+; unsigned long vSizeAlloc = 0;
+       move.w    #0,A5
+; unsigned long vOffSave = 0;
+       clr.l     -52(A6)
+; unsigned long vOffOld = 0;
+       clr.l     -48(A6)
 ; unsigned char vHeader[3];
 ; unsigned int vchecksum = 0;
-       clr.l     -38(A6)
+       clr.l     -40(A6)
 ; unsigned char inputBuffer, verro = 0;
-       moveq     #0,D7
+       clr.b     -35(A6)
 ; unsigned char *vEndSave = 0x00000000;
-       clr.l     D6
+       clr.l     D5
 ; unsigned char *vEndOld  = 0x00000000;
+       moveq     #0,D7
+; unsigned char *pEndNew  = 0x00000000;
        clr.l     -34(A6)
 ; unsigned char *pEnder  = pEndStart;
-       move.l    D4,A5
+       move.l    D2,A4
 ; unsigned long vTimeout = 0, vchecksumcalc = 0;
-       clr.l     D5
+       clr.l     D6
        clr.l     -30(A6)
 ; unsigned char sqtdtam[20];
 ; unsigned char vinicio = 0x00;
-       clr.b     D2
+       clr.b     D3
 ; unsigned char vStart = 0x00;
        clr.b     -6(A6)
 ; unsigned char vBlockOld = 0x00;
@@ -4007,36 +4910,40 @@ _loadSerialToMem:
        tst.b     15(A6)
        beq.s     loadSerialToMem_1
 ; printText("Receiving. <Esc> to Cancel... \r\n\0");
-       pea       @monitor_53.L
+       pea       @monitor_64.L
        jsr       (A2)
        addq.w    #4,A7
 loadSerialToMem_1:
 ; // Desabilita Timers and Mouse Interruption
 ; //    *(vmfp + Reg_IERA) &= 0x5E;
 ; vSizeTotalRec = 0;
-       clr.l     (A4)
+       clr.l     _vSizeTotalRec.L
 ; kbdKeyBuffer[kbdKeyPtrR] = 0x00;
        move.b    _kbdKeyPtrR.L,D0
        and.l     #255,D0
        lea       _kbdKeyBuffer.L,A0
        clr.b     0(A0,D0.L)
 ; if (pEnder == 0)
-       move.l    A5,D0
+       move.l    A4,D0
        bne.s     loadSerialToMem_3
+; {
 ; pEndStart = malloc(1024);
        pea       1024
        jsr       _malloc
        addq.w    #4,A7
-       move.l    D0,D4
+       move.l    D0,D2
+; vSizeAlloc = 1024;
+       move.w    #1024,A5
 loadSerialToMem_3:
+; }
 ; printText("Address loading: 0x");
-       pea       @monitor_54.L
+       pea       @monitor_55.L
        jsr       (A2)
        addq.w    #4,A7
 ; itoa(pEndStart, sqtdtam, 16);
        pea       16
        pea       -26(A6)
-       move.l    D4,-(A7)
+       move.l    D2,-(A7)
        jsr       _itoa
        add.w     #12,A7
 ; printText(sqtdtam);
@@ -4044,20 +4951,20 @@ loadSerialToMem_3:
        jsr       (A2)
        addq.w    #4,A7
 ; printText(" \0");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A2)
        addq.w    #4,A7
 ; vEndSave = pEndStart;
-       move.l    D4,D6
+       move.l    D2,D5
 ; vEndOld = pEndStart;
-       move.l    D4,-34(A6)
+       move.l    D2,D7
 ; while(1)
 loadSerialToMem_5:
 ; {
 ; inputBuffer = 0;
-       clr.b     D3
+       clr.b     D4
 ; vTimeout = 0;
-       clr.l     D5
+       clr.l     D6
 ; if (ptipo)
        tst.b     15(A6)
        beq       loadSerialToMem_8
@@ -4138,13 +5045,13 @@ loadSerialToMem_17:
        bra       loadSerialToMem_19
 loadSerialToMem_20:
 ; if(vinicio == 0x00 && vStart == 0x00)
-       tst.b     D2
+       tst.b     D3
        bne.s     loadSerialToMem_24
        move.b    -6(A6),D0
        bne.s     loadSerialToMem_24
 ; {
 ; if ((vTimeout % 100000) == 0) // +/- 10s
-       move.l    D5,-(A7)
+       move.l    D6,-(A7)
        pea       100000
        jsr       ULDIV
        move.l    4(A7),D0
@@ -4165,9 +5072,9 @@ loadSerialToMem_24:
 ; }*/
 ; }
 ; vTimeout++;
-       addq.l    #1,D5
+       addq.l    #1,D6
 ; if (vTimeout > 3000000) // +/- 5 min
-       cmp.l     #3000000,D5
+       cmp.l     #3000000,D6
        bls.s     loadSerialToMem_26
 ; break;
        bra.s     loadSerialToMem_19
@@ -4184,13 +5091,13 @@ loadSerialToMem_19:
        bne.s     loadSerialToMem_28
 ; {
 ; verro = 99;
-       moveq     #99,D7
+       move.b    #99,-35(A6)
 ; break;
        bra       loadSerialToMem_7
 loadSerialToMem_28:
 ; }
 ; if (vTimeout > 3000000)
-       cmp.l     #3000000,D5
+       cmp.l     #3000000,D6
        bls.s     loadSerialToMem_30
 ; break;
        bra       loadSerialToMem_7
@@ -4199,11 +5106,11 @@ loadSerialToMem_30:
        move.l    _vmfp.L,A0
        move.w    _Reg_UDR.L,D0
        and.l     #65535,D0
-       move.b    0(A0,D0.L),D3
+       move.b    0(A0,D0.L),D4
 ; if (vinicio == 0 && inputBuffer == 0x04)    // Primeiro byte eh EOT
-       tst.b     D2
+       tst.b     D3
        bne.s     loadSerialToMem_32
-       cmp.b     #4,D3
+       cmp.b     #4,D4
        bne.s     loadSerialToMem_32
 ; {
 ; writeSerial(0x06);    // Send ACK
@@ -4215,69 +5122,69 @@ loadSerialToMem_30:
 loadSerialToMem_32:
 ; }
 ; else if (vinicio < 3)
-       cmp.b     #3,D2
+       cmp.b     #3,D3
        bhs.s     loadSerialToMem_34
 ; {
 ; //*(vmfp + Reg_GPDR) = 0x04;
 ; vHeader[vinicio] = inputBuffer;
-       and.l     #255,D2
-       move.b    D3,-42(A6,D2.L)
+       and.l     #255,D3
+       move.b    D4,-44(A6,D3.L)
 ; if (vinicio == 1)
-       cmp.b     #1,D2
+       cmp.b     #1,D3
        bne.s     loadSerialToMem_39
 ; {
 ; if (vBlockOld == inputBuffer)
-       cmp.b     -5(A6),D3
+       cmp.b     -5(A6),D4
        bne.s     loadSerialToMem_38
 ; vEndSave = vEndOld;
-       move.l    -34(A6),D6
+       move.l    D7,D5
        bra.s     loadSerialToMem_39
 loadSerialToMem_38:
 ; else
 ; {
 ; vEndOld = vEndSave;
-       move.l    D6,-34(A6)
+       move.l    D5,D7
 ; vBlockOld = inputBuffer;
-       move.b    D3,-5(A6)
+       move.b    D4,-5(A6)
 loadSerialToMem_39:
 ; }
 ; }
 ; vinicio++;
-       addq.b    #1,D2
+       addq.b    #1,D3
 ; vchecksumcalc = 0;
        clr.l     -30(A6)
 ; verro = 0;
-       moveq     #0,D7
+       clr.b     -35(A6)
 ; vStart = 0x01;
        move.b    #1,-6(A6)
        bra       loadSerialToMem_46
 loadSerialToMem_34:
 ; }
 ; else if (vinicio == 131)
-       and.w     #255,D2
-       cmp.w     #131,D2
+       and.w     #255,D3
+       cmp.w     #131,D3
        bne       loadSerialToMem_40
 ; {
 ; //*(vmfp + Reg_GPDR) = 0x05;
 ; vinicio = 0;
-       clr.b     D2
+       clr.b     D3
 ; vchecksum = inputBuffer;
-       and.l     #255,D3
-       move.l    D3,-38(A6)
+       and.l     #255,D4
+       move.l    D4,-40(A6)
 ; if ((vchecksumcalc % 256) != vchecksum)
        move.l    -30(A6),-(A7)
        pea       256
        jsr       ULDIV
        move.l    4(A7),D0
        addq.w    #8,A7
-       cmp.l     -38(A6),D0
+       cmp.l     -40(A6),D0
        beq.s     loadSerialToMem_42
 ; {
 ; //*(vmfp + Reg_GPDR) = 0x00;
 ; verro = 1;
-       moveq     #1,D7
+       move.b    #1,-35(A6)
 ; vEndSave = vEndOld;
-       move.l    -34(A6),D6
+       move.l    D7,D5
 ; writeSerial(0x15);    // Send NACK
        pea       21
        jsr       _writeSerial
@@ -4300,35 +5207,67 @@ loadSerialToMem_40:
 ; else
 ; {
 ; *vEndSave++ = inputBuffer;
-       move.l    D6,A0
-       addq.l    #1,D6
-       move.b    D3,(A0)
+       move.l    D5,A0
+       addq.l    #1,D5
+       move.b    D4,(A0)
 ; vchecksumcalc += inputBuffer;
-       and.l     #255,D3
-       add.l     D3,-30(A6)
+       and.l     #255,D4
+       add.l     D4,-30(A6)
 ; vinicio++;
-       addq.b    #1,D2
+       addq.b    #1,D3
 ; vSizeTotalRec = vSizeTotalRec + 1;
-       addq.l    #1,(A4)
+       addq.l    #1,_vSizeTotalRec.L
 ; if (pEnder == 0)
-       move.l    A5,D0
-       bne.s     loadSerialToMem_46
+       move.l    A4,D0
+       bne       loadSerialToMem_46
 ; {
-; if (vSizeTotalRec >= vSizeTotalRec + 1024)
-       move.l    (A4),D0
-       add.l     #1024,D0
-       cmp.l     (A4),D0
-       bhi.s     loadSerialToMem_46
-; realloc(pEndStart, (vSizeTotalRec + 1024));
-       move.l    (A4),D1
+; if (vSizeTotalRec >= vSizeAlloc)
+       move.l    A5,D0
+       cmp.l     _vSizeTotalRec.L,D0
+       bhi       loadSerialToMem_46
+; {
+; vOffSave = (unsigned long)(vEndSave - pEndStart);
+       move.l    D5,D0
+       sub.l     D2,D0
+       move.l    D0,-52(A6)
+; vOffOld = (unsigned long)(vEndOld - pEndStart);
+       move.l    D7,D0
+       sub.l     D2,D0
+       move.l    D0,-48(A6)
+; pEndNew = realloc(pEndStart, (vSizeAlloc + 1024));
+       move.l    A5,D1
        add.l     #1024,D1
        move.l    D1,-(A7)
-       move.l    D4,-(A7)
+       move.l    D2,-(A7)
        jsr       _realloc
        addq.w    #8,A7
+       move.l    D0,-34(A6)
+; if (!pEndNew)
+       tst.l     -34(A6)
+       bne.s     loadSerialToMem_48
+; {
+; verro = 1;
+       move.b    #1,-35(A6)
+; break;
+       bra.s     loadSerialToMem_7
+loadSerialToMem_48:
+; }
+; pEndStart = pEndNew;
+       move.l    -34(A6),D2
+; vEndSave = pEndStart + vOffSave;
+       move.l    D2,D0
+       add.l     -52(A6),D0
+       move.l    D0,D5
+; vEndOld = pEndStart + vOffOld;
+       move.l    D2,D0
+       add.l     -48(A6),D0
+       move.l    D0,D7
+; vSizeAlloc = vSizeAlloc + 1024;
+       add.w     #1024,A5
 loadSerialToMem_46:
        bra       loadSerialToMem_5
 loadSerialToMem_7:
+; }
 ; }
 ; }
 ; }
@@ -4343,52 +5282,52 @@ loadSerialToMem_7:
 ; // Habilita Timers Interruption
 ; //    *(vmfp + Reg_IERA) |= 0x61;
 ; if (vTimeout > 3000000)
-       cmp.l     #3000000,D5
-       bls.s     loadSerialToMem_48
+       cmp.l     #3000000,D6
+       bls.s     loadSerialToMem_50
 ; {
 ; if (pEnder == 0)
-       move.l    A5,D0
-       bne.s     loadSerialToMem_50
+       move.l    A4,D0
+       bne.s     loadSerialToMem_52
 ; free(pEndStart);
-       move.l    D4,-(A7)
+       move.l    D2,-(A7)
        jsr       _free
        addq.w    #4,A7
-loadSerialToMem_50:
+loadSerialToMem_52:
 ; if (ptipo)
        tst.b     15(A6)
-       beq.s     loadSerialToMem_52
+       beq.s     loadSerialToMem_54
 ; printText("Timeout. Process Aborted.\r\n\0");
-       pea       @monitor_56.L
+       pea       @monitor_65.L
        jsr       (A2)
        addq.w    #4,A7
-loadSerialToMem_52:
+loadSerialToMem_54:
 ; return 0xFE;
        move.b    #254,D0
-       bra       loadSerialToMem_54
-loadSerialToMem_48:
+       bra       loadSerialToMem_56
+loadSerialToMem_50:
 ; }
 ; else
 ; {
 ; if (!verro)
-       tst.b     D7
-       bne       loadSerialToMem_55
+       tst.b     -35(A6)
+       bne       loadSerialToMem_57
 ; {
 ; if (ptipo)
        tst.b     15(A6)
-       beq       loadSerialToMem_57
+       beq       loadSerialToMem_59
 ; {
 ; printText("File loaded in to memory successfuly.\r\n\0");
-       pea       @monitor_57.L
+       pea       @monitor_66.L
        jsr       (A2)
        addq.w    #4,A7
 ; printText("Address loaded: 0x");
-       pea       @monitor_58.L
+       pea       @monitor_63.L
        jsr       (A2)
        addq.w    #4,A7
 ; itoa(pEndStart, sqtdtam, 16);
        pea       16
        pea       -26(A6)
-       move.l    D4,-(A7)
+       move.l    D2,-(A7)
        jsr       _itoa
        add.w     #12,A7
 ; printText(sqtdtam);
@@ -4399,46 +5338,47 @@ loadSerialToMem_48:
        pea       @monitor_2.L
        jsr       (A2)
        addq.w    #4,A7
-loadSerialToMem_57:
+loadSerialToMem_59:
 ; }
 ; return 0x00;
        clr.b     D0
-       bra       loadSerialToMem_54
-loadSerialToMem_55:
+       bra       loadSerialToMem_56
+loadSerialToMem_57:
 ; }
 ; else
 ; {
 ; if (pEnder == 0)
-       move.l    A5,D0
-       bne.s     loadSerialToMem_59
+       move.l    A4,D0
+       bne.s     loadSerialToMem_61
 ; free(pEndStart);
-       move.l    D4,-(A7)
+       move.l    D2,-(A7)
        jsr       _free
        addq.w    #4,A7
-loadSerialToMem_59:
+loadSerialToMem_61:
 ; if (ptipo)
        tst.b     15(A6)
-       beq.s     loadSerialToMem_64
+       beq.s     loadSerialToMem_66
 ; {
 ; if (verro == 99)
-       cmp.b     #99,D7
-       bne.s     loadSerialToMem_63
+       move.b    -35(A6),D0
+       cmp.b     #99,D0
+       bne.s     loadSerialToMem_65
 ; printText("Loading aborted.\r\n\0");
-       pea       @monitor_59.L
+       pea       @monitor_67.L
        jsr       (A2)
        addq.w    #4,A7
-       bra.s     loadSerialToMem_64
-loadSerialToMem_63:
+       bra.s     loadSerialToMem_66
+loadSerialToMem_65:
 ; else
 ; printText("File loaded in to memory with checksum errors.\r\n\0");
-       pea       @monitor_60.L
+       pea       @monitor_68.L
        jsr       (A2)
        addq.w    #4,A7
-loadSerialToMem_64:
+loadSerialToMem_66:
 ; }
 ; return 0xFD;
        move.b    #253,D0
-loadSerialToMem_54:
+loadSerialToMem_56:
        movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
        unlk      A6
        rts
@@ -4626,7 +5566,7 @@ carregaSO_4:
        bra       carregaSO_3
 carregaSO_6:
 ; printText(" ");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A4)
        addq.w    #4,A7
 ; /*--------------*/
@@ -4677,7 +5617,7 @@ carregaSO_8:
 ; videoCursorPosColX = vAntX;
        move.w    D3,(A3)
 ; printText("   ");
-       pea       @monitor_61.L
+       pea       @monitor_69.L
        jsr       (A4)
        addq.w    #4,A7
 ; videoCursorPosColX = vAntX;
@@ -4764,7 +5704,7 @@ carregaSO_10:
 ; videoCursorPosColX = vAntX;
        move.w    D3,(A3)
 ; printText("Done!");
-       pea       @monitor_62.L
+       pea       @monitor_70.L
        jsr       (A4)
        addq.w    #4,A7
 ; //    printChar(' ',0);
@@ -4789,7 +5729,7 @@ _carregaOSDisk:
        lea       _printText.L,A2
 ; unsigned int verro;
 ; printText("Loading OS. Please Wait...\0");
-       pea       @monitor_63.L
+       pea       @monitor_71.L
        jsr       (A2)
        addq.w    #4,A7
 ; verro = carregaSO();
@@ -4799,14 +5739,14 @@ _carregaOSDisk:
        tst.l     -4(A6)
        beq.s     carregaOSDisk_1
 ; printText("IO Error....\r\n\0");
-       pea       @monitor_64.L
+       pea       @monitor_72.L
        jsr       (A2)
        addq.w    #4,A7
        bra.s     carregaOSDisk_2
 carregaOSDisk_1:
 ; else {
 ; printText("Ok\r\n\0");
-       pea       @monitor_65.L
+       pea       @monitor_73.L
        jsr       (A2)
        addq.w    #4,A7
 carregaOSDisk_2:
@@ -5269,7 +6209,7 @@ _funcIntMfpGpi6:
        tst.b     (A5)
        beq.s     funcIntMfpGpi6_1
 ; writeLongSerial("Aqui 0\r\n\0");
-       pea       @monitor_66.L
+       pea       @monitor_74.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi6_1:
@@ -5350,7 +6290,7 @@ funcIntMfpGpi6_11:
        tst.b     (A5)
        beq.s     funcIntMfpGpi6_16
 ; writeLongSerial("Aqui 0.1\r\n\0");
-       pea       @monitor_67.L
+       pea       @monitor_75.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi6_16:
@@ -5400,7 +6340,7 @@ funcIntMfpGpi6_5:
        tst.b     (A5)
        beq.s     funcIntMfpGpi6_22
 ; writeLongSerial("Aqui 1\r\n\0");
-       pea       @monitor_68.L
+       pea       @monitor_76.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi6_22:
@@ -5479,7 +6419,7 @@ _funcIntMfpGpi7:
        tst.b     (A5)
        beq.s     funcIntMfpGpi7_1
 ; writeLongSerial("Aqui 2\r\n\0");
-       pea       @monitor_69.L
+       pea       @monitor_77.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi7_1:
@@ -5575,7 +6515,7 @@ funcIntMfpGpi7_15:
        tst.b     (A5)
        beq.s     funcIntMfpGpi7_20
 ; writeLongSerial("Aqui 2.1\r\n\0");
-       pea       @monitor_70.L
+       pea       @monitor_78.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi7_20:
@@ -5634,7 +6574,7 @@ funcIntMfpGpi7_26:
        tst.b     (A5)
        beq.s     funcIntMfpGpi7_27
 ; writeLongSerial("Aqui 3\r\n\0");
-       pea       @monitor_71.L
+       pea       @monitor_79.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi7_27:
@@ -5933,7 +6873,7 @@ funcErrorBusAddr_3:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -5942,7 +6882,7 @@ funcErrorBusAddr_3:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("          EXCEPTION OCCURRED        ");
-       pea       @monitor_73.L
+       pea       @monitor_81.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -5951,7 +6891,7 @@ funcErrorBusAddr_3:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(195,1);
@@ -5978,7 +6918,7 @@ funcErrorBusAddr_6:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; vOP = *errorBufferAddrBus;
@@ -6008,7 +6948,7 @@ funcErrorBusAddr_10:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("      BUS ERROR / ADDRESS ERROR     ");
-       pea       @monitor_74.L
+       pea       @monitor_82.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6017,7 +6957,7 @@ funcErrorBusAddr_10:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -6030,7 +6970,7 @@ funcErrorBusAddr_11:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("         ILLEGAL INSTRUCTION        ");
-       pea       @monitor_75.L
+       pea       @monitor_83.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6039,7 +6979,7 @@ funcErrorBusAddr_11:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -6052,7 +6992,7 @@ funcErrorBusAddr_12:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("             ZERO DIVIDE            ");
-       pea       @monitor_76.L
+       pea       @monitor_84.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6061,7 +7001,7 @@ funcErrorBusAddr_12:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -6074,7 +7014,7 @@ funcErrorBusAddr_13:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("           CHK INSTRUCTION          ");
-       pea       @monitor_77.L
+       pea       @monitor_85.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6083,7 +7023,7 @@ funcErrorBusAddr_13:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -6096,7 +7036,7 @@ funcErrorBusAddr_14:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("                TRAPV               ");
-       pea       @monitor_78.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6105,7 +7045,7 @@ funcErrorBusAddr_14:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -6118,7 +7058,7 @@ funcErrorBusAddr_15:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("         PRIVILEGE VIOLATION        ");
-       pea       @monitor_79.L
+       pea       @monitor_87.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6127,7 +7067,7 @@ funcErrorBusAddr_15:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -6150,7 +7090,7 @@ funcErrorBusAddr_7:
        jsr       (A2)
        addq.w    #4,A7
 ; printText(" : ");
-       pea       @monitor_80.L
+       pea       @monitor_88.L
        jsr       (A2)
        addq.w    #4,A7
 ; itoa(vOP,sqtdtam,16);
@@ -6200,7 +7140,7 @@ funcErrorBusAddr_19:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; ix++;
@@ -6212,7 +7152,7 @@ funcErrorBusAddr_19:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" D0       D1       D2       D3      ");
-       pea       @monitor_81.L
+       pea       @monitor_89.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6221,7 +7161,7 @@ funcErrorBusAddr_19:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6288,7 +7228,7 @@ funcErrorBusAddr_20:
        cmp.l     #3,D3
        bhs.s     funcErrorBusAddr_23
 ; printText(" ");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A2)
        addq.w    #4,A7
 funcErrorBusAddr_23:
@@ -6311,7 +7251,7 @@ funcErrorBusAddr_22:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" D4       D5       D6       D7      ");
-       pea       @monitor_82.L
+       pea       @monitor_90.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6320,7 +7260,7 @@ funcErrorBusAddr_22:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6387,7 +7327,7 @@ funcErrorBusAddr_25:
        cmp.l     #3,D3
        bhs.s     funcErrorBusAddr_28
 ; printText(" ");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A2)
        addq.w    #4,A7
 funcErrorBusAddr_28:
@@ -6410,7 +7350,7 @@ funcErrorBusAddr_27:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" A0       A1       A2       A3      ");
-       pea       @monitor_83.L
+       pea       @monitor_91.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6419,7 +7359,7 @@ funcErrorBusAddr_27:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6486,7 +7426,7 @@ funcErrorBusAddr_30:
        cmp.l     #3,D3
        bhs.s     funcErrorBusAddr_33
 ; printText(" ");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A2)
        addq.w    #4,A7
 funcErrorBusAddr_33:
@@ -6500,7 +7440,7 @@ funcErrorBusAddr_32:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6509,7 +7449,7 @@ funcErrorBusAddr_32:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" A4       A5       A6               ");
-       pea       @monitor_84.L
+       pea       @monitor_92.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6518,7 +7458,7 @@ funcErrorBusAddr_32:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6582,7 +7522,7 @@ funcErrorBusAddr_35:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A2)
        addq.w    #4,A7
        addq.l    #1,D3
@@ -6590,7 +7530,7 @@ funcErrorBusAddr_35:
 funcErrorBusAddr_37:
 ; }
 ; printText("        ");
-       pea       @monitor_85.L
+       pea       @monitor_93.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6608,7 +7548,7 @@ funcErrorBusAddr_37:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("                                    ");
-       pea       @monitor_86.L
+       pea       @monitor_94.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6626,7 +7566,7 @@ funcErrorBusAddr_37:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" SR   PC       OffSet Special_Word  ");
-       pea       @monitor_87.L
+       pea       @monitor_95.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6635,7 +7575,7 @@ funcErrorBusAddr_37:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6672,7 +7612,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A2)
        addq.w    #4,A7
 ; // Mostra PC to Return: 2 words
@@ -6721,7 +7661,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A2)
        addq.w    #4,A7
 ; // Mostra Vector offset: 1 word
@@ -6748,7 +7688,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText("   ");
-       pea       @monitor_61.L
+       pea       @monitor_69.L
        jsr       (A2)
        addq.w    #4,A7
 ; // Mostra Special Status Word: 1 word
@@ -6775,7 +7715,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText("          ");
-       pea       @monitor_88.L
+       pea       @monitor_96.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6793,7 +7733,7 @@ funcErrorBusAddr_37:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("                                    ");
-       pea       @monitor_86.L
+       pea       @monitor_94.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6811,7 +7751,7 @@ funcErrorBusAddr_37:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" FaultAddr OutB InB  Instr.InB      ");
-       pea       @monitor_89.L
+       pea       @monitor_97.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6820,7 +7760,7 @@ funcErrorBusAddr_37:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -6879,7 +7819,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText("  ");
-       pea       @monitor_90.L
+       pea       @monitor_98.L
        jsr       (A2)
        addq.w    #4,A7
 ; // unused: 1 word
@@ -6909,7 +7849,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A2)
        addq.w    #4,A7
 ; // unused: 1 word
@@ -6939,7 +7879,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A2)
        addq.w    #4,A7
 ; // unused: 1 word
@@ -6969,7 +7909,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText("           ");
-       pea       @monitor_91.L
+       pea       @monitor_99.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7006,7 +7946,7 @@ funcErrorBusAddr_40:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7015,7 +7955,7 @@ funcErrorBusAddr_40:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("            SYSTEM HALTED           ");
-       pea       @monitor_92.L
+       pea       @monitor_100.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7024,7 +7964,7 @@ funcErrorBusAddr_40:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(192,1);
@@ -7051,7 +7991,7 @@ funcErrorBusAddr_43:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_72.L
+       pea       @monitor_80.L
        jsr       (A2)
        addq.w    #4,A7
 ; for(;;);
@@ -7061,7 +8001,7 @@ funcErrorBusAddr_44:
        section   const
 @monitor_1:
        dc.b      77,77,83,74,45,51,50,48,32,66,73,79,83,32,118
-       dc.b      49,46,51,97,0
+       dc.b      49,46,52,97,48,50,0
 @monitor_2:
        dc.b      13,10,0
 @monitor_3:
@@ -7088,241 +8028,272 @@ funcErrorBusAddr_44:
 @monitor_12:
        dc.b      87,97,105,116,46,46,46,13,10,0
 @monitor_13:
-       dc.b      82,85,78,0
+       dc.b      76,79,65,68,50,0
 @monitor_14:
-       dc.b      66,65,83,73,67,0
+       dc.b      82,85,78,0
 @monitor_15:
-       dc.b      77,79,68,69,0
+       dc.b      66,65,83,73,67,0
 @monitor_16:
-       dc.b      80,79,75,69,0
+       dc.b      77,79,68,69,0
 @monitor_17:
-       dc.b      76,79,65,68,83,79,0
+       dc.b      80,79,75,69,0
 @monitor_18:
-       dc.b      82,85,78,83,79,0
+       dc.b      76,79,65,68,83,79,0
 @monitor_19:
-       dc.b      68,69,66,85,71,0
+       dc.b      82,85,78,83,79,0
 @monitor_20:
-       dc.b      68,101,98,117,103,32,77,101,115,115,97,103,101
-       dc.b      115,32,79,102,102,13,10,0
+       dc.b      68,69,66,85,71,0
 @monitor_21:
        dc.b      68,101,98,117,103,32,77,101,115,115,97,103,101
-       dc.b      115,32,79,110,13,10,0
+       dc.b      115,32,79,102,102,13,10,0
 @monitor_22:
-       dc.b      68,85,77,80,0
+       dc.b      68,101,98,117,103,32,77,101,115,115,97,103,101
+       dc.b      115,32,79,110,13,10,0
 @monitor_23:
-       dc.b      68,68,85,85,77,77,80,80,0
+       dc.b      68,85,77,80,0
 @monitor_24:
-       dc.b      54,48,50,48,65,48,0
+       dc.b      68,68,85,85,77,77,80,80,0
 @monitor_25:
-       dc.b      49,50,56,0
+       dc.b      54,48,50,48,65,48,0
 @monitor_26:
-       dc.b      0
+       dc.b      49,50,56,0
 @monitor_27:
-       dc.b      68,85,77,80,83,0
+       dc.b      0
 @monitor_28:
-       dc.b      68,85,77,80,87,0
+       dc.b      68,85,77,80,83,0
 @monitor_29:
+       dc.b      68,85,77,80,87,0
+@monitor_30:
        dc.b      85,110,107,110,111,119,110,32,67,111,109,109
        dc.b      97,110,100,32,33,33,33,13,10,0
-@monitor_30:
+@monitor_31:
        dc.b      117,115,97,103,101,58,32,109,111,100,101,32
        dc.b      91,99,111,100,101,93,13,10,0
-@monitor_31:
+@monitor_32:
        dc.b      32,32,32,99,111,100,101,58,32,48,32,61,32,84
        dc.b      101,120,116,32,77,111,100,101,32,52,48,120,50
        dc.b      52,13,10,0
-@monitor_32:
+@monitor_33:
        dc.b      32,32,32,32,32,32,32,32,32,49,32,61,32,71,114
        dc.b      97,112,104,105,99,32,84,101,120,116,32,77,111
        dc.b      100,101,32,51,50,120,50,52,13,10,0
-@monitor_33:
+@monitor_34:
        dc.b      32,32,32,32,32,32,32,32,32,50,32,61,32,71,114
        dc.b      97,112,104,105,99,32,50,53,54,120,49,57,50,13
        dc.b      10,0
-@monitor_34:
+@monitor_35:
        dc.b      32,32,32,32,32,32,32,32,32,51,32,61,32,71,114
        dc.b      97,112,104,105,99,32,54,52,120,52,56,13,10,0
-@monitor_35:
+@monitor_36:
        dc.b      117,115,97,103,101,58,32,112,111,107,101,32
        dc.b      60,101,110,100,101,114,62,32,60,98,121,116,101
        dc.b      62,13,10,0
-@monitor_36:
+@monitor_37:
        dc.b      117,115,97,103,101,58,32,100,117,109,112,32
        dc.b      60,101,110,100,101,114,62,32,91,113,116,100
        dc.b      93,32,91,99,111,108,115,93,13,10,0
-@monitor_37:
+@monitor_38:
        dc.b      32,32,32,32,113,116,100,58,32,100,101,102,97
        dc.b      117,108,116,32,54,52,13,10,0
-@monitor_38:
+@monitor_39:
        dc.b      32,32,32,99,111,108,115,58,32,100,101,102,97
        dc.b      117,108,116,32,56,13,10,0
-@monitor_39:
-       dc.b      124,0
 @monitor_40:
+       dc.b      124,0
+@monitor_41:
        dc.b      117,115,97,103,101,58,32,100,117,109,112,32
        dc.b      60,101,110,100,101,114,32,105,110,105,116,105
        dc.b      97,108,62,32,91,113,116,100,32,40,100,101,102
        dc.b      97,117,108,116,32,50,53,54,41,93,13,10,0
-@monitor_41:
-       dc.b      104,32,58,32,0
 @monitor_42:
-       dc.b      32,124,32,0
+       dc.b      104,32,58,32,0
 @monitor_43:
+       dc.b      32,124,32,0
+@monitor_44:
        dc.b      117,115,97,103,101,58,32,100,117,109,112,119
        dc.b      32,60,101,110,100,101,114,62,32,91,113,116,100
        dc.b      93,32,91,99,111,108,115,93,13,10,0
-@monitor_44:
+@monitor_45:
        dc.b      32,32,32,32,113,116,100,58,32,100,101,102,97
        dc.b      117,108,116,32,49,50,56,13,10,0
-@monitor_45:
+@monitor_46:
        dc.b      100,117,109,112,119,32,79,110,108,121,32,87
        dc.b      111,114,107,115,32,105,110,32,52,48,32,99,111
        dc.b      108,115,13,10,0
-@monitor_46:
+@monitor_47:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,68,85
        dc.b      77,80,87,32,118,48,46,49,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,32,32,32,13,10,0
-@monitor_47:
-       dc.b      65,100,100,114,32,0
 @monitor_48:
+       dc.b      65,100,100,114,32,0
+@monitor_49:
        dc.b      32,32,32,32,32,32,32,32,32,66,121,116,101,115
        dc.b      32,32,32,32,32,32,32,32,32,0
-@monitor_49:
-       dc.b      32,65,83,67,73,73,32,0
 @monitor_50:
+       dc.b      32,65,83,67,73,73,32,0
+@monitor_51:
        dc.b      32,60,45,58,80,114,101,118,32,32,45,62,58,78
        dc.b      101,120,116,32,32,60,0
-@monitor_51:
+@monitor_52:
        dc.b      58,65,100,100,114,32,32,69,83,67,58,69,120,105
        dc.b      116,32,0
-@monitor_52:
+@monitor_53:
        dc.b      32,65,100,100,114,101,115,115,40,72,69,88,41
        dc.b      58,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,32,32,32,0
-@monitor_53:
+@monitor_54:
+       dc.b      82,101,99,101,105,118,105,110,103,32,40,88,77
+       dc.b      79,68,69,77,45,67,82,67,47,49,75,41,46,13,10
+       dc.b      60,69,115,99,62,32,116,111,32,67,97,110,99,101
+       dc.b      108,46,46,46,13,10,0
+@monitor_55:
+       dc.b      65,100,100,114,101,115,115,32,108,111,97,100
+       dc.b      105,110,103,58,32,48,120,0
+@monitor_56:
+       dc.b      32,0
+@monitor_57:
+       dc.b      13,10,76,111,97,100,105,110,103,32,97,98,111
+       dc.b      114,116,101,100,46,13,10,0
+@monitor_58:
+       dc.b      13,10,84,105,109,101,111,117,116,32,119,97,105
+       dc.b      116,105,110,103,32,115,101,110,100,101,114,46
+       dc.b      13,10,0
+@monitor_59:
+       dc.b      13,10,84,114,97,110,115,102,101,114,32,99,97
+       dc.b      110,99,101,108,101,100,32,98,121,32,115,101
+       dc.b      110,100,101,114,46,13,10,0
+@monitor_60:
+       dc.b      13,10,84,111,111,32,109,97,110,121,32,112,114
+       dc.b      111,116,111,99,111,108,32,101,114,114,111,114
+       dc.b      115,46,13,10,0
+@monitor_61:
+       dc.b      13,10,78,111,32,109,101,109,111,114,121,32,119
+       dc.b      104,105,108,101,32,114,101,99,101,105,118,105
+       dc.b      110,103,46,13,10,0
+@monitor_62:
+       dc.b      13,10,70,105,108,101,32,108,111,97,100,101,100
+       dc.b      32,105,110,32,116,111,32,109,101,109,111,114
+       dc.b      121,32,115,117,99,99,101,115,115,102,117,108
+       dc.b      121,46,13,10,0
+@monitor_63:
+       dc.b      65,100,100,114,101,115,115,32,108,111,97,100
+       dc.b      101,100,58,32,48,120,0
+@monitor_64:
        dc.b      82,101,99,101,105,118,105,110,103,46,32,60,69
        dc.b      115,99,62,32,116,111,32,67,97,110,99,101,108
        dc.b      46,46,46,32,13,10,0
-@monitor_54:
-       dc.b      65,100,100,114,101,115,115,32,108,111,97,100
-       dc.b      105,110,103,58,32,48,120,0
-@monitor_55:
-       dc.b      32,0
-@monitor_56:
+@monitor_65:
        dc.b      84,105,109,101,111,117,116,46,32,80,114,111
        dc.b      99,101,115,115,32,65,98,111,114,116,101,100
        dc.b      46,13,10,0
-@monitor_57:
+@monitor_66:
        dc.b      70,105,108,101,32,108,111,97,100,101,100,32
        dc.b      105,110,32,116,111,32,109,101,109,111,114,121
        dc.b      32,115,117,99,99,101,115,115,102,117,108,121
        dc.b      46,13,10,0
-@monitor_58:
-       dc.b      65,100,100,114,101,115,115,32,108,111,97,100
-       dc.b      101,100,58,32,48,120,0
-@monitor_59:
+@monitor_67:
        dc.b      76,111,97,100,105,110,103,32,97,98,111,114,116
        dc.b      101,100,46,13,10,0
-@monitor_60:
+@monitor_68:
        dc.b      70,105,108,101,32,108,111,97,100,101,100,32
        dc.b      105,110,32,116,111,32,109,101,109,111,114,121
        dc.b      32,119,105,116,104,32,99,104,101,99,107,115
        dc.b      117,109,32,101,114,114,111,114,115,46,13,10
        dc.b      0
-@monitor_61:
+@monitor_69:
        dc.b      32,32,32,0
-@monitor_62:
+@monitor_70:
        dc.b      68,111,110,101,33,0
-@monitor_63:
+@monitor_71:
        dc.b      76,111,97,100,105,110,103,32,79,83,46,32,80
        dc.b      108,101,97,115,101,32,87,97,105,116,46,46,46
        dc.b      0
-@monitor_64:
+@monitor_72:
        dc.b      73,79,32,69,114,114,111,114,46,46,46,46,13,10
        dc.b      0
-@monitor_65:
-       dc.b      79,107,13,10,0
-@monitor_66:
-       dc.b      65,113,117,105,32,48,13,10,0
-@monitor_67:
-       dc.b      65,113,117,105,32,48,46,49,13,10,0
-@monitor_68:
-       dc.b      65,113,117,105,32,49,13,10,0
-@monitor_69:
-       dc.b      65,113,117,105,32,50,13,10,0
-@monitor_70:
-       dc.b      65,113,117,105,32,50,46,49,13,10,0
-@monitor_71:
-       dc.b      65,113,117,105,32,51,13,10,0
-@monitor_72:
-       dc.b      32,13,10,0
 @monitor_73:
+       dc.b      79,107,13,10,0
+@monitor_74:
+       dc.b      65,113,117,105,32,48,13,10,0
+@monitor_75:
+       dc.b      65,113,117,105,32,48,46,49,13,10,0
+@monitor_76:
+       dc.b      65,113,117,105,32,49,13,10,0
+@monitor_77:
+       dc.b      65,113,117,105,32,50,13,10,0
+@monitor_78:
+       dc.b      65,113,117,105,32,50,46,49,13,10,0
+@monitor_79:
+       dc.b      65,113,117,105,32,51,13,10,0
+@monitor_80:
+       dc.b      32,13,10,0
+@monitor_81:
        dc.b      32,32,32,32,32,32,32,32,32,32,69,88,67,69,80
        dc.b      84,73,79,78,32,79,67,67,85,82,82,69,68,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_74:
+@monitor_82:
        dc.b      32,32,32,32,32,32,66,85,83,32,69,82,82,79,82
        dc.b      32,47,32,65,68,68,82,69,83,83,32,69,82,82,79
        dc.b      82,32,32,32,32,32,0
-@monitor_75:
+@monitor_83:
        dc.b      32,32,32,32,32,32,32,32,32,73,76,76,69,71,65
        dc.b      76,32,73,78,83,84,82,85,67,84,73,79,78,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_76:
+@monitor_84:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,90,69
        dc.b      82,79,32,68,73,86,73,68,69,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_77:
+@monitor_85:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,67,72,75,32
        dc.b      73,78,83,84,82,85,67,84,73,79,78,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_78:
+@monitor_86:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,84,82,65,80,86,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_79:
+@monitor_87:
        dc.b      32,32,32,32,32,32,32,32,32,80,82,73,86,73,76
        dc.b      69,71,69,32,86,73,79,76,65,84,73,79,78,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_80:
+@monitor_88:
        dc.b      32,58,32,0
-@monitor_81:
+@monitor_89:
        dc.b      32,68,48,32,32,32,32,32,32,32,68,49,32,32,32
        dc.b      32,32,32,32,68,50,32,32,32,32,32,32,32,68,51
        dc.b      32,32,32,32,32,32,0
-@monitor_82:
+@monitor_90:
        dc.b      32,68,52,32,32,32,32,32,32,32,68,53,32,32,32
        dc.b      32,32,32,32,68,54,32,32,32,32,32,32,32,68,55
        dc.b      32,32,32,32,32,32,0
-@monitor_83:
+@monitor_91:
        dc.b      32,65,48,32,32,32,32,32,32,32,65,49,32,32,32
        dc.b      32,32,32,32,65,50,32,32,32,32,32,32,32,65,51
        dc.b      32,32,32,32,32,32,0
-@monitor_84:
+@monitor_92:
        dc.b      32,65,52,32,32,32,32,32,32,32,65,53,32,32,32
        dc.b      32,32,32,32,65,54,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_85:
+@monitor_93:
        dc.b      32,32,32,32,32,32,32,32,0
-@monitor_86:
+@monitor_94:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_87:
+@monitor_95:
        dc.b      32,83,82,32,32,32,80,67,32,32,32,32,32,32,32
        dc.b      79,102,102,83,101,116,32,83,112,101,99,105,97
        dc.b      108,95,87,111,114,100,32,32,0
-@monitor_88:
+@monitor_96:
        dc.b      32,32,32,32,32,32,32,32,32,32,0
-@monitor_89:
+@monitor_97:
        dc.b      32,70,97,117,108,116,65,100,100,114,32,79,117
        dc.b      116,66,32,73,110,66,32,32,73,110,115,116,114
        dc.b      46,73,110,66,32,32,32,32,32,32,0
-@monitor_90:
+@monitor_98:
        dc.b      32,32,0
-@monitor_91:
+@monitor_99:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,0
-@monitor_92:
+@monitor_100:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,83,89,83
        dc.b      84,69,77,32,72,65,76,84,69,68,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0

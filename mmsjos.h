@@ -54,6 +54,7 @@ typedef struct
     unsigned short        sectorSize;     // The size of a sector in bytes
     unsigned long       fatsize;        // The number of sectors in the FAT
     unsigned short        reserv;         // The number of copies of the FAT in the partition
+    unsigned char        NumberOfFATs;     // Number of FAT copies in the partition
     unsigned char        SecPerClus;     // The number of sectors per cluster in the data region
     unsigned char        type;           // The file system type of the partition (FAT12, FAT16 or FAT32)
     unsigned char        mount;          // Device mount flag (TRUE if disk was mounted successfully, FALSE otherwise)

@@ -1962,7 +1962,7 @@ unsigned char fsSectorWrite(unsigned long vsector, unsigned char* vbuffer, unsig
 //-----------------------------------------------------------------------------
 void catFile(unsigned char *parquivo) {
     unsigned short vbytepic;
-    unsigned char *mcfgfileptr = 0x00, vqtd = 1;
+	unsigned char *mcfgfileptr = 0x00, *mcfgfilebase = 0x00, vqtd = 1;
     unsigned char *parqptr = parquivo;
     unsigned long vsizefile, vsizefilemalloc;
     unsigned char sqtdtam[10];
@@ -1971,7 +1971,14 @@ void catFile(unsigned char *parquivo) {
         vqtd++;
 
     vsizefilemalloc = fsInfoFile(parquivo, INFO_SIZE);
-    mcfgfileptr = malloc(vsizefilemalloc);
+	mcfgfilebase = malloc(vsizefilemalloc);
+
+	if (!mcfgfilebase) {
+		printText("No memory to load file...\r\n\0");
+		return;
+	}
+
+	mcfgfileptr = mcfgfilebase;
 
     vsizefile = loadFile(parquivo, (unsigned long*)mcfgfileptr);   // 12K espaco pra carregar arquivo. Colocar logica pra pegar tamanho e alocar espaco
 
@@ -2010,7 +2017,7 @@ void catFile(unsigned char *parquivo) {
         printText("Loading file error...\r\n\0");
     }
 
-    free(vsizefilemalloc);
+	free(mcfgfilebase);
 }
 
 //-----------------------------------------------------------------------------

@@ -30,6 +30,7 @@
 * 10/01/2025  1.2     Moacir Jr.   Integrar com uC/CosII para o MMSJ320
 * 16/01/2025  1.3     Moacir Jr.   Voltar para teclado e mouse com arduino nano
 * 28/01/2025  1.3a    Moacir Jr.   Ajustes na leitura dos dados recebidos do Mouse
+* 12/04/2026  1.4a02  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
 *--------------------------------------------------------------------------------
 *
 * Mapa de Memoria
@@ -104,7 +105,7 @@
 #include "mmsj320mfp.h"
 #include "monitor.h"
 
-#define versionBios "1.3a"
+#define versionBios "1.4a02"
 
 HEADER *_allocp;
 
@@ -141,6 +142,7 @@ void writeSerial(unsigned char pchr);
 void writeLongSerial(unsigned char *msg);
 unsigned long lstmGetSize(void);
 unsigned char loadSerialToMem(unsigned char *pEnder, unsigned char ptipo);
+unsigned char loadSerialToMem2(unsigned char *pEnder, unsigned char ptipo);
 void runMem(unsigned long pEnder);
 void runBasic(unsigned long pEnder);
 void pokeMem(unsigned char *pEnder, unsigned char *pByte);
@@ -973,6 +975,14 @@ int processCmd(void)
 
             loadSerialToMem(vEndLoad, 1);
         }
+        else if (!strcmp(linhacomando,"LOAD2") && iy == 5)
+        {
+            printText("Wait...\r\n\0");
+            if (linhaarg[0] != 0x00)
+                vEndLoad = hexToLong(linhaarg);
+
+            loadSerialToMem2(vEndLoad, 1);
+        }
         else if (!strcmp(linhacomando,"RUN") && iy == 3)
         {
             if (linhaarg[0] != 0x00)
@@ -1654,6 +1664,346 @@ unsigned long lstmGetSize(void)
 }
 
 //-----------------------------------------------------------------------------
+static unsigned short xmodem_crc16_update(unsigned short crc, unsigned char data)
+{
+    unsigned char i;
+
+    crc ^= ((unsigned short)data << 8);
+    for (i = 0; i < 8; i++)
+    {
+        if (crc & 0x8000)
+            crc = (crc << 1) ^ 0x1021;
+        else
+            crc = (crc << 1);
+    }
+
+    return crc;
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char serialReadByteTimeout(unsigned char *pByte, unsigned long pTimeoutSpin)
+{
+    while (pTimeoutSpin)
+    {
+        if (kbdKeyBuffer[kbdKeyPtrR] == 0x1B)  // ESC
+            return 0;
+
+        if ((*(vmfp + Reg_RSR) & 0x80))
+        {
+            *pByte = *(vmfp + Reg_UDR);
+            return 1;
+        }
+
+        pTimeoutSpin--;
+    }
+
+    return 0;
+}
+
+//-----------------------------------------------------------------------------
+static void serialDrainRx(unsigned long pIdleSpin)
+{
+    unsigned char vDummy;
+
+    while (pIdleSpin)
+    {
+        if ((*(vmfp + Reg_RSR) & 0x80))
+        {
+            vDummy = *(vmfp + Reg_UDR);
+            pIdleSpin = 120000;
+        }
+        else
+        {
+            pIdleSpin--;
+        }
+    }
+
+    vDummy = 0;
+}
+
+//-----------------------------------------------------------------------------
+// load2 <ender initial to save>
+//----------------------------------------------------------------------------- 
+// Uses XMODEM-CRC / XMODEM-1K (SOH=128 bytes, STX=1024 bytes)
+// Faster and safer than checksum-only receiver.
+//-----------------------------------------------------------------------------
+unsigned char loadSerialToMem2(unsigned char *pEndStart, unsigned char ptipo)
+{
+    unsigned char *pEnder = pEndStart;
+    unsigned char *vEndSave;
+    unsigned char *pEndNew;
+    unsigned char vRx[1024];
+    unsigned long vSizeAlloc = 0;
+    unsigned long vSizeData = 0;
+    unsigned long vOffSave = 0;
+    unsigned long vTimeout;
+    unsigned short vCalcCrc;
+    unsigned short vRecvCrc;
+    unsigned short ix;
+    unsigned char ch = 0, blk = 0, nblk = 0;
+    unsigned char csum = 0;
+    unsigned char vCalcCsum = 0;
+    unsigned char expectedBlk = 1;
+    unsigned char retries = 0;
+    unsigned char handshakeTries = 0;
+    unsigned char useCrc = 1;
+    unsigned long handshakeTimeout = 700000;
+    unsigned long blockByteTimeout = 400000;
+    unsigned char maxRetries = 24;
+    unsigned short blockLen;
+    unsigned char sqtdtam[20];
+
+    if (ptipo)
+        printText("Receiving (XMODEM-CRC/1K).\r\n<Esc> to Cancel...\r\n\0");
+
+    vSizeTotalRec = 0;
+    kbdKeyBuffer[kbdKeyPtrR] = 0x00;
+
+    if (pEnder == 0)
+    {
+        // Default fixed buffer avoids heap realloc failures during XMODEM-1K.
+        pEndStart = 0x00850000;
+        pEnder = pEndStart;
+    }
+
+    printText("Address loading: 0x");
+    itoa(pEndStart, sqtdtam, 16);
+    printText(sqtdtam);
+    printText(" \0");
+
+    vEndSave = pEndStart;
+
+    // Start handshake requesting CRC mode.
+    writeSerial('C');
+
+    while (1)
+    {
+        if (kbdKeyBuffer[kbdKeyPtrR] == 0x1B)
+        {
+            if (pEnder == 0)
+                free(pEndStart);
+
+            if (ptipo)
+                printText("\r\nLoading aborted.\r\n\0");
+
+            return 0xFD;
+        }
+
+        if (!serialReadByteTimeout(&ch, handshakeTimeout))
+        {
+            if (useCrc)
+                writeSerial('C');
+            else
+                writeSerial(0x15);   // NAK -> checksum mode
+
+            handshakeTries++;
+            if (useCrc && handshakeTries > 8)
+            {
+                // Some senders (e.g. XMODEM-1K checksum) ignore 'C'.
+                useCrc = 0;
+                handshakeTries = 0;
+                writeSerial(0x15);
+            }
+
+            if (handshakeTries > 20)
+            {
+                if (pEnder == 0)
+                    free(pEndStart);
+
+                if (ptipo)
+                    printText("\r\nTimeout waiting sender.\r\n\0");
+
+                return 0xFE;
+            }
+            continue;
+        }
+
+        handshakeTries = 0;
+
+        if (ch == 0x04)  // EOT
+        {
+            writeSerial(0x06); // ACK
+            break;
+        }
+
+        if (ch == 0x18) // CAN
+        {
+            if (pEnder == 0)
+                free(pEndStart);
+
+            if (ptipo)
+                printText("\r\nTransfer canceled by sender.\r\n\0");
+
+            return 0xFC;
+        }
+
+        if (ch == 0x01)
+            blockLen = 128;      // SOH
+        else if (ch == 0x02)
+            blockLen = 1024;     // STX (XMODEM-1K)
+        else
+        {
+            writeSerial(0x15);   // NAK
+            retries++;
+            if (retries > maxRetries)
+            {
+                if (pEnder == 0)
+                    free(pEndStart);
+
+                if (ptipo)
+                    printText("\r\nToo many protocol errors.\r\n\0");
+
+                return 0xFD;
+            }
+            continue;
+        }
+
+        if (!serialReadByteTimeout(&blk, blockByteTimeout) || !serialReadByteTimeout(&nblk, blockByteTimeout))
+        {
+            serialDrainRx(120000);
+            writeSerial(0x15);
+            retries++;
+            continue;
+        }
+
+        if ((unsigned char)(blk + nblk) != 0xFF)
+        {
+            serialDrainRx(120000);
+            writeSerial(0x15);
+            retries++;
+            continue;
+        }
+
+        for (ix = 0; ix < blockLen; ix++)
+        {
+            if (!serialReadByteTimeout(&vRx[ix], blockByteTimeout))
+                break;
+        }
+
+        if (ix != blockLen)
+        {
+            serialDrainRx(120000);
+            writeSerial(0x15);
+            retries++;
+            continue;
+        }
+
+        if (useCrc)
+        {
+            if (!serialReadByteTimeout(&ch, blockByteTimeout))
+            {
+                serialDrainRx(120000);
+                writeSerial(0x15);
+                retries++;
+                continue;
+            }
+            vRecvCrc = ((unsigned short)ch << 8);
+
+            if (!serialReadByteTimeout(&ch, blockByteTimeout))
+            {
+                serialDrainRx(120000);
+                writeSerial(0x15);
+                retries++;
+                continue;
+            }
+            vRecvCrc |= ch;
+
+            vCalcCrc = 0;
+            for (ix = 0; ix < blockLen; ix++)
+                vCalcCrc = xmodem_crc16_update(vCalcCrc, vRx[ix]);
+
+            if (vCalcCrc != vRecvCrc)
+            {
+                serialDrainRx(120000);
+                writeSerial(0x15);
+                retries++;
+                continue;
+            }
+        }
+        else
+        {
+            if (!serialReadByteTimeout(&csum, blockByteTimeout))
+            {
+                serialDrainRx(120000);
+                writeSerial(0x15);
+                retries++;
+                continue;
+            }
+
+            vCalcCsum = 0;
+            for (ix = 0; ix < blockLen; ix++)
+                vCalcCsum += vRx[ix];
+
+            if (vCalcCsum != csum)
+            {
+                serialDrainRx(120000);
+                writeSerial(0x15);
+                retries++;
+                continue;
+            }
+        }
+
+        // Duplicate block: ACK only (sender retry after lost ACK)
+        if ((unsigned char)(expectedBlk - 1) == blk)
+        {
+            writeSerial(0x06);
+            continue;
+        }
+
+        if (blk != expectedBlk)
+        {
+            serialDrainRx(120000);
+            writeSerial(0x15);
+            retries++;
+            continue;
+        }
+
+        // Grow dynamic buffer when needed.
+        if (pEnder == 0)
+        {
+            while ((vSizeData + blockLen) > vSizeAlloc)
+            {
+                vOffSave = (unsigned long)(vEndSave - pEndStart);
+                pEndNew = realloc(pEndStart, (vSizeAlloc + 2048));
+                if (!pEndNew)
+                {
+                    free(pEndStart);
+
+                    if (ptipo)
+                        printText("\r\nNo memory while receiving.\r\n\0");
+
+                    return 0xFB;
+                }
+
+                pEndStart = pEndNew;
+                vEndSave = pEndStart + vOffSave;
+                vSizeAlloc += 2048;
+            }
+        }
+
+        for (ix = 0; ix < blockLen; ix++)
+            *vEndSave++ = vRx[ix];
+
+        vSizeData += blockLen;
+        vSizeTotalRec = vSizeData;
+        expectedBlk++;
+        retries = 0;
+        writeSerial(0x06); // ACK
+    }
+
+    if (ptipo)
+    {
+        printText("\r\nFile loaded in to memory successfuly.\r\n\0");
+        printText("Address loaded: 0x");
+        itoa(pEndStart, sqtdtam, 16);
+        printText(sqtdtam);
+        printText("\r\n\0");
+    }
+
+    return 0x00;
+}
+
+//-----------------------------------------------------------------------------
 // load <ender initial to save>
 //-----------------------------------------------------------------------------
 //         Uses XMODEM Protocol
@@ -1663,11 +2013,15 @@ unsigned long lstmGetSize(void)
 unsigned char loadSerialToMem(unsigned char *pEndStart, unsigned char ptipo)
 {
     unsigned long vTamanho;
+    unsigned long vSizeAlloc = 0;
+    unsigned long vOffSave = 0;
+    unsigned long vOffOld = 0;
     unsigned char vHeader[3];
     unsigned int vchecksum = 0;
     unsigned char inputBuffer, verro = 0;
     unsigned char *vEndSave = 0x00000000;
     unsigned char *vEndOld  = 0x00000000;
+    unsigned char *pEndNew  = 0x00000000;
     unsigned char *pEnder  = pEndStart;
     unsigned long vTimeout = 0, vchecksumcalc = 0;
     unsigned char sqtdtam[20];
@@ -1686,7 +2040,10 @@ unsigned char loadSerialToMem(unsigned char *pEndStart, unsigned char ptipo)
     kbdKeyBuffer[kbdKeyPtrR] = 0x00;
 
     if (pEnder == 0)
+    {
         pEndStart = malloc(1024);
+        vSizeAlloc = 1024;
+    }
 
     printText("Address loading: 0x");
     itoa(pEndStart, sqtdtam, 16);
@@ -1812,8 +2169,23 @@ unsigned char loadSerialToMem(unsigned char *pEndStart, unsigned char ptipo)
             vSizeTotalRec = vSizeTotalRec + 1;
             if (pEnder == 0)
             {
-                if (vSizeTotalRec >= vSizeTotalRec + 1024)
-                    realloc(pEndStart, (vSizeTotalRec + 1024));
+                if (vSizeTotalRec >= vSizeAlloc)
+                {
+                    vOffSave = (unsigned long)(vEndSave - pEndStart);
+                    vOffOld = (unsigned long)(vEndOld - pEndStart);
+                    pEndNew = realloc(pEndStart, (vSizeAlloc + 1024));
+
+                    if (!pEndNew)
+                    {
+                        verro = 1;
+                        break;
+                    }
+
+                    pEndStart = pEndNew;
+                    vEndSave = pEndStart + vOffSave;
+                    vEndOld = pEndStart + vOffOld;
+                    vSizeAlloc = vSizeAlloc + 1024;
+                }
             }
         }
     }

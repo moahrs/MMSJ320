@@ -318,6 +318,7 @@ int basStop(void);
 int basSpc(void);
 int basTab(void);
 int basXBasLoad(void);
+int basXBasLoad1k(void);
 int basInt(void);
 int basAbs(void);
 int basPeekPoke(char pTipo);

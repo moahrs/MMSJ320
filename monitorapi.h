@@ -44,6 +44,7 @@ typedef void (*setWriteAddressType)(unsigned int address);
 typedef void (*setReadAddressType)(unsigned int address);
 typedef unsigned long (*getVideoFontesType)(void);
 typedef unsigned char (*readMouseType)(unsigned char *vStat, unsigned char *vMovX, unsigned char *vMovY);
+typedef unsigned char (* loadSerialToMem2Type)(unsigned char *pEnder, unsigned char ptipo);
 
 #define processCmd ((processCmdType *)(unsigned long)MONITOR_FUNC_TABLE)[0] // Índice da função
 #define clearScr ((clearScrType *)(unsigned long)MONITOR_FUNC_TABLE)[1] // Índice da função
@@ -85,3 +86,4 @@ typedef unsigned char (*readMouseType)(unsigned char *vStat, unsigned char *vMov
 #define setReadAddress ((setReadAddressType *)(unsigned long)MONITOR_FUNC_TABLE)[37] // Índice da função
 #define getVideoFontes ((getVideoFontesType *)(unsigned long)MONITOR_FUNC_TABLE)[38] // Índice da função
 #define readMouse ((readMouseType *)(unsigned long)MONITOR_FUNC_TABLE)[39] // Índice da função
+#define loadSerialToMem2 ((loadSerialToMem2Type *)(unsigned long)MONITOR_FUNC_TABLE)[40] // Índice da função

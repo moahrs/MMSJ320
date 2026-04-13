@@ -390,6 +390,7 @@ monitor_func_table:
             dc.l _setReadAddress
             dc.l _getVideoFontes
             dc.l _readMouse
+            dc.l _loadSerialToMem2
             
            section     const
            align

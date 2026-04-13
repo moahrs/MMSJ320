@@ -11,6 +11,7 @@
 * 04/01/2025  0.3     Moacir Jr.   Receber pasta no nome do arquivo "<pasta>/<file>"
 * 08/01/2025  0.4     Moacir Jr.   Implementar wildcards "*?" para LS, RM e CP
 * 18/01/2025  0.5     Moacir Jr.   Adaptar uC/OS-II - RTOS
+* 13/04/2026  1.0a02  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
 ********************************************************************************/
 
 #include <ucos_ii.h>
@@ -121,7 +122,7 @@ void memInit(void);
 
 HEADER *_allocp;
 
-#define versionMMSJOS "0.5"
+#define versionMMSJOS "1.0a02"
 
 #define STACKSIZE  1024
 #define STACKSIZEMGUI  2048
@@ -445,8 +446,9 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
     unsigned char linhacomando[64], linhaarg[64], vloop;
     unsigned char *blin = vbuf, vbuffer[128], vlinha[40];
     unsigned short varg = 0;
-    unsigned short ix, iy, iz, ikk;
+    unsigned short ix, iy, iz, ikk, isrc;
     unsigned short vbytepic = 0, vrecfim;
+    unsigned short vReadSize;
     unsigned char *vdirptr = (unsigned char*)&vdir;
     unsigned char sqtdtam[10], cuntam, vparam[32], vparam2[32], vparam3[32], vparam4[13], vpicret;
     unsigned long vretfat, vclusterdiratu, vclusterdirsrc, vclusterdirdst, vsizefilemalloc;
@@ -497,30 +499,40 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
     {
         linhaarg[ix] = '\0';
 
+        memset(vparam, 0x00, sizeof(vparam));
+        memset(vparam2, 0x00, sizeof(vparam2));
+
         ikk = 0;
+        isrc = 0;
         iz = 0;
         varg = 0;
         while (ikk < ix)
         {
             if (linhaarg[ikk] == 0x20)
-                varg = 1;
+            {
+                if (!varg && isrc > 0)
+                    varg = 1;
+            }
             else
             {
                 if (!varg)
-                    vparam[ikk] = linhaarg[ikk];
+                {
+                    if (isrc < (sizeof(vparam) - 1))
+                        vparam[isrc++] = linhaarg[ikk];
+                }
                 else
                 {
-                    vparam2[iz] = linhaarg[ikk];
-                    iz++;
+                    if (iz < (sizeof(vparam2) - 1))
+                        vparam2[iz++] = linhaarg[ikk];
                 }
             }
 
             ikk++;
         }
-    }
 
-    vparam[ikk] = '\0';
-    vparam2[iz] = '\0';
+        vparam[isrc] = '\0';
+        vparam2[iz] = '\0';
+    }
 
     if (linhaarg[0] == 0x00)
     {
@@ -988,17 +1000,17 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
                             while (vretfat == RETURN_OK)
                             {
                                 vclusterdir = vclusterdirsrc;
-                                if (fsReadFile(vparam, ikk, vbuffer, 128) > 0)
+                                vReadSize = fsReadFile(vparam, ikk, vbuffer, 128);
+                                if (vReadSize > 0)
                                 {
                                     vclusterdir = vclusterdirdst;
-                                    //memcpy(tempData2, vbuffer, 128);
-                                    if (fsWriteFile(vparam4, ikk, vbuffer, 128) != RETURN_OK)
+                                    if (fsWriteFile(vparam4, ikk, vbuffer, (unsigned char)vReadSize) != RETURN_OK)
                                     {
                                         vretfat = ERRO_B_WRITE_FILE;
                                         break;
                                     }
 
-                                    ikk += 128;
+                                    ikk += vReadSize;
                                 }
                                 else
                                     break;
@@ -1070,11 +1082,11 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
             {
                 vretfat = fsRemoveDir(linhaarg);
             }
-            else if (!strcmp(linhacomando,"SERTOFILE") && iy == 9) // Arquivo (usa 1 soh)
+            else if (!strcmp(linhacomando,"STOF") && iy == 4) // Arquivo (usa 1 soh)
             {
                 vretfat = fsLoadSerialToFile(linhaarg, "810000");  // Carrega da Serial para o Arquivo
             }
-            else if (!strcmp(linhacomando,"SERTORUN") && iy == 8) // Arquivo (usa 1 soh)
+            else if (!strcmp(linhacomando,"STOR") && iy == 4) // Arquivo (usa 1 soh)
             {
                 vretfat = fsLoadSerialToRun(linhaarg);  // Carrega da Serial para o Arquivo
             }
@@ -1120,21 +1132,31 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
                     // Se tiver, carrega em 0x00810000 e executa
                     vsizefilemalloc = fsInfoFile(linhacomando, INFO_SIZE);
                     vEnderExec = malloc(vsizefilemalloc);
-                    itoa(vEnderExec,sqtdtam,16);
-                    printText("Loading File in \0");
-                    printText(sqtdtam);
-                    printText("h\r\n\0");
-                    loadFile(linhacomando, (unsigned long*)vEnderExec);
-                    if (!verro)
+                    if (!vEnderExec)
                     {
-                        runOSMemory = vEnderExec;
-                        runFromOsCmd();
-                        free(vEnderExec);
+                        if (linhaParametro[0] == '\0')
+                            printText("No memory to load file...\r\n\0");
                     }
                     else
                     {
-                        if (linhaParametro[0] == '\0')
-                            printText("Loading File Error...\r\n\0");
+                        itoa(vEnderExec,sqtdtam,16);
+                        printText("Loading File in \0");
+                        printText(sqtdtam);
+                        printText("h\r\n\0");
+                        loadFile(linhacomando, (unsigned long*)vEnderExec);
+                        if (!verro)
+                        {
+                            runOSMemory = vEnderExec;
+                            runFromOsCmd();
+                            free(vEnderExec);
+                        }
+                        else
+                        {
+                            free(vEnderExec);
+
+                            if (linhaParametro[0] == '\0')
+                                printText("Loading File Error...\r\n\0");
+                        }
                     }
 
                     ix = 255;
@@ -1337,6 +1359,87 @@ unsigned char fsRecByte(unsigned char pType)
 }
 
 //-----------------------------------------------------------------------------
+static unsigned char fsWriteFatSector(unsigned long vfat)
+{
+    unsigned char vfatCopy;
+    unsigned long vfatCopySector;
+
+    if (vdisk.NumberOfFATs == 0)
+        vdisk.NumberOfFATs = 1;
+
+    for (vfatCopy = 0; vfatCopy < vdisk.NumberOfFATs; vfatCopy++)
+    {
+        vfatCopySector = vfat + ((unsigned long)vfatCopy * vdisk.fatsize);
+        if (!fsSectorWrite(vfatCopySector, gDataBuffer, FALSE))
+            return ERRO_D_WRITE_DISK;
+    }
+
+    return RETURN_OK;
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char fsDeleteDirEntryChain(unsigned long vDirSector, unsigned short vDirEntry)
+{
+    unsigned long vScanSector;
+    unsigned long vSectorInCluster;
+    unsigned short vScanEntry;
+    unsigned short vLastEntryInSector;
+
+    if (!fsSectorRead(vDirSector, gDataBuffer))
+        return ERRO_D_READ_DISK;
+
+    gDataBuffer[vDirEntry] = DIR_DEL;
+    gDataBuffer[vDirEntry + 20] = 0x00;
+    gDataBuffer[vDirEntry + 21] = 0x00;
+    gDataBuffer[vDirEntry + 26] = 0x00;
+    gDataBuffer[vDirEntry + 27] = 0x00;
+    gDataBuffer[vDirEntry + 28] = 0x00;
+    gDataBuffer[vDirEntry + 29] = 0x00;
+    gDataBuffer[vDirEntry + 30] = 0x00;
+    gDataBuffer[vDirEntry + 31] = 0x00;
+
+    if (!fsSectorWrite(vDirSector, gDataBuffer, FALSE))
+        return ERRO_D_WRITE_DISK;
+
+    vScanSector = vDirSector;
+    vScanEntry = vDirEntry;
+    vLastEntryInSector = (vdisk.sectorSize - 32);
+
+    while (1)
+    {
+        if (vScanEntry >= 32)
+        {
+            vScanEntry -= 32;
+        }
+        else
+        {
+            vSectorInCluster = (vScanSector - vdisk.data) % vdisk.SecPerClus;
+            if (vSectorInCluster == 0)
+                break;
+
+            vScanSector--;
+            vScanEntry = vLastEntryInSector;
+        }
+
+        if (!fsSectorRead(vScanSector, gDataBuffer))
+            return ERRO_D_READ_DISK;
+
+        if (gDataBuffer[vScanEntry] == DIR_EMPTY || gDataBuffer[vScanEntry] == DIR_DEL)
+            break;
+
+        if (gDataBuffer[vScanEntry + 11] != ATTR_LONG_NAME)
+            break;
+
+        gDataBuffer[vScanEntry] = DIR_DEL;
+
+        if (!fsSectorWrite(vScanSector, gDataBuffer, FALSE))
+            return ERRO_D_WRITE_DISK;
+    }
+
+    return RETURN_OK;
+}
+
+//-----------------------------------------------------------------------------
 // FAT32 Functions
 //-----------------------------------------------------------------------------
 unsigned char fsMountDisk(void)
@@ -1361,7 +1464,11 @@ unsigned char fsMountDisk(void)
 
     vdisk.sectorSize  = (unsigned long)gDataBuffer[12] << 8;
     vdisk.sectorSize |= (unsigned long)gDataBuffer[11];
+	vdisk.NumberOfFATs = gDataBuffer[16];
 	vdisk.SecPerClus = gDataBuffer[13];
+
+    if (vdisk.NumberOfFATs == 0)
+        vdisk.NumberOfFATs = 1;
 
     vdisk.fatsize  = (unsigned long)gDataBuffer[39] << 24;
     vdisk.fatsize |= (unsigned long)gDataBuffer[38] << 16;
@@ -1375,7 +1482,7 @@ unsigned char fsMountDisk(void)
 
 	vdisk.type = FAT32;
 
-	vdisk.data = vdisk.reserv + (2 * vdisk.fatsize);
+    vdisk.data = vdisk.firsts + vdisk.reserv + ((unsigned long)vdisk.NumberOfFATs * vdisk.fatsize);
 
 	vclusterdir = vdisk.root;
 
@@ -1606,7 +1713,7 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
     fsCreateFile(vfilename);
 
     // Recebe os dados via Serial
-    if (!loadSerialToMem(vPosMem, 1))
+    if (!loadSerialToMem2(vPosMem, 1))
     {
         // Abre Arquivo
         printText("Opening File...\r\n\0");
@@ -1688,7 +1795,7 @@ unsigned char fsLoadSerialToRun(char * vfilename)
     vEnderExec = malloc(1024);
 
     // Recebe os dados via Serial
-    if (!loadSerialToMem(vEnderExec, 1))
+    if (!loadSerialToMem2(vEnderExec, 1))
     {
         itoa(vEnderExec,sqtdtam,16);
         printText("Running at \0");
@@ -1715,6 +1822,12 @@ unsigned char fsRWFile(unsigned long vclusterini, unsigned long voffset, unsigne
 {
 	unsigned long vdata, vclusternew, vfat;
 	unsigned short vpos, vsecfat, voffsec, voffclus, vtemp1, vtemp2, ikk, ikj;
+    unsigned char vSectorSwap[MEDIA_SECTOR_SIZE];
+    unsigned short vSwapSize;
+
+    vSwapSize = vdisk.sectorSize;
+    if (vSwapSize > MEDIA_SECTOR_SIZE)
+        return ERRO_B_READ_DISK;
 
 	// Calcula offset de setor e cluster
 	voffsec = voffset / vdisk.sectorSize;
@@ -1723,11 +1836,9 @@ unsigned char fsRWFile(unsigned long vclusterini, unsigned long voffset, unsigne
 
 	// Procura o cluster onde esta o setor a ser lido
 	for (vpos = 0; vpos < voffclus; vpos++) {
-		// Em operacao de escrita, como vai mexer com disco, salva buffer no setor de swap
+        // Em operacao de escrita, preserva o buffer em RAM porque funcoes FAT usam gDataBuffer.
 		if (vtype == OPER_WRITE) {
-		    ikk = vdisk.fat - 1;
-			if (!fsSectorWrite(ikk, buffer, FALSE))
-				return ERRO_B_READ_DISK;
+            memcpy(vSectorSwap, buffer, vSwapSize);
 		}
 
 		vclusternew = fsFindNextCluster(vclusterini, NEXT_FIND);
@@ -1761,23 +1872,21 @@ unsigned char fsRWFile(unsigned long vclusterini, unsigned long voffset, unsigne
 			ikk = vpos + 3;
 			gDataBuffer[ikk] = (unsigned char)((vclusternew / 0x1000000) & 0xFF);
 
-			if (!fsSectorWrite(vfat, gDataBuffer, FALSE))
-				return ERRO_B_WRITE_DISK;
+            if (fsWriteFatSector(vfat) != RETURN_OK)
+                return ERRO_B_WRITE_DISK;
 		}
 
 		vclusterini = vclusternew;
 
-		// Em operacao de escrita, como mexeu com disco, le o buffer salvo no setor swap
+        // Em operacao de escrita, restaura o buffer salvo em RAM.
 		if (vtype == OPER_WRITE) {
-		    ikk = vdisk.fat - 1;
-			if (!fsSectorRead(ikk, buffer))
-				return ERRO_B_READ_DISK;
+            memcpy(buffer, vSectorSwap, vSwapSize);
 		}
 	}
 
 	// Posiciona no setor dentro do cluster para ler/gravar
 	vtemp1 = ((vclusternew - 2) * vdisk.SecPerClus);
-	vtemp2 = (vdisk.reserv + vdisk.firsts + (2 * vdisk.fatsize));
+    vtemp2 = vdisk.data;
 	vdata = vtemp1 + vtemp2;
 	vtemp1 = (voffclus * vdisk.SecPerClus);
 	vdata += voffsec - vtemp1;
@@ -2181,7 +2290,7 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 
 	vfat = vdisk.fat;
 	vtemp1 = ((vclusterdir - 2) * vdisk.SecPerClus);
-	vtemp2 = (vdisk.reserv + vdisk.firsts + (2 * vdisk.fatsize));
+    vtemp2 = vdisk.data;
 	vdata = vtemp1 + vtemp2;
 
 	vclusterfile = ERRO_D_NOT_FOUND;
@@ -2362,7 +2471,7 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 							if (vtype == TYPE_CREATE_DIR) {
 	  							// Posicionar na nova posicao do diretorio
                             	vtemp1 = ((vclusterfile - 2) * vdisk.SecPerClus);
-                            	vtemp2 = (vdisk.reserv + vdisk.firsts + (2 * vdisk.fatsize));
+                                	vtemp2 = vdisk.data;
                             	vdata = vtemp1 + vtemp2;
 
 								// Limpar novo cluster do diretorio (Zerar)
@@ -2375,7 +2484,7 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 								}
 
                             	vtemp1 = ((vclusterfile - 2) * vdisk.SecPerClus);
-                            	vtemp2 = (vdisk.reserv + vdisk.firsts + (2 * vdisk.fatsize));
+                                	vtemp2 = vdisk.data;
                             	vdata = vtemp1 + vtemp2;
 
 	  							// Criar diretorio . (atual)
@@ -2503,19 +2612,9 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 								// Guardando Cluster Atual
 								vclusteratual = vdir.FirstCluster;
 
-		  						// Apagando no Diretorio
-		                		gDataBuffer[ix] = DIR_DEL;
-		                		ikk = ix + 26;
-								gDataBuffer[ikk] = 0x00;
-		                		ikk = ix + 27;
-								gDataBuffer[ikk] = 0x00;
-		                		ikk = ix + 20;
-								gDataBuffer[ikk] = 0x00;
-		                		ikk = ix + 21;
-								gDataBuffer[ikk] = 0x00;
-
-								if (!fsSectorWrite(vdata, gDataBuffer, FALSE))
-		          			  		return ERRO_D_WRITE_DISK;
+              					// Apaga a entrada principal e as entradas LFN imediatamente anteriores.
+                                if (fsDeleteDirEntryChain(vdata, ix) != RETURN_OK)
+                      				return ERRO_D_WRITE_DISK;
 
 				                // Apagando vestigios na FAT
 	          					while (1) {
@@ -2577,7 +2676,7 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 			if (vclusterdirnew != LAST_CLUSTER_FAT32) {
 				// Devolve a proxima posicao para procura/uso
             	vtemp1 = ((vclusterdirnew - 2) * vdisk.SecPerClus);
-            	vtemp2 = (vdisk.reserv + vdisk.firsts + (2 * vdisk.fatsize));
+                	vtemp2 = vdisk.data;
             	vdata = vtemp1 + vtemp2;
 			}
 			else {
@@ -2598,12 +2697,12 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 					    ikk = vpos + 3;
 					    gDataBuffer[ikk] = (unsigned char)((vclusterdirnew / 0x1000000) & 0xFF);
 
-					    if (!fsSectorWrite(vfat, gDataBuffer, FALSE))
-							return ERRO_D_WRITE_DISK;
+                        if (fsWriteFatSector(vfat) != RETURN_OK)
+                            return ERRO_D_WRITE_DISK;
 
 						// Posicionar na nova posicao do diretorio
                     	vtemp1 = ((vclusterdirnew - 2) * vdisk.SecPerClus);
-                    	vtemp2 = (vdisk.reserv + vdisk.firsts + (2 * vdisk.fatsize));
+                            	vtemp2 = vdisk.data;
                     	vdata = vtemp1 + vtemp2;
 
 						// Limpar novo cluster do diretorio (Zerar)
@@ -2616,7 +2715,7 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 						}
 
                     	vtemp1 = ((vclusterdirnew - 2) * vdisk.SecPerClus);
-                    	vtemp2 = (vdisk.reserv + vdisk.firsts + (2 * vdisk.fatsize));
+                        	vtemp2 = vdisk.data;
                     	vdata = vtemp1 + vtemp2;
 					}
 					else {
@@ -2727,8 +2826,8 @@ unsigned long fsFindNextCluster(unsigned long vclusteratual, unsigned char vtype
 			gDataBuffer[ikk] = 0x0F;
 		}
 
-		if (!fsSectorWrite(vfat, gDataBuffer, FALSE))
-			return ERRO_D_WRITE_DISK;
+        if (fsWriteFatSector(vfat) != RETURN_OK)
+            return ERRO_D_WRITE_DISK;
 	}
 
   return vclusternew;
@@ -2742,7 +2841,7 @@ unsigned long fsFindClusterFree(unsigned char vtype)
 
 	vfat = vdisk.fat;
 
-	for (cc = 0; cc <= vdisk.fatsize; cc++) {
+    for (cc = 0; cc < vdisk.fatsize; cc++) {
 	    // LER FAT SECTOR
 		if (!fsSectorRead(vfat, gDataBuffer))
 			return ERRO_D_READ_DISK;
@@ -2778,8 +2877,8 @@ unsigned long fsFindClusterFree(unsigned char vtype)
 		    ikk = jj + 3;
 		    gDataBuffer[ikk] = 0x0F;
 
-		    if (!fsSectorWrite(vfat, gDataBuffer, FALSE))
-				return ERRO_D_WRITE_DISK;
+            if (fsWriteFatSector(vfat) != RETURN_OK)
+                return ERRO_D_WRITE_DISK;
 		}
 	}
 
@@ -3159,7 +3258,7 @@ unsigned char fsSectorWrite(unsigned long vsector, unsigned char* vbuffer, unsig
 //-----------------------------------------------------------------------------
 void catFile(unsigned char *parquivo) {
     unsigned short vbytepic;
-    unsigned char *mcfgfileptr = 0x00, vqtd = 1;
+    unsigned char *mcfgfileptr = 0x00, *mcfgfilebase = 0x00, vqtd = 1;
     unsigned char *parqptr = parquivo;
     unsigned long vsizefile, vsizefilemalloc;
     unsigned char sqtdtam[10];
@@ -3168,7 +3267,14 @@ void catFile(unsigned char *parquivo) {
         vqtd++;
 
     vsizefilemalloc = fsInfoFile(parquivo, INFO_SIZE);
-    mcfgfileptr = malloc(vsizefilemalloc);
+    mcfgfilebase = malloc(vsizefilemalloc);
+
+    if (!mcfgfilebase) {
+        printText("No memory to load file...\r\n\0");
+        return;
+    }
+
+    mcfgfileptr = mcfgfilebase;
 
     vsizefile = loadFile(parquivo, (unsigned long*)mcfgfileptr);   // 12K espaco pra carregar arquivo. Colocar logica pra pegar tamanho e alocar espaco
 
@@ -3207,7 +3313,7 @@ void catFile(unsigned char *parquivo) {
         printText("Loading file error...\r\n\0");
     }
 
-    free(vsizefilemalloc);
+    free(mcfgfilebase);
 }
 
 //-----------------------------------------------------------------------------

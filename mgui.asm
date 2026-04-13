@@ -6491,8 +6491,8 @@ _menuTask:
        movem.l   D2/D3/D4/D5/D6/A2/A3/A4/A5,-(A7)
        lea       _vcorwf.L,A2
        lea       _menyi.L,A3
-       lea       _vposty.L,A4
-       lea       _menyf.L,A5
+       lea       _TrocaSpriteMouse.L,A4
+       lea       _message.L,A5
 ; unsigned char vpos = 0, mpos;
        clr.b     D5
 ; unsigned short vx, vy, vposicony;
@@ -6506,7 +6506,7 @@ _menuTask:
        clr.b     D2
 ; TrocaSpriteMouse(MOUSE_HOURGLASS);
        pea       2
-       jsr       _TrocaSpriteMouse
+       jsr       (A4)
        addq.w    #4,A7
 ; SaveScreenNew(&endSaveMenu, mx,my,128,44);
        pea       44
@@ -6584,7 +6584,7 @@ _menuTask:
        move.w    _my.L,D0
        and.w     #255,D2
        add.w     D2,D0
-       move.w    D0,(A5)
+       move.w    D0,_menyf.L
 ; DrawLine(mx,my + mpos,mx+128,my + mpos,vcorwf);
        move.b    (A2),D1
        and.w     #255,D1
@@ -6644,7 +6644,7 @@ _menuTask:
        move.w    _my.L,D0
        and.w     #255,D2
        add.w     D2,D0
-       move.w    D0,2(A5)
+       move.w    D0,_menyf+2.L
 ; mpos += 2;
        addq.b    #2,D2
 ; menyi[2] = my + mpos;
@@ -6680,7 +6680,7 @@ _menuTask:
        move.w    _my.L,D0
        and.w     #255,D2
        add.w     D2,D0
-       move.w    D0,4(A5)
+       move.w    D0,_menyf+4.L
 ; DrawLine(mx,my + mpos,mx+128,my + mpos,vcorwf);
        move.b    (A2),D1
        and.w     #255,D1
@@ -6707,7 +6707,7 @@ _menuTask:
        add.w     #20,A7
 ; TrocaSpriteMouse(MOUSE_POINTER);
        pea       1
-       jsr       _TrocaSpriteMouse
+       jsr       (A4)
        addq.w    #4,A7
 ; while (1)
 menuTask_1:
@@ -6718,12 +6718,12 @@ menuTask_1:
        bne       menuTask_4
 ; {
 ; if ((vposty >= my && vposty <= my + 42) && (vpostx >= mx && vpostx <= mx + 128))
-       move.w    (A4),D0
+       move.w    _vposty.L,D0
        cmp.w     _my.L,D0
        blo       menuTask_14
        move.w    _my.L,D0
        add.w     #42,D0
-       cmp.w     (A4),D0
+       cmp.w     _vposty.L,D0
        blo       menuTask_14
        move.w    _vpostx.L,D0
        cmp.w     _mx.L,D0
@@ -6747,14 +6747,15 @@ menuTask_8:
        and.l     #65535,D3
        move.l    D3,D0
        lsl.l     #1,D0
-       move.w    (A4),D1
+       move.w    _vposty.L,D1
        cmp.w     0(A3,D0.L),D1
        blo.s     menuTask_11
        and.l     #65535,D3
        move.l    D3,D0
        lsl.l     #1,D0
-       move.w    (A4),D1
-       cmp.w     0(A5,D0.L),D1
+       lea       _menyf.L,A0
+       move.w    _vposty.L,D1
+       cmp.w     0(A0,D0.L),D1
        bhi.s     menuTask_11
 ; {
 ; vposicony = menyi[vy];
@@ -6799,13 +6800,32 @@ menuTask_15:
 ; {
 ; TrocaSpriteMouse(MOUSE_HOURGLASS);
        pea       2
-       jsr       _TrocaSpriteMouse
+       jsr       (A4)
        addq.w    #4,A7
 ; vEndExec = malloc(vsizefilemalloc);
        move.l    D6,-(A7)
        jsr       _malloc
        addq.w    #4,A7
        move.l    D0,D4
+; if (!vEndExec)
+       tst.l     D4
+       bne.s     menuTask_21
+; {
+; TrocaSpriteMouse(MOUSE_POINTER);
+       pea       1
+       jsr       (A4)
+       addq.w    #4,A7
+; message("No memory to load FILES.BIN\0", BTCLOSE, 0);
+       clr.l     -(A7)
+       pea       64
+       pea       @mgui_34.L
+       jsr       (A5)
+       add.w     #12,A7
+       bra       menuTask_24
+menuTask_21:
+; }
+; else
+; {
 ; loadFile("/MGUI/PROGS/FILES.BIN", (unsigned long*)vEndExec);
        move.l    D4,-(A7)
        pea       @mgui_33.L
@@ -6813,39 +6833,40 @@ menuTask_15:
        addq.w    #8,A7
 ; TrocaSpriteMouse(MOUSE_POINTER);
        pea       1
-       jsr       _TrocaSpriteMouse
+       jsr       (A4)
        addq.w    #4,A7
 ; if (!verro)
        tst.b     _verro.L
-       bne.s     menuTask_21
+       bne.s     menuTask_23
 ; runFromMGUI(vEndExec);
        move.l    D4,-(A7)
        jsr       _runFromMGUI
        addq.w    #4,A7
-       bra.s     menuTask_22
-menuTask_21:
+       bra.s     menuTask_24
+menuTask_23:
 ; else {
 ; message("Loading Error...\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_34.L
-       jsr       _message
+       pea       @mgui_35.L
+       jsr       (A5)
        add.w     #12,A7
 ; free(vEndExec);
        move.l    D4,-(A7)
        jsr       _free
        addq.w    #4,A7
-menuTask_22:
+menuTask_24:
        bra.s     menuTask_20
 menuTask_19:
+; }
 ; }
 ; }
 ; else
 ; message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_35.L
-       jsr       _message
+       pea       @mgui_36.L
+       jsr       (A5)
        add.w     #12,A7
 menuTask_20:
 ; break;
@@ -6861,8 +6882,8 @@ menuTask_17:
 ; message("MGUI v0.1\nGraphical User Interface\n \nwww.utilityinf.com.br\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_36.L
-       jsr       _message
+       pea       @mgui_37.L
+       jsr       (A5)
        add.w     #12,A7
 ; break;
 menuTask_14:
@@ -6949,7 +6970,7 @@ _importFile:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_37.L
+       pea       @mgui_38.L
        pea       8
        pea       57
        pea       12
@@ -7018,7 +7039,7 @@ importFile_3:
 ; message("Error, file name must be provided!!\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_38.L
+       pea       @mgui_39.L
        jsr       _message
        add.w     #12,A7
 ; return;
@@ -7056,7 +7077,7 @@ importFile_14:
 ; vresp = message("Confirm serial Connected.\nImport File ?\0",(BTYES | BTNO), 0);
        clr.l     -(A7)
        pea       12
-       pea       @mgui_39.L
+       pea       @mgui_40.L
        jsr       _message
        add.w     #12,A7
        move.b    D0,-159(A6)
@@ -7083,7 +7104,7 @@ importFile_14:
        pea       240
        pea       40
        pea       10
-       pea       @mgui_40.L
+       pea       @mgui_41.L
        jsr       _showWindow
        add.w     #24,A7
 ; // Verifica se o arquivo existe
@@ -7104,7 +7125,7 @@ importFile_14:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_41.L
+       pea       @mgui_42.L
        pea       8
        pea       55
        pea       12
@@ -7127,7 +7148,7 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_42.L
+       pea       @mgui_43.L
        pea       8
        pea       55
        pea       12
@@ -7152,7 +7173,7 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_43.L
+       pea       @mgui_44.L
        pea       8
        pea       55
        pea       12
@@ -7160,7 +7181,7 @@ importFile_17:
        add.w     #24,A7
 ; if (!loadSerialToMem("840000", 0))
        clr.l     -(A7)
-       pea       @mgui_44.L
+       pea       @mgui_45.L
        move.l    1070,A0
        jsr       (A0)
        addq.w    #8,A7
@@ -7177,7 +7198,7 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_45.L
+       pea       @mgui_46.L
        pea       8
        pea       55
        pea       12
@@ -7197,7 +7218,7 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_46.L
+       pea       @mgui_47.L
        pea       8
        pea       55
        pea       12
@@ -7301,7 +7322,7 @@ importFile_25:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_47.L
+       pea       @mgui_48.L
        pea       8
        pea       55
        pea       12
@@ -7324,7 +7345,7 @@ importFile_25:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_48.L
+       pea       @mgui_49.L
        pea       8
        pea       55
        pea       12
@@ -7343,7 +7364,7 @@ importFile_33:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_49.L
+       pea       @mgui_50.L
        pea       8
        pea       55
        pea       12
@@ -7386,7 +7407,7 @@ importFile_21:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_50.L
+       pea       @mgui_51.L
        pea       8
        pea       55
        pea       12
@@ -7407,7 +7428,7 @@ importFile_19:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_51.L
+       pea       @mgui_52.L
        pea       8
        pea       55
        pea       12
@@ -7526,7 +7547,7 @@ _putImagePbmP4:
 ; cursor += 3;
        addq.l    #3,D2
 ; if (strcmp(tipo, "P4") != 0)
-       pea       @mgui_52.L
+       pea       @mgui_53.L
        move.l    A3,-(A7)
        jsr       _strcmp
        addq.w    #8,A7
@@ -7536,7 +7557,7 @@ _putImagePbmP4:
 ; message("Invalid or unsupported PBM format\nexpected P4",BTCLOSE,0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_53.L
+       pea       @mgui_54.L
        jsr       _message
        add.w     #12,A7
 ; return;
@@ -7996,67 +8017,71 @@ putImagePbmP4_19:
        dc.b      47,77,71,85,73,47,80,82,79,71,83,47,70,73,76
        dc.b      69,83,46,66,73,78,0
 @mgui_34:
+       dc.b      78,111,32,109,101,109,111,114,121,32,116,111
+       dc.b      32,108,111,97,100,32,70,73,76,69,83,46,66,73
+       dc.b      78,0
+@mgui_35:
        dc.b      76,111,97,100,105,110,103,32,69,114,114,111
        dc.b      114,46,46,46,0
-@mgui_35:
+@mgui_36:
        dc.b      70,105,108,101,32,110,111,116,32,102,111,117
        dc.b      110,100,46,46,46,10,47,77,71,85,73,47,80,82
        dc.b      79,71,83,47,70,73,76,69,83,46,66,73,78,0
-@mgui_36:
+@mgui_37:
        dc.b      77,71,85,73,32,118,48,46,49,10,71,114,97,112
        dc.b      104,105,99,97,108,32,85,115,101,114,32,73,110
        dc.b      116,101,114,102,97,99,101,10,32,10,119,119,119
        dc.b      46,117,116,105,108,105,116,121,105,110,102,46
        dc.b      99,111,109,46,98,114,0
-@mgui_37:
-       dc.b      70,105,108,101,32,78,97,109,101,58,0
 @mgui_38:
+       dc.b      70,105,108,101,32,78,97,109,101,58,0
+@mgui_39:
        dc.b      69,114,114,111,114,44,32,102,105,108,101,32
        dc.b      110,97,109,101,32,109,117,115,116,32,98,101
        dc.b      32,112,114,111,118,105,100,101,100,33,33,0
-@mgui_39:
+@mgui_40:
        dc.b      67,111,110,102,105,114,109,32,115,101,114,105
        dc.b      97,108,32,67,111,110,110,101,99,116,101,100
        dc.b      46,10,73,109,112,111,114,116,32,70,105,108,101
        dc.b      32,63,0
-@mgui_40:
+@mgui_41:
        dc.b      83,116,97,116,117,115,32,73,109,112,111,114
        dc.b      116,32,70,105,108,101,0
-@mgui_41:
+@mgui_42:
        dc.b      68,101,108,101,116,105,110,103,32,70,105,108
        dc.b      101,46,46,46,0
-@mgui_42:
+@mgui_43:
        dc.b      67,114,101,97,116,105,110,103,32,70,105,108
        dc.b      101,46,46,46,0
-@mgui_43:
+@mgui_44:
        dc.b      82,101,97,100,105,110,103,32,83,101,114,105
        dc.b      97,108,46,46,46,0
-@mgui_44:
-       dc.b      56,52,48,48,48,48,0
 @mgui_45:
+       dc.b      56,52,48,48,48,48,0
+@mgui_46:
        dc.b      79,112,101,110,105,110,103,32,70,105,108,101
        dc.b      46,46,46,0
-@mgui_46:
-       dc.b      87,114,105,116,105,110,103,32,70,105,108,101
-       dc.b      46,46,46,0
 @mgui_47:
-       dc.b      67,108,111,115,105,110,103,32,70,105,108,101
+       dc.b      87,114,105,116,105,110,103,32,70,105,108,101
        dc.b      46,46,46,0
 @mgui_48:
+       dc.b      67,108,111,115,105,110,103,32,70,105,108,101
+       dc.b      46,46,46,0
+@mgui_49:
        dc.b      68,111,110,101,32,33,32,32,32,32,32,32,32,32
        dc.b      32,0
-@mgui_49:
+@mgui_50:
        dc.b      87,114,105,116,105,110,103,32,70,105,108,101
        dc.b      32,69,114,114,111,114,32,33,0
-@mgui_50:
+@mgui_51:
        dc.b      83,101,114,105,97,108,32,76,111,97,100,32,69
        dc.b      114,114,111,114,46,46,46,0
-@mgui_51:
+@mgui_52:
        dc.b      67,114,101,97,116,101,32,70,105,108,101,32,69
        dc.b      114,114,111,114,46,46,46,0
-@mgui_52:
-       dc.b      80,52,0
 @mgui_53:
+       dc.b      80,52,0
+@mgui_54:
        dc.b      73,110,118,97,108,105,100,32,111,114,32,117
        dc.b      110,115,117,112,112,111,114,116,101,100,32,80
        dc.b      66,77,32,102,111,114,109,97,116,10,101,120,112

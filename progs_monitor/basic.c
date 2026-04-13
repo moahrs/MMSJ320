@@ -530,6 +530,10 @@ void processLine(void)
             {
                 basXBasLoad();
             }
+            else if (!strcmp(linhacomando,"XLOAD1K") && iy == 7)
+            {
+                basXBasLoad1k();
+            }
             else if (!strcmp(linhacomando,"TIMER") && iy == 5)
             {
                 // Ler contador A do 68901
@@ -2066,6 +2070,62 @@ int basXBasLoad(void)
 
     // Carrega programa em outro ponto da memoria
     vRet = loadSerialToMem(pStartXBasLoad,0);
+
+    // Se tudo OK, tokeniza como se estivesse sendo digitado
+    if (!vRet)
+    {
+        printText("Done.\r\n");
+        printText("Processing...\r\n");
+
+        while (1)
+        {
+            vByte = *vTemp++;
+
+            if (vByte != 0x1A)
+            {
+                if (vByte != 0xD && vByte != 0x0A)
+                    *vBufptr++ = vByte;
+                else
+                {
+                    vTemp++;
+                    *vBufptr = 0x00;
+                    vBufptr = &vbufInput;
+                    processLine();
+                }
+            }
+            else
+                break;
+        }
+
+        printText("Done.\r\n");
+    }
+    else
+    {
+        if (vRet == 0xFE)
+            *vErroProc = 19;
+        else
+            *vErroProc = 20;
+    }
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Load basic program in memory, throught xmodem protocol with 1K blocks and CRC
+// Syntaxe:
+//          XBASLOAD1K
+//--------------------------------------------------------------------------------------
+int basXBasLoad1k(void)
+{
+    unsigned char vRet = 0;
+    unsigned char vByte = 0;
+    unsigned char *vTemp = pStartXBasLoad;
+    unsigned char *vBufptr = &vbufInput;
+
+    printText("Loading Basic Program...\r\n");
+
+    // Carrega programa em outro ponto da memoria
+    vRet = loadSerialToMem2(pStartXBasLoad,0);
 
     // Se tudo OK, tokeniza como se estivesse sendo digitado
     if (!vRet)

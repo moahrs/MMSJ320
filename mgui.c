@@ -1919,13 +1919,21 @@ void menuTask(void *pData)
                         {
                             TrocaSpriteMouse(MOUSE_HOURGLASS);
                             vEndExec = malloc(vsizefilemalloc);
-                            loadFile("/MGUI/PROGS/FILES.BIN", (unsigned long*)vEndExec);
-                            TrocaSpriteMouse(MOUSE_POINTER);
-                            if (!verro)
-                                runFromMGUI(vEndExec);
-                            else {
-                                message("Loading Error...\0", BTCLOSE, 0);
-                                free(vEndExec);
+                            if (!vEndExec)
+                            {
+                                TrocaSpriteMouse(MOUSE_POINTER);
+                                message("No memory to load FILES.BIN\0", BTCLOSE, 0);
+                            }
+                            else
+                            {
+                                loadFile("/MGUI/PROGS/FILES.BIN", (unsigned long*)vEndExec);
+                                TrocaSpriteMouse(MOUSE_POINTER);
+                                if (!verro)
+                                    runFromMGUI(vEndExec);
+                                else {
+                                    message("Loading Error...\0", BTCLOSE, 0);
+                                    free(vEndExec);
+                                }
                             }
                         }
                         else
