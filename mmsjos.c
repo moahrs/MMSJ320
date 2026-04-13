@@ -989,7 +989,14 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
                                     vclusterdirdst = vretpath.ClusterDir;
                                     vclusterdir = vclusterdirdst;
 
-                                    if (fsOpenFile(vparam4) != RETURN_OK)
+                                    if (fsOpenFile(vparam4) == RETURN_OK)
+                                    {
+                                        if (fsDelFile(vparam4) != RETURN_OK)
+                                            vretfat = ERRO_B_APAGAR_ARQUIVO;
+                                        else if (fsCreateFile(vparam4) != RETURN_OK)
+                                            vretfat = ERRO_B_CREATE_FILE;
+                                    }
+                                    else
                                     {
                                         if (fsCreateFile(vparam4) != RETURN_OK)
                                             vretfat = ERRO_B_CREATE_FILE;
