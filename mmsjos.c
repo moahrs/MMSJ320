@@ -452,7 +452,7 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
     unsigned short vbytepic = 0, vrecfim;
     unsigned short vReadSize;
     unsigned char *vdirptr = (unsigned char*)&vdir;
-    unsigned char sqtdtam[10], cuntam, vparam[32], vparam2[32], vparam3[32], vparam4[13], vpicret;
+    unsigned char sqtdtam[10], cuntam, vparam[32], vparam2[32], vparam3[32], vparam4[13], vparam5[13], vpicret;
     unsigned long vretfat, vclusterdiratu, vclusterdirsrc, vclusterdirdst, vsizefilemalloc;
     unsigned char *vEnderExec;
     long vqtdtam;
@@ -989,16 +989,18 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
                                     vclusterdirdst = vretpath.ClusterDir;
                                     vclusterdir = vclusterdirdst;
 
-                                    if (fsOpenFile(vparam4) == RETURN_OK)
+                                    strcpy(vparam5, "__CP__.TMP");
+
+                                    // Limpa eventual temporario antigo no destino.
+                                    if (fsOpenFile(vparam5) == RETURN_OK)
                                     {
-                                        if (fsDelFile(vparam4) != RETURN_OK)
+                                        if (fsDelFile(vparam5) != RETURN_OK)
                                             vretfat = ERRO_B_APAGAR_ARQUIVO;
-                                        else if (fsCreateFile(vparam4) != RETURN_OK)
-                                            vretfat = ERRO_B_CREATE_FILE;
                                     }
-                                    else
+
+                                    if (vretfat == RETURN_OK)
                                     {
-                                        if (fsCreateFile(vparam4) != RETURN_OK)
+                                        if (fsCreateFile(vparam5) != RETURN_OK)
                                             vretfat = ERRO_B_CREATE_FILE;
                                     }
 
@@ -1013,7 +1015,7 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
                                 if (vReadSize > 0)
                                 {
                                     vclusterdir = vclusterdirdst;
-                                    if (fsWriteFile(vparam4, ikk, vbuffer, (unsigned char)vReadSize) != RETURN_OK)
+                                    if (fsWriteFile(vparam5, ikk, vbuffer, (unsigned char)vReadSize) != RETURN_OK)
                                     {
                                         vretfat = ERRO_B_WRITE_FILE;
                                         break;
@@ -1023,6 +1025,31 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
                                 }
                                 else
                                     break;
+                            }
+
+                            if (vretfat != RETURN_OK)
+                            {
+                                // Falhou no meio da copia: remove temporario e preserva destino antigo.
+                                vclusterdir = vclusterdirdst;
+                                fsDelFile(vparam5);
+                                break;
+                            }
+
+                            // Commit da copia: substitui o destino somente apos concluir sem erro.
+                            vclusterdir = vclusterdirdst;
+                            if (fsOpenFile(vparam4) == RETURN_OK)
+                            {
+                                if (fsDelFile(vparam4) != RETURN_OK)
+                                    vretfat = ERRO_B_APAGAR_ARQUIVO;
+                            }
+
+                            if (vretfat == RETURN_OK)
+                            {
+                                if (fsRenameFile(vparam5, vparam4) != RETURN_OK)
+                                {
+                                    fsDelFile(vparam5);
+                                    vretfat = ERRO_B_CREATE_FILE;
+                                }
                             }
 
                             if (vretfat != RETURN_OK)
