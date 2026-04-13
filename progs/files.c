@@ -21,6 +21,7 @@
 #include "../mmsjosapi.h"
 #include "files.h"
 
+
 //-----------------------------------------------------------------------------
 // Principal
 //-----------------------------------------------------------------------------
@@ -32,12 +33,22 @@ void main(void)
     unsigned char vstring[64], vwb, my, corOpcFile, corOpcFileExec, corOpcDir, corDisable;
     unsigned char *vMemTail;
     unsigned char sqtdtam[10];
+    void (*pCarregaDir)(void);
+    char *(*pMyItoa)(int, char *, int);
+    char *(*pMyLtoa)(long, char *, int);
     VDP_COLOR vdpcolor;
     MGUI_SAVESCR vsavescr;
     MGUI_MOUSE mouseData;
     MGUI_SAVESCR windowScr;
 
+
+    writeLongSerial("Starting FILES...\r\n\0");
+
+    //filesInitReloc();
+
     TrocaSpriteMouse(MOUSE_HOURGLASS);
+
+    writeLongSerial("Defining Pointers...\r\n\0");
 
     linhastatus = MMSJOS_FUNC_RELOC[FILES_RELOC_LINESTATUS_DEF];
     SearchFile = MMSJOS_FUNC_RELOC[FILES_RELOC_SEARCHFILE_DEF];
@@ -64,9 +75,17 @@ void main(void)
     if ((unsigned long)myltoa < 0x00010000UL)
         myltoa = ltoa;
 
+    // Copias locais dos ponteiros para o trecho critico de bootstrap.
+    // Isso evita depender de leitura dos globais via base register entre chamadas.
+    pCarregaDir = carregaDir;
+    pMyItoa = myitoa;
+    pMyLtoa = myltoa;
+
     // Reserva apenas o necessario para os globais do explorer.
     // fsMalloc usa a mesma heap do malloc() usado pelo SaveScreenNew.
-    vMemTotal = fsMalloc(sizeof(LIST_DIR) + 64);
+    writeLongSerial("Alloc memory to variables...\r\n\0");
+
+    vMemTotal = (unsigned char *)fsMalloc(sizeof(LIST_DIR) + 64);
 
     if (vMemTotal == 0)
     {
@@ -77,7 +96,7 @@ void main(void)
 
     // Layout fixo: LIST_DIR no inicio do bloco; variaveis pequenas no final.
     dfile = (LIST_DIR *)vMemTotal;
-    vMemTail = vMemTotal + (sizeof(LIST_DIR) * 32);
+    vMemTail = vMemTotal + sizeof(LIST_DIR);
     vpos = (unsigned short *)vMemTail;
     vposold = (unsigned short *)(vMemTail + 2);
     dFileCursor = (unsigned char *)(vMemTail + 4);
@@ -85,12 +104,14 @@ void main(void)
     vcorbg = (unsigned char *)(vMemTail + 6);
     clinha = (unsigned char *)(vMemTail + 8);
 
+    writeLongSerial("Drawing interface...\r\n\0");
+
     // Pega as cores atuais
     getColorData(&vdpcolor);
     *vcorfg = vdpcolor.fg;
     *vcorbg = vdpcolor.bg;
 
-    SaveScreenNew(&windowScr, 0, 0, 255, 191);    
+    SaveScreenNew(&windowScr, 0, 0, 255, 191);
 
     // Cria a Janela
     vcont = 1;
@@ -105,10 +126,19 @@ void main(void)
     writesxy(90,20,8,"Modify\0", *vcorfg, *vcorbg);
     writesxy(165,20,8,"Size\0", *vcorfg, *vcorbg);
     writesxy(200,20,8,"Atrib\0", *vcorfg, *vcorbg);
-    writeLongSerial("FILES: before carregaDir\r\n\0");
 
     // Carrega Diretorio
-    carregaDir();
+    writeLongSerial("FILES: before carregaDir [\0");
+    pMyLtoa((unsigned long)pCarregaDir, sqtdtam, 16);
+    writeLongSerial(sqtdtam);
+    writeLongSerial("]-[");
+    pMyLtoa((unsigned long)dfile, sqtdtam, 16);
+    writeLongSerial(sqtdtam);
+    writeLongSerial("]-[");
+    pMyLtoa((unsigned long)windowScr, sqtdtam, 16);
+    writeLongSerial(sqtdtam);
+    writeLongSerial("]\r\n\0");
+    pCarregaDir();
     writeLongSerial("FILES: after carregaDir\r\n\0");
 
     // Lista Diretorio
@@ -635,6 +665,11 @@ void carregaDirDef(void)
     FILES_DIR *pDestDir;
     FAT32_DIR vdirfiles;
 
+writeLongSerial("Aqui 332.666.2-[\0");
+myitoa(dfile,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+
     if (vMemTotal == 0 || dfile == (LIST_DIR *)1 || dFileCursor == (unsigned char *)1)
     {
         writeLongSerial("CD0-INITERR\r\n\0");
@@ -659,7 +694,7 @@ void carregaDirDef(void)
             fsGetDirAtuData(&vdirfiles);
             writeLongSerial("CD0-RET\r\n\0");
 
-			if (vdirfiles.Attr != ATTR_VOLUME && (vdirfiles.Name[0] != '.' || (vdirfiles.Name[0] == '.' && vdirfiles.Name[1] == '.' )))
+            if (vdirfiles.Attr != ATTR_VOLUME && (vdirfiles.Name[0] != '.' || (vdirfiles.Name[0] == '.' && vdirfiles.Name[1] == '.' )))
             {
                 if (*dFileCursor >= 150)
                 {
@@ -860,15 +895,18 @@ void carregaDirDef(void)
 
             writeLongSerial("CD5:[\0");
             writeLongSerial(vnomefile);
-            writeLongSerial("]\r\n\0");			
+            writeLongSerial("]\r\n\0");
 
-			if (fsFindInDir(vnomefile, TYPE_NEXT_ENTRY) >= ERRO_D_START)
+            if (fsFindInDir(vnomefile, TYPE_NEXT_ENTRY) >= ERRO_D_START)
 			{
 				writeLongSerial("CD6-BRK\r\n\0");
 				break;
 			}
             writeSerial('R');
-			writeLongSerial("CD5-RET\r\n\0");
+			writeLongSerial("CD5-RET[\0");
+            myitoa(dfile,sqtdtam,16);
+            writeLongSerial(sqtdtam);
+            writeLongSerial("]r\r\n\0");
             writeSerial('r');
         }
 
@@ -879,7 +917,9 @@ void carregaDirDef(void)
         writeLongSerial("CD1-ERR\r\n\0");
     }
 
+    writeLongSerial("CDA-BEFORE-MOUSE\r\n\0");
     TrocaSpriteMouse(MOUSE_POINTER);
+    writeLongSerial("CDB-AFTER-MOUSE\r\n\0");
 }
 
 //--------------------------------------------------------------------------

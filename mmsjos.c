@@ -74,6 +74,7 @@ void runFromOsCmd(void);
 unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress);
 void catFile(unsigned char *parquivo);
 unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem);
+unsigned char fsLoadSerialToRun(char * vfilename);
 unsigned char fsFindDirPath(char * vpath, char vtype);
 void fsGetDirAtuData(FAT32_DIR *pDir);
 unsigned long fsMalloc(unsigned long vMemSize);
@@ -1073,6 +1074,10 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
             {
                 vretfat = fsLoadSerialToFile(linhaarg, "810000");  // Carrega da Serial para o Arquivo
             }
+            else if (!strcmp(linhacomando,"SERTORUN") && iy == 8) // Arquivo (usa 1 soh)
+            {
+                vretfat = fsLoadSerialToRun(linhaarg);  // Carrega da Serial para o Arquivo
+            }
             else if (!strcmp(linhacomando,"DATE") && iy == 4)
             {
                 // TBD
@@ -1673,6 +1678,37 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
 }
 
 //-------------------------------------------------------------------------
+unsigned char fsLoadSerialToRun(char * vfilename)
+{
+    unsigned long vSize, ix, vStep;
+    unsigned char vBuffer[128], sqtdtam[20];
+    int iy;
+    unsigned char *vEnderExec;
+
+    vEnderExec = malloc(1024);
+
+    // Recebe os dados via Serial
+    if (!loadSerialToMem(vEnderExec, 1))
+    {
+        itoa(vEnderExec,sqtdtam,16);
+        printText("Running at \0");
+        printText(sqtdtam);
+        printText("h\r\n\0");
+        runOSMemory = vEnderExec;
+        runFromOsCmd();
+        free(vEnderExec);
+    }
+    else
+    {
+        printText("Serial Load Error...");
+
+        return ERRO_B_WRITE_FILE;
+    }
+
+    return RETURN_OK;
+}
+
+//-------------------------------------------------------------------------
 // Rotina para escrever/ler no disco
 //-------------------------------------------------------------------------
 unsigned char fsRWFile(unsigned long vclusterini, unsigned long voffset, unsigned char *buffer, unsigned char vtype)
@@ -2031,7 +2067,7 @@ unsigned char fsFindDirPath(char * vpath, char vtype)
 unsigned char fsChangeDir(char * vdirname)
 {
 	unsigned long vclusterdirnew;
-    
+
 	// Troca o diretorio conforme especificado
 	/*if (vdirname[0] == '/' && vdirname[1] == '\0')
 		vclusterdirnew = vdisk.root;

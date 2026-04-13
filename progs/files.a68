@@ -52,13 +52,13 @@ _MMSJOS_FUNC_RELOC:
                 lea _MMSJOS_FUNC_RELOC,A0
                 move.l 0(A0),A1
                 sub.l  A5,A1
-                move.l A1,_linhastatusDef
+                move.l A1,0(A0) ; _linhastatusDef
                 move.l 4(A0),A1
                 sub.l  A5,A1
-                move.l A1,_SearchFileDef
+                move.l A1,4(A0) ; _SearchFileDef
                 move.l 8(A0),A1
                 sub.l  A5,A1
-                move.l A1,_carregaDirDef
+                move.l A1,8(A0) ; _carregaDirDef
                 move.l 12(A0),_listaDirDef
                 move.l 16(A0),_strcpy
                 move.l 20(A0),_strcat

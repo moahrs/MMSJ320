@@ -1923,10 +1923,10 @@ void menuTask(void *pData)
                             TrocaSpriteMouse(MOUSE_POINTER);
                             if (!verro)
                                 runFromMGUI(vEndExec);
-                            else
+                            else {
                                 message("Loading Error...\0", BTCLOSE, 0);
-
-                            free(vEndExec);
+                                free(vEndExec);
+                            }
                         }
                         else
                             message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);

@@ -6824,20 +6824,21 @@ menuTask_15:
        addq.w    #4,A7
        bra.s     menuTask_22
 menuTask_21:
-; else
+; else {
 ; message("Loading Error...\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
        pea       @mgui_34.L
        jsr       _message
        add.w     #12,A7
-menuTask_22:
 ; free(vEndExec);
        move.l    D4,-(A7)
        jsr       _free
        addq.w    #4,A7
+menuTask_22:
        bra.s     menuTask_20
 menuTask_19:
+; }
 ; }
 ; else
 ; message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);

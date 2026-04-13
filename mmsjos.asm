@@ -70,6 +70,7 @@
 ; unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress);
 ; void catFile(unsigned char *parquivo);
 ; unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem);
+; unsigned char fsLoadSerialToRun(char * vfilename);
 ; unsigned char fsFindDirPath(char * vpath, char vtype);
 ; void fsGetDirAtuData(FAT32_DIR *pDir);
 ; unsigned long fsMalloc(unsigned long vMemSize);
@@ -1079,7 +1080,7 @@ fsOsCommand_21:
 ; // Processar e definir o que fazer
 ; if (linhacomando[0] != 0)
        move.b    (A2),D0
-       beq       fsOsCommand_278
+       beq       fsOsCommand_280
 ; {
 ; if (!strcmp(linhacomando,"CLS") && iy == 3)
        pea       @mmsjos_30.L
@@ -1094,7 +1095,7 @@ fsOsCommand_21:
 ; clearScr();
        move.l    1054,A0
        jsr       (A0)
-       bra       fsOsCommand_278
+       bra       fsOsCommand_280
 fsOsCommand_25:
 ; }
 ; else if (!strcmp(linhacomando,"CLEAR") && iy == 5)
@@ -1110,7 +1111,7 @@ fsOsCommand_25:
 ; clearScr();
        move.l    1054,A0
        jsr       (A0)
-       bra       fsOsCommand_278
+       bra       fsOsCommand_280
 fsOsCommand_27:
 ; }
 ; else if (!strcmp(linhacomando,"QUIT") && iy == 4)
@@ -1140,7 +1141,7 @@ fsOsCommand_29:
 ; {
 ; fsVer();
        jsr       _fsVer
-       bra       fsOsCommand_278
+       bra       fsOsCommand_280
 fsOsCommand_32:
 ; }
 ; else if (!strcmp(linhacomando,"MGUI") && iy == 4)
@@ -1162,7 +1163,7 @@ fsOsCommand_32:
        pea       _mguiTask.L
        jsr       _OSTaskCreate
        add.w     #16,A7
-       bra       fsOsCommand_278
+       bra       fsOsCommand_280
 fsOsCommand_34:
 ; }
 ; else if (!strcmp(linhacomando,"PWD") && iy == 3)
@@ -1185,7 +1186,7 @@ fsOsCommand_34:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       bra       fsOsCommand_278
+       bra       fsOsCommand_280
 fsOsCommand_36:
 ; }
 ; else if (iy == 2 && (!strcmp(linhacomando,"LS") ||
@@ -2485,7 +2486,7 @@ fsOsCommand_65:
        jsr       (A0)
        addq.w    #4,A7
 fsOsCommand_203:
-       bra       fsOsCommand_278
+       bra       fsOsCommand_280
 fsOsCommand_38:
 ; }
 ; }
@@ -2554,7 +2555,7 @@ fsOsCommand_212:
 ; }
 ; vclusterdir = vretpath.ClusterDirAtu;
        move.l    _vretpath+18.L,_vclusterdir.L
-       bra       fsOsCommand_232
+       bra       fsOsCommand_234
 fsOsCommand_205:
 ; }
 ; else if (!strcmp(linhacomando,"MD") && iy == 2)
@@ -2573,7 +2574,7 @@ fsOsCommand_205:
        addq.w    #4,A7
        and.l     #255,D0
        move.l    D0,D5
-       bra       fsOsCommand_232
+       bra       fsOsCommand_234
 fsOsCommand_213:
 ; }
 ; else if (!strcmp(linhacomando,"CD") && iy == 2)
@@ -2592,7 +2593,7 @@ fsOsCommand_213:
        addq.w    #4,A7
        and.l     #255,D0
        move.l    D0,D5
-       bra       fsOsCommand_232
+       bra       fsOsCommand_234
 fsOsCommand_215:
 ; }
 ; else if (!strcmp(linhacomando,"RD") && iy == 2)
@@ -2611,7 +2612,7 @@ fsOsCommand_215:
        addq.w    #4,A7
        and.l     #255,D0
        move.l    D0,D5
-       bra       fsOsCommand_232
+       bra       fsOsCommand_234
 fsOsCommand_217:
 ; }
 ; else if (!strcmp(linhacomando,"SERTOFILE") && iy == 9) // Arquivo (usa 1 soh)
@@ -2631,24 +2632,29 @@ fsOsCommand_217:
        addq.w    #8,A7
        and.l     #255,D0
        move.l    D0,D5
-       bra       fsOsCommand_232
+       bra       fsOsCommand_234
 fsOsCommand_219:
 ; }
-; else if (!strcmp(linhacomando,"DATE") && iy == 4)
+; else if (!strcmp(linhacomando,"SERTORUN") && iy == 8) // Arquivo (usa 1 soh)
        pea       @mmsjos_48.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_221
-       cmp.w     #4,D4
+       cmp.w     #8,D4
        bne.s     fsOsCommand_221
 ; {
-; // TBD
-; }
-       bra       fsOsCommand_232
+; vretfat = fsLoadSerialToRun(linhaarg);  // Carrega da Serial para o Arquivo
+       pea       -526(A6)
+       jsr       _fsLoadSerialToRun
+       addq.w    #4,A7
+       and.l     #255,D0
+       move.l    D0,D5
+       bra       fsOsCommand_234
 fsOsCommand_221:
-; else if (!strcmp(linhacomando,"TIME") && iy == 4)
+; }
+; else if (!strcmp(linhacomando,"DATE") && iy == 4)
        pea       @mmsjos_49.L
        move.l    A2,-(A7)
        jsr       (A5)
@@ -2660,17 +2666,31 @@ fsOsCommand_221:
 ; {
 ; // TBD
 ; }
-       bra       fsOsCommand_232
+       bra       fsOsCommand_234
 fsOsCommand_223:
-; else if (!strcmp(linhacomando,"FORMAT") && iy == 6)
+; else if (!strcmp(linhacomando,"TIME") && iy == 4)
        pea       @mmsjos_50.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_225
-       cmp.w     #6,D4
+       cmp.w     #4,D4
        bne.s     fsOsCommand_225
+; {
+; // TBD
+; }
+       bra       fsOsCommand_234
+fsOsCommand_225:
+; else if (!strcmp(linhacomando,"FORMAT") && iy == 6)
+       pea       @mmsjos_51.L
+       move.l    A2,-(A7)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.l     D0
+       bne.s     fsOsCommand_227
+       cmp.w     #6,D4
+       bne.s     fsOsCommand_227
 ; {
 ; vretfat = fsFormat(0x5678, linhaarg);
        pea       -526(A6)
@@ -2679,34 +2699,34 @@ fsOsCommand_223:
        addq.w    #8,A7
        and.l     #255,D0
        move.l    D0,D5
-       bra       fsOsCommand_232
-fsOsCommand_225:
-; }
-; else if (!strcmp(linhacomando,"MODE") && iy == 4)
-       pea       @mmsjos_51.L
-       move.l    A2,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-       tst.l     D0
-       bne.s     fsOsCommand_227
-       cmp.w     #4,D4
-       bne.s     fsOsCommand_227
-; {
-; // A definir
-; ix = 255;
-       move.w    #255,D2
-       bra       fsOsCommand_232
+       bra       fsOsCommand_234
 fsOsCommand_227:
 ; }
-; else if (!strcmp(linhacomando,"CAT") && iy == 3) // Arquivo (usa 1 soh)
+; else if (!strcmp(linhacomando,"MODE") && iy == 4)
        pea       @mmsjos_52.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_229
-       cmp.w     #3,D4
+       cmp.w     #4,D4
        bne.s     fsOsCommand_229
+; {
+; // A definir
+; ix = 255;
+       move.w    #255,D2
+       bra       fsOsCommand_234
+fsOsCommand_229:
+; }
+; else if (!strcmp(linhacomando,"CAT") && iy == 3) // Arquivo (usa 1 soh)
+       pea       @mmsjos_53.L
+       move.l    A2,-(A7)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.l     D0
+       bne.s     fsOsCommand_231
+       cmp.w     #3,D4
+       bne.s     fsOsCommand_231
 ; {
 ; catFile(linhaarg);
        pea       -526(A6)
@@ -2714,8 +2734,8 @@ fsOsCommand_227:
        addq.w    #4,A7
 ; ix = 255;
        move.w    #255,D2
-       bra       fsOsCommand_232
-fsOsCommand_229:
+       bra       fsOsCommand_234
+fsOsCommand_231:
 ; }
 ; else
 ; {
@@ -2753,7 +2773,7 @@ fsOsCommand_229:
        move.l    D0,D5
 ; if (vretfat <= ERRO_D_START)
        cmp.l     #-16,D5
-       bhi       fsOsCommand_231
+       bhi       fsOsCommand_233
 ; {
 ; // Se tiver, carrega em 0x00810000 e executa
 ; vsizefilemalloc = fsInfoFile(linhacomando, INFO_SIZE);
@@ -2774,7 +2794,7 @@ fsOsCommand_229:
        jsr       _itoa
        add.w     #12,A7
 ; printText("Loading File in \0");
-       pea       @mmsjos_53.L
+       pea       @mmsjos_54.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2784,7 +2804,7 @@ fsOsCommand_229:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("h\r\n\0");
-       pea       @mmsjos_54.L
+       pea       @mmsjos_55.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2795,7 +2815,7 @@ fsOsCommand_229:
        addq.w    #8,A7
 ; if (!verro)
        tst.b     _verro.L
-       bne.s     fsOsCommand_233
+       bne.s     fsOsCommand_235
 ; {
 ; runOSMemory = vEnderExec;
        move.l    -140(A6),_runOSMemory.L
@@ -2805,26 +2825,26 @@ fsOsCommand_229:
        move.l    -140(A6),-(A7)
        jsr       _free
        addq.w    #4,A7
-       bra.s     fsOsCommand_235
-fsOsCommand_233:
+       bra.s     fsOsCommand_237
+fsOsCommand_235:
 ; }
 ; else
 ; {
 ; if (linhaParametro[0] == '\0')
        move.l    8(A6),A0
        move.b    (A0),D0
-       bne.s     fsOsCommand_235
+       bne.s     fsOsCommand_237
 ; printText("Loading File Error...\r\n\0");
-       pea       @mmsjos_55.L
+       pea       @mmsjos_56.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-fsOsCommand_235:
+fsOsCommand_237:
 ; }
 ; ix = 255;
        move.w    #255,D2
-       bra.s     fsOsCommand_232
-fsOsCommand_231:
+       bra.s     fsOsCommand_234
+fsOsCommand_233:
 ; }
 ; else
 ; {
@@ -2832,31 +2852,31 @@ fsOsCommand_231:
 ; if (linhaParametro[0] == '\0')
        move.l    8(A6),A0
        move.b    (A0),D0
-       bne.s     fsOsCommand_237
+       bne.s     fsOsCommand_239
 ; printText("Invalid Command or File Name\r\n\0");
-       pea       @mmsjos_56.L
+       pea       @mmsjos_57.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-fsOsCommand_237:
+fsOsCommand_239:
 ; ix = 255;
        move.w    #255,D2
-fsOsCommand_232:
+fsOsCommand_234:
 ; }
 ; }
 ; if (ix != 255)
        cmp.w     #255,D2
-       beq       fsOsCommand_278
+       beq       fsOsCommand_280
 ; {
 ; if (vpicret)
        tst.b     -157(A6)
-       beq       fsOsCommand_241
+       beq       fsOsCommand_243
 ; {
 ; for (varg = 0; varg < ix; varg++)
        clr.w     D3
-fsOsCommand_243:
+fsOsCommand_245:
        cmp.w     D2,D3
-       bhs.s     fsOsCommand_245
+       bhs.s     fsOsCommand_247
 ; fsSendByte(linhaarg[varg], FS_DATA);
        pea       1
        and.l     #65535,D3
@@ -2867,40 +2887,40 @@ fsOsCommand_243:
        jsr       _fsSendByte
        addq.w    #8,A7
        addq.w    #1,D3
-       bra       fsOsCommand_243
-fsOsCommand_245:
+       bra       fsOsCommand_245
+fsOsCommand_247:
 ; vbytepic = fsRecByte(FS_DATA);
        pea       1
        jsr       _fsRecByte
        addq.w    #4,A7
        and.w     #255,D0
        move.w    D0,-286(A6)
-fsOsCommand_241:
+fsOsCommand_243:
 ; }
 ; if (((vpicret) && (vbytepic != RETURN_OK)) || ((!vpicret) && (vretfat != RETURN_OK)))
        move.b    -157(A6),D0
        and.l     #255,D0
-       beq.s     fsOsCommand_249
+       beq.s     fsOsCommand_251
        move.w    -286(A6),D0
-       bne.s     fsOsCommand_248
-fsOsCommand_249:
-       tst.b     -157(A6)
        bne.s     fsOsCommand_250
-       moveq     #1,D0
-       bra.s     fsOsCommand_251
-fsOsCommand_250:
-       clr.l     D0
 fsOsCommand_251:
+       tst.b     -157(A6)
+       bne.s     fsOsCommand_252
+       moveq     #1,D0
+       bra.s     fsOsCommand_253
+fsOsCommand_252:
+       clr.l     D0
+fsOsCommand_253:
        and.l     #255,D0
-       beq.s     fsOsCommand_246
+       beq.s     fsOsCommand_248
        tst.l     D5
-       beq.s     fsOsCommand_246
-fsOsCommand_248:
+       beq.s     fsOsCommand_248
+fsOsCommand_250:
 ; {
 ; if (linhaParametro[0] == '\0')
        move.l    8(A6),A0
        move.b    (A0),D0
-       bne.s     fsOsCommand_252
+       bne.s     fsOsCommand_254
 ; {
 ; printDiskError(vretfat);
        and.l     #255,D5
@@ -2912,9 +2932,9 @@ fsOsCommand_248:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-fsOsCommand_252:
-       bra       fsOsCommand_278
-fsOsCommand_246:
+fsOsCommand_254:
+       bra       fsOsCommand_280
+fsOsCommand_248:
 ; }
 ; }
 ; else
@@ -2925,24 +2945,24 @@ fsOsCommand_246:
        jsr       (A5)
        addq.w    #8,A7
        tst.l     D0
-       bne       fsOsCommand_254
+       bne       fsOsCommand_256
 ; {
 ; if (linhaarg[0] == '.' && linhaarg[1] == '.')
        move.b    -526+0(A6),D0
        cmp.b     #46,D0
-       bne       fsOsCommand_256
+       bne       fsOsCommand_258
        move.b    -526+1(A6),D0
        cmp.b     #46,D0
-       bne       fsOsCommand_256
+       bne       fsOsCommand_258
 ; {
 ; while (vdiratu[vdiratuidx] != '/')
-fsOsCommand_258:
+fsOsCommand_260:
        move.w    _vdiratuidx.L,D0
        and.l     #65535,D0
        lea       _vdiratu.L,A0
        move.b    0(A0,D0.L),D0
        cmp.b     #47,D0
-       beq.s     fsOsCommand_260
+       beq.s     fsOsCommand_262
 ; {
 ; vdiratu[vdiratuidx--] = '\0';
        move.w    _vdiratuidx.L,D0
@@ -2950,32 +2970,32 @@ fsOsCommand_258:
        and.l     #65535,D0
        lea       _vdiratu.L,A0
        clr.b     0(A0,D0.L)
-       bra       fsOsCommand_258
-fsOsCommand_260:
+       bra       fsOsCommand_260
+fsOsCommand_262:
 ; }
 ; if (vdiratuidx > 127)
        move.w    _vdiratuidx.L,D0
        cmp.w     #127,D0
-       bls.s     fsOsCommand_261
+       bls.s     fsOsCommand_263
 ; vdiratu[vdiratuidx--] = '\0';
        move.w    _vdiratuidx.L,D0
        subq.w    #1,_vdiratuidx.L
        and.l     #65535,D0
        lea       _vdiratu.L,A0
        clr.b     0(A0,D0.L)
-       bra.s     fsOsCommand_262
-fsOsCommand_261:
+       bra.s     fsOsCommand_264
+fsOsCommand_263:
 ; else
 ; vdiratuidx++;
        addq.w    #1,_vdiratuidx.L
-fsOsCommand_262:
-       bra       fsOsCommand_265
-fsOsCommand_256:
+fsOsCommand_264:
+       bra       fsOsCommand_267
+fsOsCommand_258:
 ; }
 ; else if(linhaarg[0] == '/')
        move.b    -526+0(A6),D0
        cmp.b     #47,D0
-       bne.s     fsOsCommand_263
+       bne.s     fsOsCommand_265
 ; {
 ; vdiratuidx = 1;
        move.w    #1,_vdiratuidx.L
@@ -2986,13 +3006,13 @@ fsOsCommand_256:
        and.l     #65535,D0
        lea       _vdiratu.L,A0
        clr.b     0(A0,D0.L)
-       bra       fsOsCommand_265
-fsOsCommand_263:
+       bra       fsOsCommand_267
+fsOsCommand_265:
 ; }
 ; else if(linhaarg[0] != '.')
        move.b    -526+0(A6),D0
        cmp.b     #46,D0
-       beq       fsOsCommand_265
+       beq       fsOsCommand_267
 ; {
 ; vdiratuidx--;
        subq.w    #1,_vdiratuidx.L
@@ -3003,19 +3023,19 @@ fsOsCommand_263:
        lea       _vdiratu.L,A0
        move.b    0(A0,D0.L),D0
        cmp.b     #47,D0
-       beq.s     fsOsCommand_267
+       beq.s     fsOsCommand_269
 ; vdiratu[vdiratuidx++] = '/';
        move.w    _vdiratuidx.L,D0
        addq.w    #1,_vdiratuidx.L
        and.l     #65535,D0
        lea       _vdiratu.L,A0
        move.b    #47,0(A0,D0.L)
-fsOsCommand_267:
+fsOsCommand_269:
 ; for (varg = 0; varg < ix; varg++)
        clr.w     D3
-fsOsCommand_269:
+fsOsCommand_271:
        cmp.w     D2,D3
-       bhs.s     fsOsCommand_271
+       bhs.s     fsOsCommand_273
 ; vdiratu[vdiratuidx++] = linhaarg[varg];
        and.l     #65535,D3
        lea       -526(A6),A0
@@ -3025,25 +3045,25 @@ fsOsCommand_269:
        lea       _vdiratu.L,A1
        move.b    0(A0,D3.L),0(A1,D0.L)
        addq.w    #1,D3
-       bra       fsOsCommand_269
-fsOsCommand_271:
+       bra       fsOsCommand_271
+fsOsCommand_273:
 ; vdiratu[vdiratuidx] = '\0';
        move.w    _vdiratuidx.L,D0
        and.l     #65535,D0
        lea       _vdiratu.L,A0
        clr.b     0(A0,D0.L)
-fsOsCommand_265:
-       bra       fsOsCommand_278
-fsOsCommand_254:
+fsOsCommand_267:
+       bra       fsOsCommand_280
+fsOsCommand_256:
 ; }
 ; }
 ; else if (!strcmp(linhacomando,"DATE"))
-       pea       @mmsjos_48.L
+       pea       @mmsjos_49.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
        tst.l     D0
-       bne       fsOsCommand_272
+       bne       fsOsCommand_274
 ; {
 ; /*for(ix = 0; ix <= 9; ix++)
 ; {
@@ -3055,41 +3075,6 @@ fsOsCommand_254:
        lea       -328(A6),A0
        clr.b     0(A0,D2.L)
 ; printText("  Date is \0");
-       pea       @mmsjos_57.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; printText(vlinha);
-       pea       -328(A6)
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; printText("\r\n\0");
-       pea       @mmsjos_1.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-       bra       fsOsCommand_278
-fsOsCommand_272:
-; }
-; else if (!strcmp(linhacomando,"TIME"))
-       pea       @mmsjos_49.L
-       move.l    A2,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-       tst.l     D0
-       bne       fsOsCommand_274
-; {
-; /*for(ix = 0; ix <= 7; ix++)
-; {
-; recPic();
-; vlinha[ix] = vbytepic;
-; }*/
-; vlinha[ix] = '\0';
-       and.l     #65535,D2
-       lea       -328(A6),A0
-       clr.b     0(A0,D2.L)
-; printText("  Time is \0");
        pea       @mmsjos_58.L
        move.l    1058,A0
        jsr       (A0)
@@ -3104,27 +3089,62 @@ fsOsCommand_272:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       bra.s     fsOsCommand_278
+       bra       fsOsCommand_280
 fsOsCommand_274:
 ; }
-; else if (!strcmp(linhacomando,"FORMAT"))
+; else if (!strcmp(linhacomando,"TIME"))
        pea       @mmsjos_50.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     fsOsCommand_278
+       bne       fsOsCommand_276
 ; {
-; if (linhaParametro[0] == '\0')
-       move.l    8(A6),A0
-       move.b    (A0),D0
-       bne.s     fsOsCommand_278
-; printText("Format disk was successfully\r\n\0");
+; /*for(ix = 0; ix <= 7; ix++)
+; {
+; recPic();
+; vlinha[ix] = vbytepic;
+; }*/
+; vlinha[ix] = '\0';
+       and.l     #65535,D2
+       lea       -328(A6),A0
+       clr.b     0(A0,D2.L)
+; printText("  Time is \0");
        pea       @mmsjos_59.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-fsOsCommand_278:
+; printText(vlinha);
+       pea       -328(A6)
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("\r\n\0");
+       pea       @mmsjos_1.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+       bra.s     fsOsCommand_280
+fsOsCommand_276:
+; }
+; else if (!strcmp(linhacomando,"FORMAT"))
+       pea       @mmsjos_51.L
+       move.l    A2,-(A7)
+       jsr       (A5)
+       addq.w    #8,A7
+       tst.l     D0
+       bne.s     fsOsCommand_280
+; {
+; if (linhaParametro[0] == '\0')
+       move.l    8(A6),A0
+       move.b    (A0),D0
+       bne.s     fsOsCommand_280
+; printText("Format disk was successfully\r\n\0");
+       pea       @mmsjos_60.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+fsOsCommand_280:
 ; }
 ; }
 ; }
@@ -4063,7 +4083,7 @@ _fsLoadSerialToFile:
        bne.s     fsLoadSerialToFile_1
 ; {
 ; printText("Error, file name must be provided!!\r\n\0");
-       pea       @mmsjos_60.L
+       pea       @mmsjos_61.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4105,7 +4125,7 @@ fsLoadSerialToFile_4:
 ; {
 ; // Abre Arquivo
 ; printText("Opening File...\r\n\0");
-       pea       @mmsjos_61.L
+       pea       @mmsjos_62.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4115,7 +4135,7 @@ fsLoadSerialToFile_4:
        addq.w    #4,A7
 ; // Grava no Arquivo
 ; printText("Writing File...\r\n\0");
-       pea       @mmsjos_62.L
+       pea       @mmsjos_63.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4309,7 +4329,7 @@ fsLoadSerialToFile_19:
        addq.w    #8,A7
 ; // Fecha Arquivo
 ; printText("\r\nClosing File...\r\n\0");
-       pea       @mmsjos_63.L
+       pea       @mmsjos_64.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4324,7 +4344,7 @@ fsLoadSerialToFile_6:
 ; else
 ; {
 ; printText("Serial Load Error...");
-       pea       @mmsjos_64.L
+       pea       @mmsjos_65.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4337,6 +4357,83 @@ fsLoadSerialToFile_7:
        clr.b     D0
 fsLoadSerialToFile_3:
        movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2
+       unlk      A6
+       rts
+; }
+; //-------------------------------------------------------------------------
+; unsigned char fsLoadSerialToRun(char * vfilename)
+; {
+       xdef      _fsLoadSerialToRun
+_fsLoadSerialToRun:
+       link      A6,#-164
+       move.l    D2,-(A7)
+; unsigned long vSize, ix, vStep;
+; unsigned char vBuffer[128], sqtdtam[20];
+; int iy;
+; unsigned char *vEnderExec;
+; vEnderExec = malloc(1024);
+       pea       1024
+       jsr       _malloc
+       addq.w    #4,A7
+       move.l    D0,D2
+; // Recebe os dados via Serial
+; if (!loadSerialToMem(vEnderExec, 1))
+       pea       1
+       move.l    D2,-(A7)
+       move.l    1070,A0
+       jsr       (A0)
+       addq.w    #8,A7
+       tst.b     D0
+       bne       fsLoadSerialToRun_1
+; {
+; itoa(vEnderExec,sqtdtam,16);
+       pea       16
+       pea       -24(A6)
+       move.l    D2,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; printText("Running at \0");
+       pea       @mmsjos_66.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText(sqtdtam);
+       pea       -24(A6)
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("h\r\n\0");
+       pea       @mmsjos_55.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; runOSMemory = vEnderExec;
+       move.l    D2,_runOSMemory.L
+; runFromOsCmd();
+       jsr       _runFromOsCmd
+; free(vEnderExec);
+       move.l    D2,-(A7)
+       jsr       _free
+       addq.w    #4,A7
+       bra.s     fsLoadSerialToRun_2
+fsLoadSerialToRun_1:
+; }
+; else
+; {
+; printText("Serial Load Error...");
+       pea       @mmsjos_65.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; return ERRO_B_WRITE_FILE;
+       move.b    #237,D0
+       bra.s     fsLoadSerialToRun_3
+fsLoadSerialToRun_2:
+; }
+; return RETURN_OK;
+       clr.b     D0
+fsLoadSerialToRun_3:
+       move.l    (A7)+,D2
        unlk      A6
        rts
 ; }
@@ -8716,7 +8813,7 @@ catFile_6:
        cmp.b     #13,D0
        bne.s     catFile_9
 ; printText("\r\0");
-       pea       @mmsjos_65.L
+       pea       @mmsjos_67.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -8792,7 +8889,7 @@ catFile_4:
 ; }
 ; else {
 ; printText("Loading file error...\r\n\0");
-       pea       @mmsjos_66.L
+       pea       @mmsjos_68.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -9229,7 +9326,7 @@ _isValidFilename:
        clr.l     D4
        clr.l     D6
 ; strcpy(valid_chars,"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$&'()@^_`{}~");
-       pea       @mmsjos_67.L
+       pea       @mmsjos_69.L
        pea       -74(A6)
        jsr       _strcpy
        addq.w    #8,A7
@@ -9795,58 +9892,62 @@ _fsGetMfp:
 @mmsjos_47:
        dc.b      56,49,48,48,48,48,0
 @mmsjos_48:
-       dc.b      68,65,84,69,0
+       dc.b      83,69,82,84,79,82,85,78,0
 @mmsjos_49:
-       dc.b      84,73,77,69,0
+       dc.b      68,65,84,69,0
 @mmsjos_50:
-       dc.b      70,79,82,77,65,84,0
+       dc.b      84,73,77,69,0
 @mmsjos_51:
-       dc.b      77,79,68,69,0
+       dc.b      70,79,82,77,65,84,0
 @mmsjos_52:
-       dc.b      67,65,84,0
+       dc.b      77,79,68,69,0
 @mmsjos_53:
+       dc.b      67,65,84,0
+@mmsjos_54:
        dc.b      76,111,97,100,105,110,103,32,70,105,108,101
        dc.b      32,105,110,32,0
-@mmsjos_54:
-       dc.b      104,13,10,0
 @mmsjos_55:
+       dc.b      104,13,10,0
+@mmsjos_56:
        dc.b      76,111,97,100,105,110,103,32,70,105,108,101
        dc.b      32,69,114,114,111,114,46,46,46,13,10,0
-@mmsjos_56:
+@mmsjos_57:
        dc.b      73,110,118,97,108,105,100,32,67,111,109,109
        dc.b      97,110,100,32,111,114,32,70,105,108,101,32,78
        dc.b      97,109,101,13,10,0
-@mmsjos_57:
-       dc.b      32,32,68,97,116,101,32,105,115,32,0
 @mmsjos_58:
-       dc.b      32,32,84,105,109,101,32,105,115,32,0
+       dc.b      32,32,68,97,116,101,32,105,115,32,0
 @mmsjos_59:
+       dc.b      32,32,84,105,109,101,32,105,115,32,0
+@mmsjos_60:
        dc.b      70,111,114,109,97,116,32,100,105,115,107,32
        dc.b      119,97,115,32,115,117,99,99,101,115,115,102
        dc.b      117,108,108,121,13,10,0
-@mmsjos_60:
+@mmsjos_61:
        dc.b      69,114,114,111,114,44,32,102,105,108,101,32
        dc.b      110,97,109,101,32,109,117,115,116,32,98,101
        dc.b      32,112,114,111,118,105,100,101,100,33,33,13
        dc.b      10,0
-@mmsjos_61:
+@mmsjos_62:
        dc.b      79,112,101,110,105,110,103,32,70,105,108,101
        dc.b      46,46,46,13,10,0
-@mmsjos_62:
+@mmsjos_63:
        dc.b      87,114,105,116,105,110,103,32,70,105,108,101
        dc.b      46,46,46,13,10,0
-@mmsjos_63:
+@mmsjos_64:
        dc.b      13,10,67,108,111,115,105,110,103,32,70,105,108
        dc.b      101,46,46,46,13,10,0
-@mmsjos_64:
+@mmsjos_65:
        dc.b      83,101,114,105,97,108,32,76,111,97,100,32,69
        dc.b      114,114,111,114,46,46,46,0
-@mmsjos_65:
-       dc.b      13,0
 @mmsjos_66:
+       dc.b      82,117,110,110,105,110,103,32,97,116,32,0
+@mmsjos_67:
+       dc.b      13,0
+@mmsjos_68:
        dc.b      76,111,97,100,105,110,103,32,102,105,108,101
        dc.b      32,101,114,114,111,114,46,46,46,13,10,0
-@mmsjos_67:
+@mmsjos_69:
        dc.b      65,66,67,68,69,70,71,72,73,74,75,76,77,78,79
        dc.b      80,81,82,83,84,85,86,87,88,89,90,48,49,50,51
        dc.b      52,53,54,55,56,57,33,35,36,38,39,40,41,64,94

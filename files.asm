@@ -183,185 +183,292 @@ _vRetAlloc:
 ; {
        xdef      _main
 _main:
-       link      A6,#-324
+       link      A6,#-332
 ; unsigned char vcont, ix, iy, cc, dd, ee, cnum[20], *cfileptr, *cfilepos;
 ; unsigned char ikk, vnomefile[128], vnomefilenew[15], avdm2, avdm, avdl, vopc, vresp;
 ; unsigned long vtotbytes = 0;
-       clr.l     -140(A6)
+       clr.l     -148(A6)
 ; unsigned char vstring[64], vwb, my, corOpcFile, corOpcFileExec, corOpcDir, corDisable;
-; unsigned long vSizeAloc = 0, izz;
-       clr.l     -66(A6)
+; unsigned char *vMemTail;
 ; unsigned char sqtdtam[10];
+; void (*pCarregaDir)(void);
+; char *(*pMyItoa)(int, char *, int);
+; char *(*pMyLtoa)(long, char *, int);
 ; VDP_COLOR vdpcolor;
 ; MGUI_SAVESCR vsavescr;
 ; MGUI_MOUSE mouseData;
 ; MGUI_SAVESCR windowScr;
-; linhastatus = linhastatusDef;
-       lea       _linhastatusDef(PC),A0
-       lea       _linhastatusDef(A5),A0
+; writeLongSerial("Starting FILES...\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_1,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; //filesInitReloc();
+; TrocaSpriteMouse(MOUSE_HOURGLASS);
+       pea       2
+       move.l    8410570,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("Defining Pointers...\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_2,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; linhastatus = MMSJOS_FUNC_RELOC[FILES_RELOC_LINESTATUS_DEF];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
        move.l    A5,A1
        add.l     #_linhastatus,A1
-       move.l    A0,(A1)
-; carregaDir = carregaDirDef;
-       lea       _carregaDirDef(PC),A0
-       lea       _carregaDirDef(A5),A0
-       move.l    A5,A1
-       add.l     #_carregaDir,A1
-       move.l    A0,(A1)
-; listaDir = listaDirDef;
-       lea       _listaDirDef(PC),A0
-       lea       _listaDirDef(A5),A0
-       move.l    A5,A1
-       add.l     #_listaDir,A1
-       move.l    A0,(A1)
-; SearchFile = SearchFileDef;
-       lea       _SearchFileDef(PC),A0
-       lea       _SearchFileDef(A5),A0
+       move.l    (A0),(A1)
+; SearchFile = MMSJOS_FUNC_RELOC[FILES_RELOC_SEARCHFILE_DEF];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
        move.l    A5,A1
        add.l     #_SearchFile,A1
-       move.l    A0,(A1)
-; myitoa = itoa;
-       lea       _itoa(PC),A0
-       lea       _itoa(A5),A0
+       move.l    4(A0),(A1)
+; carregaDir = MMSJOS_FUNC_RELOC[FILES_RELOC_CARREGADIR_DEF];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
        move.l    A5,A1
-       add.l     #_myitoa,A1
-       move.l    A0,(A1)
-; myltoa = ltoa;
-       lea       _ltoa(PC),A0
-       lea       _ltoa(A5),A0
+       add.l     #_carregaDir,A1
+       move.l    8(A0),(A1)
+; listaDir = MMSJOS_FUNC_RELOC[FILES_RELOC_LISTADIR_DEF];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
        move.l    A5,A1
-       add.l     #_myltoa,A1
-       move.l    A0,(A1)
-; mytoupper = toupper;
-       lea       _toupper(PC),A0
-       lea       _toupper(A5),A0
+       add.l     #_listaDir,A1
+       move.l    12(A0),(A1)
+; mystrcpy = MMSJOS_FUNC_RELOC[FILES_RELOC_STRCPY];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
+       move.l    A5,A1
+       add.l     #_mystrcpy,A1
+       move.l    16(A0),(A1)
+; mystrcat = MMSJOS_FUNC_RELOC[FILES_RELOC_STRCAT];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
+       move.l    A5,A1
+       add.l     #_mystrcat,A1
+       move.l    20(A0),(A1)
+; mymemset = MMSJOS_FUNC_RELOC[FILES_RELOC_MEMSET];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
+       move.l    A5,A1
+       add.l     #_mymemset,A1
+       move.l    24(A0),(A1)
+; mytoupper = MMSJOS_FUNC_RELOC[FILES_RELOC_TOUPPER];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
        move.l    A5,A1
        add.l     #_mytoupper,A1
-       move.l    A0,(A1)
+       move.l    28(A0),(A1)
+; myitoa = MMSJOS_FUNC_RELOC[FILES_RELOC_ITOA];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
+       move.l    A5,A1
+       add.l     #_myitoa,A1
+       move.l    32(A0),(A1)
+; myltoa = MMSJOS_FUNC_RELOC[FILES_RELOC_LTOA];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
+       move.l    A5,A1
+       add.l     #_myltoa,A1
+       move.l    36(A0),(A1)
+; myvRetAlloc = MMSJOS_FUNC_RELOC[FILES_RELOC_VRETALLOC];
+       move.l    A5,A0
+       add.l     #_MMSJOS_FUNC_RELOC,A0
+       move.l    A5,A1
+       add.l     #_myvRetAlloc,A1
+       move.l    40(A0),(A1)
+; if ((unsigned long)mystrcpy < 0x00010000UL)
+       move.l    A5,A0
+       add.l     #_mystrcpy,A0
+       move.l    (A0),D0
+       cmp.l     #65536,D0
+       bhs.s     main_1
 ; mystrcpy = strcpy;
        lea       _strcpy(PC),A0
        lea       _strcpy(A5),A0
        move.l    A5,A1
        add.l     #_mystrcpy,A1
        move.l    A0,(A1)
+main_1:
+; if ((unsigned long)mystrcat < 0x00010000UL)
+       move.l    A5,A0
+       add.l     #_mystrcat,A0
+       move.l    (A0),D0
+       cmp.l     #65536,D0
+       bhs.s     main_3
 ; mystrcat = strcat;
        lea       _strcat(PC),A0
        lea       _strcat(A5),A0
        move.l    A5,A1
        add.l     #_mystrcat,A1
        move.l    A0,(A1)
+main_3:
+; if ((unsigned long)mymemset < 0x00010000UL)
+       move.l    A5,A0
+       add.l     #_mymemset,A0
+       move.l    (A0),D0
+       cmp.l     #65536,D0
+       bhs.s     main_5
 ; mymemset = memset;
        lea       _memset(PC),A0
        lea       _memset(A5),A0
        move.l    A5,A1
        add.l     #_mymemset,A1
        move.l    A0,(A1)
-; myvRetAlloc = vRetAlloc;
-       lea       _vRetAlloc(PC),A0
-       lea       _vRetAlloc(A5),A0
+main_5:
+; if ((unsigned long)mytoupper < 0x00010000UL)
+       move.l    A5,A0
+       add.l     #_mytoupper,A0
+       move.l    (A0),D0
+       cmp.l     #65536,D0
+       bhs.s     main_7
+; mytoupper = toupper;
+       lea       _toupper(PC),A0
+       lea       _toupper(A5),A0
        move.l    A5,A1
-       add.l     #_myvRetAlloc,A1
+       add.l     #_mytoupper,A1
        move.l    A0,(A1)
-; // Reserva um tanto ja pra memoria de uso do programa de variaveis globais
-; vMemTotal = fsMalloc(1024);
-       pea       1024
+main_7:
+; if ((unsigned long)myitoa < 0x00010000UL)
+       move.l    A5,A0
+       add.l     #_myitoa,A0
+       move.l    (A0),D0
+       cmp.l     #65536,D0
+       bhs.s     main_9
+; myitoa = itoa;
+       lea       _itoa(PC),A0
+       lea       _itoa(A5),A0
+       move.l    A5,A1
+       add.l     #_myitoa,A1
+       move.l    A0,(A1)
+main_9:
+; if ((unsigned long)myltoa < 0x00010000UL)
+       move.l    A5,A0
+       add.l     #_myltoa,A0
+       move.l    (A0),D0
+       cmp.l     #65536,D0
+       bhs.s     main_11
+; myltoa = ltoa;
+       lea       _ltoa(PC),A0
+       lea       _ltoa(A5),A0
+       move.l    A5,A1
+       add.l     #_myltoa,A1
+       move.l    A0,(A1)
+main_11:
+; // Copias locais dos ponteiros para o trecho critico de bootstrap.
+; // Isso evita depender de leitura dos globais via base register entre chamadas.
+; pCarregaDir = carregaDir;
+       move.l    A5,A0
+       add.l     #_carregaDir,A0
+       move.l    (A0),-60(A6)
+; pMyItoa = myitoa;
+       move.l    A5,A0
+       add.l     #_myitoa,A0
+       move.l    (A0),-56(A6)
+; pMyLtoa = myltoa;
+       move.l    A5,A0
+       add.l     #_myltoa,A0
+       move.l    (A0),-52(A6)
+; // Reserva apenas o necessario para os globais do explorer.
+; // fsMalloc usa a mesma heap do malloc() usado pelo SaveScreenNew.
+; writeLongSerial("Alloc memory to variables...\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_3,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; vMemTotal = (unsigned char *)fsMalloc(sizeof(LIST_DIR) + 64);
+       pea       5918
        move.l    8486744,A0
        jsr       (A0)
        addq.w    #4,A7
        move.l    A5,A0
        add.l     #_vMemTotal,A0
        move.l    D0,(A0)
-; // Define o endereço de cada variavel global dentro desse espaço
-; vpos = vMemTotal;
+; if (vMemTotal == 0)
+       move.l    A5,A0
+       add.l     #_vMemTotal,A0
+       move.l    (A0),D0
+       bne.s     main_13
+; {
+; writeLongSerial("FILES: sem memoria\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_4,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; TrocaSpriteMouse(MOUSE_POINTER);
+       pea       1
+       move.l    8410570,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; return;
+       bra       main_15
+main_13:
+; }
+; // Layout fixo: LIST_DIR no inicio do bloco; variaveis pequenas no final.
+; dfile = (LIST_DIR *)vMemTotal;
        move.l    A5,A0
        add.l     #_vMemTotal,A0
        move.l    A5,A1
-       add.l     #_vpos,A1
+       add.l     #_dfile,A1
        move.l    (A0),(A1)
-; vposold = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vpos));
-       pea       4
-       pea       -66(A6)
+; vMemTail = vMemTotal + sizeof(LIST_DIR);
        move.l    A5,A0
        add.l     #_vMemTotal,A0
-       move.l    (A0),-(A7)
+       move.l    (A0),D0
+       add.l     #5854,D0
+       move.l    D0,-74(A6)
+; vpos = (unsigned short *)vMemTail;
        move.l    A5,A0
-       add.l     #_myvRetAlloc,A0
-       move.l    (A0),A0
-       jsr       (A0)
-       add.w     #12,A7
+       add.l     #_vpos,A0
+       move.l    -74(A6),(A0)
+; vposold = (unsigned short *)(vMemTail + 2);
+       move.l    -74(A6),D0
+       addq.l    #2,D0
        move.l    A5,A0
        add.l     #_vposold,A0
        move.l    D0,(A0)
-; dFileCursor = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vposold));
-       pea       4
-       pea       -66(A6)
-       move.l    A5,A0
-       add.l     #_vMemTotal,A0
-       move.l    (A0),-(A7)
-       move.l    A5,A0
-       add.l     #_myvRetAlloc,A0
-       move.l    (A0),A0
-       jsr       (A0)
-       add.w     #12,A7
+; dFileCursor = (unsigned char *)(vMemTail + 4);
+       move.l    -74(A6),D0
+       addq.l    #4,D0
        move.l    A5,A0
        add.l     #_dFileCursor,A0
        move.l    D0,(A0)
-; vcorfg = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(dFileCursor));
-       pea       4
-       pea       -66(A6)
-       move.l    A5,A0
-       add.l     #_vMemTotal,A0
-       move.l    (A0),-(A7)
-       move.l    A5,A0
-       add.l     #_myvRetAlloc,A0
-       move.l    (A0),A0
-       jsr       (A0)
-       add.w     #12,A7
+; vcorfg = (unsigned char *)(vMemTail + 5);
+       move.l    -74(A6),D0
+       addq.l    #5,D0
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    D0,(A0)
-; vcorbg = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vcorfg));
-       pea       4
-       pea       -66(A6)
-       move.l    A5,A0
-       add.l     #_vMemTotal,A0
-       move.l    (A0),-(A7)
-       move.l    A5,A0
-       add.l     #_myvRetAlloc,A0
-       move.l    (A0),A0
-       jsr       (A0)
-       add.w     #12,A7
+; vcorbg = (unsigned char *)(vMemTail + 6);
+       move.l    -74(A6),D0
+       addq.l    #6,D0
        move.l    A5,A0
        add.l     #_vcorbg,A0
        move.l    D0,(A0)
-; clinha = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vcorbg));
-       pea       4
-       pea       -66(A6)
-       move.l    A5,A0
-       add.l     #_vMemTotal,A0
-       move.l    (A0),-(A7)
-       move.l    A5,A0
-       add.l     #_myvRetAlloc,A0
-       move.l    (A0),A0
-       jsr       (A0)
-       add.w     #12,A7
+; clinha = (unsigned char *)(vMemTail + 8);
+       move.l    -74(A6),D0
+       addq.l    #8,D0
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    D0,(A0)
-; dfile = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(clinha) * 32); // 32 linhas de clinha
-       pea       128
-       pea       -66(A6)
+; writeLongSerial("Drawing interface...\r\n\0");
        move.l    A5,A0
-       add.l     #_vMemTotal,A0
-       move.l    (A0),-(A7)
-       move.l    A5,A0
-       add.l     #_myvRetAlloc,A0
-       move.l    (A0),A0
+       add.l     #@files_5,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
        jsr       (A0)
-       add.w     #12,A7
-       move.l    A5,A0
-       add.l     #_dfile,A0
-       move.l    D0,(A0)
+       addq.w    #4,A7
 ; // Pega as cores atuais
 ; getColorData(&vdpcolor);
        pea       -48(A6)
@@ -380,27 +487,18 @@ _main:
        add.l     #_vcorbg,A1
        move.l    (A1),A1
        move.b    1(A0),(A1)
-; TrocaSpriteMouse(MOUSE_HOURGLASS);
-       pea       2
-       move.l    8410570,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; //SaveScreenNew(&windowScr, 0, 0, 255, 191);
-; // Cria a Janela
-; showWindow("File Explorer v0.2\0", 0, 0, 255, 191, BTNONE);
-       clr.l     -(A7)
+; SaveScreenNew(&windowScr, 0, 0, 255, 191);
        pea       191
        pea       255
        clr.l     -(A7)
        clr.l     -(A7)
-       move.l    A5,A0
-       add.l     #@files_1,A0
-       move.l    A0,-(A7)
-       move.l    8410566,A0
+       pea       -20(A6)
+       move.l    8410498,A0
        jsr       (A0)
-       add.w     #24,A7
+       add.w     #20,A7
+; // Cria a Janela
 ; vcont = 1;
-       move.b    #1,-324(A6)
+       move.b    #1,-332(A6)
 ; *vpos = 0;
        move.l    A5,A0
        add.l     #_vpos,A0
@@ -412,22 +510,8 @@ _main:
        move.l    (A0),A0
        move.w    #255,(A0)
 ; vnomefile[0] = 0x00;
-       clr.b     -288+0(A6)
+       clr.b     -296+0(A6)
 ; // Prepara Cabeçalho
-; FillRect(0,18,255,10,*vcorbg);
-       move.l    A5,A0
-       add.l     #_vcorbg,A0
-       move.l    (A0),A0
-       move.b    (A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       pea       10
-       pea       255
-       pea       18
-       clr.l     -(A7)
-       move.l    8410514,A0
-       jsr       (A0)
-       add.w     #20,A7
 ; DrawRect(0,18,255,10,*vcorfg);
        move.l    A5,A0
        add.l     #_vcorfg,A0
@@ -459,7 +543,7 @@ _main:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_2,A0
+       add.l     #@files_6,A0
        move.l    A0,-(A7)
        pea       8
        pea       20
@@ -483,7 +567,7 @@ _main:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_3,A0
+       add.l     #@files_7,A0
        move.l    A0,-(A7)
        pea       8
        pea       20
@@ -507,7 +591,7 @@ _main:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_4,A0
+       add.l     #@files_8,A0
        move.l    A0,-(A7)
        pea       8
        pea       20
@@ -531,7 +615,7 @@ _main:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_5,A0
+       add.l     #@files_9,A0
        move.l    A0,-(A7)
        pea       8
        pea       20
@@ -555,7 +639,7 @@ _main:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_6,A0
+       add.l     #@files_10,A0
        move.l    A0,-(A7)
        pea       8
        pea       20
@@ -564,17 +648,102 @@ _main:
        jsr       (A0)
        add.w     #24,A7
 ; // Carrega Diretorio
-; carregaDir();
+; writeLongSerial("FILES: before carregaDir [\0");
        move.l    A5,A0
-       add.l     #_carregaDir,A0
-       move.l    (A0),A0
+       add.l     #@files_11,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
        jsr       (A0)
+       addq.w    #4,A7
+; pMyLtoa((unsigned long)pCarregaDir, sqtdtam, 16);
+       pea       16
+       pea       -70(A6)
+       move.l    -60(A6),-(A7)
+       move.l    -52(A6),A0
+       jsr       (A0)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       pea       -70(A6)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       move.l    A5,A0
+       add.l     #@files_12,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; pMyLtoa((unsigned long)dfile, sqtdtam, 16);
+       pea       16
+       pea       -70(A6)
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),-(A7)
+       move.l    -52(A6),A0
+       jsr       (A0)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       pea       -70(A6)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       move.l    A5,A0
+       add.l     #@files_12,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; pMyLtoa((unsigned long)windowScr, sqtdtam, 16);
+       pea       16
+       pea       -70(A6)
+       pea       -20(A6)
+       move.l    -52(A6),A0
+       jsr       (A0)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       pea       -70(A6)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_13,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; pCarregaDir();
+       move.l    -60(A6),A0
+       jsr       (A0)
+; writeLongSerial("FILES: after carregaDir\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_14,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; // Lista Diretorio
+; writeLongSerial("FILES: before listaDir\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_15,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; listaDir();
        move.l    A5,A0
        add.l     #_listaDir,A0
        move.l    (A0),A0
        jsr       (A0)
+; writeLongSerial("FILES: after listaDir\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_16,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; TrocaSpriteMouse(MOUSE_POINTER);
        pea       1
        move.l    8410570,A0
@@ -582,9 +751,9 @@ _main:
        addq.w    #4,A7
 ; // Loop Principal
 ; while (vcont)
-main_1:
-       tst.b     -324(A6)
-       beq       main_3
+main_16:
+       tst.b     -332(A6)
+       beq       main_18
 ; {
 ; setPosPressed(0,0); // vposty = 0;
        clr.l     -(A7)
@@ -593,7 +762,7 @@ main_1:
        jsr       (A0)
        addq.w    #8,A7
 ; while (1)
-main_4:
+main_19:
 ; {
 ; getMouseData(&mouseData);
        pea       -26(A6)
@@ -604,88 +773,88 @@ main_4:
        lea       -26(A6),A0
        move.b    (A0),D0
        cmp.b     #2,D0
-       beq.s     main_9
+       beq.s     main_24
        lea       -26(A6),A0
        move.b    1(A0),D0
        cmp.b     #1,D0
-       bne       main_7
-main_9:
+       bne       main_22
+main_24:
 ; {
 ; if (mouseData.vposty >= 34 && mouseData.vposty <= 170)
        lea       -26(A6),A0
        move.b    5(A0),D0
        cmp.b     #34,D0
-       blo       main_140
+       blo       main_155
        lea       -26(A6),A0
        move.b    5(A0),D0
        and.w     #255,D0
        cmp.w     #170,D0
-       bhi       main_140
+       bhi       main_155
 ; {
 ; ee = 99;
-       move.b    #99,-319(A6)
+       move.b    #99,-327(A6)
 ; dd = 0;
-       clr.b     -320(A6)
+       clr.b     -328(A6)
 ; while (ee == 99)
-main_12:
-       move.b    -319(A6),D0
+main_27:
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       bne       main_14
+       bne       main_29
 ; {
 ; if (mouseData.vposty >= clinha[dd] && mouseData.vposty <= (clinha[dd] + 10) && clinha[dd] != 0)
        lea       -26(A6),A0
        move.l    A5,A1
        add.l     #_clinha,A1
        move.l    (A1),A1
-       move.b    -320(A6),D0
+       move.b    -328(A6),D0
        and.l     #255,D0
        move.b    5(A0),D1
        cmp.b     0(A1,D0.L),D1
-       blo       main_15
+       blo       main_30
        lea       -26(A6),A0
        move.l    A5,A1
        add.l     #_clinha,A1
        move.l    (A1),A1
-       move.b    -320(A6),D0
+       move.b    -328(A6),D0
        and.l     #255,D0
        move.b    0(A1,D0.L),D0
        add.b     #10,D0
        cmp.b     5(A0),D0
-       blo.s     main_15
+       blo.s     main_30
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.b    -320(A6),D0
+       move.b    -328(A6),D0
        and.l     #255,D0
        move.b    0(A0,D0.L),D0
-       beq.s     main_15
+       beq.s     main_30
 ; ee = dd;
-       move.b    -320(A6),-319(A6)
-main_15:
+       move.b    -328(A6),-327(A6)
+main_30:
 ; dd++;
-       addq.b    #1,-320(A6)
+       addq.b    #1,-328(A6)
 ; if (dd > 13)
-       move.b    -320(A6),D0
+       move.b    -328(A6),D0
        cmp.b     #13,D0
-       bls.s     main_17
+       bls.s     main_32
 ; break;
-       bra.s     main_14
-main_17:
-       bra       main_12
-main_14:
+       bra.s     main_29
+main_32:
+       bra       main_27
+main_29:
 ; }
 ; corOpcFile = VDP_LIGHT_RED;
-       move.b    #9,-70(A6)
+       move.b    #9,-78(A6)
 ; corOpcFileExec = VDP_LIGHT_RED;
-       move.b    #9,-69(A6)
+       move.b    #9,-77(A6)
 ; corOpcDir = VDP_LIGHT_RED;
-       move.b    #9,-68(A6)
+       move.b    #9,-76(A6)
 ; corDisable = VDP_LIGHT_RED;
-       move.b    #9,-67(A6)
+       move.b    #9,-75(A6)
 ; if (ee != 99)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       beq       main_19
+       beq       main_34
 ; {
 ; MostraIcone(8, clinha[ee], 6, VDP_DARK_GREEN, *vcorbg);
        move.l    A5,A0
@@ -699,7 +868,7 @@ main_14:
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
        move.b    0(A0,D1.L),D1
        and.w     #255,D1
@@ -713,115 +882,115 @@ main_14:
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
        move.b    34(A0),D0
        cmp.b     #32,D0
-       bne       main_21
+       bne       main_36
 ; {
 ; corOpcFile = *vcorfg;
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    (A0),-70(A6)
+       move.b    (A0),-78(A6)
 ; if (dfile->dir[ee].Ext[0] == 'B' && dfile->dir[ee].Ext[1] == 'I' && dfile->dir[ee].Ext[2] == 'N')
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
        move.b    10(A0),D0
        cmp.b     #66,D0
-       bne       main_23
+       bne       main_38
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
        move.b    11(A0),D0
        cmp.b     #73,D0
-       bne.s     main_23
+       bne.s     main_38
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
        move.b    12(A0),D0
        cmp.b     #78,D0
-       bne.s     main_23
+       bne.s     main_38
 ; corOpcFileExec = *vcorfg;
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    (A0),-69(A6)
-main_23:
-       bra.s     main_22
-main_21:
+       move.b    (A0),-77(A6)
+main_38:
+       bra.s     main_37
+main_36:
 ; }
 ; else
 ; corOpcDir = *vcorfg;
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    (A0),-68(A6)
-main_22:
-       bra.s     main_20
-main_19:
+       move.b    (A0),-76(A6)
+main_37:
+       bra.s     main_35
+main_34:
 ; }
 ; else
 ; corOpcDir = *vcorfg;
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    (A0),-68(A6)
-main_20:
+       move.b    (A0),-76(A6)
+main_35:
 ; if (!mouseData.mouseBtnDouble)
        lea       -26(A6),A0
        tst.b     1(A0)
-       bne       main_25
+       bne       main_40
 ; {
 ; if (ee != 99)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       beq.s     main_27
+       beq.s     main_42
 ; my = clinha[ee] + 8;
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
        move.b    0(A0,D0.L),D0
        addq.b    #8,D0
-       move.b    D0,-71(A6)
-       bra.s     main_28
-main_27:
+       move.b    D0,-79(A6)
+       bra.s     main_43
+main_42:
 ; else
 ; my = mouseData.vposty;
        lea       -26(A6),A0
-       move.b    5(A0),-71(A6)
-main_28:
+       move.b    5(A0),-79(A6)
+main_43:
 ; if (my + 46 > 190)
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #46,D0
        and.w     #255,D0
        cmp.w     #190,D0
-       bls.s     main_29
+       bls.s     main_44
 ; my = my - 52;
-       sub.b     #52,-71(A6)
-main_29:
+       sub.b     #52,-79(A6)
+main_44:
 ; // Abre menu : Delete, Rename, Close
 ; SaveScreenNew(&vsavescr,30,my,52,46);
        pea       46
        pea       52
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
@@ -839,7 +1008,7 @@ main_29:
        move.l    D1,-(A7)
        pea       44
        pea       50
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        and.l     #255,D1
        move.l    D1,-(A7)
        pea       30
@@ -856,7 +1025,7 @@ main_29:
        move.l    D1,-(A7)
        pea       44
        pea       50
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
@@ -868,9 +1037,9 @@ main_29:
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -70(A6),D0
+       move.b    -78(A6),D0
        cmp.b     (A0),D0
-       bne       main_31
+       bne       main_46
 ; {
 ; writesxy(33,my+2,8,"Delete",*vcorfg,*vcorbg);
        move.l    A5,A0
@@ -888,10 +1057,10 @@ main_29:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_7,A0
+       add.l     #@files_17,A0
        move.l    A0,-(A7)
        pea       8
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        addq.b    #2,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -916,10 +1085,10 @@ main_29:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_8,A0
+       add.l     #@files_18,A0
        move.l    A0,-(A7)
        pea       8
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        add.b     #10,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -944,10 +1113,10 @@ main_29:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_9,A0
+       add.l     #@files_19,A0
        move.l    A0,-(A7)
        pea       8
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        add.b     #18,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -964,15 +1133,15 @@ main_29:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       move.b    -69(A6),D1
+       move.b    -77(A6),D1
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_10,A0
+       add.l     #@files_20,A0
        move.l    A0,-(A7)
        pea       8
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        add.b     #26,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -981,21 +1150,21 @@ main_29:
        move.l    8410486,A0
        jsr       (A0)
        add.w     #24,A7
-       bra       main_32
-main_31:
+       bra       main_47
+main_46:
 ; }
 ; else
 ; {
 ; if (ee != 99)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       beq.s     main_33
+       beq.s     main_48
 ; corDisable = *vcorfg;
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    (A0),-67(A6)
-main_33:
+       move.b    (A0),-75(A6)
+main_48:
 ; writesxy(33,my+2,8,"Open",corDisable,*vcorbg);
        move.l    A5,A0
        add.l     #_vcorbg,A0
@@ -1004,15 +1173,15 @@ main_33:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       move.b    -67(A6),D1
+       move.b    -75(A6),D1
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_11,A0
+       add.l     #@files_21,A0
        move.l    A0,-(A7)
        pea       8
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        addq.b    #2,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -1037,10 +1206,10 @@ main_33:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_12,A0
+       add.l     #@files_22,A0
        move.l    A0,-(A7)
        pea       8
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        add.b     #10,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -1057,15 +1226,15 @@ main_33:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       move.b    -67(A6),D1
+       move.b    -75(A6),D1
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_13,A0
+       add.l     #@files_23,A0
        move.l    A0,-(A7)
        pea       8
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        add.b     #18,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -1084,10 +1253,10 @@ main_33:
        move.l    D1,-(A7)
        pea       9
        move.l    A5,A0
-       add.l     #@files_14,A0
+       add.l     #@files_24,A0
        move.l    A0,-(A7)
        pea       8
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        add.b     #26,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -1096,7 +1265,7 @@ main_33:
        move.l    8410486,A0
        jsr       (A0)
        add.w     #24,A7
-main_32:
+main_47:
 ; }
 ; DrawLine(30,my+34,80,my+34,*vcorfg);
        move.l    A5,A0
@@ -1106,13 +1275,13 @@ main_32:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        add.b     #34,D1
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
        pea       80
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        add.b     #34,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -1137,10 +1306,10 @@ main_32:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_15,A0
+       add.l     #@files_25,A0
        move.l    A0,-(A7)
        pea       8
-       move.b    -71(A6),D1
+       move.b    -79(A6),D1
        add.b     #36,D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -1150,9 +1319,9 @@ main_32:
        jsr       (A0)
        add.w     #24,A7
 ; vopc = 99;
-       move.b    #99,-142(A6)
+       move.b    #99,-150(A6)
 ; while (1)
-main_35:
+main_50:
 ; {
 ; getMouseData(&mouseData);
        pea       -26(A6)
@@ -1163,210 +1332,210 @@ main_35:
        lea       -26(A6),A0
        move.b    (A0),D0
        cmp.b     #1,D0
-       bne       main_56
+       bne       main_71
 ; {
 ; if (mouseData.vpostx >= 31 && mouseData.vpostx <= 138)
        lea       -26(A6),A0
        move.b    4(A0),D0
        cmp.b     #31,D0
-       blo       main_56
+       blo       main_71
        lea       -26(A6),A0
        move.b    4(A0),D0
        and.w     #255,D0
        cmp.w     #138,D0
-       bhi       main_56
+       bhi       main_71
 ; {
 ; if (mouseData.vposty >= my+2 && mouseData.vposty <= my+8 && corOpcFile == *vcorfg)
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        addq.b    #2,D0
        cmp.b     5(A0),D0
-       bhi.s     main_42
+       bhi.s     main_57
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        addq.b    #8,D0
        cmp.b     5(A0),D0
-       blo.s     main_42
+       blo.s     main_57
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -70(A6),D0
+       move.b    -78(A6),D0
        cmp.b     (A0),D0
-       bne.s     main_42
+       bne.s     main_57
 ; {
 ; vopc = 0;
-       clr.b     -142(A6)
+       clr.b     -150(A6)
 ; break;
-       bra       main_37
-main_42:
+       bra       main_52
+main_57:
 ; }
 ; else if (mouseData.vposty >= my+10 && mouseData.vposty <= my+17 && corOpcFile == *vcorfg)
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #10,D0
        cmp.b     5(A0),D0
-       bhi.s     main_44
+       bhi.s     main_59
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #17,D0
        cmp.b     5(A0),D0
-       blo.s     main_44
+       blo.s     main_59
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -70(A6),D0
+       move.b    -78(A6),D0
        cmp.b     (A0),D0
-       bne.s     main_44
+       bne.s     main_59
 ; {
 ; vopc = 1;
-       move.b    #1,-142(A6)
+       move.b    #1,-150(A6)
 ; break;
-       bra       main_37
-main_44:
+       bra       main_52
+main_59:
 ; }
 ; else if (mouseData.vposty >= my+18 && mouseData.vposty <= my+25 && corOpcFile == *vcorfg)
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #18,D0
        cmp.b     5(A0),D0
-       bhi.s     main_46
+       bhi.s     main_61
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #25,D0
        cmp.b     5(A0),D0
-       blo.s     main_46
+       blo.s     main_61
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -70(A6),D0
+       move.b    -78(A6),D0
        cmp.b     (A0),D0
-       bne.s     main_46
+       bne.s     main_61
 ; {
 ; vopc = 2;
-       move.b    #2,-142(A6)
+       move.b    #2,-150(A6)
 ; break;
-       bra       main_37
-main_46:
+       bra       main_52
+main_61:
 ; }
 ; else if (ee != 99 && mouseData.vposty >= my+2 && mouseData.vposty <= my+8 && corOpcDir == *vcorfg)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       beq       main_48
+       beq       main_63
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        addq.b    #2,D0
        cmp.b     5(A0),D0
-       bhi.s     main_48
+       bhi.s     main_63
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        addq.b    #8,D0
        cmp.b     5(A0),D0
-       blo.s     main_48
+       blo.s     main_63
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -68(A6),D0
+       move.b    -76(A6),D0
        cmp.b     (A0),D0
-       bne.s     main_48
+       bne.s     main_63
 ; {
 ; vopc = 3;
-       move.b    #3,-142(A6)
+       move.b    #3,-150(A6)
 ; break;
-       bra       main_37
-main_48:
+       bra       main_52
+main_63:
 ; }
 ; else if (mouseData.vposty >= my+10 && mouseData.vposty <= my+17 && corOpcDir == *vcorfg)
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #10,D0
        cmp.b     5(A0),D0
-       bhi.s     main_50
+       bhi.s     main_65
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #17,D0
        cmp.b     5(A0),D0
-       blo.s     main_50
+       blo.s     main_65
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -68(A6),D0
+       move.b    -76(A6),D0
        cmp.b     (A0),D0
-       bne.s     main_50
+       bne.s     main_65
 ; {
 ; vopc = 4;
-       move.b    #4,-142(A6)
+       move.b    #4,-150(A6)
 ; break;
-       bra       main_37
-main_50:
+       bra       main_52
+main_65:
 ; }
 ; else if (ee != 99 && mouseData.vposty >= my+18 && mouseData.vposty <= my+25 && corOpcDir == *vcorfg)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       beq       main_52
+       beq       main_67
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #18,D0
        cmp.b     5(A0),D0
-       bhi.s     main_52
+       bhi.s     main_67
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #25,D0
        cmp.b     5(A0),D0
-       blo.s     main_52
+       blo.s     main_67
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -68(A6),D0
+       move.b    -76(A6),D0
        cmp.b     (A0),D0
-       bne.s     main_52
+       bne.s     main_67
 ; {
 ; vopc = 5;
-       move.b    #5,-142(A6)
+       move.b    #5,-150(A6)
 ; break;
-       bra       main_37
-main_52:
+       bra       main_52
+main_67:
 ; }
 ; else if (mouseData.vposty >= my+26 && mouseData.vposty <= my+33 && corOpcFileExec == *vcorfg)
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #26,D0
        cmp.b     5(A0),D0
-       bhi.s     main_54
+       bhi.s     main_69
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #33,D0
        cmp.b     5(A0),D0
-       blo.s     main_54
+       blo.s     main_69
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -69(A6),D0
+       move.b    -77(A6),D0
        cmp.b     (A0),D0
-       bne.s     main_54
+       bne.s     main_69
 ; {
 ; vopc = 6;
-       move.b    #6,-142(A6)
+       move.b    #6,-150(A6)
 ; break;
-       bra       main_37
-main_54:
+       bra       main_52
+main_69:
 ; }
 ; else if (mouseData.vposty >= my+44 && mouseData.vposty <= my+51)
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #44,D0
        cmp.b     5(A0),D0
-       bhi.s     main_56
+       bhi.s     main_71
        lea       -26(A6),A0
-       move.b    -71(A6),D0
+       move.b    -79(A6),D0
        add.b     #51,D0
        cmp.b     5(A0),D0
-       blo.s     main_56
+       blo.s     main_71
 ; {
 ; vopc = 7;
-       move.b    #7,-142(A6)
+       move.b    #7,-150(A6)
 ; break;
-       bra.s     main_37
-main_56:
+       bra.s     main_52
+main_71:
 ; }
 ; }
 ; }
@@ -1378,8 +1547,8 @@ main_56:
        move.l    8486736,A0
        jsr       (A0)
        add.w     #16,A7
-       bra       main_35
-main_37:
+       bra       main_50
+main_52:
 ; }
 ; RestoreScreen(vsavescr);
        lea       -46(A6),A0
@@ -1390,76 +1559,76 @@ main_37:
        move.l    8410502,A0
        jsr       (A0)
        add.w     #20,A7
-       bra       main_62
-main_25:
+       bra       main_77
+main_40:
 ; }
 ; else
 ; {
 ; if (ee != 99)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       beq.s     main_62
+       beq.s     main_77
 ; {
 ; if (corOpcDir == *vcorfg)   // Se for dir, entra na pasta
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -68(A6),D0
+       move.b    -76(A6),D0
        cmp.b     (A0),D0
-       bne.s     main_60
+       bne.s     main_75
 ; vopc = 3;
-       move.b    #3,-142(A6)
-       bra.s     main_62
-main_60:
+       move.b    #3,-150(A6)
+       bra.s     main_77
+main_75:
 ; else if (corOpcFileExec == *vcorfg) // Se for .BIN executa
        move.l    A5,A0
        add.l     #_vcorfg,A0
        move.l    (A0),A0
-       move.b    -69(A6),D0
+       move.b    -77(A6),D0
        cmp.b     (A0),D0
-       bne.s     main_62
+       bne.s     main_77
 ; vopc = 6;
-       move.b    #6,-142(A6)
-main_62:
+       move.b    #6,-150(A6)
+main_77:
 ; }
 ; }
 ; // Executa opcao selecionada
 ; if (vopc == 0 || vopc == 5)  // Delete File && Delete Directory
-       move.b    -142(A6),D0
-       beq.s     main_66
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
+       beq.s     main_81
+       move.b    -150(A6),D0
        cmp.b     #5,D0
-       bne       main_64
-main_66:
+       bne       main_79
+main_81:
 ; {
 ; // Deleta Arquivo
 ; if (vopc == 0)
-       move.b    -142(A6),D0
-       bne.s     main_67
+       move.b    -150(A6),D0
+       bne.s     main_82
 ; vresp = message("Confirm\nDelete File ?\0",(BTYES | BTNO), 0);
        clr.l     -(A7)
        pea       12
        move.l    A5,A0
-       add.l     #@files_16,A0
+       add.l     #@files_26,A0
        move.l    A0,-(A7)
        move.l    8410558,A0
        jsr       (A0)
        add.w     #12,A7
-       move.b    D0,-141(A6)
-       bra.s     main_68
-main_67:
+       move.b    D0,-149(A6)
+       bra.s     main_83
+main_82:
 ; else
 ; vresp = message("Confirm\nRemove Directory ?\0",(BTYES | BTNO), 0);
        clr.l     -(A7)
        pea       12
        move.l    A5,A0
-       add.l     #@files_17,A0
+       add.l     #@files_27,A0
        move.l    A0,-(A7)
        move.l    8410558,A0
        jsr       (A0)
        add.w     #12,A7
-       move.b    D0,-141(A6)
-main_68:
+       move.b    D0,-149(A6)
+main_83:
 ; FillRect(8,clinha[ee],8,8,*vcorbg);
        move.l    A5,A0
        add.l     #_vcorbg,A0
@@ -1472,7 +1641,7 @@ main_68:
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
        move.b    0(A0,D1.L),D1
        and.l     #255,D1
@@ -1482,22 +1651,22 @@ main_68:
        jsr       (A0)
        add.w     #20,A7
 ; if (vresp == BTYES)
-       move.b    -141(A6),D0
+       move.b    -149(A6),D0
        cmp.b     #4,D0
-       bne       main_76
+       bne       main_91
 ; {
 ; mystrcpy(vnomefile,dfile->dir[ee].Name);
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),D1
        move.l    D0,-(A7)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,D1
        move.l    (A7)+,D0
        move.l    D1,-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcpy,A0
        move.l    (A0),A0
@@ -1507,18 +1676,18 @@ main_68:
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
        move.b    10(A0),D0
-       beq       main_71
+       beq       main_86
 ; {
 ; mystrcat(vnomefile,".");
        move.l    A5,A0
-       add.l     #@files_18,A0
+       add.l     #@files_28,A0
        move.l    (A0),-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
@@ -1531,28 +1700,28 @@ main_68:
        move.l    D0,-(A7)
        move.l    (A0),D0
        move.l    D1,-(A7)
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
-       muls      #40,D1
+       muls      #39,D1
        add.l     D1,D0
        move.l    (A7)+,D1
        add.l     D0,D1
        move.l    (A7)+,D0
        move.l    D1,-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
-main_71:
+main_86:
 ; }
 ; if (vopc == 0)
-       move.b    -142(A6),D0
-       bne.s     main_73
+       move.b    -150(A6),D0
+       bne.s     main_88
 ; {
 ; linhastatus(4, vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        pea       4
        move.l    A5,A0
        add.l     #_linhastatus,A0
@@ -1560,18 +1729,18 @@ main_71:
        jsr       (A0)
        addq.w    #8,A7
 ; vresp = fsDelFile(vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    8486712,A0
        jsr       (A0)
        addq.w    #4,A7
-       move.b    D0,-141(A6)
-       bra.s     main_74
-main_73:
+       move.b    D0,-149(A6)
+       bra.s     main_89
+main_88:
 ; }
 ; else
 ; {
 ; linhastatus(6, vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        pea       6
        move.l    A5,A0
        add.l     #_linhastatus,A0
@@ -1579,46 +1748,46 @@ main_73:
        jsr       (A0)
        addq.w    #8,A7
 ; vresp = fsRemoveDir(vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    8486732,A0
        jsr       (A0)
        addq.w    #4,A7
-       move.b    D0,-141(A6)
-main_74:
+       move.b    D0,-149(A6)
+main_89:
 ; }
 ; if (vresp >= ERRO_D_START)
-       move.b    -141(A6),D0
+       move.b    -149(A6),D0
        and.l     #255,D0
        cmp.l     #-16,D0
-       blo       main_75
+       blo       main_90
 ; {
 ; if (vopc == 0)
-       move.b    -142(A6),D0
-       bne.s     main_77
+       move.b    -150(A6),D0
+       bne.s     main_92
 ; message("Delete File Error.\0",(BTCLOSE), 0);
        clr.l     -(A7)
        pea       64
        move.l    A5,A0
-       add.l     #@files_19,A0
+       add.l     #@files_29,A0
        move.l    A0,-(A7)
        move.l    8410558,A0
        jsr       (A0)
        add.w     #12,A7
-       bra.s     main_78
-main_77:
+       bra.s     main_93
+main_92:
 ; else
 ; message("Remove Directory Error.\0",(BTCLOSE), 0);
        clr.l     -(A7)
        pea       64
        move.l    A5,A0
-       add.l     #@files_20,A0
+       add.l     #@files_30,A0
        move.l    A0,-(A7)
        move.l    8410558,A0
        jsr       (A0)
        add.w     #12,A7
-main_78:
-       bra.s     main_76
-main_75:
+main_93:
+       bra.s     main_91
+main_90:
 ; }
 ; else
 ; {
@@ -1632,29 +1801,29 @@ main_75:
        add.l     #_listaDir,A0
        move.l    (A0),A0
        jsr       (A0)
-main_76:
+main_91:
 ; }
 ; }
 ; break;
-       bra       main_6
-main_64:
+       bra       main_21
+main_79:
 ; }
 ; else if (vopc == 1 || vopc == 2 || vopc == 4) // Rename (1) / Copy (2) File & Create Directory (4)
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        cmp.b     #1,D0
-       beq.s     main_81
-       move.b    -142(A6),D0
+       beq.s     main_96
+       move.b    -150(A6),D0
        cmp.b     #2,D0
-       beq.s     main_81
-       move.b    -142(A6),D0
+       beq.s     main_96
+       move.b    -150(A6),D0
        cmp.b     #4,D0
-       bne       main_79
-main_81:
+       bne       main_94
+main_96:
 ; {
 ; // Renomeia Arquivo
 ; linhastatus(1, "\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        pea       1
        move.l    A5,A0
@@ -1664,7 +1833,7 @@ main_81:
        addq.w    #8,A7
 ; // Abre janela para pedir novo nome
 ; vstring[0] = '\0';
-       clr.b     -136+0(A6)
+       clr.b     -144+0(A6)
 ; SaveScreenNew(&vsavescr,10,40,240,60);
        pea       60
        pea       240
@@ -1675,24 +1844,24 @@ main_81:
        jsr       (A0)
        add.w     #20,A7
 ; switch (vopc)
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        and.l     #255,D0
        cmp.l     #2,D0
-       beq       main_85
-       bhi.s     main_87
+       beq       main_100
+       bhi.s     main_102
        cmp.l     #1,D0
-       beq.s     main_84
-       bra       main_83
-main_87:
+       beq.s     main_99
+       bra       main_98
+main_102:
        cmp.l     #4,D0
-       beq       main_86
-       bra       main_83
-main_84:
+       beq       main_101
+       bra       main_98
+main_99:
 ; {
 ; case 1:
 ; linhastatus(5, "\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        pea       5
        move.l    A5,A0
@@ -1707,7 +1876,7 @@ main_84:
        pea       40
        pea       10
        move.l    A5,A0
-       add.l     #@files_22,A0
+       add.l     #@files_32,A0
        move.l    A0,-(A7)
        move.l    8410566,A0
        jsr       (A0)
@@ -1728,7 +1897,7 @@ main_84:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_23,A0
+       add.l     #@files_33,A0
        move.l    A0,-(A7)
        pea       8
        pea       57
@@ -1737,12 +1906,12 @@ main_84:
        jsr       (A0)
        add.w     #24,A7
 ; break;
-       bra       main_83
-main_85:
+       bra       main_98
+main_100:
 ; case 2:
 ; linhastatus(8, "\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        pea       8
        move.l    A5,A0
@@ -1757,7 +1926,7 @@ main_85:
        pea       40
        pea       10
        move.l    A5,A0
-       add.l     #@files_24,A0
+       add.l     #@files_34,A0
        move.l    A0,-(A7)
        move.l    8410566,A0
        jsr       (A0)
@@ -1778,7 +1947,7 @@ main_85:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_25,A0
+       add.l     #@files_35,A0
        move.l    A0,-(A7)
        pea       8
        pea       57
@@ -1787,12 +1956,12 @@ main_85:
        jsr       (A0)
        add.w     #24,A7
 ; break;
-       bra       main_83
-main_86:
+       bra       main_98
+main_101:
 ; case 4:
 ; linhastatus(9, "\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        pea       9
        move.l    A5,A0
@@ -1807,7 +1976,7 @@ main_86:
        pea       40
        pea       10
        move.l    A5,A0
-       add.l     #@files_26,A0
+       add.l     #@files_36,A0
        move.l    A0,-(A7)
        move.l    8410566,A0
        jsr       (A0)
@@ -1828,7 +1997,7 @@ main_86:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_27,A0
+       add.l     #@files_37,A0
        move.l    A0,-(A7)
        pea       8
        pea       57
@@ -1837,14 +2006,14 @@ main_86:
        jsr       (A0)
        add.w     #24,A7
 ; break;
-main_83:
+main_98:
 ; }
 ; fillin(&vstring, 80, 57, 130, WINDISP);
        clr.l     -(A7)
        pea       130
        pea       57
        pea       80
-       pea       -136(A6)
+       pea       -144(A6)
        move.l    8410602,A0
        jsr       (A0)
        add.w     #20,A7
@@ -1855,7 +2024,7 @@ main_83:
        pea       78
        pea       18
        move.l    A5,A0
-       add.l     #@files_28,A0
+       add.l     #@files_38,A0
        move.l    A0,-(A7)
        move.l    8410610,A0
        jsr       (A0)
@@ -1867,20 +2036,20 @@ main_83:
        pea       78
        pea       66
        move.l    A5,A0
-       add.l     #@files_29,A0
+       add.l     #@files_39,A0
        move.l    A0,-(A7)
        move.l    8410610,A0
        jsr       (A0)
        add.w     #24,A7
 ; while (1)
-main_88:
+main_103:
 ; {
 ; fillin(&vstring, 80, 57, 130, WINOPER);
        pea       1
        pea       130
        pea       57
        pea       80
-       pea       -136(A6)
+       pea       -144(A6)
        move.l    8410602,A0
        jsr       (A0)
        add.w     #20,A7
@@ -1891,19 +2060,19 @@ main_88:
        pea       78
        pea       18
        move.l    A5,A0
-       add.l     #@files_28,A0
+       add.l     #@files_38,A0
        move.l    A0,-(A7)
        move.l    8410610,A0
        jsr       (A0)
        add.w     #24,A7
        tst.b     D0
-       beq.s     main_91
+       beq.s     main_106
 ; {
 ; vwb = BTOK;
-       move.b    #1,-72(A6)
+       move.b    #1,-80(A6)
 ; break;
-       bra       main_90
-main_91:
+       bra       main_105
+main_106:
 ; }
 ; if (button("CANCEL", 66, 78, 44, 10, WINOPER))
        pea       1
@@ -1912,19 +2081,19 @@ main_91:
        pea       78
        pea       66
        move.l    A5,A0
-       add.l     #@files_29,A0
+       add.l     #@files_39,A0
        move.l    A0,-(A7)
        move.l    8410610,A0
        jsr       (A0)
        add.w     #24,A7
        tst.b     D0
-       beq.s     main_93
+       beq.s     main_108
 ; {
 ; vwb = BTCANCEL;
-       move.b    #2,-72(A6)
+       move.b    #2,-80(A6)
 ; break;
-       bra.s     main_90
-main_93:
+       bra.s     main_105
+main_108:
 ; }
 ; OSTimeDlyHMSM(0, 0, 0, 100);
        pea       100
@@ -1934,8 +2103,8 @@ main_93:
        move.l    8486736,A0
        jsr       (A0)
        add.w     #16,A7
-       bra       main_88
-main_90:
+       bra       main_103
+main_105:
 ; }
 ; RestoreScreen(vsavescr);
        lea       -46(A6),A0
@@ -1947,23 +2116,23 @@ main_90:
        jsr       (A0)
        add.w     #20,A7
 ; if (vwb == BTOK) {
-       move.b    -72(A6),D0
+       move.b    -80(A6),D0
        cmp.b     #1,D0
-       bne       main_123
+       bne       main_138
 ; ix = 0;
-       clr.b     -323(A6)
+       clr.b     -331(A6)
 ; while(vstring[ix])
-main_97:
-       move.b    -323(A6),D0
+main_112:
+       move.b    -331(A6),D0
        and.l     #255,D0
-       lea       -136(A6),A0
+       lea       -144(A6),A0
        tst.b     0(A0,D0.L)
-       beq       main_99
+       beq       main_114
 ; {
 ; vnomefilenew[ix] = mytoupper(vstring[ix]);
-       move.b    -323(A6),D1
+       move.b    -331(A6),D1
        and.l     #255,D1
-       lea       -136(A6),A0
+       lea       -144(A6),A0
        move.b    0(A0,D1.L),D1
        and.l     #255,D1
        move.l    D1,-(A7)
@@ -1972,80 +2141,80 @@ main_97:
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #4,A7
-       move.b    -323(A6),D1
+       move.b    -331(A6),D1
        and.l     #255,D1
-       lea       -160(A6),A0
+       lea       -168(A6),A0
        move.b    D0,0(A0,D1.L)
 ; ix++;
-       addq.b    #1,-323(A6)
-       bra       main_97
-main_99:
+       addq.b    #1,-331(A6)
+       bra       main_112
+main_114:
 ; }
 ; vstring[ix] = 0x00;
-       move.b    -323(A6),D0
+       move.b    -331(A6),D0
        and.l     #255,D0
-       lea       -136(A6),A0
+       lea       -144(A6),A0
        clr.b     0(A0,D0.L)
 ; switch (vopc)
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        and.l     #255,D0
        cmp.l     #2,D0
-       beq       main_103
-       bhi.s     main_105
+       beq       main_118
+       bhi.s     main_120
        cmp.l     #1,D0
-       beq.s     main_102
-       bra       main_101
-main_105:
+       beq.s     main_117
+       bra       main_116
+main_120:
        cmp.l     #4,D0
-       beq       main_104
-       bra       main_101
-main_102:
+       beq       main_119
+       bra       main_116
+main_117:
 ; {
 ; case 1:
 ; mystrcpy(vnomefile,"Confirm\nRename File ?\n\0");
        move.l    A5,A0
-       add.l     #@files_30,A0
+       add.l     #@files_40,A0
        move.l    (A0),-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcpy,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
 ; break;
-       bra       main_101
-main_103:
+       bra       main_116
+main_118:
 ; case 2:
 ; mystrcpy(vnomefile,"Confirm\nCopy File ?\n\0");
        move.l    A5,A0
-       add.l     #@files_31,A0
+       add.l     #@files_41,A0
        move.l    (A0),-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcpy,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
 ; break;
-       bra.s     main_101
-main_104:
+       bra.s     main_116
+main_119:
 ; case 4:
 ; mystrcpy(vnomefile,"Confirm\nCreate Directory ?\n\0");
        move.l    A5,A0
-       add.l     #@files_32,A0
+       add.l     #@files_42,A0
        move.l    (A0),-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcpy,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
 ; break;
-main_101:
+main_116:
 ; }
 ; mystrcat(vnomefile, vstring);
-       pea       -136(A6)
-       pea       -288(A6)
+       pea       -144(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
@@ -2054,56 +2223,56 @@ main_101:
 ; vresp = message(vnomefile,(BTYES | BTNO), 0);
        clr.l     -(A7)
        pea       12
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    8410558,A0
        jsr       (A0)
        add.w     #12,A7
-       move.b    D0,-141(A6)
+       move.b    D0,-149(A6)
 ; if (vresp == BTYES)
-       move.b    -141(A6),D0
+       move.b    -149(A6),D0
        cmp.b     #4,D0
-       bne       main_123
+       bne       main_138
 ; {
 ; if (ee != 99)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       beq       main_114
+       beq       main_129
 ; {
 ; if (vopc == 1)
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        cmp.b     #1,D0
-       bne       main_110
+       bne       main_125
 ; {
 ; mystrcpy(vnomefile,dfile->dir[ee].Name);
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),D1
        move.l    D0,-(A7)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,D1
        move.l    (A7)+,D0
        move.l    D1,-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcpy,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
-       bra       main_112
-main_110:
+       bra       main_127
+main_125:
 ; }
 ; else if (vopc == 2)
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        cmp.b     #2,D0
-       bne       main_112
+       bne       main_127
 ; {
 ; mystrcpy(vnomefile,"CP ");
        move.l    A5,A0
-       add.l     #@files_33,A0
+       add.l     #@files_43,A0
        move.l    (A0),-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcpy,A0
        move.l    (A0),A0
@@ -2114,36 +2283,36 @@ main_110:
        add.l     #_dfile,A0
        move.l    (A0),D1
        move.l    D0,-(A7)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,D1
        move.l    (A7)+,D0
        move.l    D1,-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
-main_112:
+main_127:
 ; }
 ; if (dfile->dir[ee].Ext[0] != 0x00)
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
        move.b    10(A0),D0
-       beq       main_114
+       beq       main_129
 ; {
 ; mystrcat(vnomefile,".");
        move.l    A5,A0
-       add.l     #@files_18,A0
+       add.l     #@files_28,A0
        move.l    (A0),-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
@@ -2156,41 +2325,41 @@ main_112:
        move.l    D0,-(A7)
        move.l    (A0),D0
        move.l    D1,-(A7)
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
-       muls      #40,D1
+       muls      #39,D1
        add.l     D1,D0
        move.l    (A7)+,D1
        add.l     D0,D1
        move.l    (A7)+,D0
        move.l    D1,-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
-main_114:
+main_129:
 ; }
 ; }
 ; switch (vopc)
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        and.l     #255,D0
        cmp.l     #2,D0
-       beq       main_119
-       bhi.s     main_121
+       beq       main_134
+       bhi.s     main_136
        cmp.l     #1,D0
-       beq.s     main_118
-       bra       main_117
-main_121:
+       beq.s     main_133
+       bra       main_132
+main_136:
        cmp.l     #4,D0
-       beq       main_120
-       bra       main_117
-main_118:
+       beq       main_135
+       bra       main_132
+main_133:
 ; {
 ; case 1:
 ; linhastatus(5, vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        pea       5
        move.l    A5,A0
        add.l     #_linhastatus,A0
@@ -2198,18 +2367,18 @@ main_118:
        jsr       (A0)
        addq.w    #8,A7
 ; vresp = fsRenameFile(vnomefile,vnomefilenew);
-       pea       -160(A6)
-       pea       -288(A6)
+       pea       -168(A6)
+       pea       -296(A6)
        move.l    8486716,A0
        jsr       (A0)
        addq.w    #8,A7
-       move.b    D0,-141(A6)
+       move.b    D0,-149(A6)
 ; break;
-       bra       main_117
-main_119:
+       bra       main_132
+main_134:
 ; case 2:
 ; linhastatus(8, vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        pea       8
        move.l    A5,A0
        add.l     #_linhastatus,A0
@@ -2218,34 +2387,34 @@ main_119:
        addq.w    #8,A7
 ; mystrcat(vnomefile," ");
        move.l    A5,A0
-       add.l     #@files_14,A0
+       add.l     #@files_24,A0
        move.l    (A0),-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
 ; mystrcat(vnomefile,vnomefilenew);
-       pea       -160(A6)
-       pea       -288(A6)
+       pea       -168(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
 ; vresp = fsOsCommand(vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    8486680,A0
        jsr       (A0)
        addq.w    #4,A7
-       move.b    D0,-141(A6)
+       move.b    D0,-149(A6)
 ; break;
-       bra.s     main_117
-main_120:
+       bra.s     main_132
+main_135:
 ; case 4:
 ; linhastatus(9, vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        pea       9
        move.l    A5,A0
        add.l     #_linhastatus,A0
@@ -2253,75 +2422,75 @@ main_120:
        jsr       (A0)
        addq.w    #8,A7
 ; vresp = fsMakeDir(vnomefilenew);
-       pea       -160(A6)
+       pea       -168(A6)
        move.l    8486724,A0
        jsr       (A0)
        addq.w    #4,A7
-       move.b    D0,-141(A6)
+       move.b    D0,-149(A6)
 ; break;
-main_117:
+main_132:
 ; }
 ; if (vresp >= ERRO_D_START)
-       move.b    -141(A6),D0
+       move.b    -149(A6),D0
        and.l     #255,D0
        cmp.l     #-16,D0
-       blo       main_122
+       blo       main_137
 ; {
 ; switch (vopc)
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        and.l     #255,D0
        cmp.l     #2,D0
-       beq       main_127
-       bhi.s     main_129
+       beq       main_142
+       bhi.s     main_144
        cmp.l     #1,D0
-       beq.s     main_126
-       bra       main_125
-main_129:
+       beq.s     main_141
+       bra       main_140
+main_144:
        cmp.l     #4,D0
-       beq       main_128
-       bra       main_125
-main_126:
+       beq       main_143
+       bra       main_140
+main_141:
 ; {
 ; case 1:
 ; message("Rename File Error.\0",(BTCLOSE), 0);
        clr.l     -(A7)
        pea       64
        move.l    A5,A0
-       add.l     #@files_34,A0
+       add.l     #@files_44,A0
        move.l    A0,-(A7)
        move.l    8410558,A0
        jsr       (A0)
        add.w     #12,A7
 ; break;
-       bra       main_125
-main_127:
+       bra       main_140
+main_142:
 ; case 2:
 ; message("Copy File Error.\0",(BTCLOSE), 0);
        clr.l     -(A7)
        pea       64
        move.l    A5,A0
-       add.l     #@files_35,A0
+       add.l     #@files_45,A0
        move.l    A0,-(A7)
        move.l    8410558,A0
        jsr       (A0)
        add.w     #12,A7
 ; break;
-       bra.s     main_125
-main_128:
+       bra.s     main_140
+main_143:
 ; case 4:
 ; message("Create Directory Error.\0",(BTCLOSE), 0);
        clr.l     -(A7)
        pea       64
        move.l    A5,A0
-       add.l     #@files_36,A0
+       add.l     #@files_46,A0
        move.l    A0,-(A7)
        move.l    8410558,A0
        jsr       (A0)
        add.w     #12,A7
 ; break;
-main_125:
-       bra.s     main_123
-main_122:
+main_140:
+       bra.s     main_138
+main_137:
 ; }
 ; }
 ; else
@@ -2336,13 +2505,13 @@ main_122:
        add.l     #_listaDir,A0
        move.l    (A0),A0
        jsr       (A0)
-main_123:
+main_138:
 ; }
 ; }
 ; }
 ; linhastatus(0, "\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        clr.l     -(A7)
        move.l    A5,A0
@@ -2351,9 +2520,9 @@ main_123:
        jsr       (A0)
        addq.w    #8,A7
 ; if (ee != 99)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       beq       main_130
+       beq       main_145
 ; FillRect(8,clinha[ee],8,8,*vcorbg);
        move.l    A5,A0
        add.l     #_vcorbg,A0
@@ -2366,7 +2535,7 @@ main_123:
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
        move.b    0(A0,D1.L),D1
        and.l     #255,D1
@@ -2375,15 +2544,15 @@ main_123:
        move.l    8410514,A0
        jsr       (A0)
        add.w     #20,A7
-main_130:
+main_145:
 ; break;
-       bra       main_6
-main_79:
+       bra       main_21
+main_94:
 ; }
 ; else if (vopc == 3) // Enter Directory  // Usar click duplo tb
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        cmp.b     #3,D0
-       bne       main_132
+       bne       main_147
 ; {
 ; FillRect(8,clinha[ee],8,8,*vcorbg);
        move.l    A5,A0
@@ -2397,7 +2566,7 @@ main_79:
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
        move.b    0(A0,D1.L),D1
        and.l     #255,D1
@@ -2411,13 +2580,13 @@ main_79:
        add.l     #_dfile,A0
        move.l    (A0),D1
        move.l    D0,-(A7)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,D1
        move.l    (A7)+,D0
        move.l    D1,-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcpy,A0
        move.l    (A0),A0
@@ -2427,18 +2596,18 @@ main_79:
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
        move.b    10(A0),D0
-       beq       main_134
+       beq       main_149
 ; {
 ; mystrcat(vnomefile,".");
        move.l    A5,A0
-       add.l     #@files_18,A0
+       add.l     #@files_28,A0
        move.l    (A0),-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
@@ -2451,24 +2620,24 @@ main_79:
        move.l    D0,-(A7)
        move.l    (A0),D0
        move.l    D1,-(A7)
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
-       muls      #40,D1
+       muls      #39,D1
        add.l     D1,D0
        move.l    (A7)+,D1
        add.l     D0,D1
        move.l    (A7)+,D0
        move.l    D1,-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
-main_134:
+main_149:
 ; }
 ; linhastatus(5, vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        pea       5
        move.l    A5,A0
        add.l     #_linhastatus,A0
@@ -2476,28 +2645,28 @@ main_134:
        jsr       (A0)
        addq.w    #8,A7
 ; vresp = fsChangeDir(vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    8486728,A0
        jsr       (A0)
        addq.w    #4,A7
-       move.b    D0,-141(A6)
+       move.b    D0,-149(A6)
 ; if (vresp >= ERRO_D_START)
-       move.b    -141(A6),D0
+       move.b    -149(A6),D0
        and.l     #255,D0
        cmp.l     #-16,D0
-       blo.s     main_136
+       blo.s     main_151
 ; {
 ; message("Change Directory Error.\0",(BTCLOSE), 0);
        clr.l     -(A7)
        pea       64
        move.l    A5,A0
-       add.l     #@files_37,A0
+       add.l     #@files_47,A0
        move.l    A0,-(A7)
        move.l    8410558,A0
        jsr       (A0)
        add.w     #12,A7
-       bra.s     main_137
-main_136:
+       bra.s     main_152
+main_151:
 ; }
 ; else
 ; {
@@ -2511,11 +2680,11 @@ main_136:
        add.l     #_listaDir,A0
        move.l    (A0),A0
        jsr       (A0)
-main_137:
+main_152:
 ; }
 ; linhastatus(0, "\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        clr.l     -(A7)
        move.l    A5,A0
@@ -2524,13 +2693,13 @@ main_137:
        jsr       (A0)
        addq.w    #8,A7
 ; break;
-       bra       main_6
-main_132:
+       bra       main_21
+main_147:
 ; }
 ; else if (vopc == 6) // Execute File .BIN    // Usar click duplo tb
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        cmp.b     #6,D0
-       bne       main_138
+       bne       main_153
 ; {
 ; FillRect(8,clinha[ee],8,8,*vcorbg);
        move.l    A5,A0
@@ -2544,7 +2713,7 @@ main_132:
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
        move.b    0(A0,D1.L),D1
        and.l     #255,D1
@@ -2558,13 +2727,13 @@ main_132:
        add.l     #_dfile,A0
        move.l    (A0),D1
        move.l    D0,-(A7)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        and.l     #255,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,D1
        move.l    (A7)+,D0
        move.l    D1,-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcpy,A0
        move.l    (A0),A0
@@ -2572,9 +2741,9 @@ main_132:
        addq.w    #8,A7
 ; mystrcat(vnomefile,".");
        move.l    A5,A0
-       add.l     #@files_18,A0
+       add.l     #@files_28,A0
        move.l    (A0),-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
@@ -2587,22 +2756,22 @@ main_132:
        move.l    D0,-(A7)
        move.l    (A0),D0
        move.l    D1,-(A7)
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
-       muls      #40,D1
+       muls      #39,D1
        add.l     D1,D0
        move.l    (A7)+,D1
        add.l     D0,D1
        move.l    (A7)+,D0
        move.l    D1,-(A7)
-       pea       -288(A6)
+       pea       -296(A6)
        move.l    A5,A0
        add.l     #_mystrcat,A0
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
 ; linhastatus(5, vnomefile);
-       pea       -288(A6)
+       pea       -296(A6)
        pea       5
        move.l    A5,A0
        add.l     #_linhastatus,A0
@@ -2613,7 +2782,7 @@ main_132:
 ; // vresp = xxxxxx.
 ; linhastatus(0, "\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        clr.l     -(A7)
        move.l    A5,A0
@@ -2622,18 +2791,18 @@ main_132:
        jsr       (A0)
        addq.w    #8,A7
 ; break;
-       bra       main_6
-main_138:
+       bra       main_21
+main_153:
 ; }
 ; else if (vopc == 7) // Close Menu
-       move.b    -142(A6),D0
+       move.b    -150(A6),D0
        cmp.b     #7,D0
-       bne       main_140
+       bne       main_155
 ; {
 ; if (ee != 99)
-       move.b    -319(A6),D0
+       move.b    -327(A6),D0
        cmp.b     #99,D0
-       beq       main_142
+       beq       main_157
 ; FillRect(8,clinha[ee],8,8,*vcorbg);
        move.l    A5,A0
        add.l     #_vcorbg,A0
@@ -2646,7 +2815,7 @@ main_138:
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.b    -319(A6),D1
+       move.b    -327(A6),D1
        and.l     #255,D1
        move.b    0(A0,D1.L),D1
        and.l     #255,D1
@@ -2655,12 +2824,12 @@ main_138:
        move.l    8410514,A0
        jsr       (A0)
        add.w     #20,A7
-main_142:
+main_157:
 ; break;
-       bra       main_6
-main_140:
-       bra       main_156
-main_7:
+       bra       main_21
+main_155:
+       bra       main_171
+main_22:
 ; }
 ; }
 ; }
@@ -2668,24 +2837,24 @@ main_7:
        lea       -26(A6),A0
        move.b    (A0),D0
        cmp.b     #1,D0
-       bne       main_156
+       bne       main_171
 ; {
 ; if (mouseData.vposty > 170) {
        lea       -26(A6),A0
        move.b    5(A0),D0
        and.w     #255,D0
        cmp.w     #170,D0
-       bls       main_156
+       bls       main_171
 ; // Ultima Linha
 ; if (mouseData.vpostx > 5 && mouseData.vpostx <= 20) {               // Flecha Esquerda
        lea       -26(A6),A0
        move.b    4(A0),D0
        cmp.b     #5,D0
-       bls       main_148
+       bls       main_163
        lea       -26(A6),A0
        move.b    4(A0),D0
        cmp.b     #20,D0
-       bhi       main_148
+       bhi       main_163
 ; *vposold = *vpos;
        move.l    A5,A0
        add.l     #_vpos,A0
@@ -2700,39 +2869,39 @@ main_7:
        move.l    (A0),A0
        move.w    (A0),D0
        cmp.w     #14,D0
-       bhs.s     main_150
+       bhs.s     main_165
 ; *vpos = 0;
        move.l    A5,A0
        add.l     #_vpos,A0
        move.l    (A0),A0
        clr.w     (A0)
-       bra.s     main_151
-main_150:
+       bra.s     main_166
+main_165:
 ; else
 ; *vpos = *vpos - 14;
        move.l    A5,A0
        add.l     #_vpos,A0
        move.l    (A0),A0
        sub.w     #14,(A0)
-main_151:
+main_166:
 ; listaDir();
        move.l    A5,A0
        add.l     #_listaDir,A0
        move.l    (A0),A0
        jsr       (A0)
 ; break;
-       bra       main_6
-main_148:
+       bra       main_21
+main_163:
 ; }
 ; else if (mouseData.vpostx >= 25 && mouseData.vpostx <= 40) {         // Flecha Direita
        lea       -26(A6),A0
        move.b    4(A0),D0
        cmp.b     #25,D0
-       blo       main_152
+       blo       main_167
        lea       -26(A6),A0
        move.b    4(A0),D0
        cmp.b     #40,D0
-       bhi       main_152
+       bhi       main_167
 ; *vposold = *vpos;
        move.l    A5,A0
        add.l     #_vpos,A0
@@ -2752,36 +2921,36 @@ main_148:
        move.l    (A0),A0
        jsr       (A0)
 ; break;
-       bra       main_6
-main_152:
+       bra       main_21
+main_167:
 ; }
 ; else if (mouseData.vpostx >= 100 && mouseData.vpostx <= 120) {       // Search
        lea       -26(A6),A0
        move.b    4(A0),D0
        cmp.b     #100,D0
-       blo.s     main_154
+       blo.s     main_169
        lea       -26(A6),A0
        move.b    4(A0),D0
        cmp.b     #120,D0
-       bhi.s     main_154
+       bhi.s     main_169
 ; break;
-       bra       main_6
-main_154:
+       bra       main_21
+main_169:
 ; }
 ; else if (mouseData.vpostx >= 200 && mouseData.vpostx <= 220) {       // Sair
        lea       -26(A6),A0
        move.b    4(A0),D0
        and.w     #255,D0
        cmp.w     #200,D0
-       blo       main_156
+       blo       main_171
        lea       -26(A6),A0
        move.b    4(A0),D0
        and.w     #255,D0
        cmp.w     #220,D0
-       bhi.s     main_156
+       bhi.s     main_171
 ; linhastatus(7,"\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        pea       7
        move.l    A5,A0
@@ -2790,10 +2959,10 @@ main_154:
        jsr       (A0)
        addq.w    #8,A7
 ; vcont = 0;
-       clr.b     -324(A6)
+       clr.b     -332(A6)
 ; break;
-       bra.s     main_6
-main_156:
+       bra.s     main_21
+main_171:
 ; }
 ; }
 ; }
@@ -2805,12 +2974,12 @@ main_156:
        move.l    8486736,A0
        jsr       (A0)
        add.w     #16,A7
-       bra       main_4
-main_6:
+       bra       main_19
+main_21:
 ; }
 ; if (vcont)
-       tst.b     -324(A6)
-       beq.s     main_158
+       tst.b     -332(A6)
+       beq.s     main_173
 ; OSTimeDlyHMSM(0, 0, 0, 100);
        pea       100
        clr.l     -(A7)
@@ -2819,9 +2988,9 @@ main_6:
        move.l    8486736,A0
        jsr       (A0)
        add.w     #16,A7
-main_158:
-       bra       main_1
-main_3:
+main_173:
+       bra       main_16
+main_18:
 ; }
 ; TrocaSpriteMouse(MOUSE_HOURGLASS);
        pea       2
@@ -2849,6 +3018,7 @@ main_3:
        move.l    8486700,A0
        jsr       (A0)
        addq.w    #4,A7
+main_15:
        unlk      A6
        rts
 ; }
@@ -3004,7 +3174,7 @@ linhastatusDef_5:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_38,A0
+       add.l     #@files_48,A0
        move.l    A0,-(A7)
        pea       8
        pea       180
@@ -3032,7 +3202,7 @@ linhastatusDef_6:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_39,A0
+       add.l     #@files_49,A0
        move.l    A0,-(A7)
        pea       8
        pea       180
@@ -3060,7 +3230,7 @@ linhastatusDef_7:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_40,A0
+       add.l     #@files_50,A0
        move.l    A0,-(A7)
        pea       8
        pea       180
@@ -3088,7 +3258,7 @@ linhastatusDef_8:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_41,A0
+       add.l     #@files_51,A0
        move.l    A0,-(A7)
        pea       8
        pea       180
@@ -3116,7 +3286,7 @@ linhastatusDef_9:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_42,A0
+       add.l     #@files_52,A0
        move.l    A0,-(A7)
        pea       8
        pea       180
@@ -3144,7 +3314,7 @@ linhastatusDef_10:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_43,A0
+       add.l     #@files_53,A0
        move.l    A0,-(A7)
        pea       8
        pea       180
@@ -3172,7 +3342,7 @@ linhastatusDef_11:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_44,A0
+       add.l     #@files_54,A0
        move.l    A0,-(A7)
        pea       8
        pea       180
@@ -3200,7 +3370,7 @@ linhastatusDef_12:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_45,A0
+       add.l     #@files_55,A0
        move.l    A0,-(A7)
        pea       8
        pea       180
@@ -3228,7 +3398,7 @@ linhastatusDef_13:
        and.l     #65535,D1
        move.l    D1,-(A7)
        move.l    A5,A0
-       add.l     #@files_46,A0
+       add.l     #@files_56,A0
        move.l    A0,-(A7)
        pea       8
        pea       180
@@ -3274,14 +3444,80 @@ linhastatusDef_14:
 ; {
        xdef      _carregaDirDef
 _carregaDirDef:
-       link      A6,#-160
+       link      A6,#-168
 ; unsigned char vcont, ikk, ix, iy, cc, dd, ee, cnum[20];
 ; unsigned char vnomefile[32], dsize;
 ; unsigned char sqtdtam[10], cuntam;
+; unsigned char vlen;
+; unsigned char destIdx;
 ; unsigned long vtotbytes = 0, vqtdtam;
-       clr.l     -86(A6)
+       clr.l     -90(A6)
 ; FILES_DIR ddir;
+; FILES_DIR *pDestDir;
 ; FAT32_DIR vdirfiles;
+; writeLongSerial("Aqui 332.666.2-[\0");
+       move.l    A5,A0
+       add.l     #@files_57,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; myitoa(dfile,sqtdtam,16);
+       pea       16
+       pea       -104(A6)
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),-(A7)
+       move.l    A5,A0
+       add.l     #_myitoa,A0
+       move.l    (A0),A0
+       jsr       (A0)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       pea       -104(A6)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_13,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; if (vMemTotal == 0 || dfile == (LIST_DIR *)1 || dFileCursor == (unsigned char *)1)
+       move.l    A5,A0
+       add.l     #_vMemTotal,A0
+       move.l    (A0),D0
+       beq.s     carregaDirDef_3
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),D0
+       cmp.l     #1,D0
+       beq.s     carregaDirDef_3
+       move.l    A5,A0
+       add.l     #_dFileCursor,A0
+       move.l    (A0),D0
+       cmp.l     #1,D0
+       bne.s     carregaDirDef_1
+carregaDirDef_3:
+; {
+; writeLongSerial("CD0-INITERR\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_58,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; TrocaSpriteMouse(MOUSE_POINTER);
+       pea       1
+       move.l    8410570,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; return;
+       bra       carregaDirDef_4
+carregaDirDef_1:
+; }
 ; // Leitura dos Arquivos
 ; *dFileCursor = 0;
        move.l    A5,A0
@@ -3289,12 +3525,7 @@ _carregaDirDef:
        move.l    (A0),A0
        clr.b     (A0)
 ; dsize = sizeof(FILES_DIR);
-       move.b    #40,-99(A6)
-; dfile->pos = 0;
-       move.l    A5,A0
-       add.l     #_dfile,A0
-       move.l    (A0),A0
-       clr.l     6000(A0)
+       move.b    #39,-105(A6)
 ; TrocaSpriteMouse(MOUSE_HOURGLASS);
        pea       2
        move.l    8410570,A0
@@ -3313,113 +3544,150 @@ _carregaDirDef:
        bhs       carregaDirDef_5
 ; {
 ; while (1)
-carregaDirDef_3:
+carregaDirDef_7:
 ; {
+; writeSerial('W');
+       pea       87
+       move.l    1162,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("CD0-CALL\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_59,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeSerial('w');
+       pea       119
+       move.l    1162,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; fsGetDirAtuData(&vdirfiles);
        pea       -38(A6)
        move.l    8486656,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("CD0-RET\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_60,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
 ; if (vdirfiles.Attr != ATTR_VOLUME && (vdirfiles.Name[0] != '.' || (vdirfiles.Name[0] == '.' && vdirfiles.Name[1] == '.' )))
        lea       -38(A6),A0
        move.b    11(A0),D0
        cmp.b     #8,D0
-       beq       carregaDirDef_6
+       beq       carregaDirDef_10
        lea       -38(A6),A0
        move.b    (A0),D0
        cmp.b     #46,D0
-       bne.s     carregaDirDef_8
+       bne.s     carregaDirDef_12
        lea       -38(A6),A0
        move.b    (A0),D0
        cmp.b     #46,D0
-       bne       carregaDirDef_6
+       bne       carregaDirDef_10
        lea       -38(A6),A0
        move.b    1(A0),D0
        cmp.b     #46,D0
-       bne       carregaDirDef_6
-carregaDirDef_8:
+       bne       carregaDirDef_10
+carregaDirDef_12:
 ; {
+; if (*dFileCursor >= 150)
+       move.l    A5,A0
+       add.l     #_dFileCursor,A0
+       move.l    (A0),A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #150,D0
+       blo.s     carregaDirDef_13
+; {
+; break;
+       bra       carregaDirDef_9
+carregaDirDef_13:
+; }
 ; // Nome
 ; for (cc = 0; cc <= 7; cc++)
-       clr.b     -155(A6)
-carregaDirDef_9:
-       move.b    -155(A6),D0
+       clr.b     -161(A6)
+carregaDirDef_15:
+       move.b    -161(A6),D0
        cmp.b     #7,D0
-       bhi       carregaDirDef_11
+       bhi       carregaDirDef_17
 ; {
 ; if (vdirfiles.Name[cc] > 32)
        lea       -38(A6),A0
-       move.b    -155(A6),D0
+       move.b    -161(A6),D0
        and.l     #255,D0
        move.b    0(A0,D0.L),D0
        cmp.b     #32,D0
-       bls.s     carregaDirDef_12
+       bls.s     carregaDirDef_18
 ; ddir.Name[cc] = vdirfiles.Name[cc];
        lea       -38(A6),A0
-       move.b    -155(A6),D0
+       move.b    -161(A6),D0
        and.l     #255,D0
-       lea       -78(A6),A1
-       move.b    -155(A6),D1
+       lea       -82(A6),A1
+       move.b    -161(A6),D1
        and.l     #255,D1
        move.b    0(A0,D0.L),0(A1,D1.L)
-       bra.s     carregaDirDef_13
-carregaDirDef_12:
+       bra.s     carregaDirDef_19
+carregaDirDef_18:
 ; else
 ; ddir.Name[cc] = '\0';
-       lea       -78(A6),A0
-       move.b    -155(A6),D0
+       lea       -82(A6),A0
+       move.b    -161(A6),D0
        and.l     #255,D0
        clr.b     0(A0,D0.L)
-carregaDirDef_13:
-       addq.b    #1,-155(A6)
-       bra       carregaDirDef_9
-carregaDirDef_11:
+carregaDirDef_19:
+       addq.b    #1,-161(A6)
+       bra       carregaDirDef_15
+carregaDirDef_17:
 ; }
 ; ddir.Name[8] = '\0';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        clr.b     8(A0)
 ; // Extensao
 ; for (cc = 0; cc <= 2; cc++)
-       clr.b     -155(A6)
-carregaDirDef_14:
-       move.b    -155(A6),D0
+       clr.b     -161(A6)
+carregaDirDef_20:
+       move.b    -161(A6),D0
        cmp.b     #2,D0
-       bhi       carregaDirDef_16
+       bhi       carregaDirDef_22
 ; {
 ; if (vdirfiles.Ext[cc] > 32)
        lea       -38(A6),A0
-       move.b    -155(A6),D0
+       move.b    -161(A6),D0
        and.l     #255,D0
        add.l     D0,A0
        move.b    8(A0),D0
        cmp.b     #32,D0
-       bls.s     carregaDirDef_17
+       bls.s     carregaDirDef_23
 ; ddir.Ext[cc] = vdirfiles.Ext[cc];
        lea       -38(A6),A0
-       move.b    -155(A6),D0
+       move.b    -161(A6),D0
        and.l     #255,D0
        add.l     D0,A0
-       lea       -78(A6),A1
-       move.b    -155(A6),D0
+       lea       -82(A6),A1
+       move.b    -161(A6),D0
        and.l     #255,D0
        add.l     D0,A1
        move.b    8(A0),10(A1)
-       bra.s     carregaDirDef_18
-carregaDirDef_17:
+       bra.s     carregaDirDef_24
+carregaDirDef_23:
 ; else
 ; ddir.Ext[cc] = '\0';
-       lea       -78(A6),A0
-       move.b    -155(A6),D0
+       lea       -82(A6),A0
+       move.b    -161(A6),D0
        and.l     #255,D0
        add.l     D0,A0
        clr.b     10(A0)
-carregaDirDef_18:
-       addq.b    #1,-155(A6)
-       bra       carregaDirDef_14
-carregaDirDef_16:
+carregaDirDef_24:
+       addq.b    #1,-161(A6)
+       bra       carregaDirDef_20
+carregaDirDef_22:
 ; }
 ; ddir.Ext[3] = '\0';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        clr.b     13(A0)
 ; // Data Ultima Modificacao
 ; // Mes
@@ -3429,45 +3697,45 @@ carregaDirDef_16:
        and.l     #65535,D0
        and.l     #480,D0
        lsr.l     #5,D0
-       move.l    D0,-82(A6)
+       move.l    D0,-86(A6)
 ; if (vqtdtam < 1 || vqtdtam > 12)
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        cmp.l     #1,D0
-       blo.s     carregaDirDef_21
-       move.l    -82(A6),D0
+       blo.s     carregaDirDef_27
+       move.l    -86(A6),D0
        cmp.l     #12,D0
-       bls.s     carregaDirDef_19
-carregaDirDef_21:
+       bls.s     carregaDirDef_25
+carregaDirDef_27:
 ; vqtdtam = 1;
-       move.l    #1,-82(A6)
-carregaDirDef_19:
+       move.l    #1,-86(A6)
+carregaDirDef_25:
 ; vqtdtam--;
-       subq.l    #1,-82(A6)
+       subq.l    #1,-86(A6)
 ; ddir.Modify[0] = vmesc[vqtdtam][0];
        move.l    A5,A0
        add.l     #_vmesc,A0
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        muls      #3,D0
-       lea       -78(A6),A1
+       lea       -82(A6),A1
        move.b    0(A0,D0.L),14(A1)
 ; ddir.Modify[1] = vmesc[vqtdtam][1];
        move.l    A5,A0
        add.l     #_vmesc,A0
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        muls      #3,D0
        add.l     D0,A0
-       lea       -78(A6),A1
+       lea       -82(A6),A1
        move.b    1(A0),15(A1)
 ; ddir.Modify[2] = vmesc[vqtdtam][2];
        move.l    A5,A0
        add.l     #_vmesc,A0
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        muls      #3,D0
        add.l     D0,A0
-       lea       -78(A6),A1
+       lea       -82(A6),A1
        move.b    2(A0),16(A1)
 ; ddir.Modify[3] = '/';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #47,17(A0)
 ; // Dia
 ; vqtdtam = vdirfiles.UpdateDate & 0x001F;
@@ -3475,11 +3743,11 @@ carregaDirDef_19:
        move.w    18(A0),D0
        and.l     #65535,D0
        and.l     #31,D0
-       move.l    D0,-82(A6)
+       move.l    D0,-86(A6)
 ; mymemset(sqtdtam, 0x0, 10);
        pea       10
        clr.l     -(A7)
-       pea       -98(A6)
+       pea       -104(A6)
        move.l    A5,A0
        add.l     #_mymemset,A0
        move.l    (A0),A0
@@ -3487,37 +3755,37 @@ carregaDirDef_19:
        add.w     #12,A7
 ; myitoa(vqtdtam, sqtdtam, 10);
        pea       10
-       pea       -98(A6)
-       move.l    -82(A6),-(A7)
+       pea       -104(A6)
+       move.l    -86(A6),-(A7)
        move.l    A5,A0
        add.l     #_myitoa,A0
        move.l    (A0),A0
        jsr       (A0)
        add.w     #12,A7
 ; if (vqtdtam < 10) {
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        cmp.l     #10,D0
-       bhs.s     carregaDirDef_22
+       bhs.s     carregaDirDef_28
 ; ddir.Modify[4] = '0';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #48,18(A0)
 ; ddir.Modify[5] = sqtdtam[0];
-       lea       -78(A6),A0
-       move.b    -98+0(A6),19(A0)
-       bra.s     carregaDirDef_23
-carregaDirDef_22:
+       lea       -82(A6),A0
+       move.b    -104+0(A6),19(A0)
+       bra.s     carregaDirDef_29
+carregaDirDef_28:
 ; }
 ; else {
 ; ddir.Modify[4] = sqtdtam[0];
-       lea       -78(A6),A0
-       move.b    -98+0(A6),18(A0)
+       lea       -82(A6),A0
+       move.b    -104+0(A6),18(A0)
 ; ddir.Modify[5] = sqtdtam[1];
-       lea       -78(A6),A0
-       move.b    -98+1(A6),19(A0)
-carregaDirDef_23:
+       lea       -82(A6),A0
+       move.b    -104+1(A6),19(A0)
+carregaDirDef_29:
 ; }
 ; ddir.Modify[6] = '/';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #47,20(A0)
 ; // Ano
 ; vqtdtam = ((vdirfiles.UpdateDate & 0xFE00) >> 9) + 1980;
@@ -3528,119 +3796,147 @@ carregaDirDef_23:
        lsr.l     #8,D0
        lsr.l     #1,D0
        add.l     #1980,D0
-       move.l    D0,-82(A6)
+       move.l    D0,-86(A6)
+; writeLongSerial("CD1\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_61,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; mymemset(sqtdtam, 0x0, 10);
        pea       10
        clr.l     -(A7)
-       pea       -98(A6)
+       pea       -104(A6)
        move.l    A5,A0
        add.l     #_mymemset,A0
        move.l    (A0),A0
        jsr       (A0)
        add.w     #12,A7
+; writeLongSerial("CD2\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_62,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; myitoa(vqtdtam, sqtdtam, 10);
        pea       10
-       pea       -98(A6)
-       move.l    -82(A6),-(A7)
+       pea       -104(A6)
+       move.l    -86(A6),-(A7)
        move.l    A5,A0
        add.l     #_myitoa,A0
        move.l    (A0),A0
        jsr       (A0)
        add.w     #12,A7
 ; ddir.Modify[7] = sqtdtam[0];
-       lea       -78(A6),A0
-       move.b    -98+0(A6),21(A0)
+       lea       -82(A6),A0
+       move.b    -104+0(A6),21(A0)
 ; ddir.Modify[8] = sqtdtam[1];
-       lea       -78(A6),A0
-       move.b    -98+1(A6),22(A0)
+       lea       -82(A6),A0
+       move.b    -104+1(A6),22(A0)
 ; ddir.Modify[9] = sqtdtam[2];
-       lea       -78(A6),A0
-       move.b    -98+2(A6),23(A0)
+       lea       -82(A6),A0
+       move.b    -104+2(A6),23(A0)
 ; ddir.Modify[10] = sqtdtam[3];
-       lea       -78(A6),A0
-       move.b    -98+3(A6),24(A0)
+       lea       -82(A6),A0
+       move.b    -104+3(A6),24(A0)
 ; ddir.Modify[11] = '\0';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        clr.b     25(A0)
 ; // Tamanho
 ; if (vdirfiles.Attr != ATTR_DIRECTORY) {
        lea       -38(A6),A0
        move.b    11(A0),D0
        cmp.b     #16,D0
-       beq       carregaDirDef_24
+       beq       carregaDirDef_30
 ; // Reduz o tamanho a unidade (GB, MB ou KB)
 ; vqtdtam = vdirfiles.Size;
        lea       -38(A6),A0
-       move.l    26(A0),-82(A6)
+       move.l    26(A0),-86(A6)
 ; if ((vqtdtam & 0xC0000000) != 0) {
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        and.l     #-1073741824,D0
-       beq.s     carregaDirDef_26
+       beq.s     carregaDirDef_32
 ; cuntam = 'G';
-       move.b    #71,-87(A6)
+       move.b    #71,-93(A6)
 ; vqtdtam = ((vqtdtam & 0xC0000000) >> 30) + 1;
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        and.l     #-1073741824,D0
        lsr.l     #8,D0
        lsr.l     #8,D0
        lsr.l     #8,D0
        lsr.l     #6,D0
        addq.l    #1,D0
-       move.l    D0,-82(A6)
-       bra       carregaDirDef_31
-carregaDirDef_26:
+       move.l    D0,-86(A6)
+       bra       carregaDirDef_37
+carregaDirDef_32:
 ; }
 ; else if ((vqtdtam & 0x3FF00000) != 0) {
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        and.l     #1072693248,D0
-       beq.s     carregaDirDef_28
+       beq.s     carregaDirDef_34
 ; cuntam = 'M';
-       move.b    #77,-87(A6)
+       move.b    #77,-93(A6)
 ; vqtdtam = ((vqtdtam & 0x3FF00000) >> 20) + 1;
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        and.l     #1072693248,D0
        lsr.l     #8,D0
        lsr.l     #8,D0
        lsr.l     #4,D0
        addq.l    #1,D0
-       move.l    D0,-82(A6)
-       bra.s     carregaDirDef_31
-carregaDirDef_28:
+       move.l    D0,-86(A6)
+       bra.s     carregaDirDef_37
+carregaDirDef_34:
 ; }
 ; else if ((vqtdtam & 0x000FFC00) != 0) {
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        and.l     #1047552,D0
-       beq.s     carregaDirDef_30
+       beq.s     carregaDirDef_36
 ; cuntam = 'K';
-       move.b    #75,-87(A6)
+       move.b    #75,-93(A6)
 ; vqtdtam = ((vqtdtam & 0x000FFC00) >> 10) + 1;
-       move.l    -82(A6),D0
+       move.l    -86(A6),D0
        and.l     #1047552,D0
        lsr.l     #8,D0
        lsr.l     #2,D0
        addq.l    #1,D0
-       move.l    D0,-82(A6)
-       bra.s     carregaDirDef_31
-carregaDirDef_30:
+       move.l    D0,-86(A6)
+       bra.s     carregaDirDef_37
+carregaDirDef_36:
 ; }
 ; else
 ; cuntam = ' ';
-       move.b    #32,-87(A6)
-carregaDirDef_31:
+       move.b    #32,-93(A6)
+carregaDirDef_37:
 ; // Transforma para decimal
+; writeLongSerial("CD3\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_63,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; mymemset(sqtdtam, 0x0, 10);
        pea       10
        clr.l     -(A7)
-       pea       -98(A6)
+       pea       -104(A6)
        move.l    A5,A0
        add.l     #_mymemset,A0
        move.l    (A0),A0
        jsr       (A0)
        add.w     #12,A7
+; writeLongSerial("CD4\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_64,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; myitoa(vqtdtam, sqtdtam, 10);
        pea       10
-       pea       -98(A6)
-       move.l    -82(A6),-(A7)
+       pea       -104(A6)
+       move.l    -86(A6),-(A7)
        move.l    A5,A0
        add.l     #_myitoa,A0
        move.l    (A0),A0
@@ -3648,288 +3944,497 @@ carregaDirDef_31:
        add.w     #12,A7
 ; // Primeira Parte da Linha do dir, tamanho
 ; for(ix = 0; ix <= 3; ix++) {
-       clr.b     -157(A6)
-carregaDirDef_32:
-       move.b    -157(A6),D0
+       clr.b     -163(A6)
+carregaDirDef_38:
+       move.b    -163(A6),D0
        cmp.b     #3,D0
-       bhi.s     carregaDirDef_34
+       bhi.s     carregaDirDef_40
 ; if (sqtdtam[ix] == 0)
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       move.b    -98(A6,D0.L),D0
-       bne.s     carregaDirDef_35
+       move.b    -104(A6,D0.L),D0
+       bne.s     carregaDirDef_41
 ; break;
-       bra.s     carregaDirDef_34
-carregaDirDef_35:
-       addq.b    #1,-157(A6)
-       bra       carregaDirDef_32
-carregaDirDef_34:
+       bra.s     carregaDirDef_40
+carregaDirDef_41:
+       addq.b    #1,-163(A6)
+       bra       carregaDirDef_38
+carregaDirDef_40:
 ; }
 ; iy = (4 - ix);
        moveq     #4,D0
-       sub.b     -157(A6),D0
-       move.b    D0,-156(A6)
+       sub.b     -163(A6),D0
+       move.b    D0,-162(A6)
 ; for(ix = 0; ix <= 3; ix++) {
-       clr.b     -157(A6)
-carregaDirDef_37:
-       move.b    -157(A6),D0
+       clr.b     -163(A6)
+carregaDirDef_43:
+       move.b    -163(A6),D0
        cmp.b     #3,D0
-       bhi       carregaDirDef_39
+       bhi       carregaDirDef_45
 ; if (iy <= ix) {
-       move.b    -156(A6),D0
-       cmp.b     -157(A6),D0
-       bhi.s     carregaDirDef_40
+       move.b    -162(A6),D0
+       cmp.b     -163(A6),D0
+       bhi.s     carregaDirDef_46
 ; ikk = ix - iy;
-       move.b    -157(A6),D0
-       sub.b     -156(A6),D0
-       move.b    D0,-158(A6)
+       move.b    -163(A6),D0
+       sub.b     -162(A6),D0
+       move.b    D0,-164(A6)
 ; ddir.Size[ix] = sqtdtam[ikk];
-       move.b    -158(A6),D0
+       move.b    -164(A6),D0
        and.l     #255,D0
-       lea       -78(A6),A0
-       move.b    -157(A6),D1
+       lea       -82(A6),A0
+       move.b    -163(A6),D1
        and.l     #255,D1
        add.l     D1,A0
-       move.b    -98(A6,D0.L),26(A0)
-       bra.s     carregaDirDef_41
-carregaDirDef_40:
+       move.b    -104(A6,D0.L),26(A0)
+       bra.s     carregaDirDef_47
+carregaDirDef_46:
 ; }
 ; else
 ; ddir.Size[ix] = ' ';
-       lea       -78(A6),A0
-       move.b    -157(A6),D0
+       lea       -82(A6),A0
+       move.b    -163(A6),D0
        and.l     #255,D0
        add.l     D0,A0
        move.b    #32,26(A0)
-carregaDirDef_41:
-       addq.b    #1,-157(A6)
-       bra       carregaDirDef_37
-carregaDirDef_39:
+carregaDirDef_47:
+       addq.b    #1,-163(A6)
+       bra       carregaDirDef_43
+carregaDirDef_45:
 ; }
 ; ddir.Size[ix] = cuntam;
-       lea       -78(A6),A0
-       move.b    -157(A6),D0
+       lea       -82(A6),A0
+       move.b    -163(A6),D0
        and.l     #255,D0
        add.l     D0,A0
-       move.b    -87(A6),26(A0)
-       bra.s     carregaDirDef_25
-carregaDirDef_24:
+       move.b    -93(A6),26(A0)
+       bra.s     carregaDirDef_31
+carregaDirDef_30:
 ; }
 ; else {
 ; ddir.Size[0] = ' ';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #32,26(A0)
 ; ddir.Size[1] = ' ';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #32,27(A0)
 ; ddir.Size[2] = ' ';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #32,28(A0)
 ; ddir.Size[3] = ' ';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #32,29(A0)
 ; ddir.Size[4] = '0';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #48,30(A0)
-carregaDirDef_25:
+carregaDirDef_31:
 ; }
 ; ddir.Size[5] = '\0';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        clr.b     31(A0)
 ; // Atributos
 ; if (vdirfiles.Attr == ATTR_DIRECTORY) {
        lea       -38(A6),A0
        move.b    11(A0),D0
        cmp.b     #16,D0
-       bne.s     carregaDirDef_42
+       bne.s     carregaDirDef_48
 ; ddir.Attr[0] = '<';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #60,34(A0)
 ; ddir.Attr[1] = 'D';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #68,35(A0)
 ; ddir.Attr[2] = 'I';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #73,36(A0)
 ; ddir.Attr[3] = 'R';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #82,37(A0)
 ; ddir.Attr[4] = '>';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #62,38(A0)
-       bra.s     carregaDirDef_43
-carregaDirDef_42:
+       bra.s     carregaDirDef_49
+carregaDirDef_48:
 ; }
 ; else {
 ; ddir.Attr[0] = ' ';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #32,34(A0)
 ; ddir.Attr[1] = ' ';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #32,35(A0)
 ; ddir.Attr[2] = ' ';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #32,36(A0)
 ; ddir.Attr[3] = ' ';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #32,37(A0)
 ; ddir.Attr[4] = ' ';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        move.b    #32,38(A0)
-carregaDirDef_43:
+carregaDirDef_49:
 ; }
 ; ddir.Attr[5] = '\0';
-       lea       -78(A6),A0
+       lea       -82(A6),A0
        clr.b     39(A0)
-; dfile->dir[*dFileCursor] = ddir;
+; destIdx = *dFileCursor;
+       move.l    A5,A0
+       add.l     #_dFileCursor,A0
+       move.l    (A0),A0
+       move.b    (A0),-91(A6)
+; pDestDir = &dfile->dir[destIdx];
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),D0
-       move.l    A5,A0
-       add.l     #_dFileCursor,A0
-       move.l    (A0),A0
-       move.b    (A0),D1
+       move.b    -91(A6),D1
        and.l     #255,D1
-       muls      #40,D1
+       muls      #39,D1
        add.l     D1,D0
-       move.l    D0,A0
-       lea       -78(A6),A1
-       moveq     #9,D0
-       move.l    (A1)+,(A0)+
-       dbra      D0,*-2
-; dfile->pos = *dFileCursor;
-       move.l    A5,A0
-       add.l     #_dFileCursor,A0
-       move.l    (A0),A0
-       move.b    (A0),D0
+       move.l    D0,-42(A6)
+; for (cc = 0; cc <= 8; cc++)
+       clr.b     -161(A6)
+carregaDirDef_50:
+       move.b    -161(A6),D0
+       cmp.b     #8,D0
+       bhi.s     carregaDirDef_52
+; pDestDir->Name[cc] = ddir.Name[cc];
+       lea       -82(A6),A0
+       move.b    -161(A6),D0
        and.l     #255,D0
-       move.l    A5,A0
-       add.l     #_dfile,A0
-       move.l    (A0),A0
-       move.l    D0,6000(A0)
+       move.l    -42(A6),A1
+       move.b    -161(A6),D1
+       and.l     #255,D1
+       move.b    0(A0,D0.L),0(A1,D1.L)
+       addq.b    #1,-161(A6)
+       bra       carregaDirDef_50
+carregaDirDef_52:
+; for (cc = 0; cc <= 3; cc++)
+       clr.b     -161(A6)
+carregaDirDef_53:
+       move.b    -161(A6),D0
+       cmp.b     #3,D0
+       bhi.s     carregaDirDef_55
+; pDestDir->Ext[cc] = ddir.Ext[cc];
+       lea       -82(A6),A0
+       move.b    -161(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.l    -42(A6),A1
+       move.b    -161(A6),D0
+       and.l     #255,D0
+       add.l     D0,A1
+       move.b    10(A0),10(A1)
+       addq.b    #1,-161(A6)
+       bra       carregaDirDef_53
+carregaDirDef_55:
+; for (cc = 0; cc <= 11; cc++)
+       clr.b     -161(A6)
+carregaDirDef_56:
+       move.b    -161(A6),D0
+       cmp.b     #11,D0
+       bhi.s     carregaDirDef_58
+; pDestDir->Modify[cc] = ddir.Modify[cc];
+       lea       -82(A6),A0
+       move.b    -161(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.l    -42(A6),A1
+       move.b    -161(A6),D0
+       and.l     #255,D0
+       add.l     D0,A1
+       move.b    14(A0),14(A1)
+       addq.b    #1,-161(A6)
+       bra       carregaDirDef_56
+carregaDirDef_58:
+; for (cc = 0; cc <= 5; cc++)
+       clr.b     -161(A6)
+carregaDirDef_59:
+       move.b    -161(A6),D0
+       cmp.b     #5,D0
+       bhi.s     carregaDirDef_61
+; pDestDir->Size[cc] = ddir.Size[cc];
+       lea       -82(A6),A0
+       move.b    -161(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.l    -42(A6),A1
+       move.b    -161(A6),D0
+       and.l     #255,D0
+       add.l     D0,A1
+       move.b    26(A0),26(A1)
+       addq.b    #1,-161(A6)
+       bra       carregaDirDef_59
+carregaDirDef_61:
+; for (cc = 0; cc <= 5; cc++)
+       clr.b     -161(A6)
+carregaDirDef_62:
+       move.b    -161(A6),D0
+       cmp.b     #5,D0
+       bhi.s     carregaDirDef_64
+; pDestDir->Attr[cc] = ddir.Attr[cc];
+       lea       -82(A6),A0
+       move.b    -161(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.l    -42(A6),A1
+       move.b    -161(A6),D0
+       and.l     #255,D0
+       add.l     D0,A1
+       move.b    34(A0),34(A1)
+       addq.b    #1,-161(A6)
+       bra       carregaDirDef_62
+carregaDirDef_64:
+; pDestDir->posy = ddir.posy;
+       lea       -82(A6),A0
+       move.l    -42(A6),A1
+       move.b    38(A0),38(A1)
 ; *dFileCursor = *dFileCursor + 1;
        move.l    A5,A0
        add.l     #_dFileCursor,A0
        move.l    (A0),A0
        addq.b    #1,(A0)
-carregaDirDef_6:
+carregaDirDef_10:
 ; }
 ; // Verifica se tem mais Arquivos
 ; for (ix = 0; ix <= 7; ix++) {
-       clr.b     -157(A6)
-carregaDirDef_44:
-       move.b    -157(A6),D0
+       clr.b     -163(A6)
+carregaDirDef_65:
+       move.b    -163(A6),D0
        cmp.b     #7,D0
-       bhi       carregaDirDef_46
+       bhi       carregaDirDef_67
 ; vnomefile[ix] = vdirfiles.Name[ix];
        lea       -38(A6),A0
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       move.b    -157(A6),D1
+       move.b    -163(A6),D1
        and.l     #255,D1
-       lea       -132(A6),A1
+       lea       -138(A6),A1
        move.b    0(A0,D0.L),0(A1,D1.L)
 ; if (vnomefile[ix] == 0x20) {
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       lea       -132(A6),A0
+       lea       -138(A6),A0
        move.b    0(A0,D0.L),D0
        cmp.b     #32,D0
-       bne.s     carregaDirDef_47
+       bne.s     carregaDirDef_68
 ; vnomefile[ix] = '\0';
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       lea       -132(A6),A0
+       lea       -138(A6),A0
        clr.b     0(A0,D0.L)
 ; break;
-       bra.s     carregaDirDef_46
-carregaDirDef_47:
-       addq.b    #1,-157(A6)
-       bra       carregaDirDef_44
-carregaDirDef_46:
+       bra.s     carregaDirDef_67
+carregaDirDef_68:
+       addq.b    #1,-163(A6)
+       bra       carregaDirDef_65
+carregaDirDef_67:
 ; }
 ; }
 ; vnomefile[ix] = '\0';
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       lea       -132(A6),A0
+       lea       -138(A6),A0
        clr.b     0(A0,D0.L)
 ; if (vdirfiles.Name[0] != '.') {
        lea       -38(A6),A0
        move.b    (A0),D0
        cmp.b     #46,D0
-       beq       carregaDirDef_49
+       beq       carregaDirDef_70
 ; vnomefile[ix] = '.';
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       lea       -132(A6),A0
+       lea       -138(A6),A0
        move.b    #46,0(A0,D0.L)
 ; ix++;
-       addq.b    #1,-157(A6)
+       addq.b    #1,-163(A6)
 ; for (iy = 0; iy <= 2; iy++) {
-       clr.b     -156(A6)
-carregaDirDef_51:
-       move.b    -156(A6),D0
+       clr.b     -162(A6)
+carregaDirDef_72:
+       move.b    -162(A6),D0
        cmp.b     #2,D0
-       bhi       carregaDirDef_53
+       bhi       carregaDirDef_74
 ; vnomefile[ix] = vdirfiles.Ext[iy];
        lea       -38(A6),A0
-       move.b    -156(A6),D0
+       move.b    -162(A6),D0
        and.l     #255,D0
        add.l     D0,A0
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       lea       -132(A6),A1
+       lea       -138(A6),A1
        move.b    8(A0),0(A1,D0.L)
 ; if (vnomefile[ix] == 0x20) {
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       lea       -132(A6),A0
+       lea       -138(A6),A0
        move.b    0(A0,D0.L),D0
        cmp.b     #32,D0
-       bne.s     carregaDirDef_54
+       bne.s     carregaDirDef_75
 ; vnomefile[ix] = '\0';
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       lea       -132(A6),A0
+       lea       -138(A6),A0
        clr.b     0(A0,D0.L)
 ; break;
-       bra.s     carregaDirDef_53
-carregaDirDef_54:
+       bra.s     carregaDirDef_74
+carregaDirDef_75:
 ; }
 ; ix++;
-       addq.b    #1,-157(A6)
-       addq.b    #1,-156(A6)
-       bra       carregaDirDef_51
-carregaDirDef_53:
+       addq.b    #1,-163(A6)
+       addq.b    #1,-162(A6)
+       bra       carregaDirDef_72
+carregaDirDef_74:
 ; }
 ; vnomefile[ix] = '\0';
-       move.b    -157(A6),D0
+       move.b    -163(A6),D0
        and.l     #255,D0
-       lea       -132(A6),A0
+       lea       -138(A6),A0
        clr.b     0(A0,D0.L)
-carregaDirDef_49:
+carregaDirDef_70:
 ; }
+; vlen = 0;
+       clr.b     -92(A6)
+; while (vnomefile[vlen] != '\0') {
+carregaDirDef_77:
+       move.b    -92(A6),D0
+       and.l     #255,D0
+       lea       -138(A6),A0
+       move.b    0(A0,D0.L),D0
+       beq.s     carregaDirDef_79
+; vlen++;
+       addq.b    #1,-92(A6)
+; if (vlen > 12)
+       move.b    -92(A6),D0
+       cmp.b     #12,D0
+       bls.s     carregaDirDef_80
+; break;
+       bra.s     carregaDirDef_79
+carregaDirDef_80:
+       bra       carregaDirDef_77
+carregaDirDef_79:
+; }
+; writeLongSerial("CD5:[\0");
+       move.l    A5,A0
+       add.l     #@files_65,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial(vnomefile);
+       pea       -138(A6)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_13,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; if (fsFindInDir(vnomefile, TYPE_NEXT_ENTRY) >= ERRO_D_START)
        pea       9
-       pea       -132(A6)
+       pea       -138(A6)
        move.l    8486740,A0
        jsr       (A0)
        addq.w    #8,A7
        cmp.l     #-16,D0
-       blo.s     carregaDirDef_56
+       blo.s     carregaDirDef_82
+; {
+; writeLongSerial("CD6-BRK\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_66,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; break;
-       bra.s     carregaDirDef_5
-carregaDirDef_56:
-       bra       carregaDirDef_3
+       bra       carregaDirDef_9
+carregaDirDef_82:
+; }
+; writeSerial('R');
+       pea       82
+       move.l    1162,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("CD5-RET[\0");
+       move.l    A5,A0
+       add.l     #@files_67,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; myitoa(dfile,sqtdtam,16);
+       pea       16
+       pea       -104(A6)
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),-(A7)
+       move.l    A5,A0
+       add.l     #_myitoa,A0
+       move.l    (A0),A0
+       jsr       (A0)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       pea       -104(A6)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]r\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_68,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeSerial('r');
+       pea       114
+       move.l    1162,A0
+       jsr       (A0)
+       addq.w    #4,A7
+       bra       carregaDirDef_7
+carregaDirDef_9:
+; }
+; writeLongSerial("CD9-OK\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_69,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+       bra.s     carregaDirDef_6
 carregaDirDef_5:
 ; }
+; else
+; {
+; writeLongSerial("CD1-ERR\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_70,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+carregaDirDef_6:
 ; }
+; writeLongSerial("CDA-BEFORE-MOUSE\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_71,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; TrocaSpriteMouse(MOUSE_POINTER);
        pea       1
        move.l    8410570,A0
        jsr       (A0)
        addq.w    #4,A7
+; writeLongSerial("CDB-AFTER-MOUSE\r\n\0");
+       move.l    A5,A0
+       add.l     #@files_72,A0
+       move.l    A0,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+carregaDirDef_4:
        unlk      A6
        rts
 ; }
@@ -3938,12 +4443,12 @@ carregaDirDef_5:
 ; {
        xdef      _listaDirDef
 _listaDirDef:
-       link      A6,#-24
-; unsigned short pposy, vretfs, dd, ww;
-; unsigned char ee, cc,ix, cstring[10];
+       link      A6,#-32
+; unsigned short pposy, vretfs, dd, ww, total;
+; unsigned char ee, cc, ix, cstring[16];
 ; linhastatus(1, "\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        pea       1
        move.l    A5,A0
@@ -3957,105 +4462,163 @@ _listaDirDef:
        jsr       (A0)
        addq.w    #4,A7
 ; for (dd = 0; dd <= 13; dd++)
-       clr.w     -18(A6)
+       clr.w     -26(A6)
 listaDirDef_1:
-       move.w    -18(A6),D0
+       move.w    -26(A6),D0
        cmp.w     #13,D0
        bhi.s     listaDirDef_3
 ; clinha[dd] = 0x00;
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.w    -18(A6),D0
+       move.w    -26(A6),D0
        and.l     #65535,D0
        clr.b     0(A0,D0.L)
-       addq.w    #1,-18(A6)
+       addq.w    #1,-26(A6)
        bra       listaDirDef_1
 listaDirDef_3:
 ; pposy = 34;
-       move.w    #34,-22(A6)
+       move.w    #34,-30(A6)
 ; dd = *vpos;
        move.l    A5,A0
        add.l     #_vpos,A0
        move.l    (A0),A0
-       move.w    (A0),-18(A6)
-; if (dd < 0)
-       move.w    -18(A6),D0
-       cmp.w     #0,D0
-       bhs.s     listaDirDef_4
-; dd = 0;
-       clr.w     -18(A6)
+       move.w    (A0),-26(A6)
+; total = *dFileCursor;
+       move.l    A5,A0
+       add.l     #_dFileCursor,A0
+       move.l    (A0),A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       move.w    D0,-22(A6)
+; if (total > 150)
+       move.w    -22(A6),D0
+       cmp.w     #150,D0
+       bls.s     listaDirDef_4
+; total = 150;
+       move.w    #150,-22(A6)
 listaDirDef_4:
-; if (dd >= *dFileCursor)
-       move.l    A5,A0
-       add.l     #_dFileCursor,A0
-       move.l    (A0),A0
-       move.b    (A0),D0
-       and.w     #255,D0
-       cmp.w     -18(A6),D0
-       bhi.s     listaDirDef_6
-; dd = (*dFileCursor - 1);
-       move.l    A5,A0
-       add.l     #_dFileCursor,A0
-       move.l    (A0),A0
-       move.b    (A0),D0
-       and.w     #255,D0
-       subq.w    #1,D0
-       move.w    D0,-18(A6)
-listaDirDef_6:
-; ee = 14;
-       move.b    #14,-13(A6)
-; cc = 0;
-       clr.b     -12(A6)
-; while(1)
-listaDirDef_8:
+; // Sem entradas carregadas: limpa area da listagem e sai.
+; if (total == 0)
+       move.w    -22(A6),D0
+       bne       listaDirDef_6
 ; {
-; for (ix = 0; ix < 8; ix++)
-       clr.b     -11(A6)
+; FillRect(5,34,249,140,*vcorbg);
+       move.l    A5,A0
+       add.l     #_vcorbg,A0
+       move.l    (A0),A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       pea       140
+       pea       249
+       pea       34
+       pea       5
+       move.l    8410514,A0
+       jsr       (A0)
+       add.w     #20,A7
+; TrocaSpriteMouse(MOUSE_POINTER);
+       pea       1
+       move.l    8410570,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; linhastatus(0, "\0");
+       move.l    A5,A0
+       add.l     #@files_31,A0
+       move.l    (A0),-(A7)
+       clr.l     -(A7)
+       move.l    A5,A0
+       add.l     #_linhastatus,A0
+       move.l    (A0),A0
+       jsr       (A0)
+       addq.w    #8,A7
+; return;
+       bra       listaDirDef_8
+listaDirDef_6:
+; }
+; if (dd >= total)
+       move.w    -26(A6),D0
+       cmp.w     -22(A6),D0
+       blo.s     listaDirDef_9
+; dd = (total - 1);
+       move.w    -22(A6),D0
+       subq.w    #1,D0
+       move.w    D0,-26(A6)
+listaDirDef_9:
+; if (dd > 149)
+       move.w    -26(A6),D0
+       cmp.w     #149,D0
+       bls.s     listaDirDef_11
+; dd = 149;
+       move.w    #149,-26(A6)
 listaDirDef_11:
-       move.b    -11(A6),D0
+; ee = 14;
+       move.b    #14,-19(A6)
+; cc = 0;
+       clr.b     -18(A6)
+; while(1)
+listaDirDef_13:
+; {
+; if (dd > 149 || dd >= total || cc >= 14)
+       move.w    -26(A6),D0
+       cmp.w     #149,D0
+       bhi.s     listaDirDef_18
+       move.w    -26(A6),D0
+       cmp.w     -22(A6),D0
+       bhs.s     listaDirDef_18
+       move.b    -18(A6),D0
+       cmp.b     #14,D0
+       blo.s     listaDirDef_16
+listaDirDef_18:
+; break;
+       bra       listaDirDef_15
+listaDirDef_16:
+; for (ix = 0; ix < 8; ix++)
+       clr.b     -17(A6)
+listaDirDef_19:
+       move.b    -17(A6),D0
        cmp.b     #8,D0
-       bhs       listaDirDef_13
+       bhs       listaDirDef_21
 ; {
 ; if (dfile->dir[dd].Name[ix] == 0x00)
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.w    -18(A6),D0
+       move.w    -26(A6),D0
        and.l     #65535,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
-       move.b    -11(A6),D0
+       move.b    -17(A6),D0
        and.l     #255,D0
        move.b    0(A0,D0.L),D0
-       bne.s     listaDirDef_14
+       bne.s     listaDirDef_22
 ; cstring[ix] = 0x20;
-       move.b    -11(A6),D0
+       move.b    -17(A6),D0
        and.l     #255,D0
-       move.b    #32,-10(A6,D0.L)
-       bra.s     listaDirDef_15
-listaDirDef_14:
+       move.b    #32,-16(A6,D0.L)
+       bra.s     listaDirDef_23
+listaDirDef_22:
 ; else
 ; cstring[ix] = dfile->dir[dd].Name[ix];
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.w    -18(A6),D0
+       move.w    -26(A6),D0
        and.l     #65535,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
-       move.b    -11(A6),D0
+       move.b    -17(A6),D0
        and.l     #255,D0
-       move.b    -11(A6),D1
+       move.b    -17(A6),D1
        and.l     #255,D1
-       move.b    0(A0,D0.L),-10(A6,D1.L)
-listaDirDef_15:
-       addq.b    #1,-11(A6)
-       bra       listaDirDef_11
-listaDirDef_13:
+       move.b    0(A0,D0.L),-16(A6,D1.L)
+listaDirDef_23:
+       addq.b    #1,-17(A6)
+       bra       listaDirDef_19
+listaDirDef_21:
 ; }
 ; cstring[8] = '\0';
-       clr.b     -10+8(A6)
+       clr.b     -16+8(A6)
 ; // Nome
 ; writesxy(16,pposy,6,cstring,*vcorfg,*vcorbg);
        move.l    A5,A0
@@ -4072,9 +4635,9 @@ listaDirDef_13:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       -10(A6)
+       pea       -16(A6)
        pea       6
-       move.w    -22(A6),D1
+       move.w    -30(A6),D1
        and.l     #65535,D1
        move.l    D1,-(A7)
        pea       16
@@ -4082,53 +4645,53 @@ listaDirDef_13:
        jsr       (A0)
        add.w     #24,A7
 ; for (ix = 0; ix < 3; ix++)
-       clr.b     -11(A6)
-listaDirDef_16:
-       move.b    -11(A6),D0
+       clr.b     -17(A6)
+listaDirDef_24:
+       move.b    -17(A6),D0
        cmp.b     #3,D0
-       bhs       listaDirDef_18
+       bhs       listaDirDef_26
 ; {
 ; if (dfile->dir[dd].Ext[ix] == 0x00)
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.w    -18(A6),D0
+       move.w    -26(A6),D0
        and.l     #65535,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
-       move.b    -11(A6),D0
+       move.b    -17(A6),D0
        and.l     #255,D0
        add.l     D0,A0
        move.b    10(A0),D0
-       bne.s     listaDirDef_19
+       bne.s     listaDirDef_27
 ; cstring[ix] = 0x20;
-       move.b    -11(A6),D0
+       move.b    -17(A6),D0
        and.l     #255,D0
-       move.b    #32,-10(A6,D0.L)
-       bra.s     listaDirDef_20
-listaDirDef_19:
+       move.b    #32,-16(A6,D0.L)
+       bra.s     listaDirDef_28
+listaDirDef_27:
 ; else
 ; cstring[ix] = dfile->dir[dd].Ext[ix];
        move.l    A5,A0
        add.l     #_dfile,A0
        move.l    (A0),A0
-       move.w    -18(A6),D0
+       move.w    -26(A6),D0
        and.l     #65535,D0
-       muls      #40,D0
+       muls      #39,D0
        add.l     D0,A0
-       move.b    -11(A6),D0
+       move.b    -17(A6),D0
        and.l     #255,D0
        add.l     D0,A0
-       move.b    -11(A6),D0
+       move.b    -17(A6),D0
        and.l     #255,D0
-       move.b    10(A0),-10(A6,D0.L)
-listaDirDef_20:
-       addq.b    #1,-11(A6)
-       bra       listaDirDef_16
-listaDirDef_18:
+       move.b    10(A0),-16(A6,D0.L)
+listaDirDef_28:
+       addq.b    #1,-17(A6)
+       bra       listaDirDef_24
+listaDirDef_26:
 ; }
 ; cstring[3] = '\0';
-       clr.b     -10+3(A6)
+       clr.b     -16+3(A6)
 ; // Ext
 ; writesxy(66,pposy,6,cstring,*vcorfg,*vcorbg);
        move.l    A5,A0
@@ -4145,9 +4708,9 @@ listaDirDef_18:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       -10(A6)
+       pea       -16(A6)
        pea       6
-       move.w    -22(A6),D1
+       move.w    -30(A6),D1
        and.l     #65535,D1
        move.l    D1,-(A7)
        pea       66
@@ -4155,7 +4718,55 @@ listaDirDef_18:
        jsr       (A0)
        add.w     #24,A7
 ; // Modif
-; writesxy(90,pposy,6,dfile->dir[dd].Modify,*vcorfg,*vcorbg);
+; for (ix = 0; ix < 11; ix++)
+       clr.b     -17(A6)
+listaDirDef_29:
+       move.b    -17(A6),D0
+       cmp.b     #11,D0
+       bhs       listaDirDef_31
+; {
+; if (dfile->dir[dd].Modify[ix] == 0x00)
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),A0
+       move.w    -26(A6),D0
+       and.l     #65535,D0
+       muls      #39,D0
+       add.l     D0,A0
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.b    14(A0),D0
+       bne.s     listaDirDef_32
+; cstring[ix] = 0x20;
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       move.b    #32,-16(A6,D0.L)
+       bra.s     listaDirDef_33
+listaDirDef_32:
+; else
+; cstring[ix] = dfile->dir[dd].Modify[ix];
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),A0
+       move.w    -26(A6),D0
+       and.l     #65535,D0
+       muls      #39,D0
+       add.l     D0,A0
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       move.b    14(A0),-16(A6,D0.L)
+listaDirDef_33:
+       addq.b    #1,-17(A6)
+       bra       listaDirDef_29
+listaDirDef_31:
+; }
+; cstring[11] = '\0';
+       clr.b     -16+11(A6)
+; writesxy(90,pposy,6,cstring,*vcorfg,*vcorbg);
        move.l    A5,A0
        add.l     #_vcorbg,A0
        move.l    (A0),A0
@@ -4170,22 +4781,9 @@ listaDirDef_18:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       moveq     #14,D1
-       move.l    A5,A0
-       add.l     #_dfile,A0
-       move.l    D0,-(A7)
-       move.l    (A0),D0
-       move.l    D1,-(A7)
-       move.w    -18(A6),D1
-       and.l     #65535,D1
-       muls      #40,D1
-       add.l     D1,D0
-       move.l    (A7)+,D1
-       add.l     D0,D1
-       move.l    (A7)+,D0
-       move.l    D1,-(A7)
+       pea       -16(A6)
        pea       6
-       move.w    -22(A6),D1
+       move.w    -30(A6),D1
        and.l     #65535,D1
        move.l    D1,-(A7)
        pea       90
@@ -4193,7 +4791,55 @@ listaDirDef_18:
        jsr       (A0)
        add.w     #24,A7
 ; // Tamanho
-; writesxy(165,pposy,6,dfile->dir[dd].Size,*vcorfg,*vcorbg);
+; for (ix = 0; ix < 5; ix++)
+       clr.b     -17(A6)
+listaDirDef_34:
+       move.b    -17(A6),D0
+       cmp.b     #5,D0
+       bhs       listaDirDef_36
+; {
+; if (dfile->dir[dd].Size[ix] == 0x00)
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),A0
+       move.w    -26(A6),D0
+       and.l     #65535,D0
+       muls      #39,D0
+       add.l     D0,A0
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.b    26(A0),D0
+       bne.s     listaDirDef_37
+; cstring[ix] = 0x20;
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       move.b    #32,-16(A6,D0.L)
+       bra.s     listaDirDef_38
+listaDirDef_37:
+; else
+; cstring[ix] = dfile->dir[dd].Size[ix];
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),A0
+       move.w    -26(A6),D0
+       and.l     #65535,D0
+       muls      #39,D0
+       add.l     D0,A0
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       move.b    26(A0),-16(A6,D0.L)
+listaDirDef_38:
+       addq.b    #1,-17(A6)
+       bra       listaDirDef_34
+listaDirDef_36:
+; }
+; cstring[5] = '\0';
+       clr.b     -16+5(A6)
+; writesxy(165,pposy,6,cstring,*vcorfg,*vcorbg);
        move.l    A5,A0
        add.l     #_vcorbg,A0
        move.l    (A0),A0
@@ -4208,22 +4854,9 @@ listaDirDef_18:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       moveq     #26,D1
-       move.l    A5,A0
-       add.l     #_dfile,A0
-       move.l    D0,-(A7)
-       move.l    (A0),D0
-       move.l    D1,-(A7)
-       move.w    -18(A6),D1
-       and.l     #65535,D1
-       muls      #40,D1
-       add.l     D1,D0
-       move.l    (A7)+,D1
-       add.l     D0,D1
-       move.l    (A7)+,D0
-       move.l    D1,-(A7)
+       pea       -16(A6)
        pea       6
-       move.w    -22(A6),D1
+       move.w    -30(A6),D1
        and.l     #65535,D1
        move.l    D1,-(A7)
        pea       165
@@ -4231,7 +4864,55 @@ listaDirDef_18:
        jsr       (A0)
        add.w     #24,A7
 ; // Atrib
-; writesxy(200,pposy,6,dfile->dir[dd].Attr,*vcorfg,*vcorbg);
+; for (ix = 0; ix < 5; ix++)
+       clr.b     -17(A6)
+listaDirDef_39:
+       move.b    -17(A6),D0
+       cmp.b     #5,D0
+       bhs       listaDirDef_41
+; {
+; if (dfile->dir[dd].Attr[ix] == 0x00)
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),A0
+       move.w    -26(A6),D0
+       and.l     #65535,D0
+       muls      #39,D0
+       add.l     D0,A0
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.b    34(A0),D0
+       bne.s     listaDirDef_42
+; cstring[ix] = 0x20;
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       move.b    #32,-16(A6,D0.L)
+       bra.s     listaDirDef_43
+listaDirDef_42:
+; else
+; cstring[ix] = dfile->dir[dd].Attr[ix];
+       move.l    A5,A0
+       add.l     #_dfile,A0
+       move.l    (A0),A0
+       move.w    -26(A6),D0
+       and.l     #65535,D0
+       muls      #39,D0
+       add.l     D0,A0
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       add.l     D0,A0
+       move.b    -17(A6),D0
+       and.l     #255,D0
+       move.b    34(A0),-16(A6,D0.L)
+listaDirDef_43:
+       addq.b    #1,-17(A6)
+       bra       listaDirDef_39
+listaDirDef_41:
+; }
+; cstring[5] = '\0';
+       clr.b     -16+5(A6)
+; writesxy(200,pposy,6,cstring,*vcorfg,*vcorbg);
        move.l    A5,A0
        add.l     #_vcorbg,A0
        move.l    (A0),A0
@@ -4246,22 +4927,9 @@ listaDirDef_18:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       moveq     #34,D1
-       move.l    A5,A0
-       add.l     #_dfile,A0
-       move.l    D0,-(A7)
-       move.l    (A0),D0
-       move.l    D1,-(A7)
-       move.w    -18(A6),D1
-       and.l     #65535,D1
-       muls      #40,D1
-       add.l     D1,D0
-       move.l    (A7)+,D1
-       add.l     D0,D1
-       move.l    (A7)+,D0
-       move.l    D1,-(A7)
+       pea       -16(A6)
        pea       6
-       move.w    -22(A6),D1
+       move.w    -30(A6),D1
        and.l     #65535,D1
        move.l    D1,-(A7)
        pea       200
@@ -4269,63 +4937,59 @@ listaDirDef_18:
        jsr       (A0)
        add.w     #24,A7
 ; clinha[cc] = pposy;
-       move.w    -22(A6),D0
+       move.w    -30(A6),D0
        move.l    A5,A0
        add.l     #_clinha,A0
        move.l    (A0),A0
-       move.b    -12(A6),D1
+       move.b    -18(A6),D1
        and.l     #255,D1
        move.b    D0,0(A0,D1.L)
 ; pposy += 10;
-       add.w     #10,-22(A6)
+       add.w     #10,-30(A6)
 ; dd++;
-       addq.w    #1,-18(A6)
+       addq.w    #1,-26(A6)
 ; cc++;
-       addq.b    #1,-12(A6)
+       addq.b    #1,-18(A6)
 ; ee--;
-       subq.b    #1,-13(A6)
-; if (dd == *dFileCursor)
-       move.l    A5,A0
-       add.l     #_dFileCursor,A0
-       move.l    (A0),A0
-       move.b    (A0),D0
-       and.w     #255,D0
-       cmp.w     -18(A6),D0
-       bne.s     listaDirDef_21
+       subq.b    #1,-19(A6)
+; if (dd >= total)
+       move.w    -26(A6),D0
+       cmp.w     -22(A6),D0
+       blo.s     listaDirDef_44
 ; break;
-       bra.s     listaDirDef_10
-listaDirDef_21:
+       bra.s     listaDirDef_15
+listaDirDef_44:
 ; if (ee == 0)
-       move.b    -13(A6),D0
-       bne.s     listaDirDef_23
+       move.b    -19(A6),D0
+       bne.s     listaDirDef_46
 ; break;
-       bra.s     listaDirDef_10
-listaDirDef_23:
-       bra       listaDirDef_8
-listaDirDef_10:
+       bra.s     listaDirDef_15
+listaDirDef_46:
+       bra       listaDirDef_13
+listaDirDef_15:
 ; }
 ; if (ee > 0) {
-       move.b    -13(A6),D0
+       move.b    -19(A6),D0
        cmp.b     #0,D0
-       bls       listaDirDef_25
+       bls       listaDirDef_48
 ; dd = 14 - ee;
        moveq     #14,D0
        ext.w     D0
-       move.b    -13(A6),D1
+       move.b    -19(A6),D1
        and.w     #255,D1
        sub.w     D1,D0
-       move.w    D0,-18(A6)
+       move.w    D0,-26(A6)
 ; dd = dd * 10;
-       move.w    -18(A6),D0
+       move.w    -26(A6),D0
        mulu.w    #10,D0
-       move.w    D0,-18(A6)
+       move.w    D0,-26(A6)
 ; dd = dd + 34;
-       add.w     #34,-18(A6)
+       add.w     #34,-26(A6)
 ; ww = ee * 10;
-       move.b    -13(A6),D0
+       move.b    -19(A6),D0
        and.w     #255,D0
        mulu.w    #10,D0
-       move.w    D0,-16(A6)
+       move.w    D0,-24(A6)
 ; FillRect(5,dd,249,ww,*vcorbg);
        move.l    A5,A0
        add.l     #_vcorbg,A0
@@ -4333,18 +4997,18 @@ listaDirDef_10:
        move.b    (A0),D1
        and.l     #255,D1
        move.l    D1,-(A7)
-       move.w    -16(A6),D1
+       move.w    -24(A6),D1
        and.l     #255,D1
        move.l    D1,-(A7)
        pea       249
-       move.w    -18(A6),D1
+       move.w    -26(A6),D1
        and.l     #255,D1
        move.l    D1,-(A7)
        pea       5
        move.l    8410514,A0
        jsr       (A0)
        add.w     #20,A7
-listaDirDef_25:
+listaDirDef_48:
 ; }
 ; TrocaSpriteMouse(MOUSE_POINTER);
        pea       1
@@ -4353,7 +5017,7 @@ listaDirDef_25:
        addq.w    #4,A7
 ; linhastatus(0, "\0");
        move.l    A5,A0
-       add.l     #@files_21,A0
+       add.l     #@files_31,A0
        move.l    (A0),-(A7)
        clr.l     -(A7)
        move.l    A5,A0
@@ -4361,6 +5025,7 @@ listaDirDef_25:
        move.l    (A0),A0
        jsr       (A0)
        addq.w    #8,A7
+listaDirDef_8:
        unlk      A6
        rts
 ; }
@@ -4373,120 +5038,185 @@ _SearchFileDef:
 ; }
        section   const
 @files_1:
-       dc.b      70,105,108,101,32,69,120,112,108,111,114,101
-       dc.b      114,32,118,48,46,50,0
+       dc.b      83,116,97,114,116,105,110,103,32,70,73,76,69
+       dc.b      83,46,46,46,13,10,0
 @files_2:
-       dc.b      78,97,109,101,0
+       dc.b      68,101,102,105,110,105,110,103,32,80,111,105
+       dc.b      110,116,101,114,115,46,46,46,13,10,0
 @files_3:
-       dc.b      69,120,116,0
+       dc.b      65,108,108,111,99,32,109,101,109,111,114,121
+       dc.b      32,116,111,32,118,97,114,105,97,98,108,101,115
+       dc.b      46,46,46,13,10,0
 @files_4:
-       dc.b      77,111,100,105,102,121,0
+       dc.b      70,73,76,69,83,58,32,115,101,109,32,109,101
+       dc.b      109,111,114,105,97,13,10,0
 @files_5:
-       dc.b      83,105,122,101,0
+       dc.b      68,114,97,119,105,110,103,32,105,110,116,101
+       dc.b      114,102,97,99,101,46,46,46,13,10,0
 @files_6:
-       dc.b      65,116,114,105,98,0
+       dc.b      78,97,109,101,0
 @files_7:
-       dc.b      68,101,108,101,116,101,0
+       dc.b      69,120,116,0
 @files_8:
-       dc.b      82,101,110,97,109,101,0
+       dc.b      77,111,100,105,102,121,0
 @files_9:
-       dc.b      67,111,112,121,0
+       dc.b      83,105,122,101,0
 @files_10:
-       dc.b      69,120,101,99,117,116,101,0
+       dc.b      65,116,114,105,98,0
 @files_11:
-       dc.b      79,112,101,110,0
+       dc.b      70,73,76,69,83,58,32,98,101,102,111,114,101
+       dc.b      32,99,97,114,114,101,103,97,68,105,114,32,91
+       dc.b      0
 @files_12:
-       dc.b      78,101,119,0
+       dc.b      93,45,91,0
 @files_13:
-       dc.b      82,101,109,111,118,101,0
+       dc.b      93,13,10,0
 @files_14:
-       dc.b      32,0
+       dc.b      70,73,76,69,83,58,32,97,102,116,101,114,32,99
+       dc.b      97,114,114,101,103,97,68,105,114,13,10,0
 @files_15:
-       dc.b      67,108,111,115,101,0
+       dc.b      70,73,76,69,83,58,32,98,101,102,111,114,101
+       dc.b      32,108,105,115,116,97,68,105,114,13,10,0
 @files_16:
+       dc.b      70,73,76,69,83,58,32,97,102,116,101,114,32,108
+       dc.b      105,115,116,97,68,105,114,13,10,0
+@files_17:
+       dc.b      68,101,108,101,116,101,0
+@files_18:
+       dc.b      82,101,110,97,109,101,0
+@files_19:
+       dc.b      67,111,112,121,0
+@files_20:
+       dc.b      69,120,101,99,117,116,101,0
+@files_21:
+       dc.b      79,112,101,110,0
+@files_22:
+       dc.b      78,101,119,0
+@files_23:
+       dc.b      82,101,109,111,118,101,0
+@files_24:
+       dc.b      32,0
+@files_25:
+       dc.b      67,108,111,115,101,0
+@files_26:
        dc.b      67,111,110,102,105,114,109,10,68,101,108,101
        dc.b      116,101,32,70,105,108,101,32,63,0
-@files_17:
+@files_27:
        dc.b      67,111,110,102,105,114,109,10,82,101,109,111
        dc.b      118,101,32,68,105,114,101,99,116,111,114,121
        dc.b      32,63,0
-@files_18:
+@files_28:
        dc.b      46,0
-@files_19:
+@files_29:
        dc.b      68,101,108,101,116,101,32,70,105,108,101,32
        dc.b      69,114,114,111,114,46,0
-@files_20:
+@files_30:
        dc.b      82,101,109,111,118,101,32,68,105,114,101,99
        dc.b      116,111,114,121,32,69,114,114,111,114,46,0
-@files_21:
+@files_31:
        dc.b      0
-@files_22:
+@files_32:
        dc.b      82,101,110,97,109,101,32,70,105,108,101,0
-@files_23:
+@files_33:
        dc.b      32,32,32,78,101,119,32,78,97,109,101,58,0
-@files_24:
+@files_34:
        dc.b      67,111,112,121,32,70,105,108,101,0
-@files_25:
+@files_35:
        dc.b      68,101,115,116,105,110,97,116,105,111,110,58
        dc.b      0
-@files_26:
+@files_36:
        dc.b      67,114,101,97,116,101,32,68,105,114,101,99,116
        dc.b      111,114,121,0
-@files_27:
+@files_37:
        dc.b      32,32,32,68,105,114,32,78,97,109,101,58,0
-@files_28:
+@files_38:
        dc.b      79,75,0
-@files_29:
+@files_39:
        dc.b      67,65,78,67,69,76,0
-@files_30:
+@files_40:
        dc.b      67,111,110,102,105,114,109,10,82,101,110,97
        dc.b      109,101,32,70,105,108,101,32,63,10,0
-@files_31:
+@files_41:
        dc.b      67,111,110,102,105,114,109,10,67,111,112,121
        dc.b      32,70,105,108,101,32,63,10,0
-@files_32:
+@files_42:
        dc.b      67,111,110,102,105,114,109,10,67,114,101,97
        dc.b      116,101,32,68,105,114,101,99,116,111,114,121
        dc.b      32,63,10,0
-@files_33:
+@files_43:
        dc.b      67,80,32,0
-@files_34:
+@files_44:
        dc.b      82,101,110,97,109,101,32,70,105,108,101,32,69
        dc.b      114,114,111,114,46,0
-@files_35:
+@files_45:
        dc.b      67,111,112,121,32,70,105,108,101,32,69,114,114
        dc.b      111,114,46,0
-@files_36:
+@files_46:
        dc.b      67,114,101,97,116,101,32,68,105,114,101,99,116
        dc.b      111,114,121,32,69,114,114,111,114,46,0
-@files_37:
+@files_47:
        dc.b      67,104,97,110,103,101,32,68,105,114,101,99,116
        dc.b      111,114,121,32,69,114,114,111,114,46,0
-@files_38:
+@files_48:
        dc.b      119,97,105,116,46,46,46,0
-@files_39:
+@files_49:
        dc.b      112,114,111,99,101,115,115,105,110,103,46,46
        dc.b      46,0
-@files_40:
+@files_50:
        dc.b      102,105,108,101,32,110,111,116,32,102,111,117
        dc.b      110,100,46,46,46,0
-@files_41:
+@files_51:
        dc.b      68,101,108,101,116,105,110,103,32,102,105,108
        dc.b      101,46,46,46,0
-@files_42:
+@files_52:
        dc.b      82,101,110,97,109,105,110,103,32,102,105,108
        dc.b      101,46,46,46,0
-@files_43:
+@files_53:
        dc.b      68,101,108,101,116,105,110,103,32,68,105,114
        dc.b      101,99,116,111,114,121,46,46,46,0
-@files_44:
+@files_54:
        dc.b      69,120,105,116,105,110,103,46,46,46,0
-@files_45:
+@files_55:
        dc.b      67,111,112,121,105,110,103,32,70,105,108,101
        dc.b      46,46,46,0
-@files_46:
+@files_56:
        dc.b      67,114,101,97,116,105,110,103,32,68,105,114
        dc.b      101,99,116,111,114,121,46,46,46,0
+@files_57:
+       dc.b      65,113,117,105,32,51,51,50,46,54,54,54,46,50
+       dc.b      45,91,0
+@files_58:
+       dc.b      67,68,48,45,73,78,73,84,69,82,82,13,10,0
+@files_59:
+       dc.b      67,68,48,45,67,65,76,76,13,10,0
+@files_60:
+       dc.b      67,68,48,45,82,69,84,13,10,0
+@files_61:
+       dc.b      67,68,49,13,10,0
+@files_62:
+       dc.b      67,68,50,13,10,0
+@files_63:
+       dc.b      67,68,51,13,10,0
+@files_64:
+       dc.b      67,68,52,13,10,0
+@files_65:
+       dc.b      67,68,53,58,91,0
+@files_66:
+       dc.b      67,68,54,45,66,82,75,13,10,0
+@files_67:
+       dc.b      67,68,53,45,82,69,84,91,0
+@files_68:
+       dc.b      93,114,13,10,0
+@files_69:
+       dc.b      67,68,57,45,79,75,13,10,0
+@files_70:
+       dc.b      67,68,49,45,69,82,82,13,10,0
+@files_71:
+       dc.b      67,68,65,45,66,69,70,79,82,69,45,77,79,85,83
+       dc.b      69,13,10,0
+@files_72:
+       dc.b      67,68,66,45,65,70,84,69,82,45,77,79,85,83,69
+       dc.b      13,10,0
        xdef      _strValidChars
 _strValidChars:
        dc.b      48,49,50,51,52,53,54,55,56,57,65,66,67,68,69
@@ -4499,67 +5229,67 @@ _vmesc:
        dc.b      74,97,110,70,101,98,77,97,114,65,112,114,77
        dc.b      97,121,74,117,110,74,117,108,65,117,103,83,101
        dc.b      112,79,99,116,78,111,118,68,101,99
-       section   bss
        xdef      _dfile
 _dfile:
-       ds.b      4
+       dc.l      1
        xdef      _vMemTotal
 _vMemTotal:
-       ds.b      4
+       dc.l      9436928
        xdef      _clinha
 _clinha:
-       ds.b      4
+       dc.l      1
        xdef      _vpos
 _vpos:
-       ds.b      4
+       dc.l      1
        xdef      _vposold
 _vposold:
-       ds.b      4
+       dc.l      1
        xdef      _dFileCursor
 _dFileCursor:
-       ds.b      4
+       dc.l      1
        xdef      _vcorfg
 _vcorfg:
-       ds.b      4
+       dc.l      1
        xdef      _vcorbg
 _vcorbg:
-       ds.b      4
+       dc.l      1
        xdef      _linhastatus
 _linhastatus:
-       ds.b      4
+       dc.l      1
        xdef      _SearchFile
 _SearchFile:
-       ds.b      4
+       dc.l      1
        xdef      _carregaDir
 _carregaDir:
-       ds.b      4
+       dc.l      1
        xdef      _listaDir
 _listaDir:
-       ds.b      4
+       dc.l      1
        xdef      _mystrcpy
 _mystrcpy:
-       ds.b      4
+       dc.l      1
        xdef      _mystrcat
 _mystrcat:
-       ds.b      4
+       dc.l      1
        xdef      _mymemset
 _mymemset:
-       ds.b      4
+       dc.l      1
        xdef      _mytoupper
 _mytoupper:
-       ds.b      4
+       dc.l      1
        xdef      _myitoa
 _myitoa:
-       ds.b      4
+       dc.l      1
        xdef      _myltoa
 _myltoa:
-       ds.b      4
+       dc.l      1
        xdef      _myvRetAlloc
 _myvRetAlloc:
-       ds.b      4
+       dc.l      1
        xref      _strcpy
        xref      _itoa
        xref      _ltoa
+       xref      _MMSJOS_FUNC_RELOC
        xref      _memset
        xref      _strcat
        xref      _toupper
