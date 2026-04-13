@@ -275,7 +275,7 @@ extern unsigned char fsRenameFile(char * vfilename, char * vnewname);
 extern void runFromOsCmd(void);
 extern unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress);
 extern void catFile(unsigned char *parquivo);
-extern unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem);
+extern unsigned char fsLoadSerialToFile(char * vfilename);
 extern unsigned char fsLoadSerialToRun(char * vfilename);
 extern unsigned char fsFindDirPath(char * vpath, char vtype);
 extern void fsGetDirAtuData(FAT32_DIR *pDir);

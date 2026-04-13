@@ -48,7 +48,7 @@ unsigned char fsRenameFile(char * vfilename, char * vnewname);
 void runFromOsCmd(void);
 unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress);
 void catFile(unsigned char *parquivo);
-unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem);
+unsigned char fsLoadSerialToFile(char * vfilename);
 unsigned char fsFindDirPath(char * vpath, char vtype);
 void fsGetDirAtuData(FAT32_DIR *pDir);
 unsigned long fsMalloc(unsigned long vMemSize);
@@ -411,21 +411,32 @@ unsigned char fsRenameFile(char * vfilename, char * vnewname)
 }
 
 //-------------------------------------------------------------------------
-unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
+unsigned char fsLoadSerialToFile(char * vfilename)
 {
     unsigned long vSize, ix, vStep;
-    unsigned char *xaddress = hexToLong(vPosMem);
+	unsigned char *xaddress;
+	unsigned char *xaddressStart;
     unsigned char vBuffer[128];
     int iy;
     unsigned char vmovposyatu = 0;
     VDP_COORD vcursor;
     unsigned long vSizeTotalRec;
 
-    vSizeTotalRec = lstmGetSize();
+	vSizeTotalRec = 0;
+
+	xaddress = malloc(1024);
+	xaddressStart = xaddress;
+
+	if (!xaddress)
+	{
+		printText("No memory to receive file.\r\n\0");
+		return ERRO_B_WRITE_FILE;
+	}
 
     if (vfilename == 0)
     {
         printText("Error, file name must be provided!!\r\n\0");
+		free(xaddressStart);
         return ERRO_B_WRITE_FILE;;
     }
 
@@ -433,19 +444,33 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
 	if (fsFindInDir(vfilename, TYPE_FILE) < ERRO_D_START)
     {
         // Se existir, apaga
-        fsDelFile(vfilename);
+		if (fsDelFile(vfilename) != RETURN_OK)
+		{
+			free(xaddressStart);
+			return ERRO_B_WRITE_FILE;
+		}
     }
 
     // Cria o Arquivo
-    fsCreateFile(vfilename);
+	if (fsCreateFile(vfilename) != RETURN_OK)
+	{
+		free(xaddressStart);
+		return ERRO_B_CREATE_FILE;
+	}
 
     // Recebe os dados via Serial
-    if (!loadSerialToMem(vPosMem, 1))
+	if (!loadSerialToMem(xaddressStart, 1))
     {
+		vSizeTotalRec = lstmGetSize();
+
         // Abre Arquivo
         printText("Opening File...\r\n\0");
 
-        fsOpenFile(vfilename);
+		if (fsOpenFile(vfilename) != RETURN_OK)
+		{
+			free(xaddressStart);
+			return ERRO_B_WRITE_FILE;
+		}
 
         // Grava no Arquivo
         printText("Writing File...\r\n\0");
@@ -475,7 +500,7 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
 
         vmovposyatu = vcursor.y;
 
-        vStep = vSizeTotalRec / 20;
+		vStep = (vSizeTotalRec >= 20) ? (vSizeTotalRec / 20) : 0;
 
         vdp_set_cursor(1, (vcursor.y - 2));
 
@@ -483,7 +508,7 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
         {
             for (iy = 0; iy < 128; iy++)
             {
-                if (ix > 0 && ((ix + iy) % vStep) == 0)
+				if (vStep > 0 && ix > 0 && ((ix + iy) % vStep) == 0)
                     printChar(254, 1);
 
                 vBuffer[iy] = *xaddress;
@@ -491,7 +516,10 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
             }
 
             if (fsWriteFile(vfilename, ix, vBuffer, 128) != RETURN_OK)
+			{
+				free(xaddressStart);
                 return ERRO_B_WRITE_FILE;
+			}
         }
 
         vdp_set_cursor(0, vmovposyatu);
@@ -500,10 +528,14 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
         printText("\r\nClosing File...\r\n\0");
 
         fsCloseFile(vfilename, 0);
+
+		free(xaddressStart);
     }
     else
     {
         printText("Serial Load Error...");
+
+		free(xaddressStart);
 
         return ERRO_B_WRITE_FILE;
     }

@@ -74,7 +74,7 @@ unsigned char fsRenameFile(char * vfilename, char * vnewname);
 void runFromOsCmd(void);
 unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress);
 void catFile(unsigned char *parquivo);
-unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem);
+unsigned char fsLoadSerialToFile(char * vfilename);
 unsigned char fsLoadSerialToRun(char * vfilename);
 unsigned char fsFindDirPath(char * vpath, char vtype);
 void fsGetDirAtuData(FAT32_DIR *pDir);
@@ -124,6 +124,7 @@ void memInit(void);
 HEADER *_allocp;
 
 #define versionMMSJOS "1.0a02"
+#define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 
 #define STACKSIZE  1024
 #define STACKSIZEMGUI  2048
@@ -460,6 +461,8 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
     char cTemp[128];
     unsigned char vposTemp = 0, vrettype, logwildcard = 0;
 
+    vretfat = RETURN_OK;
+
     // Se veio parametro pela linha de parametro, usa esse
     if (linhaParametro[0] != '\0')
         blin = linhaParametro;
@@ -625,6 +628,8 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
             if (fsFindInDir(NULL, TYPE_FIRST_ENTRY) >= ERRO_D_START)
             {
                 printText("File not found..\r\n\0");
+                if (strcmp(linhacomando,"LS"))
+                    vretfat = ERRO_B_NOT_FOUND;
             }
             else
             {
@@ -1120,7 +1125,7 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
             }
             else if (!strcmp(linhacomando,"STOF") && iy == 4) // Arquivo (usa 1 soh)
             {
-                vretfat = fsLoadSerialToFile(linhaarg, "810000");  // Carrega da Serial para o Arquivo
+                vretfat = fsLoadSerialToFile(linhaarg);  // Carrega da Serial para o Arquivo
             }
             else if (!strcmp(linhacomando,"STOR") && iy == 4) // Arquivo (usa 1 soh)
             {
@@ -1720,21 +1725,33 @@ unsigned char fsRenameFile(char * vfilename, char * vnewname)
 }
 
 //-------------------------------------------------------------------------
-unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
+unsigned char fsLoadSerialToFile(char * vfilename)
 {
     unsigned long vSize, ix, vStep;
-    unsigned char *xaddress = hexToLong(vPosMem);
+    unsigned char *xaddress;
+    unsigned char *xaddressStart;
     unsigned char vBuffer[128];
     int iy;
     unsigned char vmovposyatu = 0;
     VDP_COORD vcursor;
     unsigned long vSizeTotalRec;
+    unsigned short vChunkSize;
 
-    vSizeTotalRec = lstmGetSize();
+    vSizeTotalRec = 0;
+
+    xaddress = malloc(STOF_RX_BUFFER_SIZE);
+    xaddressStart = xaddress;
+
+    if (!xaddress)
+    {
+        printText("No memory to receive file.\r\n\0");
+        return ERRO_B_WRITE_FILE;
+    }
 
     if (vfilename == 0)
     {
         printText("Error, file name must be provided!!\r\n\0");
+        free(xaddressStart);
         return ERRO_B_WRITE_FILE;;
     }
 
@@ -1742,19 +1759,33 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
 	if (fsFindInDir(vfilename, TYPE_FILE) < ERRO_D_START)
     {
         // Se existir, apaga
-        fsDelFile(vfilename);
+        if (fsDelFile(vfilename) != RETURN_OK)
+        {
+            free(xaddressStart);
+            return ERRO_B_WRITE_FILE;
+        }
     }
 
     // Cria o Arquivo
-    fsCreateFile(vfilename);
+    if (fsCreateFile(vfilename) != RETURN_OK)
+    {
+        free(xaddressStart);
+        return ERRO_B_CREATE_FILE;
+    }
 
     // Recebe os dados via Serial
-    if (!loadSerialToMem2(vPosMem, 1))
+    if (!loadSerialToMem2(xaddressStart, 1))
     {
+        vSizeTotalRec = lstmGetSize();
+
         // Abre Arquivo
         printText("Opening File...\r\n\0");
 
-        fsOpenFile(vfilename);
+        if (fsOpenFile(vfilename) != RETURN_OK)
+        {
+            free(xaddressStart);
+            return ERRO_B_WRITE_FILE;
+        }
 
         // Grava no Arquivo
         printText("Writing File...\r\n\0");
@@ -1784,23 +1815,33 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
 
         vmovposyatu = vcursor.y;
 
-        vStep = vSizeTotalRec / 20;
+        vStep = (vSizeTotalRec >= 20) ? (vSizeTotalRec / 20) : 0;
 
         vdp_set_cursor(1, (vcursor.y - 2));
 
         for (ix = 0; ix < vSizeTotalRec; ix += 128)
         {
+            vChunkSize = (unsigned short)(vSizeTotalRec - ix);
+            if (vChunkSize > 128)
+                vChunkSize = 128;
+
             for (iy = 0; iy < 128; iy++)
             {
-                if (ix > 0 && ((ix + iy) % vStep) == 0)
-                    printChar(254, 1);
+                if (vStep > 0 && ix > 0 && ((ix + iy) % vStep) == 0)
+                    printChar(219, 1);  // Cursor cheio
 
-                vBuffer[iy] = *xaddress;
-                xaddress += 1;
+                if (iy < vChunkSize)
+                {
+                    vBuffer[iy] = *xaddress;
+                    xaddress += 1;
+                }
             }
 
-            if (fsWriteFile(vfilename, ix, vBuffer, 128) != RETURN_OK)
+            if (fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize) != RETURN_OK)
+            {
+                free(xaddressStart);
                 return ERRO_B_WRITE_FILE;
+            }
         }
 
         vdp_set_cursor(0, vmovposyatu);
@@ -1809,10 +1850,14 @@ unsigned char fsLoadSerialToFile(char * vfilename, char * vPosMem)
         printText("\r\nClosing File...\r\n\0");
 
         fsCloseFile(vfilename, 0);
+
+        free(xaddressStart);
     }
     else
     {
         printText("Serial Load Error...");
+
+        free(xaddressStart);
 
         return ERRO_B_WRITE_FILE;
     }
@@ -3363,63 +3408,58 @@ unsigned char fsSectorWrite(unsigned long vsector, unsigned char* vbuffer, unsig
 
 //-----------------------------------------------------------------------------
 void catFile(unsigned char *parquivo) {
-    unsigned short vbytepic;
-    unsigned char *mcfgfileptr = 0x00, *mcfgfilebase = 0x00, vqtd = 1;
-    unsigned char *parqptr = parquivo;
-    unsigned long vsizefile, vsizefilemalloc;
-    unsigned char sqtdtam[10];
+    unsigned long voffset, vsizeR, vclusterdiratu;
+    unsigned short ix;
+    unsigned char vbuffer[128];
 
-    while (*parqptr++)
-        vqtd++;
+    voffset = 0;
 
-    vsizefilemalloc = fsInfoFile(parquivo, INFO_SIZE);
-    mcfgfilebase = malloc(vsizefilemalloc);
-
-    if (!mcfgfilebase) {
-        printText("No memory to load file...\r\n\0");
+    if (fsFindDirPath(parquivo, FIND_PATH_PART) == FIND_PATH_RET_ERROR)
+    {
+        printText("Loading file error...\r\n\0");
         return;
     }
 
-    mcfgfileptr = mcfgfilebase;
+    vclusterdiratu = vretpath.ClusterDirAtu;
+    vclusterdir = vretpath.ClusterDir;
 
-    vsizefile = loadFile(parquivo, (unsigned long*)mcfgfileptr);   // 12K espaco pra carregar arquivo. Colocar logica pra pegar tamanho e alocar espaco
-
-
-    if (!verro) {
-        /*itoa(vsizefile, sqtdtam, 10);
-        printText(sqtdtam);
-        printText("\r\n\0");*/
-
-        while (vsizefile > 0) {
-            /*itoa(vsizefile, sqtdtam, 10);
-            printText(sqtdtam);
-            printText("\r\n\0");*/
-
-            if (*mcfgfileptr == 0x0D) {
-                printText("\r\0");
-            }
-            else if (*mcfgfileptr == 0x0A) {
-                printText("\r\n\0");
-            }
-            else if (*mcfgfileptr == 0x1A || *mcfgfileptr == 0x00) {
-                    break;
-            }
-            else {
-                if (*mcfgfileptr >= 0x20 && *mcfgfileptr < 0xFF)
-                    printChar(*mcfgfileptr, 1);
-                else
-                    printChar(0x20, 1);
-            }
-
-            mcfgfileptr++;
-            vsizefile--;
-        }
-    }
-    else {
+    if (fsOpenFile(vretpath.Name) != RETURN_OK)
+    {
+        vclusterdir = vclusterdiratu;
         printText("Loading file error...\r\n\0");
+        return;
     }
 
-    free(mcfgfilebase);
+    while (1)
+    {
+        vsizeR = fsReadFile(vretpath.Name, voffset, vbuffer, sizeof(vbuffer));
+
+        if (vsizeR == 0)
+            break;
+
+        for (ix = 0; ix < vsizeR; ix++)
+        {
+            if (vbuffer[ix] == 0x0D)
+                printText("\r\0");
+            else if (vbuffer[ix] == 0x0A)
+                printText("\r\n\0");
+            else if (vbuffer[ix] == 0x1A || vbuffer[ix] == 0x00)
+            {
+                fsCloseFile(vretpath.Name, 0);
+                vclusterdir = vclusterdiratu;
+                return;
+            }
+            else if (vbuffer[ix] >= 0x20 && vbuffer[ix] < 0xFF)
+                printChar(vbuffer[ix], 1);
+            else
+                printChar(0x20, 1);
+        }
+
+        voffset += vsizeR;
+    }
+
+    fsCloseFile(vretpath.Name, 0);
+    vclusterdir = vclusterdiratu;
 }
 
 //-----------------------------------------------------------------------------
@@ -3427,6 +3467,7 @@ unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress)
 {
     unsigned short cc, dd;
     unsigned char vbuffer[512];
+    unsigned char *xaddressb = (unsigned char *)xaddress;
     unsigned int vbytegrava = 0;
     unsigned short xdado = 0, xcounter = 0;
     unsigned short vcrc, vcrcpic, vloop;
@@ -3454,17 +3495,14 @@ unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress)
 
 			if (vsizeR != 0)
             {
-                for (dd = 0; dd < 512; dd += 2)
+                for (dd = 0; dd < vsizeR; dd++)
                 {
-                	vbytegrava = (unsigned short)vbuffer[dd] << 8;
-                	vbytegrava = vbytegrava | (vbuffer[dd + 1] & 0x00FF);
-
-                    // Grava Dados na Posição Especificada
-                    *xaddress = vbytegrava;
-                    xaddress += 1;
+                    // Grava exatamente os bytes lidos para evitar sobrescrever heap.
+                    *xaddressb++ = vbuffer[dd];
                 }
 
-                vsizefile += 512;
+
+                vsizefile += vsizeR;
 			}
 			else
 				break;
