@@ -239,6 +239,8 @@ void main(void)
     printText("Ok\r\n\0");
     printText("#>");
 
+    vbuf[0] = '\0';
+
     showCursor();
 
     *(vmfp + Reg_IERA) |= 0x01; // Timer B 10ms - Tick OS
@@ -309,7 +311,7 @@ void inputTask(void *pdata)
                 if (vRetProcCmd)
                     printText("\r\n\0");
 
-                printChar('#>', 1);
+                printText("#>");
             }
 
             showCursor();
@@ -3460,6 +3462,8 @@ void catFile(unsigned char *parquivo) {
 
     fsCloseFile(vretpath.Name, 0);
     vclusterdir = vclusterdiratu;
+
+    printText("\r\n\0");
 }
 
 //-----------------------------------------------------------------------------

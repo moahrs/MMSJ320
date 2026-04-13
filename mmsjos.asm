@@ -485,6 +485,8 @@ _main:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
+; vbuf[0] = '\0';
+       clr.b     _vbuf.L
 ; showCursor();
        move.l    1082,A0
        jsr       (A0)
@@ -652,12 +654,11 @@ inputTask_16:
        jsr       (A0)
        addq.w    #4,A7
 inputTask_17:
-; printChar('#>', 1);
-       pea       1
-       pea       62
-       move.l    1062,A0
+; printText("#>");
+       pea       @mmsjos_29.L
+       move.l    1058,A0
        jsr       (A0)
-       addq.w    #8,A7
+       addq.w    #4,A7
 inputTask_14:
 ; }
 ; showCursor();
@@ -9543,6 +9544,11 @@ catFile_8:
        addq.w    #8,A7
 ; vclusterdir = vclusterdiratu;
        move.l    D4,(A4)
+; printText("\r\n\0");
+       pea       @mmsjos_1.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
 catFile_3:
        movem.l   (A7)+,D2/D3/D4/D5/A2/A3/A4
        unlk      A6
