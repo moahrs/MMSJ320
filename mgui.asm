@@ -10,6 +10,7 @@
 ; *    ...       ...       ...            ...
 ; * 03/01/2025  0.5a    Moacir Jr.   Troca de cores e ajustes de tela
 ; * 19/01/2025  0.6     Moacir Jr.   Adaptar para rodar junto com o MMSJOS
+; * 13/04/2026  0.7a02  Moacir Jr.   Ajustes para o mouse e o sprite do ponteiro
 ; *--------------------------------------------------------------------------------
 ; *
 ; *--------------------------------------------------------------------------------
@@ -29,7 +30,7 @@
 ; #include "monitor.h"
 ; #include "monitorapi.h"
 ; #include "mgui.h"
-; #define versionMgui "0.6"
+; #define versionMgui "0.7a02"
 ; #define __EM_OBRAS__ 1
 ; unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
 ; unsigned char *vvdgc = 0x00400043; // VDP TMS9118 Registers/Address Mode
@@ -70,8 +71,8 @@
 ; extern HEADER *_allocp;
 ; #define STACKSIZE  1024
 ; #define STACKSIZEMGUI  2048
-; #define STACKSIZEMOUSE  256
-; #define STACKSIZEMENU  256
+; #define STACKSIZEMOUSE  2048
+; #define STACKSIZEMENU  1024
 ; extern OS_STK StkInput[STACKSIZE];
 ; OS_STK StkFiles[STACKSIZEMGUI];
 ; OS_STK StkMouse[STACKSIZEMOUSE];
@@ -81,6 +82,7 @@
 ; void mouseTask (void *pData);
 ; void menuTask (void *pData);
 ; void messageTask (void *pData);
+; void runBin(void);
 ; //-----------------------------------------------------------------------------
 ; void clearScrW(unsigned char color)
 ; {
@@ -4036,7 +4038,7 @@ _startMGI:
        pea       131
        jsr       (A4)
        add.w     #24,A7
-; writesxy(113,150,1,"v"versionMgui,vcorwf,vcorwb);
+; writesxy(105,150,1,"v"versionMgui,vcorwf,vcorwb);
        move.b    (A2),D1
        and.w     #255,D1
        and.l     #65535,D1
@@ -4048,7 +4050,7 @@ _startMGI:
        pea       @mgui_5.L
        pea       1
        pea       150
-       pea       113
+       pea       105
        jsr       (A4)
        add.w     #24,A7
 ; writesxy(86,170,1,"Loading Config",vcorwf,vcorwb);
@@ -4271,7 +4273,7 @@ startMGI_3:
        jsr       (A0)
        add.w     #12,A7
        move.b    D0,_statusVdpSprite.L
-; OSTaskCreate(mouseTask, OS_NULL, &StkMouse[STACKSIZEMGUI], TASK_MGUI_MOUSE);
+; OSTaskCreate(mouseTask, OS_NULL, &StkMouse[STACKSIZEMOUSE], TASK_MGUI_MOUSE);
        pea       12
        lea       _StkMouse.L,A0
        add.w     #4096,A0
@@ -5399,40 +5401,69 @@ VerifyMouse_7:
        ext.l     D0
        add.l     D0,(A2)
 VerifyMouse_5:
+; if (mouseX <= 1)
+       move.l    (A2),D0
+       cmp.l     #1,D0
+       bhi.s     VerifyMouse_9
+; mouseX = 2;
+       move.l    #2,(A2)
+VerifyMouse_9:
+; if (mouseX >= 254)
+       move.l    (A2),D0
+       cmp.l     #254,D0
+       blo.s     VerifyMouse_11
+; mouseX = 253;
+       move.l    #253,(A2)
+VerifyMouse_11:
 ; if (mouseMoveY < -2)
        move.b    _mouseMoveY.L,D0
        cmp.b     #-2,D0
-       bge.s     VerifyMouse_9
-; mouseMoveY = 2;
-       move.b    #2,_mouseMoveY.L
-VerifyMouse_9:
+       bge.s     VerifyMouse_13
+; mouseMoveY = -2;
+       move.b    #-2,_mouseMoveY.L
+VerifyMouse_13:
 ; if (mouseMoveY > 2)
        move.b    _mouseMoveY.L,D0
        cmp.b     #2,D0
-       ble.s     VerifyMouse_11
-; mouseMoveY = -2;
-       move.b    #-2,_mouseMoveY.L
-VerifyMouse_11:
+       ble.s     VerifyMouse_15
+; mouseMoveY = 2;
+       move.b    #2,_mouseMoveY.L
+VerifyMouse_15:
 ; if ((mouseMoveY == -2 && mouseY > 1) || (mouseMoveY == 2 && mouseY < 190))
        move.b    _mouseMoveY.L,D0
        cmp.b     #-2,D0
-       bne.s     VerifyMouse_16
+       bne.s     VerifyMouse_20
        move.b    _mouseY.L,D0
        cmp.b     #1,D0
-       bhi.s     VerifyMouse_15
-VerifyMouse_16:
+       bhi.s     VerifyMouse_19
+VerifyMouse_20:
        move.b    _mouseMoveY.L,D0
        cmp.b     #2,D0
-       bne.s     VerifyMouse_13
+       bne.s     VerifyMouse_17
        move.b    _mouseY.L,D0
        and.w     #255,D0
        cmp.w     #190,D0
-       bhs.s     VerifyMouse_13
-VerifyMouse_15:
-; mouseY = mouseY + mouseMoveY;
+       bhs.s     VerifyMouse_17
+VerifyMouse_19:
+; mouseY = mouseY - mouseMoveY;
        move.b    _mouseMoveY.L,D0
-       add.b     D0,_mouseY.L
-VerifyMouse_13:
+       sub.b     D0,_mouseY.L
+VerifyMouse_17:
+; if (mouseY <= 1)
+       move.b    _mouseY.L,D0
+       cmp.b     #1,D0
+       bhi.s     VerifyMouse_21
+; mouseY = 2;
+       move.b    #2,_mouseY.L
+VerifyMouse_21:
+; if (mouseY >= 190)
+       move.b    _mouseY.L,D0
+       and.w     #255,D0
+       cmp.w     #190,D0
+       blo.s     VerifyMouse_23
+; mouseY = 189;
+       move.b    #189,_mouseY.L
+VerifyMouse_23:
 ; mouseBtnPres = mouseStat & 0x07;
        move.b    _mouseStat.L,D0
        and.b     #7,D0
@@ -5449,7 +5480,7 @@ VerifyMouse_13:
        move.b    D0,_statusVdpSprite.L
 ; if (mouseBtnPres)
        tst.b     _mouseBtnPres.L
-       beq.s     VerifyMouse_17
+       beq.s     VerifyMouse_25
 ; {
 ; vpostx = mouseX;
        move.l    (A2),D0
@@ -5458,7 +5489,7 @@ VerifyMouse_13:
        move.b    _mouseY.L,D0
        and.w     #255,D0
        move.w    D0,_vposty.L
-VerifyMouse_17:
+VerifyMouse_25:
        move.l    (A7)+,A2
        unlk      A6
        rts
@@ -6387,7 +6418,7 @@ _new_menu:
 ; OSTaskCreate(menuTask, OS_NULL, &StkMenu[STACKSIZEMENU], 20);
        pea       20
        lea       _StkMenu.L,A0
-       add.w     #512,A0
+       add.w     #2048,A0
        move.l    A0,-(A7)
        clr.l     -(A7)
        pea       _menuTask.L
@@ -6446,10 +6477,12 @@ new_menu_12:
        dc.w      new_menu_16-new_menu_12
 new_menu_13:
 ; case 1: // RUN
+; runBin();
+       jsr       _runBin
 ; break;
        bra.s     new_menu_11
 new_menu_14:
-; case 2: // MMSJDOS
+; case 2: // MMSJOS
 ; break;
        bra.s     new_menu_11
 new_menu_15:
@@ -6872,7 +6905,7 @@ menuTask_20:
 ; break;
        bra.s     menuTask_14
 menuTask_16:
-; case 1: // Help
+; case 1: // Import File via Serial
 ; importFile();
        jsr       _importFile
 ; break;
@@ -6920,30 +6953,375 @@ menuTask_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
+; void runBin(void)
+; {
+       xdef      _runBin
+_runBin:
+       link      A6,#-248
+       movem.l   D2/D3/D4/D5/D6/A2/A3/A4/A5,-(A7)
+       lea       -180(A6),A2
+       lea       _message.L,A3
+       lea       -116(A6),A4
+       lea       -244(A6),A5
+; unsigned short ix;
+; unsigned char vwb, vresp;
+; unsigned char vnamein[64], vfilename[64], vfullpath[96];
+; unsigned char *vEndExec;
+; unsigned long vsizefilemalloc;
+; char *vdot;
+; MGUI_SAVESCR vsavescr;
+; vnamein[0] = '\0';
+       clr.b     (A5)
+; vfilename[0] = '\0';
+       clr.b     (A2)
+; vfullpath[0] = '\0';
+       clr.b     (A4)
+; SaveScreenNew(&vsavescr, 10,40,240,60);
+       pea       60
+       pea       240
+       pea       40
+       pea       10
+       pea       -20(A6)
+       jsr       _SaveScreenNew
+       add.w     #20,A7
+; showWindow("Run Binary",10,40,240,50,BTOK | BTCANCEL);
+       pea       3
+       pea       50
+       pea       240
+       pea       40
+       pea       10
+       pea       @mgui_38.L
+       jsr       _showWindow
+       add.w     #24,A7
+; writesxy(12,57,8,"File Name:",vcorwf,vcorwb);
+       move.b    _vcorwb.L,D1
+       and.w     #255,D1
+       and.l     #65535,D1
+       move.l    D1,-(A7)
+       move.b    _vcorwf.L,D1
+       and.w     #255,D1
+       and.l     #65535,D1
+       move.l    D1,-(A7)
+       pea       @mgui_39.L
+       pea       8
+       pea       57
+       pea       12
+       jsr       _writesxy
+       add.w     #24,A7
+; fillin(vnamein, 78, 57, 130, WINDISP);
+       clr.l     -(A7)
+       pea       130
+       pea       57
+       pea       78
+       move.l    A5,-(A7)
+       jsr       _fillin
+       add.w     #20,A7
+; while (1)
+runBin_1:
+; {
+; fillin(vnamein, 78, 57, 130, WINOPER);
+       pea       1
+       pea       130
+       pea       57
+       pea       78
+       move.l    A5,-(A7)
+       jsr       _fillin
+       add.w     #20,A7
+; vwb = waitButton();
+       jsr       _waitButton
+       move.b    D0,D5
+; if (vwb == BTOK || vwb == BTCANCEL)
+       cmp.b     #1,D5
+       beq.s     runBin_6
+       cmp.b     #2,D5
+       bne.s     runBin_4
+runBin_6:
+; break;
+       bra.s     runBin_3
+runBin_4:
+; OSTimeDlyHMSM(0, 0, 0, 30);
+       pea       30
+       clr.l     -(A7)
+       clr.l     -(A7)
+       clr.l     -(A7)
+       jsr       _OSTimeDlyHMSM
+       add.w     #16,A7
+       bra       runBin_1
+runBin_3:
+; }
+; RestoreScreen(vsavescr);
+       lea       -20(A6),A0
+       add.w     #20,A0
+       moveq     #4,D1
+       move.l    -(A0),-(A7)
+       dbra      D1,*-2
+       jsr       _RestoreScreen
+       add.w     #20,A7
+; if (vwb != BTOK)
+       cmp.b     #1,D5
+       beq.s     runBin_7
+; return;
+       bra       runBin_9
+runBin_7:
+; if (vnamein[0] == '\0')
+       move.b    (A5),D0
+       bne.s     runBin_10
+; {
+; message("Error, file name must be provided!!\0", BTCLOSE, 0);
+       clr.l     -(A7)
+       pea       64
+       pea       @mgui_40.L
+       jsr       (A3)
+       add.w     #12,A7
+; return;
+       bra       runBin_9
+runBin_10:
+; }
+; for (ix = 0; ix < 63 && vnamein[ix] != '\0'; ix++)
+       clr.w     D2
+runBin_12:
+       cmp.w     #63,D2
+       bhs.s     runBin_14
+       and.l     #65535,D2
+       move.b    0(A5,D2.L),D0
+       beq.s     runBin_14
+; vfilename[ix] = toupper(vnamein[ix]);
+       and.l     #65535,D2
+       move.b    0(A5,D2.L),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       _toupper
+       addq.w    #4,A7
+       and.l     #65535,D2
+       move.b    D0,0(A2,D2.L)
+       addq.w    #1,D2
+       bra       runBin_12
+runBin_14:
+; vfilename[ix] = '\0';
+       and.l     #65535,D2
+       clr.b     0(A2,D2.L)
+; vdot = 0;
+       clr.l     D4
+; for (ix = 0; vfilename[ix] != '\0'; ix++)
+       clr.w     D2
+runBin_15:
+       and.l     #65535,D2
+       move.b    0(A2,D2.L),D0
+       beq.s     runBin_17
+; {
+; if (vfilename[ix] == '.')
+       and.l     #65535,D2
+       move.b    0(A2,D2.L),D0
+       cmp.b     #46,D0
+       bne.s     runBin_18
+; vdot = &vfilename[ix];
+       move.l    A2,D0
+       and.l     #65535,D2
+       add.l     D2,D0
+       move.l    D0,D4
+runBin_18:
+       addq.w    #1,D2
+       bra       runBin_15
+runBin_17:
+; }
+; if (!vdot)
+       tst.l     D4
+       bne       runBin_20
+; {
+; if (strlen(vfilename) > 59)
+       move.l    A2,-(A7)
+       jsr       _strlen
+       addq.w    #4,A7
+       cmp.l     #59,D0
+       ble.s     runBin_22
+; {
+; message("Invalid file name length\0", BTCLOSE, 0);
+       clr.l     -(A7)
+       pea       64
+       pea       @mgui_41.L
+       jsr       (A3)
+       add.w     #12,A7
+; return;
+       bra       runBin_9
+runBin_22:
+; }
+; strcat(vfilename, ".BIN");
+       pea       @mgui_42.L
+       move.l    A2,-(A7)
+       jsr       _strcat
+       addq.w    #8,A7
+       bra.s     runBin_24
+runBin_20:
+; }
+; else if (strcmp(vdot, ".BIN") != 0)
+       pea       @mgui_42.L
+       move.l    D4,-(A7)
+       jsr       _strcmp
+       addq.w    #8,A7
+       tst.l     D0
+       beq.s     runBin_24
+; {
+; message("Only .BIN files are allowed\0", BTCLOSE, 0);
+       clr.l     -(A7)
+       pea       64
+       pea       @mgui_43.L
+       jsr       (A3)
+       add.w     #12,A7
+; return;
+       bra       runBin_9
+runBin_24:
+; }
+; if (vfilename[0] == '/')
+       move.b    (A2),D0
+       cmp.b     #47,D0
+       bne.s     runBin_26
+; strcpy(vfullpath, vfilename);
+       move.l    A2,-(A7)
+       move.l    A4,-(A7)
+       jsr       _strcpy
+       addq.w    #8,A7
+       bra.s     runBin_27
+runBin_26:
+; else
+; {
+; strcpy(vfullpath, "/MGUI/PROGS/");
+       pea       @mgui_44.L
+       move.l    A4,-(A7)
+       jsr       _strcpy
+       addq.w    #8,A7
+; strcat(vfullpath, vfilename);
+       move.l    A2,-(A7)
+       move.l    A4,-(A7)
+       jsr       _strcat
+       addq.w    #8,A7
+runBin_27:
+; }
+; vresp = message("Run selected file ?\0",(BTYES | BTNO), 0);
+       clr.l     -(A7)
+       pea       12
+       pea       @mgui_45.L
+       jsr       (A3)
+       add.w     #12,A7
+       move.b    D0,-245(A6)
+; if (vresp != BTYES)
+       move.b    -245(A6),D0
+       cmp.b     #4,D0
+       beq.s     runBin_28
+; return;
+       bra       runBin_9
+runBin_28:
+; vsizefilemalloc = fsInfoFile(vfullpath, INFO_SIZE);
+       pea       1
+       move.l    A4,-(A7)
+       jsr       _fsInfoFile
+       addq.w    #8,A7
+       move.l    D0,D6
+; if (vsizefilemalloc == ERRO_D_NOT_FOUND)
+       cmp.l     #-1,D6
+       bne.s     runBin_30
+; {
+; message("File not found...\0", BTCLOSE, 0);
+       clr.l     -(A7)
+       pea       64
+       pea       @mgui_46.L
+       jsr       (A3)
+       add.w     #12,A7
+; return;
+       bra       runBin_9
+runBin_30:
+; }
+; TrocaSpriteMouse(MOUSE_HOURGLASS);
+       pea       2
+       jsr       _TrocaSpriteMouse
+       addq.w    #4,A7
+; vEndExec = malloc(vsizefilemalloc);
+       move.l    D6,-(A7)
+       jsr       _malloc
+       addq.w    #4,A7
+       move.l    D0,D3
+; if (!vEndExec)
+       tst.l     D3
+       bne.s     runBin_32
+; {
+; TrocaSpriteMouse(MOUSE_POINTER);
+       pea       1
+       jsr       _TrocaSpriteMouse
+       addq.w    #4,A7
+; message("No memory to load .BIN\0", BTCLOSE, 0);
+       clr.l     -(A7)
+       pea       64
+       pea       @mgui_47.L
+       jsr       (A3)
+       add.w     #12,A7
+; return;
+       bra       runBin_9
+runBin_32:
+; }
+; loadFile(vfullpath, (unsigned long*)vEndExec);
+       move.l    D3,-(A7)
+       move.l    A4,-(A7)
+       jsr       _loadFile
+       addq.w    #8,A7
+; TrocaSpriteMouse(MOUSE_POINTER);
+       pea       1
+       jsr       _TrocaSpriteMouse
+       addq.w    #4,A7
+; if (!verro)
+       tst.b     _verro.L
+       bne.s     runBin_34
+; runFromMGUI(vEndExec);
+       move.l    D3,-(A7)
+       jsr       _runFromMGUI
+       addq.w    #4,A7
+       bra.s     runBin_35
+runBin_34:
+; else
+; {
+; message("Loading Error...\0", BTCLOSE, 0);
+       clr.l     -(A7)
+       pea       64
+       pea       @mgui_35.L
+       jsr       (A3)
+       add.w     #12,A7
+; free(vEndExec);
+       move.l    D3,-(A7)
+       jsr       _free
+       addq.w    #4,A7
+runBin_35:
+; }
+; return;
+runBin_9:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/A2/A3/A4/A5
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
 ; void importFile(void)
 ; {
        xdef      _importFile
 _importFile:
-       link      A6,#-296
+       link      A6,#-304
        movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
        lea       _vcorwf.L,A2
        lea       _vcorwb.L,A3
        lea       _writesxy.L,A4
-       lea       -288(A6),A5
+       lea       -292(A6),A5
 ; unsigned long vStep, ix;
 ; unsigned char *xaddress = 0x00840000;
-       move.l    #8650752,-292(A6)
+       move.l    #8650752,D7
+; unsigned char *xaddressStart;
 ; unsigned char vErro, vPerc;
 ; char vfilename[64], vstring[64];
 ; unsigned char vwb, vresp, vBuffer[128];
 ; int iy;
 ; unsigned char sqtdtam[10];
 ; unsigned long vSizeTotalRec;
+; unsigned short vChunkSize;
 ; MGUI_SAVESCR vsavescr;
 ; vSizeTotalRec = lstmGetSize();
        move.l    1178,A0
        jsr       (A0)
-       move.l    D0,D7
+       move.l    D0,-24(A6)
 ; SaveScreenNew(&vsavescr, 10,40,240,60);
        pea       60
        pea       240
@@ -6970,7 +7348,7 @@ _importFile:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_38.L
+       pea       @mgui_39.L
        pea       8
        pea       57
        pea       12
@@ -6981,7 +7359,7 @@ _importFile:
        pea       130
        pea       57
        pea       78
-       pea       -224(A6)
+       pea       -228(A6)
        jsr       _fillin
        add.w     #20,A7
 ; vErro = RETURN_OK;
@@ -6994,16 +7372,16 @@ importFile_1:
        pea       130
        pea       57
        pea       78
-       pea       -224(A6)
+       pea       -228(A6)
        jsr       _fillin
        add.w     #20,A7
 ; vwb = waitButton();
        jsr       _waitButton
-       move.b    D0,D4
+       move.b    D0,D5
 ; if (vwb == BTOK || vwb == BTCANCEL)
-       cmp.b     #1,D4
+       cmp.b     #1,D5
        beq.s     importFile_6
-       cmp.b     #2,D4
+       cmp.b     #2,D5
        bne.s     importFile_4
 importFile_6:
 ; break;
@@ -7028,18 +7406,18 @@ importFile_3:
        jsr       _RestoreScreen
        add.w     #20,A7
 ; if (vwb == BTOK)
-       cmp.b     #1,D4
+       cmp.b     #1,D5
        bne       importFile_15
 ; {
 ; if (vstring == 0)
-       lea       -224(A6),A0
+       lea       -228(A6),A0
        move.l    A0,D0
        bne.s     importFile_9
 ; {
 ; message("Error, file name must be provided!!\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_39.L
+       pea       @mgui_40.L
        jsr       _message
        add.w     #12,A7
 ; return;
@@ -7051,7 +7429,7 @@ importFile_9:
 importFile_12:
        cmp.l     #12,D2
        bhs       importFile_14
-       lea       -224(A6),A0
+       lea       -228(A6),A0
        move.b    0(A0,D2.L),D1
        ext.w     D1
        ext.l     D1
@@ -7061,7 +7439,7 @@ importFile_12:
        tst.l     D0
        beq.s     importFile_14
 ; vfilename[ix] = toupper(vstring[ix]);
-       lea       -224(A6),A0
+       lea       -228(A6),A0
        move.b    0(A0,D2.L),D1
        ext.w     D1
        ext.l     D1
@@ -7077,12 +7455,12 @@ importFile_14:
 ; vresp = message("Confirm serial Connected.\nImport File ?\0",(BTYES | BTNO), 0);
        clr.l     -(A7)
        pea       12
-       pea       @mgui_40.L
+       pea       @mgui_48.L
        jsr       _message
        add.w     #12,A7
-       move.b    D0,-159(A6)
+       move.b    D0,-163(A6)
 ; if (vresp == BTYES)
-       move.b    -159(A6),D0
+       move.b    -163(A6),D0
        cmp.b     #4,D0
        bne       importFile_15
 ; {
@@ -7104,7 +7482,7 @@ importFile_14:
        pea       240
        pea       40
        pea       10
-       pea       @mgui_41.L
+       pea       @mgui_49.L
        jsr       _showWindow
        add.w     #24,A7
 ; // Verifica se o arquivo existe
@@ -7125,7 +7503,7 @@ importFile_14:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_42.L
+       pea       @mgui_50.L
        pea       8
        pea       55
        pea       12
@@ -7148,7 +7526,7 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_43.L
+       pea       @mgui_51.L
        pea       8
        pea       55
        pea       12
@@ -7173,16 +7551,23 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_44.L
+       pea       @mgui_52.L
        pea       8
        pea       55
        pea       12
        jsr       (A4)
        add.w     #24,A7
-; if (!loadSerialToMem("840000", 0))
+; xaddress = malloc(256UL * 1024UL); // Aloca 256KB para receber o arquivo via serial
+       pea       262144
+       jsr       _malloc
+       addq.w    #4,A7
+       move.l    D0,D7
+; xaddressStart = xaddress;
+       move.l    D7,-298(A6)
+; if (!loadSerialToMem2(xaddressStart, 0))
        clr.l     -(A7)
-       pea       @mgui_45.L
-       move.l    1070,A0
+       move.l    -298(A6),-(A7)
+       move.l    1210,A0
        jsr       (A0)
        addq.w    #8,A7
        tst.b     D0
@@ -7198,16 +7583,30 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_46.L
+       pea       @mgui_53.L
        pea       8
        pea       55
        pea       12
        jsr       (A4)
        add.w     #24,A7
-; fsOpenFile(vfilename);
+; vErro = fsOpenFile(vfilename);
        move.l    A5,-(A7)
        jsr       _fsOpenFile
        addq.w    #4,A7
+       move.b    D0,D3
+; if (vErro != RETURN_OK)
+       tst.b     D3
+       beq.s     importFile_23
+; {
+; free(xaddressStart);
+       move.l    -298(A6),-(A7)
+       jsr       _free
+       addq.w    #4,A7
+       bra       importFile_24
+importFile_23:
+; }
+; else
+; {
 ; // Grava no Arquivo
 ; writesxy(12,55,8,"Writing File...",vcorwf,vcorwb);
        move.b    (A3),D1
@@ -7218,7 +7617,7 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_47.L
+       pea       @mgui_54.L
        pea       8
        pea       55
        pea       12
@@ -7236,38 +7635,48 @@ importFile_17:
        jsr       _DrawRect
        add.w     #20,A7
 ; vStep = vSizeTotalRec / 20;
-       move.l    D7,-(A7)
+       move.l    -24(A6),-(A7)
        pea       20
        jsr       ULDIV
        move.l    (A7),D0
        addq.w    #8,A7
-       move.l    D0,-296(A6)
+       move.l    D0,-302(A6)
 ; vPerc = 0;
-       clr.b     D6
+       clr.b     -293(A6)
 ; for (ix = 0; ix < vSizeTotalRec; ix += 128)
        clr.l     D2
-importFile_23:
-       cmp.l     D7,D2
-       bhs       importFile_25
+importFile_25:
+       cmp.l     -24(A6),D2
+       bhs       importFile_27
 ; {
+; vChunkSize = (unsigned short)(vSizeTotalRec - ix);
+       move.l    -24(A6),D0
+       sub.l     D2,D0
+       move.w    D0,D6
+; if (vChunkSize > 128)
+       cmp.w     #128,D6
+       bls.s     importFile_28
+; vChunkSize = 128;
+       move.w    #128,D6
+importFile_28:
 ; for (iy = 0; iy < 128; iy++)
-       clr.l     D5
-importFile_26:
-       cmp.l     #128,D5
-       bge       importFile_28
+       clr.l     D4
+importFile_30:
+       cmp.l     #128,D4
+       bge       importFile_32
 ; {
 ; if (ix > 0 && ((ix + iy) % vStep) == 0)
        cmp.l     #0,D2
-       bls       importFile_29
+       bls       importFile_33
        move.l    D2,D0
-       add.l     D5,D0
+       add.l     D4,D0
        move.l    D0,-(A7)
-       move.l    -296(A6),-(A7)
+       move.l    -302(A6),-(A7)
        jsr       ULDIV
        move.l    4(A7),D0
        addq.w    #8,A7
        tst.l     D0
-       bne.s     importFile_29
+       bne.s     importFile_33
 ; {
 ; FillRect((21 + vPerc), 71, 8, 8, VDP_DARK_BLUE);
        pea       4
@@ -7275,28 +7684,36 @@ importFile_26:
        pea       8
        pea       71
        moveq     #21,D1
-       add.b     D6,D1
+       add.b     -293(A6),D1
        and.l     #255,D1
        move.l    D1,-(A7)
        jsr       _FillRect
        add.w     #20,A7
 ; vPerc += 10;
-       add.b     #10,D6
-importFile_29:
+       add.b     #10,-293(A6)
+importFile_33:
 ; }
+; if (iy < vChunkSize)
+       and.l     #65535,D6
+       cmp.l     D6,D4
+       bhs.s     importFile_35
+; {
 ; vBuffer[iy] = *xaddress;
-       move.l    -292(A6),A0
-       lea       -158(A6),A1
-       move.b    (A0),0(A1,D5.L)
+       move.l    D7,A0
+       lea       -162(A6),A1
+       move.b    (A0),0(A1,D4.L)
 ; xaddress += 1;
-       addq.l    #1,-292(A6)
-       addq.l    #1,D5
-       bra       importFile_26
-importFile_28:
+       addq.l    #1,D7
+importFile_35:
+       addq.l    #1,D4
+       bra       importFile_30
+importFile_32:
 ; }
-; vErro = fsWriteFile(vfilename, ix, vBuffer, 128);
-       pea       128
-       pea       -158(A6)
+; }
+; vErro = fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize);
+       and.l     #255,D6
+       move.l    D6,-(A7)
+       pea       -162(A6)
        move.l    D2,-(A7)
        move.l    A5,-(A7)
        jsr       _fsWriteFile
@@ -7304,13 +7721,19 @@ importFile_28:
        move.b    D0,D3
 ; if (vErro != RETURN_OK)
        tst.b     D3
-       beq.s     importFile_31
+       beq.s     importFile_37
+; {
+; free(xaddressStart);
+       move.l    -298(A6),-(A7)
+       jsr       _free
+       addq.w    #4,A7
 ; break;
-       bra.s     importFile_25
-importFile_31:
+       bra.s     importFile_27
+importFile_37:
        add.l     #128,D2
-       bra       importFile_23
-importFile_25:
+       bra       importFile_25
+importFile_27:
+; }
 ; }
 ; // Fecha Arquivo
 ; writesxy(12,55,8,"Closing File...",vcorwf,vcorwb);
@@ -7322,7 +7745,7 @@ importFile_25:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_48.L
+       pea       @mgui_55.L
        pea       8
        pea       55
        pea       12
@@ -7333,9 +7756,11 @@ importFile_25:
        move.l    A5,-(A7)
        jsr       _fsCloseFile
        addq.w    #8,A7
+importFile_24:
+; }
 ; if (vErro == RETURN_OK)
        tst.b     D3
-       bne.s     importFile_33
+       bne.s     importFile_39
 ; writesxy(12,55,8,"Done !         ",vcorwf,vcorwb);
        move.b    (A3),D1
        and.w     #255,D1
@@ -7345,14 +7770,14 @@ importFile_25:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_49.L
+       pea       @mgui_56.L
        pea       8
        pea       55
        pea       12
        jsr       (A4)
        add.w     #24,A7
-       bra       importFile_34
-importFile_33:
+       bra       importFile_40
+importFile_39:
 ; else
 ; {
 ; writesxy(12,55,8,"Writing File Error !",vcorwf,vcorwb);
@@ -7364,7 +7789,7 @@ importFile_33:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_50.L
+       pea       @mgui_57.L
        pea       8
        pea       55
        pea       12
@@ -7372,7 +7797,7 @@ importFile_33:
        add.w     #24,A7
 ; itoa(vErro, sqtdtam, 16);
        pea       16
-       pea       -30(A6)
+       pea       -34(A6)
        and.l     #255,D3
        move.l    D3,-(A7)
        jsr       _itoa
@@ -7386,13 +7811,13 @@ importFile_33:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       -30(A6)
+       pea       -34(A6)
        pea       8
        pea       65
        pea       12
        jsr       (A4)
        add.w     #24,A7
-importFile_34:
+importFile_40:
        bra.s     importFile_22
 importFile_21:
 ; }
@@ -7407,7 +7832,7 @@ importFile_21:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_51.L
+       pea       @mgui_58.L
        pea       8
        pea       55
        pea       12
@@ -7428,7 +7853,7 @@ importFile_19:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_52.L
+       pea       @mgui_59.L
        pea       8
        pea       55
        pea       12
@@ -7436,7 +7861,7 @@ importFile_19:
        add.w     #24,A7
 ; itoa(vErro, sqtdtam, 16);
        pea       16
-       pea       -30(A6)
+       pea       -34(A6)
        and.l     #255,D3
        move.l    D3,-(A7)
        jsr       _itoa
@@ -7450,7 +7875,7 @@ importFile_19:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       -30(A6)
+       pea       -34(A6)
        pea       8
        pea       65
        pea       12
@@ -7478,17 +7903,17 @@ importFile_20:
        jsr       _TrocaSpriteMouse
        addq.w    #4,A7
 ; while (1)
-importFile_35:
+importFile_41:
 ; {
 ; vwb = waitButton();
        jsr       _waitButton
-       move.b    D0,D4
+       move.b    D0,D5
 ; if (vwb == BTCLOSE)
-       cmp.b     #64,D4
-       bne.s     importFile_38
+       cmp.b     #64,D5
+       bne.s     importFile_44
 ; break;
-       bra.s     importFile_37
-importFile_38:
+       bra.s     importFile_43
+importFile_44:
 ; OSTimeDlyHMSM(0, 0, 0, 30);
        pea       30
        clr.l     -(A7)
@@ -7496,8 +7921,8 @@ importFile_38:
        clr.l     -(A7)
        jsr       _OSTimeDlyHMSM
        add.w     #16,A7
-       bra       importFile_35
-importFile_37:
+       bra       importFile_41
+importFile_43:
 ; }
 ; RestoreScreen(vsavescr);
        lea       -20(A6),A0
@@ -7547,7 +7972,7 @@ _putImagePbmP4:
 ; cursor += 3;
        addq.l    #3,D2
 ; if (strcmp(tipo, "P4") != 0)
-       pea       @mgui_53.L
+       pea       @mgui_60.L
        move.l    A3,-(A7)
        jsr       _strcmp
        addq.w    #8,A7
@@ -7557,7 +7982,7 @@ _putImagePbmP4:
 ; message("Invalid or unsupported PBM format\nexpected P4",BTCLOSE,0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_54.L
+       pea       @mgui_61.L
        jsr       _message
        add.w     #12,A7
 ; return;
@@ -7949,7 +8374,7 @@ putImagePbmP4_19:
 @mgui_4:
        dc.b      73,110,116,101,114,102,97,99,101,0
 @mgui_5:
-       dc.b      118,48,46,54,0
+       dc.b      118,48,46,55,97,48,50,0
 @mgui_6:
        dc.b      76,111,97,100,105,110,103,32,67,111,110,102
        dc.b      105,103,0
@@ -8034,54 +8459,75 @@ putImagePbmP4_19:
        dc.b      46,117,116,105,108,105,116,121,105,110,102,46
        dc.b      99,111,109,46,98,114,0
 @mgui_38:
-       dc.b      70,105,108,101,32,78,97,109,101,58,0
+       dc.b      82,117,110,32,66,105,110,97,114,121,0
 @mgui_39:
+       dc.b      70,105,108,101,32,78,97,109,101,58,0
+@mgui_40:
        dc.b      69,114,114,111,114,44,32,102,105,108,101,32
        dc.b      110,97,109,101,32,109,117,115,116,32,98,101
        dc.b      32,112,114,111,118,105,100,101,100,33,33,0
-@mgui_40:
+@mgui_41:
+       dc.b      73,110,118,97,108,105,100,32,102,105,108,101
+       dc.b      32,110,97,109,101,32,108,101,110,103,116,104
+       dc.b      0
+@mgui_42:
+       dc.b      46,66,73,78,0
+@mgui_43:
+       dc.b      79,110,108,121,32,46,66,73,78,32,102,105,108
+       dc.b      101,115,32,97,114,101,32,97,108,108,111,119
+       dc.b      101,100,0
+@mgui_44:
+       dc.b      47,77,71,85,73,47,80,82,79,71,83,47,0
+@mgui_45:
+       dc.b      82,117,110,32,115,101,108,101,99,116,101,100
+       dc.b      32,102,105,108,101,32,63,0
+@mgui_46:
+       dc.b      70,105,108,101,32,110,111,116,32,102,111,117
+       dc.b      110,100,46,46,46,0
+@mgui_47:
+       dc.b      78,111,32,109,101,109,111,114,121,32,116,111
+       dc.b      32,108,111,97,100,32,46,66,73,78,0
+@mgui_48:
        dc.b      67,111,110,102,105,114,109,32,115,101,114,105
        dc.b      97,108,32,67,111,110,110,101,99,116,101,100
        dc.b      46,10,73,109,112,111,114,116,32,70,105,108,101
        dc.b      32,63,0
-@mgui_41:
+@mgui_49:
        dc.b      83,116,97,116,117,115,32,73,109,112,111,114
        dc.b      116,32,70,105,108,101,0
-@mgui_42:
+@mgui_50:
        dc.b      68,101,108,101,116,105,110,103,32,70,105,108
        dc.b      101,46,46,46,0
-@mgui_43:
+@mgui_51:
        dc.b      67,114,101,97,116,105,110,103,32,70,105,108
        dc.b      101,46,46,46,0
-@mgui_44:
+@mgui_52:
        dc.b      82,101,97,100,105,110,103,32,83,101,114,105
        dc.b      97,108,46,46,46,0
-@mgui_45:
-       dc.b      56,52,48,48,48,48,0
-@mgui_46:
+@mgui_53:
        dc.b      79,112,101,110,105,110,103,32,70,105,108,101
        dc.b      46,46,46,0
-@mgui_47:
+@mgui_54:
        dc.b      87,114,105,116,105,110,103,32,70,105,108,101
        dc.b      46,46,46,0
-@mgui_48:
+@mgui_55:
        dc.b      67,108,111,115,105,110,103,32,70,105,108,101
        dc.b      46,46,46,0
-@mgui_49:
+@mgui_56:
        dc.b      68,111,110,101,32,33,32,32,32,32,32,32,32,32
        dc.b      32,0
-@mgui_50:
+@mgui_57:
        dc.b      87,114,105,116,105,110,103,32,70,105,108,101
        dc.b      32,69,114,114,111,114,32,33,0
-@mgui_51:
+@mgui_58:
        dc.b      83,101,114,105,97,108,32,76,111,97,100,32,69
        dc.b      114,114,111,114,46,46,46,0
-@mgui_52:
+@mgui_59:
        dc.b      67,114,101,97,116,101,32,70,105,108,101,32,69
        dc.b      114,114,111,114,46,46,46,0
-@mgui_53:
+@mgui_60:
        dc.b      80,52,0
-@mgui_54:
+@mgui_61:
        dc.b      73,110,118,97,108,105,100,32,111,114,32,117
        dc.b      110,115,117,112,112,111,114,116,101,100,32,80
        dc.b      66,77,32,102,111,114,109,97,116,10,101,120,112
@@ -8210,15 +8656,16 @@ _StkFiles:
        ds.b      4096
        xdef      _StkMouse
 _StkMouse:
-       ds.b      512
+       ds.b      4096
        xdef      _StkMenu
 _StkMenu:
-       ds.b      512
+       ds.b      2048
        xdef      _StkMessage
 _StkMessage:
        ds.b      2048
        xref      _fsCloseFile
        xref      _fsFindInDir
+       xref      _strcpy
        xref      _itoa
        xref      LDIV
        xref      LMUL
@@ -8233,6 +8680,7 @@ _StkMessage:
        xref      _OSTimeDlyHMSM
        xref      _OSTaskDel
        xref      _fsInfoFile
+       xref      _strcat
        xref      _verro
        xref      _OSTaskCreate
        xref      _toupper

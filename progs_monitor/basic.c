@@ -18,6 +18,7 @@
 * 24/07/2023  1.0c    Moacir Jr.   Retirada "BYE" message. Ajustes de bugs no gosub...return
 * 25/07/2023  1.0d    Moacir Jr.   Ajuste no basInputGet, quando Get, mandar 1 pro inputLine e sem manipulacoa cursor
 * 20/01/2024  1.0e    Moacir Jr.   Colocar para iniciar direto no Basic
+* 14/04/2026  1.1a03  Moacir Jr.   Ajustes para por cache variaveis e simplificar parse, retirando recursividade
 *--------------------------------------------------------------------------------
 * Variables Simples: start at 00800000
 *   --------------------------------------------------------
@@ -51,9 +52,41 @@
 #include "../monitorapi.h"
 #include "basic.h"
 
-#define versionBasic "1.0e"
+#define versionBasic "1.1a03"
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
+
+#define SIMPLE_VAR_CACHE_SLOTS 8
+#define PARSER_STACK_SIZE 32
+
+static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+static unsigned char *lastVarCacheAddr[SIMPLE_VAR_CACHE_SLOTS] = {0,0,0,0,0,0,0,0};
+static unsigned char valStack[32][50];
+static unsigned char opStack[PARSER_STACK_SIZE];
+static unsigned char opPrecStack[PARSER_STACK_SIZE];
+static char valTypeStack[PARSER_STACK_SIZE];
+static unsigned char temp[50];
+
+static void invalidateFindVariableCache(void)
+{
+    int ix;
+
+    for (ix = 0; ix < SIMPLE_VAR_CACHE_SLOTS; ix++)
+    {
+        lastVarCacheName0[ix] = 0x00;
+        lastVarCacheName1[ix] = 0x00;
+        lastVarCacheAddr[ix] = 0;
+    }
+}
+
+static void clearRuntimeData(unsigned char *pForStack)
+{
+    invalidateFindVariableCache();
+    memset(pStartSimpVar, 0x00, 0x2000);
+    memset(pStartArrayVar, 0x00, 0x6000);
+    memset(pForStack, 0x00, 0x800);
+}
 
 //-----------------------------------------------------------------------------
 // Principal
@@ -121,6 +154,9 @@ void main(void)
     printText("\r\n\0");
 }
 
+/******************************************************************************************/
+/* Secao de Processamento da linha, tokenização e execução                                */
+/******************************************************************************************/
 //-----------------------------------------------------------------------------
 // pQtdInput - Quantidade a ser digitada, min 1 max 255
 // pTipo - Tipo de entrada:
@@ -410,7 +446,8 @@ unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
 }
 
 //-----------------------------------------------------------------------------
-//
+// Process line previous input after return
+// If have number in start, is to store in program, if not, is command to execute
 //-----------------------------------------------------------------------------
 void processLine(void)
 {
@@ -505,6 +542,12 @@ void processLine(void)
                 *nextAddrLine = pStartProg;
                 *firstLineNumber = 0;
                 *addrFirstLineNumber = 0;
+
+                *nextAddrSimpVar = pStartSimpVar;
+                *nextAddrArrayVar = pStartArrayVar;
+                *nextAddrString = pStartString;
+
+                clearRuntimeData((unsigned char*)forStack);
             }
             else if (!strcmp(linhacomando,"EDIT") && iy == 4)
             {
@@ -583,10 +626,8 @@ void processLine(void)
 
                 tokenizeLine(vRetInf.tString);
 
-                strcpy(vLinhaArg, vRetInf.tString);
-
                 // Salva a linha pra ser interpretada
-                vTam = strlen(vLinhaArg);
+                    vTam = strlen(vRetInf.tString);
                 vNextAddr = comandLineTokenized + (vTam + 6);
 
                 *comandLineTokenized = ((vNextAddr & 0xFF0000) >> 16);
@@ -599,7 +640,7 @@ void processLine(void)
 
                 // Grava linha tokenizada
                 for(kt = 0; kt < vTam; kt++)
-                    *(comandLineTokenized + (kt + 5)) = vLinhaArg[kt];
+                    *(comandLineTokenized + (kt + 5)) = vRetInf.tString[kt];
 
                 // Grava final linha 0x00
                 *(comandLineTokenized + (vTam + 5)) = 0x00;
@@ -610,6 +651,7 @@ void processLine(void)
                 *nextAddrSimpVar = pStartSimpVar;
                 *nextAddrArrayVar = pStartArrayVar;
                 *nextAddrString = pStartString;
+                invalidateFindVariableCache();
                 *vMaisTokens = 0;
                 *vParenteses = 0x00;
                 *vTemIf = 0x00;
@@ -1224,6 +1266,7 @@ void delLine(unsigned char *pArg)
 //-----------------------------------------------------------------------------
 // Sintaxe:
 //      EDIT <num>          : Edita conteudo da linha <num>
+// PS Ainda precisa ser ajustado
 //-----------------------------------------------------------------------------
 void editLine(unsigned char *pNumber)
 {
@@ -1390,14 +1433,7 @@ void runProg(unsigned char *pNumber)
     *nextAddrArrayVar = pStartArrayVar;
     *nextAddrString = pStartString;
 
-    for (ix = 0; ix < 0x2000; ix++)
-        *(pStartSimpVar + ix) = 0x00;
-
-    for (ix = 0; ix < 0x6000; ix++)
-        *(pStartArrayVar + ix) = 0x00;
-
-    for (ix = 0; ix < 0x800; ix++)
-        *(pForStack + ix) = 0x00;
+    clearRuntimeData(pForStack);
 
     if (pNumber[0] != 0x00)
     {
@@ -1561,7 +1597,7 @@ void runProg(unsigned char *pNumber)
 }
 
 //-----------------------------------------------------------------------------
-//
+// Mostra mensagem de erro de acordo com o codigo do erro e numero da linha
 //-----------------------------------------------------------------------------
 void showErrorMessage(unsigned int pError, unsigned int pNumLine)
 {
@@ -1583,8 +1619,125 @@ void showErrorMessage(unsigned int pError, unsigned int pNumLine)
     *vErroProc = 0;
 }
 
+//--------------------------------------------------------------------------------------
+// Load basic program in memory, throught xmodem protocol
+// Syntaxe:
+//          XBASLOAD
+//--------------------------------------------------------------------------------------
+int basXBasLoad(void)
+{
+    unsigned char vRet = 0;
+    unsigned char vByte = 0;
+    unsigned char *vTemp = pStartXBasLoad;
+    unsigned char *vBufptr = &vbufInput;
+
+    printText("Loading Basic Program...\r\n");
+
+    // Carrega programa em outro ponto da memoria
+    vRet = loadSerialToMem(pStartXBasLoad,0);
+
+    // Se tudo OK, tokeniza como se estivesse sendo digitado
+    if (!vRet)
+    {
+        printText("Done.\r\n");
+        printText("Processing...\r\n");
+
+        while (1)
+        {
+            vByte = *vTemp++;
+
+            if (vByte != 0x1A)
+            {
+                if (vByte != 0xD && vByte != 0x0A)
+                    *vBufptr++ = vByte;
+                else
+                {
+                    vTemp++;
+                    *vBufptr = 0x00;
+                    vBufptr = &vbufInput;
+                    processLine();
+                }
+            }
+            else
+                break;
+        }
+
+        printText("Done.\r\n");
+    }
+    else
+    {
+        if (vRet == 0xFE)
+            *vErroProc = 19;
+        else
+            *vErroProc = 20;
+    }
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Load basic program in memory, throught xmodem protocol with 1K blocks and CRC
+// Syntaxe:
+//          XBASLOAD1K
+//--------------------------------------------------------------------------------------
+int basXBasLoad1k(void)
+{
+    unsigned char vRet = 0;
+    unsigned char vByte = 0;
+    unsigned char *vTemp = pStartXBasLoad;
+    unsigned char *vBufptr = &vbufInput;
+
+    printText("Loading Basic Program 1k...\r\n");
+
+    // Carrega programa em outro ponto da memoria
+    vRet = loadSerialToMem2(pStartXBasLoad,0);
+
+    // Se tudo OK, tokeniza como se estivesse sendo digitado
+    if (!vRet)
+    {
+        printText("Done.\r\n");
+        printText("Processing...\r\n");
+
+        while (1)
+        {
+            vByte = *vTemp++;
+
+            if (vByte != 0x1A)
+            {
+                if (vByte != 0xD && vByte != 0x0A)
+                    *vBufptr++ = vByte;
+                else
+                {
+                    vTemp++;
+                    *vBufptr = 0x00;
+                    vBufptr = &vbufInput;
+                    processLine();
+                }
+            }
+            else
+                break;
+        }
+
+        printText("Done.\r\n");
+    }
+    else
+    {
+        if (vRet == 0xFE)
+            *vErroProc = 19;
+        else
+            *vErroProc = 20;
+    }
+
+    return 0;
+}
+
+/***************************************************************************************/
+/* Secao CORE - Processamento das linhas apos RUN ou ENTER no processline sem numero   */
+/* Controle do fluxo de execucao e ordem de leitura dentro da linha processando        */
+/***************************************************************************************/
+
 //-----------------------------------------------------------------------------
-//
+// Executa cada token, chamando as funcoes de acordo
 //-----------------------------------------------------------------------------
 int executeToken(unsigned char pToken)
 {
@@ -1666,14 +1819,7 @@ int executeToken(unsigned char pToken)
             clearScr();
             break;
         case 0x97:  // CLEAR - Clear all variables
-            for (ix = 0; ix < 0x2000; ix++)
-                *(pStartSimpVar + ix) = 0x00;
-
-            for (ix = 0; ix < 0x6000; ix++)
-                *(pStartArrayVar + ix) = 0x00;
-
-            for (ix = 0; ix < 0x800; ix++)
-                *(pForStack + ix) = 0x00;
+            clearRuntimeData(pForStack);
 
             vReta = 0;
             break;
@@ -1811,7 +1957,7 @@ int executeToken(unsigned char pToken)
 }
 
 //--------------------------------------------------------------------------------------
-//
+// Procura o proximo token ou componente da linha sendo processada
 //--------------------------------------------------------------------------------------
 int nextToken(void)
 {
@@ -1843,7 +1989,7 @@ int nextToken(void)
         return *token_type;
     }
 
-    while(iswhite(*vTempPointer)) // skip over white space
+    while(*vTempPointer == ' ' || *vTempPointer == '\t') // skip over white space
     {
         *pointerRunProg = *pointerRunProg + 1;
         vTempPointer = *pointerRunProg;
@@ -1860,7 +2006,10 @@ int nextToken(void)
         return *token_type;
     }
 
-    if (strchr("+-*^/=;:,><", *vTempPointer) || *vTempPointer >= 0xF0) { // delimiter
+    if ((*vTempPointer == '+' || *vTempPointer == '-' || *vTempPointer == '*' ||
+         *vTempPointer == '^' || *vTempPointer == '/' || *vTempPointer == '=' ||
+         *vTempPointer == ';' || *vTempPointer == ':' || *vTempPointer == ',' ||
+         *vTempPointer == '>' || *vTempPointer == '<' || *vTempPointer >= 0xF0)) { // delimiter
         *temp = *vTempPointer;
         *pointerRunProg = *pointerRunProg + 1; // advance to next position
         temp++;
@@ -1955,7 +2104,8 @@ int nextToken(void)
 }
 
 //-----------------------------------------------------------------------------
-//
+// Procura o token na lista de keywords e devolve a posicao, se nao encontrar,
+// devolve 14 (token desconhecido)
 //-----------------------------------------------------------------------------
 int findToken(unsigned char pToken)
 {
@@ -1979,7 +2129,8 @@ int findToken(unsigned char pToken)
 }
 
 //-----------------------------------------------------------------------------
-//
+// Procura o numero da linha na lista de linhas do programa e devolve o endereco,
+// se nao encontrar, devolve 0
 //-----------------------------------------------------------------------------
 unsigned long findNumberLine(unsigned short pNumber, unsigned char pTipoRet, unsigned char pTipoFind)
 {
@@ -2037,8 +2188,11 @@ int isdigitus(unsigned char c)
 //--------------------------------------------------------------------------------------
 int isdelim(unsigned char c)
 {
-    if (strchr(" ;,+-<>()/*^=:", c) || c==9 || c=='\r' || c==0 || c>=0xF0)
-       return 1;
+    if (c >= 0xF0 || c == 0 || c == '\r' || c == '\t' || c == ' ' ||
+        c == ';' || c == ',' || c == '+' || c == '-' || c == '<' ||
+        c == '>' || c == '(' || c == ')' || c == '/' || c == '*' ||
+        c == '^' || c == '=' || c == ':')
+        return 1;
 
     return 0;
 }
@@ -2050,677 +2204,6 @@ int iswhite(unsigned char c)
 {
     if (c==' ' || c=='\t')
        return 1;
-
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-// Load basic program in memory, throught xmodem protocol
-// Syntaxe:
-//          XBASLOAD
-//--------------------------------------------------------------------------------------
-int basXBasLoad(void)
-{
-    unsigned char vRet = 0;
-    unsigned char vByte = 0;
-    unsigned char *vTemp = pStartXBasLoad;
-    unsigned char *vBufptr = &vbufInput;
-
-    printText("Loading Basic Program...\r\n");
-
-    // Carrega programa em outro ponto da memoria
-    vRet = loadSerialToMem(pStartXBasLoad,0);
-
-    // Se tudo OK, tokeniza como se estivesse sendo digitado
-    if (!vRet)
-    {
-        printText("Done.\r\n");
-        printText("Processing...\r\n");
-
-        while (1)
-        {
-            vByte = *vTemp++;
-
-            if (vByte != 0x1A)
-            {
-                if (vByte != 0xD && vByte != 0x0A)
-                    *vBufptr++ = vByte;
-                else
-                {
-                    vTemp++;
-                    *vBufptr = 0x00;
-                    vBufptr = &vbufInput;
-                    processLine();
-                }
-            }
-            else
-                break;
-        }
-
-        printText("Done.\r\n");
-    }
-    else
-    {
-        if (vRet == 0xFE)
-            *vErroProc = 19;
-        else
-            *vErroProc = 20;
-    }
-
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-// Load basic program in memory, throught xmodem protocol with 1K blocks and CRC
-// Syntaxe:
-//          XBASLOAD1K
-//--------------------------------------------------------------------------------------
-int basXBasLoad1k(void)
-{
-    unsigned char vRet = 0;
-    unsigned char vByte = 0;
-    unsigned char *vTemp = pStartXBasLoad;
-    unsigned char *vBufptr = &vbufInput;
-
-    printText("Loading Basic Program...\r\n");
-
-    // Carrega programa em outro ponto da memoria
-    vRet = loadSerialToMem2(pStartXBasLoad,0);
-
-    // Se tudo OK, tokeniza como se estivesse sendo digitado
-    if (!vRet)
-    {
-        printText("Done.\r\n");
-        printText("Processing...\r\n");
-
-        while (1)
-        {
-            vByte = *vTemp++;
-
-            if (vByte != 0x1A)
-            {
-                if (vByte != 0xD && vByte != 0x0A)
-                    *vBufptr++ = vByte;
-                else
-                {
-                    vTemp++;
-                    *vBufptr = 0x00;
-                    vBufptr = &vbufInput;
-                    processLine();
-                }
-            }
-            else
-                break;
-        }
-
-        printText("Done.\r\n");
-    }
-    else
-    {
-        if (vRet == 0xFE)
-            *vErroProc = 19;
-        else
-            *vErroProc = 20;
-    }
-
-    return 0;
-}
-
-#ifndef __TESTE_TOKENIZE__
-//-----------------------------------------------------------------------------
-// Calcula o endereco do valor dentro da area de dados de uma variavel array.
-// Retorna 0 em caso de erro de limite e ajusta vErroProc.
-//-----------------------------------------------------------------------------
-static unsigned char* getArrayValuePointer(unsigned char ixDim, unsigned char* vLista, unsigned char* vDim, unsigned char vTamValue)
-{
-    int ix;
-    int iw;
-    unsigned char ixDimAnt;
-    unsigned char* vPosValueVar;
-    unsigned short iDim;
-    unsigned long vOffSet;
-
-    iw = (ixDim - 1);
-    ixDimAnt = 1;
-    vPosValueVar = 0;
-
-    for (ix = ((ixDim - 1) * 2 ); ix >= 0; ix -= 2)
-    {
-        iDim = ((vLista[ix + 8] << 8) | vLista[ix + 9]);
-
-        if (vDim[iw] > iDim)
-        {
-            *vErroProc = 21;
-            return 0;
-        }
-
-        vPosValueVar = vPosValueVar + ((vDim[iw] - 1 ) * ixDimAnt * vTamValue);
-        ixDimAnt = ixDimAnt * iDim;
-        iw--;
-    }
-
-    vOffSet = vLista;
-    vPosValueVar = vPosValueVar + (vOffSet + 8 + (ixDim * 2));
-
-    return vPosValueVar;
-}
-
-//-----------------------------------------------------------------------------
-// Retornos: -1 - Erro, 0 - Nao Existe, 1 - eh um valor numeral
-//           [endereco > 1] - Endereco da variavel
-//
-//           se retorno > 1: pVariable vai conter o valor numeral (qdo 1) ou
-//                           o conteudo da variavel (qdo endereco)
-//-----------------------------------------------------------------------------
-long findVariable(unsigned char* pVariable)
-{
-    unsigned char* vLista = pStartSimpVar;
-    unsigned char* vTemp = pStartSimpVar;
-    long vEnder = 0;
-    int ix = 0, iy = 0, iz = 0;
-    unsigned char vDim[88];
-    unsigned int vTempDim = 0;
-    unsigned long vOffSet;
-    unsigned char ixDim = 0;
-    unsigned char vArray = 0;
-    unsigned long vPosNextVar = 0;
-    unsigned char* vPosValueVar = 0;
-    unsigned char vTamValue = 4;
-    unsigned char *vTempPointer;
-    unsigned char sqtdtam[20];
-
-    // Verifica se eh array (tem parenteses logo depois do nome da variavel)
-
-    vTempPointer = *pointerRunProg;
-    if (*vTempPointer == 0x28)
-    {
-        // Define que eh array
-        vArray = 1;
-
-        // Procura as dimensoes
-        nextToken();
-        if (*vErroProc) return 0;
-
-        // Erro, primeiro caracter depois da variavel, deve ser abre parenteses
-        if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
-        {
-            *vErroProc = 15;
-            return 0;
-        }
-
-        do
-        {
-            nextToken();
-            if (*vErroProc) return 0;
-
-            if (*token_type == QUOTE) { // is string, error
-                *vErroProc = 16;
-                return 0;
-            }
-            else { // is expression
-
-                putback();
-
-                getExp(&vTempDim);
-
-                if (*vErroProc) return 0;
-
-                if (*value_type == '$')
-                {
-                    *vErroProc = 16;
-                    return 0;
-                }
-
-                if (*value_type == '#')
-                {
-                    vTempDim = fppInt(vTempDim);
-                    *value_type = '%';
-                }
-
-                vDim[ixDim] = vTempDim + 1;
-
-                ixDim++;
-            }
-
-            if (*token == ',')
-            {
-                *pointerRunProg = *pointerRunProg + 1;
-
-                vTempPointer = *pointerRunProg;
-            }
-            else
-                break;
-
-        } while(1);
-
-        // Deve ter pelo menos 1 elemento
-        if (ixDim < 1)
-        {
-            *vErroProc = 21;
-            return 0;
-        }
-
-        nextToken();
-        if (*vErroProc) return 0;
-
-        // Ultimo caracter deve ser fecha parenteses
-        if (*token_type!=CLOSEPARENT)
-        {
-            *vErroProc = 15;
-            return 0;
-        }
-    }
-
-    // Procura na lista geral de variaveis simples / array
-    if (vArray)
-        vLista = pStartArrayVar;
-    else
-        vLista = pStartSimpVar;
-
-    while(1)
-    {
-        vPosNextVar  = (((unsigned long)*(vLista + 3) << 24) & 0xFF000000);
-        vPosNextVar |= (((unsigned long)*(vLista + 4) << 16) & 0x00FF0000);
-        vPosNextVar |= (((unsigned long)*(vLista + 5) << 8) & 0x0000FF00);
-        vPosNextVar |= ((unsigned long)*(vLista + 6) & 0x000000FF);
-        *value_type = *vLista;
-
-        if (*(vLista + 1) == pVariable[0] && *(vLista + 2) ==  pVariable[1])
-        {
-            // Pega endereco da variavel pra delvover
-            if (vArray)
-            {
-                if (*vLista == '$')
-                    vTamValue = 5;
-
-                // Verifica se os tamanhos da dimensao informada e da variavel sao iguais
-                if (ixDim != vLista[7])
-                {
-                    *vErroProc = 21;
-                    return 0;
-                }
-
-                vPosValueVar = getArrayValuePointer(ixDim, vLista, vDim, vTamValue);
-                if (*vErroProc)
-                    return 0;
-
-                vEnder = vPosValueVar;
-            }
-            else
-            {
-                vPosValueVar = vLista + 3;
-                vEnder = vLista;
-            }
-
-            // Pelo tipo da variavel, ja retorna na variavel de nome o conteudo da variavel
-            if (*vLista == '$')
-            {
-if (*debugOn)
-{
-writeLongSerial("Aqui 333.666.0-[");
-writeSerial(*vLista);
-writeLongSerial("]-[");
-itoa(vPosValueVar,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
-                vOffSet  = (((unsigned long)*(vPosValueVar + 1) << 24) & 0xFF000000);
-                vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
-                vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
-                vOffSet |= ((unsigned long)*(vPosValueVar + 4) & 0x000000FF);
-                vTemp = vOffSet;
-
-                iy = *vPosValueVar;
-                iz = 0;
-
-if (*debugOn)
-{
-writeLongSerial("Aqui 333.666.1-[");
-itoa(vTemp,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-}
-                for (ix = 0; ix < iy; ix++)
-                {
-if (*debugOn)
-{
-itoa(ix,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(iz,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(*(vTemp + ix),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-}
-                    pVariable[iz++] = *(vTemp + ix); // Numero gerado
-                    pVariable[iz] = 0x00;
-                }
-if (*debugOn)
-{
-writeLongSerial("]\r\n");
-}
-
-                pVariable[iz++] = 0x00;
-
-if (*debugOn)
-{
-writeLongSerial("Aqui 333.666.2-[");
-itoa(vOffSet,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pVariable[0],sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pVariable[1],sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pVariable[2],sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pVariable[3],sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
-            }
-            else
-            {
-                if (!vArray)
-                    vPosValueVar++;
-
-                pVariable[0] = *(vPosValueVar);
-                pVariable[1] = *(vPosValueVar + 1);
-                pVariable[2] = *(vPosValueVar + 2);
-                pVariable[3] = *(vPosValueVar + 3);
-                pVariable[4] = 0x00;
-            }
-
-            return vEnder;
-        }
-
-        if (vArray)
-            vLista = vPosNextVar;
-        else
-            vLista += 8;
-
-        if ((!vArray && vLista >= pStartArrayVar) || (vArray && vLista >= pStartProg) || *vLista == 0x00)
-            break;
-    }
-
-    return 0;
-}
-
-//-----------------------------------------------------------------------------
-//
-//-----------------------------------------------------------------------------
-char createVariable(unsigned char* pVariable, unsigned char* pValor, char pType)
-{
-    char vRet = 0;
-    long vTemp = 0;
-    char vBuffer [sizeof(long)*8+1];
-    unsigned char* vNextSimpVar;
-    char vLenVar = 0;
-
-    vTemp = *nextAddrSimpVar;
-    vNextSimpVar = *nextAddrSimpVar;
-
-    vLenVar = strlen(pVariable);
-
-    *vNextSimpVar++ = pType;
-    *vNextSimpVar++ = pVariable[0];
-    *vNextSimpVar++ = pVariable[1];
-
-    vRet = updateVariable(vNextSimpVar, pValor, pType, 0);
-    *nextAddrSimpVar += 8;
-
-    return vRet;
-}
-
-//-----------------------------------------------------------------------------
-//
-//-----------------------------------------------------------------------------
-char updateVariable(unsigned long* pVariable, unsigned char* pValor, char pType, char pOper)
-{
-    long vNumVal = 0;
-    int ix, iz = 0;
-    char vBuffer [sizeof(long)*8+1];
-    unsigned char* vNextSimpVar;
-    unsigned char* vNextString;
-    char pNewStr = 0;
-    unsigned long vOffSet;
-//    unsigned char* sqtdtam[20];
-
-    vNextSimpVar = pVariable;
-    *atuVarAddr = pVariable;
-
-/*writeLongSerial("Aqui 333.666.0-[");
-itoa(pVariable,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pValor,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pType,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-
-    if (pType == '#' || pType == '%')   // Real ou Inteiro
-    {
-        if (vNextSimpVar < pStartArrayVar)
-            *vNextSimpVar++ = 0x00;
-
-        *vNextSimpVar++ = pValor[0];
-        *vNextSimpVar++ = pValor[1];
-        *vNextSimpVar++ = pValor[2];
-        *vNextSimpVar++ = pValor[3];
-    }
-    else // String
-    {
-        iz = strlen(pValor);    // Tamanho da strings
-
-/*writeLongSerial("Aqui 333.666.1-[");
-itoa(*vNextSimpVar,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(iz,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pOper,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-        // Se for o mesmo tamanho ou menor, usa a mesma posicao
-        if (*vNextSimpVar <= iz && pOper)
-        {
-            vOffSet  = (((unsigned long)*(vNextSimpVar + 1) << 24) & 0xFF000000);
-            vOffSet |= (((unsigned long)*(vNextSimpVar + 2) << 16) & 0x00FF0000);
-            vOffSet |= (((unsigned long)*(vNextSimpVar + 3) << 8) & 0x0000FF00);
-            vOffSet |= ((unsigned long)*(vNextSimpVar + 4) & 0x000000FF);
-            vNextString = vOffSet;
-
-            if (pOper == 2 && vNextString == 0)
-            {
-                vNextString = *nextAddrString;
-                pNewStr = 1;
-            }
-        }
-        else
-            vNextString = *nextAddrString;
-
-        vNumVal = vNextString;
-/*writeLongSerial("Aqui 333.666.2-[");
-itoa(nextAddrString,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vNextString,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vNumVal,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-
-        for (ix = 0; ix < iz; ix++)
-        {
-            *vNextString++ = pValor[ix];
-        }
-
-/*writeLongSerial("Aqui 333.666.3-[");
-itoa(nextAddrString,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vNextString,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vNumVal,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-
-        if (*vNextSimpVar > iz || !pOper || pNewStr)
-            *nextAddrString = vNextString;
-
-/*writeLongSerial("Aqui 333.666.4-[");
-itoa(vNextString,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vNumVal,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-
-        *vNextSimpVar++ = iz;
-
-/*writeLongSerial("Aqui 333.666.5-[");
-itoa(vNextString,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-
-        *vNextSimpVar++ = ((vNumVal & 0xFF000000) >>24);
-        *vNextSimpVar++ = ((vNumVal & 0x00FF0000) >>16);
-        *vNextSimpVar++ = ((vNumVal & 0x0000FF00) >>8);
-        *vNextSimpVar++ = (vNumVal & 0x000000FF);
-/*writeLongSerial("Aqui 333.666.6-[");
-itoa(vNextString,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-    }
-
-/*    *(vNextSimpVar + 1) = 0x00;
-    *(vNextSimpVar + 2) = 0x00;
-    *(vNextSimpVar + 3) = 0x00;
-    *(vNextSimpVar + 4) = 0x00;*/
-
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-char createVariableArray(unsigned char* pVariable, char pType, unsigned int pNumDim, unsigned int *pDim)
-{
-    char vRet = 0;
-    long vTemp = 0;
-    unsigned char* vTempC = &vTemp;
-    char vBuffer [sizeof(long)*8+1];
-    unsigned char* vNextArrayVar;
-    char vLenVar = 0;
-    int ix, vTam;
-    long vAreaFree = (pStartString - *nextAddrArrayVar);
-    long vSizeTotal = 0;
-//    unsigned char sqtdtam[20];
-
-    vTemp = *nextAddrArrayVar;
-    vNextArrayVar = *nextAddrArrayVar;
-
-    vLenVar = strlen(pVariable);
-
-    *vNextArrayVar++ = pType;
-    *vNextArrayVar++ = pVariable[0];
-    *vNextArrayVar++ = pVariable[1];
-    vTam = 0;
-
-    for (ix = 0; ix < pNumDim; ix++)
-    {
-        // Somando mais 1, porque 0 = 1 em quantidade e e em posicao (igual ao c)
-        pDim[ix] = pDim[ix] /*+ 1*/ ;
-
-        // Definir o tamanho do campo de dados do array
-        if (vTam == 0)
-            vTam = pDim[ix] /*- 1*/ ;
-        else
-            vTam = vTam * (pDim[ix] /*- 1*/ );
-
-/*writeLongSerial("Aqui 333.666.0-[");
-itoa(vTam,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(ix,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pDim[ix],sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-    }
-
-/*writeLongSerial("Aqui 333.666.1-[");
-itoa(vTam,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(pNumDim,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-
-    if (pType == '$')
-        vTam = vTam * 5;
-    else
-        vTam = vTam * 4;
-
-/*writeLongSerial("Aqui 333.666.2-[");
-itoa(pType,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vTam,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-
-    vSizeTotal = vTam + 8;
-    vSizeTotal = vSizeTotal + (pNumDim *2);
-
-/*writeLongSerial("Aqui 333.666.3-[");
-itoa(pStartString,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(*nextAddrArrayVar,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vAreaFree,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vSizeTotal,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
-
-    if (vSizeTotal > vAreaFree)
-    {
-        *vErroProc = 22;
-        return 0;
-    }
-
-    // Coloca setup do array
-    vTemp = vTemp + vTam + 8 + (pNumDim * 2);
-    *vNextArrayVar++ = vTempC[0];
-    *vNextArrayVar++ = vTempC[1];
-    *vNextArrayVar++ = vTempC[2];
-    *vNextArrayVar++ = vTempC[3];
-    *vNextArrayVar++ = pNumDim;
-
-    for (ix = 0; ix < pNumDim; ix++)
-    {
-        *vNextArrayVar++ = (pDim[ix] >> 8);
-        *vNextArrayVar++ = (pDim[ix] & 0xFF);
-    }
-
-    // Limpa area de dados (zera)
-    for (ix = 0; ix < vTam; ix++)
-        *(vNextArrayVar + ix) = 0x00;
-
-    *nextAddrArrayVar = vTemp;
 
     return 0;
 }
@@ -2768,18 +2251,550 @@ void getExp(unsigned char *result)
 {
     unsigned char sqtdtam[10];
 
+    #ifdef USE_ITERATIVE_PARSER
+        parseExpressionIterative(result);
+
+        if (*vErroProc) return;
+
+        putback(); // return last token read to input stream
+
+        return;
+    #else
+        nextToken();
+        if (*vErroProc) return;
+
+        if (!*token) {
+            *vErroProc = 2;
+            return;
+        }
+
+        level2(result);
+        if (*vErroProc) return;
+
+        putback(); // return last token read to input stream
+
+        return;
+    #endif
+}
+
+// -----------------------------------------------------------------------------
+// Precedência dos operadores
+// -----------------------------------------------------------------------------
+int getPrec(unsigned char op)
+{
+    switch (op)
+    {
+        case '(':
+            return 0;
+        case '=':
+        case '<':
+        case '>':
+        case 0xF5:
+        case 0xF6:
+        case 0xF7:
+            return 1; // comparadores
+        case 0xF3:
+        case 0xF4:
+            return 1; // AND, OR
+        case '+':
+        case '-':
+            return 2;
+        case '*':
+        case '/':
+            return 3;
+        case '^':
+            return 4;
+        default:
+            return 0;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Associatividade: ^ é direita, resto esquerda
+// -----------------------------------------------------------------------------
+int isRightAssoc(char op) {
+    return (op == '^');
+}
+
+// -----------------------------------------------------------------------------
+// Parser iterativo (experimental, ativado por USE_ITERATIVE_PARSER)
+// -----------------------------------------------------------------------------
+void parseExpressionIterative(unsigned char *result) {
+    int opTop = -1, valTop = -1;
+    unsigned char op, currentOp;
+    char typeA, typeB;
+    unsigned char tokenType, tokenChar, valueType;
+    unsigned char *a, *b;
+    unsigned char *vRet;
+    unsigned long numberValue;
+    unsigned char *numberBytes;
+    unsigned char tokenLen;
+    unsigned char *commandPointer;
+    int expectValue = 1; // Para detectar unário
+    char pendingUnary = 0; // 0: nenhum, '+': unário +, '-': unário -
+    int currentPrec, topPrec;
+
     nextToken();
     if (*vErroProc) return;
-
     if (!*token) {
         *vErroProc = 2;
         return;
     }
 
-    level2(result);
-    if (*vErroProc) return;
+    while (1) {
+        tokenType = *token_type;
+        tokenChar = *token;
 
-    putback(); // return last token read to input stream
+        if (expectValue) {
+            if (tokenType == DELIMITER && (tokenChar == '+' || tokenChar == '-')) {
+                pendingUnary = tokenChar;
+                nextToken();
+                if (*vErroProc) return;
+                continue;
+            }
+
+            if (tokenType == NUMBER || tokenType == VARIABLE || tokenType == QUOTE || tokenType == COMMAND) {
+                if (tokenType == VARIABLE) {
+                    tokenLen = 0;
+                    while (token[tokenLen])
+                        tokenLen++;
+
+                    if (tokenLen < 3)
+                    {
+                        valueType = VARTYPEDEFAULT;
+
+                        if (tokenLen == 2 && token[1] < 0x30)
+                            valueType = token[1];
+                    }
+                    else
+                    {
+                        valueType = token[2];
+                    }
+
+                    vRet = find_var((char*)token);
+                    if (vRet == 0)
+                    {
+                        if (*vErroProc == 0)
+                            *vErroProc = 4;
+                        return;
+                    }
+
+                    valueType = *value_type;
+
+                    if (valueType == '$')
+                        strcpy((char*)temp, (char*)vRet);
+                    else
+                    {
+                        temp[0] = vRet[0];
+                        temp[1] = vRet[1];
+                        temp[2] = vRet[2];
+                        temp[3] = vRet[3];
+                    }
+
+                    nextToken();
+                    if (*vErroProc) return;
+                }
+                else if (tokenType == QUOTE) {
+                    valueType = '$';
+                    strcpy((char*)temp, (char*)token);
+                    nextToken();
+                    if (*vErroProc) return;
+                }
+                else if (tokenType == NUMBER) {
+                    if (strchr((char*)token, '.'))
+                    {
+                        valueType = '#';
+                        numberValue = floatStringToFpp(token);
+                        if (*vErroProc) return;
+                    }
+                    else
+                    {
+                        valueType = '%';
+                        numberValue = atoi((char*)token);
+                    }
+
+                    numberBytes = (unsigned char*)&numberValue;
+                    temp[0] = numberBytes[0];
+                    temp[1] = numberBytes[1];
+                    temp[2] = numberBytes[2];
+                    temp[3] = numberBytes[3];
+
+                    nextToken();
+                    if (*vErroProc) return;
+                }
+                else {
+                    commandPointer = *pointerRunProg;
+                    *token = *commandPointer;
+                    *pointerRunProg = *pointerRunProg + 1;
+                    executeToken(*commandPointer);
+                    if (*vErroProc) return;
+
+                    valueType = *value_type;
+
+                    if (valueType == '$')
+                        strcpy((char*)temp, (char*)token);
+                    else
+                    {
+                        temp[0] = token[0];
+                        temp[1] = token[1];
+                        temp[2] = token[2];
+                        temp[3] = token[3];
+                    }
+
+                    nextToken();
+                    if (*vErroProc) return;
+                }
+
+                if (pendingUnary) {
+                    if (valueType == '$') {
+                        *vErroProc = 16;
+                        return;
+                    }
+
+                    if (valueType == '#')
+                        unaryReal(pendingUnary, (int*)temp);
+                    else
+                        unaryInt(pendingUnary, (int*)temp);
+
+                    pendingUnary = 0;
+                }
+
+                if (valTop + 1 >= PARSER_STACK_SIZE) {
+                    *vErroProc = 14;
+                    return;
+                }
+
+                valTop++;
+
+                if (valueType == '$')
+                    strcpy((char*)valStack[valTop], (char*)temp);
+                else
+                    *(unsigned int*)valStack[valTop] = *(unsigned int*)temp;
+
+                valTypeStack[valTop] = valueType;
+                expectValue = 0;
+
+                continue;
+            }
+
+            if (tokenChar == '(') {
+                if (pendingUnary) {
+                    if (pendingUnary == '-') {
+                        if (valTop + 1 >= PARSER_STACK_SIZE) {
+                            *vErroProc = 14;
+                            return;
+                        }
+
+                        valTop++;
+                        *(unsigned int*)valStack[valTop] = 0;
+                        valTypeStack[valTop] = '%';
+
+                        if (opTop + 1 >= PARSER_STACK_SIZE) {
+                            *vErroProc = 14;
+                            return;
+                        }
+
+                        opTop++;
+                        opStack[opTop] = '-';
+                        opPrecStack[opTop] = 2;
+                    }
+
+                    pendingUnary = 0;
+                }
+
+                if (opTop + 1 >= PARSER_STACK_SIZE) {
+                    *vErroProc = 14;
+                    return;
+                }
+
+                opTop++;
+                opStack[opTop] = '(';
+                opPrecStack[opTop] = 0;
+
+                nextToken();
+                if (*vErroProc) return;
+
+                continue;
+            }
+        }
+
+        if (tokenChar == ')') {
+            char foundOpenParen = 0;
+
+            while (opTop >= 0) {
+                if (opStack[opTop] == '(') {
+                    foundOpenParen = 1;
+                    break;
+                }
+
+                op = opStack[opTop--];
+
+                if (valTop < 1) {
+                    *vErroProc = 14;
+                    return;
+                }
+
+                b = valStack[valTop];
+                typeB = valTypeStack[valTop];
+                valTop--;
+
+                a = valStack[valTop];
+                typeA = valTypeStack[valTop];
+
+                if (typeA != typeB) {
+                    if (typeA == '$' || typeB == '$') {
+                        *vErroProc = 16;
+                        return;
+                    }
+
+                    if (typeA == '#')
+                        *(unsigned int*)b = fppReal(*(unsigned int*)b);
+                    else {
+                        *(unsigned int*)a = fppReal(*(unsigned int*)a);
+                        typeA = '#';
+                    }
+                }
+
+                if (op == 0xF3 || op == 0xF4) {
+                    if (typeA == '$' || typeB == '$') {
+                        *vErroProc = 16;
+                        return;
+                    }
+
+                    if (op == 0xF3)
+                        *(int*)a = (*(int*)a && *(int*)b);
+                    else
+                        *(int*)a = (*(int*)a || *(int*)b);
+
+                    valTypeStack[valTop] = '%';
+                } else if (op == '=' || op == '<' || op == '>' || op == 0xF5 || op == 0xF6 || op == 0xF7) {
+                    if (typeA == '$')
+                        logicalString(op, a, b);
+                    else if (typeA == '#')
+                        logicalNumericFloat(op, a, b);
+                    else
+                        logicalNumericInt(op, a, b);
+
+                    valTypeStack[valTop] = '%';
+                } else {
+                    if (typeA == '#')
+                        arithReal(op, a, b);
+                    else
+                        arithInt(op, a, b);
+
+                    valTypeStack[valTop] = typeA;
+                }
+            }
+
+            if (foundOpenParen) {
+                opTop--;
+
+                nextToken();
+                if (*vErroProc) return;
+
+                expectValue = 0;
+                continue;
+            }
+
+            break;
+        }
+
+        if (tokenChar == '+' || tokenChar == '-' || tokenChar == '*' || tokenChar == '/' || tokenChar == '^' ||
+            tokenChar == '=' || tokenChar == '<' || tokenChar == '>' || tokenChar == 0xF5 || tokenChar == 0xF6 || tokenChar == 0xF7 ||
+            tokenChar == 0xF3 || tokenChar == 0xF4) {
+            currentOp = tokenChar;
+
+            switch ((unsigned char)currentOp) {
+                case '=':
+                case '<':
+                case '>':
+                case 0xF5:
+                case 0xF6:
+                case 0xF7:
+                case 0xF3:
+                case 0xF4:
+                    currentPrec = 1;
+                    break;
+                case '+':
+                case '-':
+                    currentPrec = 2;
+                    break;
+                case '*':
+                case '/':
+                    currentPrec = 3;
+                    break;
+                case '^':
+                    currentPrec = 4;
+                    break;
+                default:
+                    currentPrec = 0;
+                    break;
+            }
+
+            while (opTop >= 0) {
+                topPrec = opPrecStack[opTop];
+
+                if (topPrec < currentPrec)
+                    break;
+
+                if (currentOp == '^' && topPrec == currentPrec)
+                    break;
+
+                op = opStack[opTop--];
+
+                if (valTop < 1) {
+                    *vErroProc = 14;
+                    return;
+                }
+
+                b = valStack[valTop];
+                typeB = valTypeStack[valTop];
+                valTop--;
+
+                a = valStack[valTop];
+                typeA = valTypeStack[valTop];
+
+                if (typeA != typeB) {
+                    if (typeA == '$' || typeB == '$') {
+                        *vErroProc = 16;
+                        return;
+                    }
+
+                    if (typeA == '#')
+                        *(unsigned int*)b = fppReal(*(unsigned int*)b);
+                    else {
+                        *(unsigned int*)a = fppReal(*(unsigned int*)a);
+                        typeA = '#';
+                    }
+                }
+
+                if (op == 0xF3 || op == 0xF4) {
+                    if (typeA == '$' || typeB == '$') {
+                        *vErroProc = 16;
+                        return;
+                    }
+
+                    if (op == 0xF3)
+                        *(int*)a = (*(int*)a && *(int*)b);
+                    else
+                        *(int*)a = (*(int*)a || *(int*)b);
+
+                    valTypeStack[valTop] = '%';
+                } else if (op == '=' || op == '<' || op == '>' || op == 0xF5 || op == 0xF6 || op == 0xF7) {
+                    if (typeA == '$')
+                        logicalString(op, a, b);
+                    else if (typeA == '#')
+                        logicalNumericFloat(op, a, b);
+                    else
+                        logicalNumericInt(op, a, b);
+
+                    valTypeStack[valTop] = '%';
+                } else {
+                    if (typeA == '#')
+                        arithReal(op, a, b);
+                    else
+                        arithInt(op, a, b);
+
+                    valTypeStack[valTop] = typeA;
+                }
+            }
+
+            if (opTop + 1 >= PARSER_STACK_SIZE) {
+                *vErroProc = 14;
+                return;
+            }
+
+            opTop++;
+            opStack[opTop] = currentOp;
+            opPrecStack[opTop] = (unsigned char)currentPrec;
+
+            nextToken();
+            if (*vErroProc) return;
+
+            expectValue = 1;
+
+            continue;
+        }
+
+        break;
+    }
+
+    while (opTop >= 0) {
+        op = opStack[opTop--];
+
+        if (op == '(') {
+            *vErroProc = 15;
+            return;
+        }
+
+        if (valTop < 1) {
+            *vErroProc = 14;
+            return;
+        }
+
+        b = valStack[valTop];
+        typeB = valTypeStack[valTop];
+        valTop--;
+
+        a = valStack[valTop];
+        typeA = valTypeStack[valTop];
+
+        if (typeA != typeB) {
+            if (typeA == '$' || typeB == '$') {
+                *vErroProc = 16;
+                return;
+            }
+
+            if (typeA == '#')
+                *(unsigned int*)b = fppReal(*(unsigned int*)b);
+            else {
+                *(unsigned int*)a = fppReal(*(unsigned int*)a);
+                typeA = '#';
+            }
+        }
+
+        if (op == 0xF3 || op == 0xF4) {
+            if (typeA == '$' || typeB == '$') {
+                *vErroProc = 16;
+                return;
+            }
+
+            if (op == 0xF3)
+                *(int*)a = (*(int*)a && *(int*)b);
+            else
+                *(int*)a = (*(int*)a || *(int*)b);
+
+            valTypeStack[valTop] = '%';
+        } else if (op == '=' || op == '<' || op == '>' || op == 0xF5 || op == 0xF6 || op == 0xF7) {
+            if (typeA == '$')
+                logicalString(op, a, b);
+            else if (typeA == '#')
+                logicalNumericFloat(op, a, b);
+            else
+                logicalNumericInt(op, a, b);
+
+            valTypeStack[valTop] = '%';
+        } else {
+            if (typeA == '#')
+                arithReal(op, a, b);
+            else
+                arithInt(op, a, b);
+
+            valTypeStack[valTop] = typeA;
+        }
+    }
+
+    if (valTop < 0) {
+        *vErroProc = 14;
+        return;
+    }
+
+    *value_type = valTypeStack[valTop];
+
+    if (*value_type == '$')
+        strcpy((char*)result, (char*)valStack[valTop]);
+    else
+        *(unsigned int*)result = *(unsigned int*)valStack[valTop];
 
     return;
 }
@@ -2974,7 +2989,7 @@ void level30(unsigned char *result)
 }
 
 //--------------------------------------------------------------------------------------
-// Process logic conditions
+// Process logic conditions AND or OR.
 //--------------------------------------------------------------------------------------
 void level31(unsigned char *result)
 {
@@ -3212,14 +3227,18 @@ void primitive(unsigned char *result)
     unsigned char* vRet;
     unsigned char sqtdtam[10];
     unsigned char *vTempPointer;
+    unsigned char tokenLen = 0;
 
     switch(*token_type) {
         case VARIABLE:
-            if (strlen(token) < 3)
+            while (token[tokenLen])
+                tokenLen++;
+
+            if (tokenLen < 3)
             {
                 *value_type=VARTYPEDEFAULT;
 
-                if (strlen(token) == 2 && *(token + 1) < 0x30)
+                if (tokenLen == 2 && *(token + 1) < 0x30)
                     *value_type = *(token + 1);
             }
             else
@@ -3540,24 +3559,34 @@ void unaryReal(char o, int *r)
 //--------------------------------------------------------------------------------------
 unsigned char* find_var(char *s)
 {
-    unsigned char vTemp[250];
+    static unsigned char vTempPool[4][250];
+    static unsigned char vTempDepth = 0;
+    unsigned char *vTemp;
+    unsigned char vLen = 0;
+
+    vTemp = vTempPool[vTempDepth & 0x03];
+    vTempDepth++;
+
+    while (s[vLen])
+        vLen++;
 
     *vErroProc = 0x00;
 
     if (!isalphas(*s)){
         *vErroProc = 4; // not a variable
+        vTempDepth--;
         return 0;
     }
 
-    if (strlen(s) < 3)
+    if (vLen < 3)
     {
         vTemp[0] = *s;
         vTemp[2] = VARTYPEDEFAULT;
 
-        if (strlen(s) == 2 && *(s + 1) < 0x30)
+        if (vLen == 2 && *(s + 1) < 0x30)
             vTemp[2] = *(s + 1);
 
-        if (strlen(s) == 2 && isalphas(*(s + 1)))
+        if (vLen == 2 && isalphas(*(s + 1)))
             vTemp[1] = *(s + 1);
         else
             vTemp[1] = 0x00;
@@ -3569,12 +3598,14 @@ unsigned char* find_var(char *s)
         vTemp[2] = *s;
     }
 
-    if (!findVariable(&vTemp))
+    if (!findVariable(vTemp))
     {
         *vErroProc = 4; // not a variable
+        vTempDepth--;
         return 0;
     }
 
+    vTempDepth--;
     return vTemp;
 }
 
@@ -4136,9 +4167,677 @@ int procParam(unsigned char tipoRetorno, unsigned char temParenteses, unsigned c
     return 0;
 }
 
+/*****************************************************************************/
+/* CONTROLE DE VARIAVEIS                                                     */
+/*****************************************************************************/
+
 //-----------------------------------------------------------------------------
-// FUNCOES BASIC
+// Calcula o endereco do valor dentro da area de dados de uma variavel array.
+// Retorna 0 em caso de erro de limite e ajusta vErroProc.
 //-----------------------------------------------------------------------------
+static unsigned char* getArrayValuePointer(unsigned char ixDim, unsigned char* vLista, unsigned char* vDim, unsigned char vTamValue)
+{
+    int ix;
+    int iw;
+    unsigned char ixDimAnt;
+    unsigned char* vPosValueVar;
+    unsigned short iDim;
+    unsigned long vOffSet;
+
+    iw = (ixDim - 1);
+    ixDimAnt = 1;
+    vPosValueVar = 0;
+
+    for (ix = ((ixDim - 1) * 2 ); ix >= 0; ix -= 2)
+    {
+        iDim = ((vLista[ix + 8] << 8) | vLista[ix + 9]);
+
+        if (vDim[iw] > iDim)
+        {
+            *vErroProc = 21;
+            return 0;
+        }
+
+        vPosValueVar = vPosValueVar + ((vDim[iw] - 1 ) * ixDimAnt * vTamValue);
+        ixDimAnt = ixDimAnt * iDim;
+        iw--;
+    }
+
+    vOffSet = vLista;
+    vPosValueVar = vPosValueVar + (vOffSet + 8 + (ixDim * 2));
+
+    return vPosValueVar;
+}
+
+//-----------------------------------------------------------------------------
+// Retornos: -1 - Erro, 0 - Nao Existe, 1 - eh um valor numeral
+//           [endereco > 1] - Endereco da variavel
+//
+//           se retorno > 1: pVariable vai conter o valor numeral (qdo 1) ou
+//                           o conteudo da variavel (qdo endereco)
+//-----------------------------------------------------------------------------
+long findVariable(unsigned char* pVariable)
+{
+    unsigned char* vLista = pStartSimpVar;
+    unsigned char* vTemp = pStartSimpVar;
+    unsigned char vVarName0 = pVariable[0];
+    unsigned char vVarName1 = pVariable[1];
+    long vEnder = 0;
+    int ix = 0, iy = 0, iz = 0;
+    unsigned char vDim[88];
+    unsigned int vTempDim = 0;
+    unsigned long vOffSet;
+    unsigned char ixDim = 0;
+    unsigned char vArray = 0;
+    unsigned long vPosNextVar = 0;
+    unsigned char* vPosValueVar = 0;
+    unsigned char vTamValue = 4;
+    unsigned char *vTempPointer;
+    unsigned char *pDst;
+    unsigned char *pSrc;
+    unsigned char sqtdtam[20];
+    int vCacheIx;
+
+    // Verifica se eh array (tem parenteses logo depois do nome da variavel)
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.0 varName-[");
+itoa(pVariable[0],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pVariable[1],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
+
+    vTempPointer = *pointerRunProg;
+    if (*vTempPointer == 0x28)
+    {
+        // Define que eh array
+        vArray = 1;
+
+        // Procura as dimensoes
+        nextToken();
+        if (*vErroProc) return 0;
+
+        // Erro, primeiro caracter depois da variavel, deve ser abre parenteses
+        if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
+        {
+            *vErroProc = 15;
+            return 0;
+        }
+
+        do
+        {
+            nextToken();
+            if (*vErroProc) return 0;
+
+            if (*token_type == QUOTE) { // is string, error
+                *vErroProc = 16;
+                return 0;
+            }
+            else { // is expression
+
+                putback();
+
+                getExp(&vTempDim);
+
+                if (*vErroProc) return 0;
+
+                if (*value_type == '$')
+                {
+                    *vErroProc = 16;
+                    return 0;
+                }
+
+                if (*value_type == '#')
+                {
+                    vTempDim = fppInt(vTempDim);
+                    *value_type = '%';
+                }
+
+                vDim[ixDim] = vTempDim + 1;
+
+                ixDim++;
+            }
+
+            if (*token == ',')
+            {
+                *pointerRunProg = *pointerRunProg + 1;
+
+                vTempPointer = *pointerRunProg;
+            }
+            else
+                break;
+
+        } while(1);
+
+        // Deve ter pelo menos 1 elemento
+        if (ixDim < 1)
+        {
+            *vErroProc = 21;
+            return 0;
+        }
+
+        nextToken();
+        if (*vErroProc) return 0;
+
+        // Ultimo caracter deve ser fecha parenteses
+        if (*token_type!=CLOSEPARENT)
+        {
+            *vErroProc = 15;
+            return 0;
+        }
+    }
+
+    // Procura na lista geral de variaveis simples / array
+    if (vArray)
+        vLista = pStartArrayVar;
+    else
+        vLista = pStartSimpVar;
+
+    if (1)  // (!vArray)
+    {
+        for (vCacheIx = 0; vCacheIx < SIMPLE_VAR_CACHE_SLOTS; vCacheIx++)
+        {
+            if (lastVarCacheAddr[vCacheIx] &&
+                lastVarCacheName0[vCacheIx] == vVarName0 &&
+                lastVarCacheName1[vCacheIx] == vVarName1)
+            {
+                vLista = lastVarCacheAddr[vCacheIx];
+
+                *value_type = *vLista;
+
+                if (vArray)
+                {
+                    if (*vLista == '$')
+                        vTamValue = 5;
+
+                    // Verifica se os tamanhos da dimensao informada e da variavel sao iguais
+                    if (ixDim != vLista[7])
+                    {
+                        *vErroProc = 21;
+                        return 0;
+                    }
+
+                    vPosValueVar = getArrayValuePointer(ixDim, vLista, vDim, vTamValue);
+                    if (*vErroProc)
+                        return 0;
+                }
+                else
+                {
+                    vPosValueVar = vLista + 3;
+                }
+
+                if (*vLista == '$')
+                {
+                    vOffSet  = (((unsigned long)*(vPosValueVar + 1) << 24) & 0xFF000000);
+                    vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
+                    vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
+                    vOffSet |= ((unsigned long)*(vPosValueVar + 4) & 0x000000FF);
+                    vTempPointer = vOffSet;
+                    iy = *vPosValueVar;
+                    pDst = pVariable;
+                    pSrc = vTempPointer;
+                    for (ix = 0; ix < iy; ix++)
+                    {
+                        *pDst++ = *pSrc++;
+                    }
+                    *pDst = 0x00;
+                }
+                else
+                {
+                    vPosValueVar++;
+                    pVariable[0] = *(vPosValueVar);
+                    pVariable[1] = *(vPosValueVar + 1);
+                    pVariable[2] = *(vPosValueVar + 2);
+                    pVariable[3] = *(vPosValueVar + 3);
+                    pVariable[4] = 0x00;
+                }
+
+                return (long)vLista;
+            }
+        }
+    }
+
+    while(1)
+    {
+        vPosNextVar  = (((unsigned long)*(vLista + 3) << 24) & 0xFF000000);
+        vPosNextVar |= (((unsigned long)*(vLista + 4) << 16) & 0x00FF0000);
+        vPosNextVar |= (((unsigned long)*(vLista + 5) << 8) & 0x0000FF00);
+        vPosNextVar |= ((unsigned long)*(vLista + 6) & 0x000000FF);
+        *value_type = *vLista;
+
+        if (*(vLista + 1) == pVariable[0] && *(vLista + 2) ==  pVariable[1])
+        {
+            // Pega endereco da variavel pra delvover
+            if (vArray)
+            {
+                if (*vLista == '$')
+                    vTamValue = 5;
+
+                // Verifica se os tamanhos da dimensao informada e da variavel sao iguais
+                if (ixDim != vLista[7])
+                {
+                    *vErroProc = 21;
+                    return 0;
+                }
+
+                vPosValueVar = getArrayValuePointer(ixDim, vLista, vDim, vTamValue);
+                if (*vErroProc)
+                    return 0;
+
+                vEnder = vPosValueVar;
+            }
+            else
+            {
+                vPosValueVar = vLista + 3;
+                vEnder = vLista;
+            }
+
+            // Pelo tipo da variavel, ja retorna na variavel de nome o conteudo da variavel
+            if (*vLista == '$')
+            {
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.0-[");
+writeSerial(*vLista);
+writeLongSerial("]-[");
+itoa(vPosValueVar,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
+                vOffSet  = (((unsigned long)*(vPosValueVar + 1) << 24) & 0xFF000000);
+                vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
+                vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
+                vOffSet |= ((unsigned long)*(vPosValueVar + 4) & 0x000000FF);
+                vTemp = vOffSet;
+
+                iy = *vPosValueVar;
+                pDst = pVariable;
+                pSrc = vTemp;
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.1-[");
+itoa(vTemp,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+}
+                for (ix = 0; ix < iy; ix++)
+                {
+if (*debugOn)
+{
+itoa(ix,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+        itoa((unsigned long)(pDst - pVariable),sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+        itoa(*pSrc,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+}
+                      *pDst = *pSrc;
+if (*debugOn)
+{
+        itoa(*pDst,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+}
+                      pDst++;
+                      pSrc++;
+                }
+if (*debugOn)
+{
+writeLongSerial("]\r\n");
+}
+
+                  *pDst = 0x00;
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.2-[");
+itoa(vOffSet,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pVariable[0],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pVariable[1],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pVariable[2],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pVariable[3],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
+            }
+            else
+            {
+                if (!vArray)
+                    vPosValueVar++;
+
+                pVariable[0] = *(vPosValueVar);
+                pVariable[1] = *(vPosValueVar + 1);
+                pVariable[2] = *(vPosValueVar + 2);
+                pVariable[3] = *(vPosValueVar + 3);
+                pVariable[4] = 0x00;
+            }
+
+            if (!vArray)
+            {
+                for (ix = (SIMPLE_VAR_CACHE_SLOTS - 1); ix > 0; ix--)
+                {
+                    lastVarCacheName0[ix] = lastVarCacheName0[ix - 1];
+                    lastVarCacheName1[ix] = lastVarCacheName1[ix - 1];
+                    lastVarCacheAddr[ix] = lastVarCacheAddr[ix - 1];
+                }
+                lastVarCacheName0[0] = vVarName0;
+                lastVarCacheName1[0] = vVarName1;
+                lastVarCacheAddr[0] = vLista;
+            }
+
+            return vEnder;
+        }
+
+        if (vArray)
+            vLista = vPosNextVar;
+        else
+            vLista += 8;
+
+        if ((!vArray && vLista >= pStartArrayVar) || (vArray && vLista >= pStartProg) || *vLista == 0x00)
+            break;
+    }
+
+    return 0;
+}
+
+//-----------------------------------------------------------------------------
+// Cria a Variavel NO ENDEREÇO DEFINIDO POR nextAddrSimpVar OU nextAddrArrayVar,
+// DE ACORDO COM O TIPO E NOME INFORMADOS
+//-----------------------------------------------------------------------------
+char createVariable(unsigned char* pVariable, unsigned char* pValor, char pType)
+{
+    char vRet = 0;
+    long vTemp = 0;
+    char vBuffer [sizeof(long)*8+1];
+    unsigned char* vNextSimpVar;
+    char vLenVar = 0;
+
+    vTemp = *nextAddrSimpVar;
+    vNextSimpVar = *nextAddrSimpVar;
+
+    vLenVar = strlen(pVariable);
+
+    *vNextSimpVar++ = pType;
+    *vNextSimpVar++ = pVariable[0];
+    *vNextSimpVar++ = pVariable[1];
+
+    vRet = updateVariable(vNextSimpVar, pValor, pType, 0);
+    *nextAddrSimpVar += 8;
+
+    return vRet;
+}
+
+//-----------------------------------------------------------------------------
+// Atualiza o valor da Variavel no ENDEREÇO DEFINIDO POR nextAddrSimpVar OU nextAddrArrayVar,
+// DE ACORDO COM O TIPO E NOME INFORMADOS
+//-----------------------------------------------------------------------------
+char updateVariable(unsigned long* pVariable, unsigned char* pValor, char pType, char pOper)
+{
+    long vNumVal = 0;
+    int ix, iz = 0;
+    char vBuffer [sizeof(long)*8+1];
+    unsigned char* vNextSimpVar;
+    unsigned char* vNextString;
+    char pNewStr = 0;
+    unsigned long vOffSet;
+//    unsigned char* sqtdtam[20];
+
+    vNextSimpVar = pVariable;
+    *atuVarAddr = pVariable;
+
+/*writeLongSerial("Aqui 333.666.0-[");
+itoa(pVariable,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pValor,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pType,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+
+    if (pType == '#' || pType == '%')   // Real ou Inteiro
+    {
+        if (vNextSimpVar < pStartArrayVar)
+            *vNextSimpVar++ = 0x00;
+
+        *vNextSimpVar++ = pValor[0];
+        *vNextSimpVar++ = pValor[1];
+        *vNextSimpVar++ = pValor[2];
+        *vNextSimpVar++ = pValor[3];
+    }
+    else // String
+    {
+        iz = strlen(pValor);    // Tamanho da strings
+
+/*writeLongSerial("Aqui 333.666.1-[");
+itoa(*vNextSimpVar,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(iz,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pOper,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+        // Se for o mesmo tamanho ou menor, usa a mesma posicao
+        if (*vNextSimpVar <= iz && pOper)
+        {
+            vOffSet  = (((unsigned long)*(vNextSimpVar + 1) << 24) & 0xFF000000);
+            vOffSet |= (((unsigned long)*(vNextSimpVar + 2) << 16) & 0x00FF0000);
+            vOffSet |= (((unsigned long)*(vNextSimpVar + 3) << 8) & 0x0000FF00);
+            vOffSet |= ((unsigned long)*(vNextSimpVar + 4) & 0x000000FF);
+            vNextString = vOffSet;
+
+            if (pOper == 2 && vNextString == 0)
+            {
+                vNextString = *nextAddrString;
+                pNewStr = 1;
+            }
+        }
+        else
+            vNextString = *nextAddrString;
+
+        vNumVal = vNextString;
+/*writeLongSerial("Aqui 333.666.2-[");
+itoa(nextAddrString,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vNextString,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vNumVal,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+
+        for (ix = 0; ix < iz; ix++)
+        {
+            *vNextString++ = pValor[ix];
+        }
+
+/*writeLongSerial("Aqui 333.666.3-[");
+itoa(nextAddrString,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vNextString,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vNumVal,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+
+        if (*vNextSimpVar > iz || !pOper || pNewStr)
+            *nextAddrString = vNextString;
+
+/*writeLongSerial("Aqui 333.666.4-[");
+itoa(vNextString,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vNumVal,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+
+        *vNextSimpVar++ = iz;
+
+/*writeLongSerial("Aqui 333.666.5-[");
+itoa(vNextString,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+
+        *vNextSimpVar++ = ((vNumVal & 0xFF000000) >>24);
+        *vNextSimpVar++ = ((vNumVal & 0x00FF0000) >>16);
+        *vNextSimpVar++ = ((vNumVal & 0x0000FF00) >>8);
+        *vNextSimpVar++ = (vNumVal & 0x000000FF);
+/*writeLongSerial("Aqui 333.666.6-[");
+itoa(vNextString,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+    }
+
+/*    *(vNextSimpVar + 1) = 0x00;
+    *(vNextSimpVar + 2) = 0x00;
+    *(vNextSimpVar + 3) = 0x00;
+    *(vNextSimpVar + 4) = 0x00;*/
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Cria a Variavel Array NO ENDEREÇO DEFINIDO POR nextAddrArrayVar, DE ACORDO COM O TIPO,
+// NOME E DIMENSÕES INFORMADOS
+//--------------------------------------------------------------------------------------
+char createVariableArray(unsigned char* pVariable, char pType, unsigned int pNumDim, unsigned int *pDim)
+{
+    char vRet = 0;
+    long vTemp = 0;
+    unsigned char* vTempC = &vTemp;
+    char vBuffer [sizeof(long)*8+1];
+    unsigned char* vNextArrayVar;
+    char vLenVar = 0;
+    int ix, vTam;
+    long vAreaFree = (pStartString - *nextAddrArrayVar);
+    long vSizeTotal = 0;
+//    unsigned char sqtdtam[20];
+
+    vTemp = *nextAddrArrayVar;
+    vNextArrayVar = *nextAddrArrayVar;
+
+    vLenVar = strlen(pVariable);
+
+    *vNextArrayVar++ = pType;
+    *vNextArrayVar++ = pVariable[0];
+    *vNextArrayVar++ = pVariable[1];
+    vTam = 0;
+
+    for (ix = 0; ix < pNumDim; ix++)
+    {
+        // Somando mais 1, porque 0 = 1 em quantidade e e em posicao (igual ao c)
+        pDim[ix] = pDim[ix] /*+ 1*/ ;
+
+        // Definir o tamanho do campo de dados do array
+        if (vTam == 0)
+            vTam = pDim[ix] /*- 1*/ ;
+        else
+            vTam = vTam * (pDim[ix] /*- 1*/ );
+
+/*writeLongSerial("Aqui 333.666.0-[");
+itoa(vTam,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(ix,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pDim[ix],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+    }
+
+/*writeLongSerial("Aqui 333.666.1-[");
+itoa(vTam,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(pNumDim,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+
+    if (pType == '$')
+        vTam = vTam * 5;
+    else
+        vTam = vTam * 4;
+
+/*writeLongSerial("Aqui 333.666.2-[");
+itoa(pType,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vTam,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+
+    vSizeTotal = vTam + 8;
+    vSizeTotal = vSizeTotal + (pNumDim *2);
+
+/*writeLongSerial("Aqui 333.666.3-[");
+itoa(pStartString,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*nextAddrArrayVar,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vAreaFree,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vSizeTotal,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");*/
+
+    if (vSizeTotal > vAreaFree)
+    {
+        *vErroProc = 22;
+        return 0;
+    }
+
+    // Coloca setup do array
+    vTemp = vTemp + vTam + 8 + (pNumDim * 2);
+    *vNextArrayVar++ = vTempC[0];
+    *vNextArrayVar++ = vTempC[1];
+    *vNextArrayVar++ = vTempC[2];
+    *vNextArrayVar++ = vTempC[3];
+    *vNextArrayVar++ = pNumDim;
+
+    for (ix = 0; ix < pNumDim; ix++)
+    {
+        *vNextArrayVar++ = (pDim[ix] >> 8);
+        *vNextArrayVar++ = (pDim[ix] & 0xFF);
+    }
+
+    // Limpa area de dados (zera)
+    for (ix = 0; ix < vTam; ix++)
+        *(vNextArrayVar + ix) = 0x00;
+
+    *nextAddrArrayVar = vTemp;
+
+    return 0;
+}
+
+/*****************************************************************************/
+/* FUNCOES BASIC                                                             */
+/*****************************************************************************/
 
 //-----------------------------------------------------------------------------
 // Joga pra tela Texto.
@@ -5566,8 +6265,18 @@ int basFor(void)
     char vResLog1 = 0, vResLog2 = 0;
     char vResLog3 = 0, vResLog4 = 0;
 
+if (*debugOn)
+{
+writeLongSerial("Aqui 444.666.0\r\n");
+}
+
     basLet();
     if (*vErroProc) return 0;
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 444.666.1]\r\n");
+}
 
     endLastVar = *atuVarAddr - 3;
     endVarCont = *atuVarAddr + 1;
@@ -5598,6 +6307,14 @@ int basFor(void)
     }
 
     *pointerRunProg = *pointerRunProg + 1;
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 444.666.2 varName-[");
+itoa(*pointerRunProg,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
 
     getExp(&iTarget); /* get target value */
 
@@ -7499,4 +8216,3 @@ int basRestore(void)
 
     return 0;
 }
-#endif

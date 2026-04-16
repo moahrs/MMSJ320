@@ -9,6 +9,7 @@
 *    ...       ...       ...            ...
 * 03/01/2025  0.5a    Moacir Jr.   Troca de cores e ajustes de tela
 * 19/01/2025  0.6     Moacir Jr.   Adaptar para rodar junto com o MMSJOS
+* 13/04/2026  0.7a03  Moacir Jr.   Ajustes para o mouse e o sprite do ponteiro
 *--------------------------------------------------------------------------------
 *
 *--------------------------------------------------------------------------------
@@ -29,7 +30,7 @@
 #include "monitorapi.h"
 #include "mgui.h"
 
-#define versionMgui "0.6"
+#define versionMgui "0.7a03"
 #define __EM_OBRAS__ 1
 
 unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
@@ -74,8 +75,8 @@ extern HEADER *_allocp;
 
 #define STACKSIZE  1024
 #define STACKSIZEMGUI  2048
-#define STACKSIZEMOUSE  256
-#define STACKSIZEMENU  256
+#define STACKSIZEMOUSE  2048
+#define STACKSIZEMENU  1024
 
 extern OS_STK StkInput[STACKSIZE];
 OS_STK StkFiles[STACKSIZEMGUI];
@@ -88,6 +89,7 @@ extern OS_EVENT *shared_sem;
 void mouseTask (void *pData);
 void menuTask (void *pData);
 void messageTask (void *pData);
+void runBin(void);
 
 //-----------------------------------------------------------------------------
 void clearScrW(unsigned char color)
@@ -1142,7 +1144,6 @@ void startMGI(void) {
     bgcolorMgui = VDP_DARK_BLUE; // cores.bg;
 
     vdp_get_cfg(&mgui_pattern_table, &mgui_color_table);
-
     vLoadImage = malloc(SIZE_LOAD_IMAGE_MEM);
     loadFile("/MGUI/IMAGES/UTILITY.PBM", (unsigned long*)vLoadImage);
     putImagePbmP4((unsigned long*)vLoadImage, 8, 1);
@@ -1151,7 +1152,7 @@ void startMGI(void) {
     writesxy(116,130,2,"MGUI",vcorwf,vcorwb);
     writesxy(71,140,1,"Graphical",vcorwf,vcorwb);
     writesxy(131,140,1,"Interface",vcorwf,vcorwb);
-    writesxy(113,150,1,"v"versionMgui,vcorwf,vcorwb);
+    writesxy(105,150,1,"v"versionMgui,vcorwf,vcorwb);
 
     writesxy(86,170,1,"Loading Config",vcorwf,vcorwb);
     loadFile("/MGUI/MGUI.CFG", memPosConfig);
@@ -1186,11 +1187,10 @@ void startMGI(void) {
     redrawMain();
 
     TrocaSpriteMouse(MOUSE_POINTER);
-
     spthdlmouse = vdp_sprite_init(0, 0, VDP_DARK_RED);
     statusVdpSprite = vdp_sprite_set_position(spthdlmouse, mouseX, mouseY);
 
-    OSTaskCreate(mouseTask, OS_NULL, &StkMouse[STACKSIZEMGUI], TASK_MGUI_MOUSE);
+    OSTaskCreate(mouseTask, OS_NULL, &StkMouse[STACKSIZEMOUSE], TASK_MGUI_MOUSE);
 
     vIndicaDialog = 0;
 
@@ -1493,14 +1493,26 @@ void VerifyMouse(void)
     if ((mouseMoveX == -2 && mouseX > 1) || (mouseMoveX == 2 && mouseX < 254))
         mouseX = mouseX + mouseMoveX;
 
-    if (mouseMoveY < -2)
-        mouseMoveY = 2;
+    if (mouseX <= 1)
+        mouseX = 2;
 
-    if (mouseMoveY > 2)
+    if (mouseX >= 254)
+        mouseX = 253;
+
+    if (mouseMoveY < -2)
         mouseMoveY = -2;
 
+    if (mouseMoveY > 2)
+        mouseMoveY = 2;
+
     if ((mouseMoveY == -2 && mouseY > 1) || (mouseMoveY == 2 && mouseY < 190))
-        mouseY = mouseY + mouseMoveY;
+        mouseY = mouseY - mouseMoveY;
+
+    if (mouseY <= 1)
+        mouseY = 2;
+
+    if (mouseY >= 190)
+        mouseY = 189;
 
     mouseBtnPres = mouseStat & 0x07;
 
@@ -1834,8 +1846,9 @@ unsigned char new_menu(void)
 
         switch (lc) {
             case 1: // RUN
+                runBin();
                 break;
-            case 2: // MMSJDOS
+            case 2: // MMSJOS
                 break;
             case 3: // SETUP
                 break;
@@ -1940,7 +1953,7 @@ void menuTask(void *pData)
                             message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);
 
                         break;
-                    case 1: // Help
+                    case 1: // Import File via Serial
                         importFile();
                         break;
                     case 2: // About
@@ -1961,16 +1974,131 @@ void menuTask(void *pData)
 }
 
 //-----------------------------------------------------------------------------
+void runBin(void)
+{
+    unsigned short ix;
+    unsigned char vwb, vresp;
+    unsigned char vnamein[64], vfilename[64], vfullpath[96];
+    unsigned char *vEndExec;
+    unsigned long vsizefilemalloc;
+    char *vdot;
+    MGUI_SAVESCR vsavescr;
+
+    vnamein[0] = '\0';
+    vfilename[0] = '\0';
+    vfullpath[0] = '\0';
+
+    SaveScreenNew(&vsavescr, 10,40,240,60);
+    showWindow("Run Binary",10,40,240,50,BTOK | BTCANCEL);
+
+    writesxy(12,57,8,"File Name:",vcorwf,vcorwb);
+    fillin(vnamein, 78, 57, 130, WINDISP);
+
+    while (1)
+    {
+        fillin(vnamein, 78, 57, 130, WINOPER);
+
+        vwb = waitButton();
+
+        if (vwb == BTOK || vwb == BTCANCEL)
+            break;
+
+        OSTimeDlyHMSM(0, 0, 0, 30);
+    }
+
+    RestoreScreen(vsavescr);
+
+    if (vwb != BTOK)
+        return;
+
+    if (vnamein[0] == '\0')
+    {
+        message("Error, file name must be provided!!\0", BTCLOSE, 0);
+        return;
+    }
+
+    for (ix = 0; ix < 63 && vnamein[ix] != '\0'; ix++)
+        vfilename[ix] = toupper(vnamein[ix]);
+
+    vfilename[ix] = '\0';
+
+    vdot = 0;
+    for (ix = 0; vfilename[ix] != '\0'; ix++)
+    {
+        if (vfilename[ix] == '.')
+            vdot = &vfilename[ix];
+    }
+
+    if (!vdot)
+    {
+        if (strlen(vfilename) > 59)
+        {
+            message("Invalid file name length\0", BTCLOSE, 0);
+            return;
+        }
+
+        strcat(vfilename, ".BIN");
+    }
+    else if (strcmp(vdot, ".BIN") != 0)
+    {
+        message("Only .BIN files are allowed\0", BTCLOSE, 0);
+        return;
+    }
+
+    if (vfilename[0] == '/')
+        strcpy(vfullpath, vfilename);
+    else
+    {
+        strcpy(vfullpath, "/MGUI/PROGS/");
+        strcat(vfullpath, vfilename);
+    }
+
+    vresp = message("Run selected file ?\0",(BTYES | BTNO), 0);
+    if (vresp != BTYES)
+        return;
+
+    vsizefilemalloc = fsInfoFile(vfullpath, INFO_SIZE);
+    if (vsizefilemalloc == ERRO_D_NOT_FOUND)
+    {
+        message("File not found...\0", BTCLOSE, 0);
+        return;
+    }
+
+    TrocaSpriteMouse(MOUSE_HOURGLASS);
+    vEndExec = malloc(vsizefilemalloc);
+    if (!vEndExec)
+    {
+        TrocaSpriteMouse(MOUSE_POINTER);
+        message("No memory to load .BIN\0", BTCLOSE, 0);
+        return;
+    }
+
+    loadFile(vfullpath, (unsigned long*)vEndExec);
+    TrocaSpriteMouse(MOUSE_POINTER);
+    if (!verro)
+        runFromMGUI(vEndExec);
+    else
+    {
+        message("Loading Error...\0", BTCLOSE, 0);
+        free(vEndExec);
+    }
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
 void importFile(void)
 {
     unsigned long vStep, ix;
     unsigned char *xaddress = 0x00840000;
+    unsigned char *xaddressStart;
     unsigned char vErro, vPerc;
     char vfilename[64], vstring[64];
     unsigned char vwb, vresp, vBuffer[128];
     int iy;
     unsigned char sqtdtam[10];
     unsigned long vSizeTotalRec;
+    unsigned short vChunkSize;
     MGUI_SAVESCR vsavescr;
 
     vSizeTotalRec = lstmGetSize();
@@ -2036,44 +2164,63 @@ void importFile(void)
                 // Recebe os dados via Serial
                 writesxy(12,55,8,"Reading Serial...",vcorwf,vcorwb);
 
-                if (!loadSerialToMem("840000", 0))
+                xaddress = malloc(256UL * 1024UL); // Aloca 256KB para receber o arquivo via serial
+                xaddressStart = xaddress;
+
+                if (!loadSerialToMem2(xaddressStart, 0))
                 {
                     // Abre Arquivo
                     writesxy(12,55,8,"Opening File...",vcorwf,vcorwb);
 
-                    fsOpenFile(vfilename);
-
-                    // Grava no Arquivo
-                    writesxy(12,55,8,"Writing File...",vcorwf,vcorwb);
-
-                    DrawRect(18,68,203,14,vcorwf);
-
-                    vStep = vSizeTotalRec / 20;
-                    vPerc = 0;
-
-                    for (ix = 0; ix < vSizeTotalRec; ix += 128)
+                    vErro = fsOpenFile(vfilename);
+                    if (vErro != RETURN_OK)
                     {
-                        for (iy = 0; iy < 128; iy++)
+                        free(xaddressStart);
+                    }
+                    else
+                    {
+                        // Grava no Arquivo
+                        writesxy(12,55,8,"Writing File...",vcorwf,vcorwb);
+
+                        DrawRect(18,68,203,14,vcorwf);
+
+                        vStep = vSizeTotalRec / 20;
+                        vPerc = 0;
+
+                        for (ix = 0; ix < vSizeTotalRec; ix += 128)
                         {
-                            if (ix > 0 && ((ix + iy) % vStep) == 0)
+                            vChunkSize = (unsigned short)(vSizeTotalRec - ix);
+                            if (vChunkSize > 128)
+                                vChunkSize = 128;
+
+                            for (iy = 0; iy < 128; iy++)
                             {
-                                FillRect((21 + vPerc), 71, 8, 8, VDP_DARK_BLUE);
-                                vPerc += 10;
+                                if (ix > 0 && ((ix + iy) % vStep) == 0)
+                                {
+                                    FillRect((21 + vPerc), 71, 8, 8, VDP_DARK_BLUE);
+                                    vPerc += 10;
+                                }
+
+                                if (iy < vChunkSize)
+                                {
+                                    vBuffer[iy] = *xaddress;
+                                    xaddress += 1;
+                                }
                             }
 
-                            vBuffer[iy] = *xaddress;
-                            xaddress += 1;
+                            vErro = fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize);
+                            if (vErro != RETURN_OK)
+                            {
+                                free(xaddressStart);
+                                break;
+                            }
                         }
 
-                        vErro = fsWriteFile(vfilename, ix, vBuffer, 128);
-                        if (vErro != RETURN_OK)
-                            break;
+                        // Fecha Arquivo
+                        writesxy(12,55,8,"Closing File...",vcorwf,vcorwb);
+
+                        fsCloseFile(vfilename, 0);
                     }
-
-                    // Fecha Arquivo
-                    writesxy(12,55,8,"Closing File...",vcorwf,vcorwb);
-
-                    fsCloseFile(vfilename, 0);
 
                     if (vErro == RETURN_OK)
                         writesxy(12,55,8,"Done !         ",vcorwf,vcorwb);

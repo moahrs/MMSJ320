@@ -146,6 +146,7 @@ unsigned char new_menu(void);
 void TrocaSpriteMouse(unsigned char vicone);
 void MostraIcone(unsigned short xi, unsigned short yi, unsigned char vicone, unsigned char colorfg, unsigned char colorbg);
 void runFromMguiCmd(void);
+void runBin(void);
 void importFile(void);
 void putImagePbmP4(unsigned long* memoria, unsigned short ix, unsigned short iy);
 

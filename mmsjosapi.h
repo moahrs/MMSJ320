@@ -2,7 +2,7 @@
 #define MMSJOSAPI_H
 
 // Function Shared Definitions
-#define MMSJOS_FUNC_TABLE    0x00817F00
+#define MMSJOS_FUNC_TABLE    0x00800032
 #define MGUI_FUNC_TABLE      0x00805576
 
 // MMSJOS Struct for Functions
@@ -32,8 +32,6 @@ typedef unsigned long (*fsMallocType)(unsigned long vMemSize);
 typedef unsigned long (*fsFindNextClusterType)(unsigned long vclusteratual, unsigned char vtype);
 typedef unsigned long (*fsFindClusterFreeType)(unsigned char vtype);
 typedef unsigned char (*OSTimeDlyHMSMType)(unsigned char hours, unsigned char minutes, unsigned char seconds, unsigned int ms);
-typedef void (*fsSetMfpType)(unsigned int Config, unsigned char Value, unsigned char TypeSet);
-typedef unsigned int (*fsGetMfpType)(unsigned int Config);
 
 // MGUI Struct for Functions
 typedef void (*writesxyType)(unsigned short x, unsigned short y, unsigned char sizef, unsigned char *msgs, unsigned short pcolor, unsigned short pbcolor);
@@ -95,8 +93,6 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define fsMalloc ((fsMallocType *)(unsigned long)MMSJOS_FUNC_TABLE)[22] // Índice da função
 #define fsFindNextCluster ((fsFindNextClusterType *)(unsigned long)MMSJOS_FUNC_TABLE)[23] // Índice da função
 #define fsFindClusterFree ((fsFindClusterFreeType *)(unsigned long)MMSJOS_FUNC_TABLE)[24] // Índice da função
-#define fsSetMfp ((fsSetMfpType *)(unsigned long)MMSJOS_FUNC_TABLE)[25] // Índice da função
-#define fsGetMfp ((fsGetMfpType *)(unsigned long)MMSJOS_FUNC_TABLE)[26] // Índice da função
 
 // MGUI define functions
 #define writesxy ((writesxyType *)(unsigned long)MGUI_FUNC_TABLE)[0] // Índice da função

@@ -21,6 +21,7 @@
 #include "../mmsjosapi.h"
 #include "files.h"
 
+
 //-----------------------------------------------------------------------------
 // Principal
 //-----------------------------------------------------------------------------
@@ -30,56 +31,103 @@ void main(void)
     unsigned char ikk, vnomefile[128], vnomefilenew[15], avdm2, avdm, avdl, vopc, vresp;
     unsigned long vtotbytes = 0;
     unsigned char vstring[64], vwb, my, corOpcFile, corOpcFileExec, corOpcDir, corDisable;
-    unsigned long vSizeAloc = 0, izz;
+    unsigned char *vMemTail;
     unsigned char sqtdtam[10];
+    void (*pCarregaDir)(void);
+    void (*pListaDir)(void);
+    char *(*pMyItoa)(int, char *, int);
+    char *(*pMyLtoa)(long, char *, int);
     VDP_COLOR vdpcolor;
     MGUI_SAVESCR vsavescr;
     MGUI_MOUSE mouseData;
     MGUI_SAVESCR windowScr;
 
-    linhastatus = linhastatusDef;
-    carregaDir = carregaDirDef;
-    listaDir = listaDirDef;
-    SearchFile = SearchFileDef;
-    myitoa = itoa;
-    myltoa = ltoa;
-    mytoupper = toupper;
-    mystrcpy = strcpy;
-    mystrcat = strcat;
-    mymemset = memset;
-    myvRetAlloc = vRetAlloc;
 
-    // Reserva um tanto ja pra memoria de uso do programa de variaveis globais
-    vMemTotal = fsMalloc(1024);
+    writeLongSerial("Starting FILES...\r\n\0");
 
-    // Define o endereço de cada variavel global dentro desse espaço
-    vpos = vMemTotal;
-    vposold = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vpos));
-    dFileCursor = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vposold));
-    vcorfg = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(dFileCursor));
-    vcorbg = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vcorfg));
-    clinha = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vcorbg));
-    dfile = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(clinha) * 32); // 32 linhas de clinha
+    //filesInitReloc();
+
+    TrocaSpriteMouse(MOUSE_HOURGLASS);
+
+    writeLongSerial("Defining Pointers...\r\n\0");
+
+    linhastatus = MMSJOS_FUNC_RELOC[FILES_RELOC_LINESTATUS_DEF];
+    SearchFile = MMSJOS_FUNC_RELOC[FILES_RELOC_SEARCHFILE_DEF];
+    carregaDir = MMSJOS_FUNC_RELOC[FILES_RELOC_CARREGADIR_DEF];
+    listaDir = MMSJOS_FUNC_RELOC[FILES_RELOC_LISTADIR_DEF];
+    mystrcpy = MMSJOS_FUNC_RELOC[FILES_RELOC_STRCPY];
+    mystrcat = MMSJOS_FUNC_RELOC[FILES_RELOC_STRCAT];
+    mymemset = MMSJOS_FUNC_RELOC[FILES_RELOC_MEMSET];
+    mytoupper = MMSJOS_FUNC_RELOC[FILES_RELOC_TOUPPER];
+    myitoa = MMSJOS_FUNC_RELOC[FILES_RELOC_ITOA];
+    myltoa = MMSJOS_FUNC_RELOC[FILES_RELOC_LTOA];
+    myvRetAlloc = MMSJOS_FUNC_RELOC[FILES_RELOC_VRETALLOC];
+
+    if ((unsigned long)mystrcpy < 0x00010000UL)
+        mystrcpy = strcpy;
+    if ((unsigned long)mystrcat < 0x00010000UL)
+        mystrcat = strcat;
+    if ((unsigned long)mymemset < 0x00010000UL)
+        mymemset = memset;
+    if ((unsigned long)mytoupper < 0x00010000UL)
+        mytoupper = toupper;
+    if ((unsigned long)myitoa < 0x00010000UL)
+        myitoa = itoa;
+    if ((unsigned long)myltoa < 0x00010000UL)
+        myltoa = ltoa;
+
+    // Copias locais dos ponteiros para o trecho critico de bootstrap.
+    // Isso evita depender de leitura dos globais via base register entre chamadas.
+    pCarregaDir = carregaDir;
+    pListaDir = listaDir;
+    pMyItoa = myitoa;
+    pMyLtoa = myltoa;
+
+    if ((unsigned long)pCarregaDir < 0x00010000UL)
+        pCarregaDir = carregaDirDef;
+
+    if ((unsigned long)pListaDir < 0x00010000UL)
+        pListaDir = listaDirDef;
+
+    // Reserva apenas o necessario para os globais do explorer.
+    // fsMalloc usa a mesma heap do malloc() usado pelo SaveScreenNew.
+    writeLongSerial("Alloc memory to variables...\r\n\0");
+
+    vMemTotal = (unsigned char *)fsMalloc(sizeof(LIST_DIR) + 64);
+
+    if (vMemTotal == 0)
+    {
+        writeLongSerial("FILES: sem memoria\r\n\0");
+        TrocaSpriteMouse(MOUSE_POINTER);
+        return;
+    }
+
+    // Layout fixo: LIST_DIR no inicio do bloco; variaveis pequenas no final.
+    dfile = (LIST_DIR *)vMemTotal;
+    vMemTail = vMemTotal + sizeof(LIST_DIR);
+    vpos = (unsigned short *)vMemTail;
+    vposold = (unsigned short *)(vMemTail + 2);
+    dFileCursor = (unsigned char *)(vMemTail + 4);
+    vcorfg = (unsigned char *)(vMemTail + 5);
+    vcorbg = (unsigned char *)(vMemTail + 6);
+    clinha = (unsigned char *)(vMemTail + 8);
+
+    writeLongSerial("Drawing interface...\r\n\0");
 
     // Pega as cores atuais
     getColorData(&vdpcolor);
     *vcorfg = vdpcolor.fg;
     *vcorbg = vdpcolor.bg;
 
-    TrocaSpriteMouse(MOUSE_HOURGLASS);
-
     SaveScreenNew(&windowScr, 0, 0, 255, 191);
 
     // Cria a Janela
-    showWindow("File Explorer v0.2\0", 0, 0, 255, 191, BTNONE);
-
     vcont = 1;
     *vpos = 0;
     *vposold = 0xFF;
     vnomefile[0] = 0x00;
 
     // Prepara Cabeçalho
-    FillRect(0,18,255,10,*vcorbg);
     DrawRect(0,18,255,10,*vcorfg);
     writesxy(16,20,8,"Name\0", *vcorfg, *vcorbg);
     writesxy(66,20,8,"Ext\0", *vcorfg, *vcorbg);
@@ -88,10 +136,23 @@ void main(void)
     writesxy(200,20,8,"Atrib\0", *vcorfg, *vcorbg);
 
     // Carrega Diretorio
-    carregaDir();
+    writeLongSerial("FILES: before carregaDir [\0");
+    pMyLtoa((unsigned long)pCarregaDir, sqtdtam, 16);
+    writeLongSerial(sqtdtam);
+    writeLongSerial("]-[");
+    pMyLtoa((unsigned long)dfile, sqtdtam, 16);
+    writeLongSerial(sqtdtam);
+    writeLongSerial("]-[");
+    pMyLtoa((unsigned long)&windowScr, sqtdtam, 16);
+    writeLongSerial(sqtdtam);
+    writeLongSerial("]\r\n\0");
+    pCarregaDir();
+    writeLongSerial("FILES: after carregaDir\r\n\0");
 
     // Lista Diretorio
-    listaDir();
+    writeLongSerial("FILES: before listaDir\r\n\0");
+    pListaDir();
+    writeLongSerial("FILES: after listaDir\r\n\0");
 
     TrocaSpriteMouse(MOUSE_POINTER);
 
@@ -290,8 +351,8 @@ void main(void)
                             }
                             else
                             {
-                                carregaDir();
-                                listaDir();
+                                pCarregaDir();
+                                pListaDir();
                             }
                         }
 
@@ -434,8 +495,8 @@ void main(void)
                                 }
                                 else
                                 {
-                                    carregaDir();
-                                    listaDir();
+                                    pCarregaDir();
+                                    pListaDir();
                                 }
                             }
                         }
@@ -469,8 +530,8 @@ void main(void)
                         }
                         else
                         {
-                            carregaDir();
-                            listaDir();
+                            pCarregaDir();
+                            pListaDir();
                         }
 
                         linhastatus(0, "\0");
@@ -514,7 +575,7 @@ void main(void)
                         else
                             *vpos = *vpos - 14;
 
-                        listaDir();
+                        pListaDir();
 
                         break;
                     }
@@ -522,7 +583,7 @@ void main(void)
                         *vposold = *vpos;
                         *vpos = *vpos + 14;
 
-                        listaDir();
+                        pListaDir();
 
                         break;
                     }
@@ -605,14 +666,28 @@ void carregaDirDef(void)
     unsigned char vcont, ikk, ix, iy, cc, dd, ee, cnum[20];
     unsigned char vnomefile[32], dsize;
     unsigned char sqtdtam[10], cuntam;
+    unsigned char vlen;
+    unsigned char destIdx;
     unsigned long vtotbytes = 0, vqtdtam;
     FILES_DIR ddir;
+    FILES_DIR *pDestDir;
     FAT32_DIR vdirfiles;
+
+writeLongSerial("Aqui 332.666.2-[\0");
+myitoa(dfile,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+
+    if (vMemTotal == 0 || dfile == (LIST_DIR *)1 || dFileCursor == (unsigned char *)1)
+    {
+        writeLongSerial("CD0-INITERR\r\n\0");
+        TrocaSpriteMouse(MOUSE_POINTER);
+        return;
+    }
 
     // Leitura dos Arquivos
     *dFileCursor = 0;
     dsize = sizeof(FILES_DIR);
-    dfile->pos = 0;
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
 
@@ -621,10 +696,19 @@ void carregaDirDef(void)
     {
         while (1)
         {
+            writeSerial('W');
+            writeLongSerial("CD0-CALL\r\n\0");
+            writeSerial('w');
             fsGetDirAtuData(&vdirfiles);
+            writeLongSerial("CD0-RET\r\n\0");
 
-			if (vdirfiles.Attr != ATTR_VOLUME && (vdirfiles.Name[0] != '.' || (vdirfiles.Name[0] == '.' && vdirfiles.Name[1] == '.' )))
+            if (vdirfiles.Attr != ATTR_VOLUME && (vdirfiles.Name[0] != '.' || (vdirfiles.Name[0] == '.' && vdirfiles.Name[1] == '.' )))
             {
+                if (*dFileCursor >= 150)
+                {
+                    break;
+                }
+
                 // Nome
                 for (cc = 0; cc <= 7; cc++)
                 {
@@ -677,7 +761,9 @@ void carregaDirDef(void)
 
                 // Ano
                 vqtdtam = ((vdirfiles.UpdateDate & 0xFE00) >> 9) + 1980;
+                writeLongSerial("CD1\r\n\0");
 				mymemset(sqtdtam, 0x0, 10);
+                writeLongSerial("CD2\r\n\0");
                 myitoa(vqtdtam, sqtdtam, 10);
 
                 ddir.Modify[7] = sqtdtam[0];
@@ -708,7 +794,9 @@ void carregaDirDef(void)
                         cuntam = ' ';
 
                     // Transforma para decimal
+                    writeLongSerial("CD3\r\n\0");
 					mymemset(sqtdtam, 0x0, 10);
+                    writeLongSerial("CD4\r\n\0");
                     myitoa(vqtdtam, sqtdtam, 10);
 
                     // Primeira Parte da Linha do dir, tamanho
@@ -758,49 +846,95 @@ void carregaDirDef(void)
 
                 ddir.Attr[5] = '\0';
 
-                dfile->dir[*dFileCursor] = ddir;
-                dfile->pos = *dFileCursor;
+                destIdx = *dFileCursor;
+                pDestDir = &dfile->dir[destIdx];
+
+                for (cc = 0; cc <= 8; cc++)
+                    pDestDir->Name[cc] = ddir.Name[cc];
+
+                for (cc = 0; cc <= 3; cc++)
+                    pDestDir->Ext[cc] = ddir.Ext[cc];
+
+                for (cc = 0; cc <= 11; cc++)
+                    pDestDir->Modify[cc] = ddir.Modify[cc];
+
+                for (cc = 0; cc <= 5; cc++)
+                    pDestDir->Size[cc] = ddir.Size[cc];
+
+                for (cc = 0; cc <= 5; cc++)
+                    pDestDir->Attr[cc] = ddir.Attr[cc];
+
+                pDestDir->posy = ddir.posy;
                 *dFileCursor = *dFileCursor + 1;
+
             }
 
             // Verifica se tem mais Arquivos
-			for (ix = 0; ix <= 7; ix++) {
-			    vnomefile[ix] = vdirfiles.Name[ix];
-				if (vnomefile[ix] == 0x20) {
-					vnomefile[ix] = '\0';
-					break;
-			    }
-			}
+            for (ix = 0; ix <= 7; ix++) {
+                vnomefile[ix] = vdirfiles.Name[ix];
+                if (vnomefile[ix] == 0x20) {
+                    vnomefile[ix] = '\0';
+                    break;
+                }
+            }
 
-			vnomefile[ix] = '\0';
+            vnomefile[ix] = '\0';
 
-			if (vdirfiles.Name[0] != '.') {
-			    vnomefile[ix] = '.';
-			    ix++;
-				for (iy = 0; iy <= 2; iy++) {
-				    vnomefile[ix] = vdirfiles.Ext[iy];
-					if (vnomefile[ix] == 0x20) {
-						vnomefile[ix] = '\0';
-						break;
-				    }
-				    ix++;
-				}
-				vnomefile[ix] = '\0';
-			}
+            if (vdirfiles.Name[0] != '.') {
+                vnomefile[ix] = '.';
+                ix++;
+                for (iy = 0; iy <= 2; iy++) {
+                    vnomefile[ix] = vdirfiles.Ext[iy];
+                    if (vnomefile[ix] == 0x20) {
+                        vnomefile[ix] = '\0';
+                        break;
+                    }
+                    ix++;
+                }
+                vnomefile[ix] = '\0';
+            }
 
-			if (fsFindInDir(vnomefile, TYPE_NEXT_ENTRY) >= ERRO_D_START)
+            vlen = 0;
+            while (vnomefile[vlen] != '\0') {
+                vlen++;
+                if (vlen > 12)
+                    break;
+            }
+
+            writeLongSerial("CD5:[\0");
+            writeLongSerial(vnomefile);
+            writeLongSerial("]\r\n\0");
+
+            if (fsFindInDir(vnomefile, TYPE_NEXT_ENTRY) >= ERRO_D_START)
+			{
+				writeLongSerial("CD6-BRK\r\n\0");
 				break;
+			}
+            writeSerial('R');
+			writeLongSerial("CD5-RET[\0");
+            myitoa(dfile,sqtdtam,16);
+            writeLongSerial(sqtdtam);
+            writeLongSerial("]r\r\n\0");
+            writeSerial('r');
         }
+
+        writeLongSerial("CD9-OK\r\n\0");
+    }
+    else
+    {
+        writeLongSerial("CD1-ERR\r\n\0");
     }
 
+    writeLongSerial("CDA-BEFORE-MOUSE\r\n\0");
     TrocaSpriteMouse(MOUSE_POINTER);
+    writeLongSerial("CDB-AFTER-MOUSE\r\n\0");
 }
 
 //--------------------------------------------------------------------------
 void listaDirDef(void)
 {
-    unsigned short pposy, vretfs, dd, ww;
-    unsigned char ee, cc,ix, cstring[10];
+    unsigned short pposy, vretfs, dd, ww, total;
+    unsigned char ee, cc, ix, cstring[16];
 
     linhastatus(1, "\0");
 
@@ -811,18 +945,34 @@ void listaDirDef(void)
 
     pposy = 34;
     dd = *vpos;
+    total = *dFileCursor;
 
-    if (dd < 0)
-        dd = 0;
+    if (total > 150)
+        total = 150;
 
-    if (dd >= *dFileCursor)
-        dd = (*dFileCursor - 1);
+    // Sem entradas carregadas: limpa area da listagem e sai.
+    if (total == 0)
+    {
+        FillRect(5,34,249,140,*vcorbg);
+        TrocaSpriteMouse(MOUSE_POINTER);
+        linhastatus(0, "\0");
+        return;
+    }
+
+    if (dd >= total)
+        dd = (total - 1);
+
+    if (dd > 149)
+        dd = 149;
 
     ee = 14;
     cc = 0;
 
     while(1)
     {
+        if (dd > 149 || dd >= total || cc >= 14)
+            break;
+
         for (ix = 0; ix < 8; ix++)
         {
             if (dfile->dir[dd].Name[ix] == 0x00)
@@ -848,13 +998,37 @@ void listaDirDef(void)
         writesxy(66,pposy,6,cstring,*vcorfg,*vcorbg);
 
         // Modif
-        writesxy(90,pposy,6,dfile->dir[dd].Modify,*vcorfg,*vcorbg);
+        for (ix = 0; ix < 11; ix++)
+        {
+            if (dfile->dir[dd].Modify[ix] == 0x00)
+                cstring[ix] = 0x20;
+            else
+                cstring[ix] = dfile->dir[dd].Modify[ix];
+        }
+        cstring[11] = '\0';
+        writesxy(90,pposy,6,cstring,*vcorfg,*vcorbg);
 
         // Tamanho
-        writesxy(165,pposy,6,dfile->dir[dd].Size,*vcorfg,*vcorbg);
+        for (ix = 0; ix < 5; ix++)
+        {
+            if (dfile->dir[dd].Size[ix] == 0x00)
+                cstring[ix] = 0x20;
+            else
+                cstring[ix] = dfile->dir[dd].Size[ix];
+        }
+        cstring[5] = '\0';
+        writesxy(165,pposy,6,cstring,*vcorfg,*vcorbg);
 
         // Atrib
-        writesxy(200,pposy,6,dfile->dir[dd].Attr,*vcorfg,*vcorbg);
+        for (ix = 0; ix < 5; ix++)
+        {
+            if (dfile->dir[dd].Attr[ix] == 0x00)
+                cstring[ix] = 0x20;
+            else
+                cstring[ix] = dfile->dir[dd].Attr[ix];
+        }
+        cstring[5] = '\0';
+        writesxy(200,pposy,6,cstring,*vcorfg,*vcorbg);
 
         clinha[cc] = pposy;
         pposy += 10;
@@ -862,7 +1036,7 @@ void listaDirDef(void)
         cc++;
         ee--;
 
-        if (dd == *dFileCursor)
+        if (dd >= total)
             break;
 
         if (ee == 0)

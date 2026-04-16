@@ -19,6 +19,7 @@
 ; * 24/07/2023  1.0c    Moacir Jr.   Retirada "BYE" message. Ajustes de bugs no gosub...return
 ; * 25/07/2023  1.0d    Moacir Jr.   Ajuste no basInputGet, quando Get, mandar 1 pro inputLine e sem manipulacoa cursor
 ; * 20/01/2024  1.0e    Moacir Jr.   Colocar para iniciar direto no Basic
+; * 14/04/2026  1.1a03  Moacir Jr.   Ajustes para por cache variaveis e simplificar parse, retirando recursividade
 ; *--------------------------------------------------------------------------------
 ; * Variables Simples: start at 00800000
 ; *   --------------------------------------------------------
@@ -51,15 +52,84 @@
 ; #include "../monitor.h"
 ; #include "../monitorapi.h"
 ; #include "basic.h"
-; #define versionBasic "1.0e"
+; #define versionBasic "1.1a03"
 ; //#define __TESTE_TOKENIZE__ 1
 ; //#define __DEBUG_ARRAYS__ 1
+; #define SIMPLE_VAR_CACHE_SLOTS 8
+; #define PARSER_STACK_SIZE 32
+; static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+; static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
+; static unsigned char *lastVarCacheAddr[SIMPLE_VAR_CACHE_SLOTS] = {0,0,0,0,0,0,0,0};
+; static unsigned char valStack[32][50];
+; static unsigned char opStack[PARSER_STACK_SIZE];
+; static unsigned char opPrecStack[PARSER_STACK_SIZE];
+; static char valTypeStack[PARSER_STACK_SIZE];
+; static unsigned char temp[50];
+; static void invalidateFindVariableCache(void)
+; {
+       section   code
+@basic_invalidateFindVariableCache:
+       move.l    D2,-(A7)
+; int ix;
+; for (ix = 0; ix < SIMPLE_VAR_CACHE_SLOTS; ix++)
+       clr.l     D2
+@basic_invalidateFindVariableCache_1:
+       cmp.l     #8,D2
+       bge.s     @basic_invalidateFindVariableCache_3
+; {
+; lastVarCacheName0[ix] = 0x00;
+       lea       @basic_lastVarCacheName0.L,A0
+       clr.b     0(A0,D2.L)
+; lastVarCacheName1[ix] = 0x00;
+       lea       @basic_lastVarCacheName1.L,A0
+       clr.b     0(A0,D2.L)
+; lastVarCacheAddr[ix] = 0;
+       move.l    D2,D0
+       lsl.l     #2,D0
+       lea       @basic_lastVarCacheAddr.L,A0
+       clr.l     0(A0,D0.L)
+       addq.l    #1,D2
+       bra       @basic_invalidateFindVariableCache_1
+@basic_invalidateFindVariableCache_3:
+       move.l    (A7)+,D2
+       rts
+; }
+; }
+; static void clearRuntimeData(unsigned char *pForStack)
+; {
+@basic_clearRuntimeData:
+       link      A6,#0
+       move.l    A2,-(A7)
+       lea       _memset.L,A2
+; invalidateFindVariableCache();
+       jsr       @basic_invalidateFindVariableCache
+; memset(pStartSimpVar, 0x00, 0x2000);
+       pea       8192
+       clr.l     -(A7)
+       move.l    _pStartSimpVar.L,-(A7)
+       jsr       (A2)
+       add.w     #12,A7
+; memset(pStartArrayVar, 0x00, 0x6000);
+       pea       24576
+       clr.l     -(A7)
+       move.l    _pStartArrayVar.L,-(A7)
+       jsr       (A2)
+       add.w     #12,A7
+; memset(pForStack, 0x00, 0x800);
+       pea       2048
+       clr.l     -(A7)
+       move.l    8(A6),-(A7)
+       jsr       (A2)
+       add.w     #12,A7
+       move.l    (A7)+,A2
+       unlk      A6
+       rts
+; }
 ; //-----------------------------------------------------------------------------
 ; // Principal
 ; //-----------------------------------------------------------------------------
 ; void main(void)
 ; {
-       section   code
        xdef      _main
 _main:
        link      A6,#-4
@@ -237,6 +307,9 @@ main_3:
        unlk      A6
        rts
 ; }
+; /******************************************************************************************/
+; /* Secao de Processamento da linha, tokenização e execução                                */
+; /******************************************************************************************/
 ; //-----------------------------------------------------------------------------
 ; // pQtdInput - Quantidade a ser digitada, min 1 max 255
 ; // pTipo - Tipo de entrada:
@@ -1006,7 +1079,8 @@ inputLineBasic_21:
 ; return 0x00;
 ; }
 ; //-----------------------------------------------------------------------------
-; //
+; // Process line previous input after return
+; // If have number in start, is to store in program, if not, is command to execute
 ; //-----------------------------------------------------------------------------
 ; void processLine(void)
 ; {
@@ -1016,8 +1090,8 @@ _processLine:
        movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
        lea       -634(A6),A2
        lea       _strcmp.L,A3
-       lea       -590(A6),A4
-       lea       _comandLineTokenized.L,A5
+       lea       _comandLineTokenized.L,A4
+       lea       -590(A6),A5
 ; unsigned char linhacomando[32], vloop, vToken;
 ; unsigned char *blin = &vbufInput;
        lea       _vbufInput.L,A0
@@ -1047,7 +1121,7 @@ _processLine:
 ; linhacomando[0] = '\0';
        clr.b     (A2)
 ; vLinhaArg[0] = '\0';
-       clr.b     (A4)
+       clr.b     (A5)
 ; ix = 0;
        clr.w     D3
 ; iy = 0;
@@ -1096,7 +1170,7 @@ processLine_7:
        move.w    D3,D0
        addq.w    #1,D3
        and.l     #65535,D0
-       move.b    (A0),0(A4,D0.L)
+       move.b    (A0),0(A5,D0.L)
        bra.s     processLine_9
 processLine_8:
 ; else
@@ -1121,7 +1195,7 @@ processLine_10:
 ; vLinhaArg[ix] = *blin;
        move.l    D4,A0
        and.l     #65535,D3
-       move.b    (A0),0(A4,D3.L)
+       move.b    (A0),0(A5,D3.L)
 processLine_11:
 ; ix++;
        addq.w    #1,D3
@@ -1148,7 +1222,7 @@ processLine_12:
 ; else
 ; vLinhaArg[ix] = '\0';
        and.l     #65535,D3
-       clr.b     0(A4,D3.L)
+       clr.b     0(A5,D3.L)
 processLine_13:
 ; vpicret = 0;
        clr.b     -318(A6)
@@ -1171,11 +1245,11 @@ processLine_13:
        move.b    #1,(A0)
 ; // Entrada de programa
 ; tokenizeLine(vLinhaArg);
-       move.l    A4,-(A7)
+       move.l    A5,-(A7)
        jsr       _tokenizeLine
        addq.w    #4,A7
 ; saveLine(linhacomando, vLinhaArg);
-       move.l    A4,-(A7)
+       move.l    A5,-(A7)
        move.l    A2,-(A7)
        jsr       _saveLine
        addq.w    #8,A7
@@ -1227,9 +1301,9 @@ processLine_21:
        jsr       (A3)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     processLine_23
+       bne       processLine_23
        cmp.w     #3,D2
-       bne.s     processLine_23
+       bne       processLine_23
 ; {
 ; *pStartProg = 0x00;
        move.l    _pStartProg.L,A0
@@ -1249,6 +1323,19 @@ processLine_21:
 ; *addrFirstLineNumber = 0;
        move.l    _addrFirstLineNumber.L,A0
        clr.l     (A0)
+; *nextAddrSimpVar = pStartSimpVar;
+       move.l    _nextAddrSimpVar.L,A0
+       move.l    _pStartSimpVar.L,(A0)
+; *nextAddrArrayVar = pStartArrayVar;
+       move.l    _nextAddrArrayVar.L,A0
+       move.l    _pStartArrayVar.L,(A0)
+; *nextAddrString = pStartString;
+       move.l    _nextAddrString.L,A0
+       move.l    _pStartString.L,(A0)
+; clearRuntimeData((unsigned char*)forStack);
+       move.l    _forStack.L,-(A7)
+       jsr       @basic_clearRuntimeData
+       addq.w    #4,A7
        bra       processLine_60
 processLine_23:
 ; }
@@ -1263,7 +1350,7 @@ processLine_23:
        bne.s     processLine_25
 ; {
 ; editLine(vLinhaArg);
-       move.l    A4,-(A7)
+       move.l    A5,-(A7)
        jsr       _editLine
        addq.w    #4,A7
        bra       processLine_60
@@ -1281,7 +1368,7 @@ processLine_25:
 ; {
 ; listProg(vLinhaArg, 0);
        clr.l     -(A7)
-       move.l    A4,-(A7)
+       move.l    A5,-(A7)
        jsr       _listProg
        addq.w    #8,A7
        bra       processLine_60
@@ -1299,7 +1386,7 @@ processLine_27:
 ; {
 ; listProg(vLinhaArg, 1);
        pea       1
-       move.l    A4,-(A7)
+       move.l    A5,-(A7)
        jsr       _listProg
        addq.w    #8,A7
        bra       processLine_60
@@ -1316,7 +1403,7 @@ processLine_29:
        bne.s     processLine_31
 ; {
 ; runProg(vLinhaArg);
-       move.l    A4,-(A7)
+       move.l    A5,-(A7)
        jsr       _runProg
        addq.w    #4,A7
        bra       processLine_60
@@ -1333,7 +1420,7 @@ processLine_31:
        bne.s     processLine_33
 ; {
 ; delLine(vLinhaArg);
-       move.l    A4,-(A7)
+       move.l    A5,-(A7)
        jsr       _delLine
        addq.w    #4,A7
        bra       processLine_60
@@ -1518,7 +1605,7 @@ processLine_49:
        addq.w    #8,A7
 processLine_51:
 ; strcat(vRetInf.tString, vLinhaArg);
-       move.l    A4,-(A7)
+       move.l    A5,-(A7)
        lea       -312(A6),A0
        move.l    A0,-(A7)
        jsr       _strcat
@@ -1528,20 +1615,15 @@ processLine_51:
        move.l    A0,-(A7)
        jsr       _tokenizeLine
        addq.w    #4,A7
-; strcpy(vLinhaArg, vRetInf.tString);
+; // Salva a linha pra ser interpretada
+; vTam = strlen(vRetInf.tString);
        lea       -312(A6),A0
        move.l    A0,-(A7)
-       move.l    A4,-(A7)
-       jsr       _strcpy
-       addq.w    #8,A7
-; // Salva a linha pra ser interpretada
-; vTam = strlen(vLinhaArg);
-       move.l    A4,-(A7)
        jsr       _strlen
        addq.w    #4,A7
        move.w    D0,D5
 ; vNextAddr = comandLineTokenized + (vTam + 6);
-       move.l    (A5),D0
+       move.l    (A4),D0
        move.w    D5,D1
        addq.w    #6,D1
        and.l     #65535,D1
@@ -1552,25 +1634,25 @@ processLine_51:
        and.l     #16711680,D0
        lsr.l     #8,D0
        lsr.l     #8,D0
-       move.l    (A5),A0
+       move.l    (A4),A0
        move.b    D0,(A0)
 ; *(comandLineTokenized + 1) = ((vNextAddr & 0xFF00) >> 8);
        move.l    -50(A6),D0
        and.l     #65280,D0
        lsr.l     #8,D0
-       move.l    (A5),A0
+       move.l    (A4),A0
        move.b    D0,1(A0)
 ; *(comandLineTokenized + 2) =  (vNextAddr & 0xFF);
        move.l    -50(A6),D0
        and.l     #255,D0
-       move.l    (A5),A0
+       move.l    (A4),A0
        move.b    D0,2(A0)
 ; // Grava numero da linha
 ; *(comandLineTokenized + 3) = 0xFF;
-       move.l    (A5),A0
+       move.l    (A4),A0
        move.b    #255,3(A0)
 ; *(comandLineTokenized + 4) = 0xFF;
-       move.l    (A5),A0
+       move.l    (A4),A0
        move.b    #255,4(A0)
 ; // Grava linha tokenizada
 ; for(kt = 0; kt < vTam; kt++)
@@ -1578,37 +1660,38 @@ processLine_51:
 processLine_53:
        cmp.w     D5,D6
        bhs.s     processLine_55
-; *(comandLineTokenized + (kt + 5)) = vLinhaArg[kt];
+; *(comandLineTokenized + (kt + 5)) = vRetInf.tString[kt];
+       lea       -312(A6),A0
        and.l     #65535,D6
-       move.l    (A5),A0
+       move.l    (A4),A1
        move.w    D6,D0
        addq.w    #5,D0
        and.l     #65535,D0
-       move.b    0(A4,D6.L),0(A0,D0.L)
+       move.b    0(A0,D6.L),0(A1,D0.L)
        addq.w    #1,D6
        bra       processLine_53
 processLine_55:
 ; // Grava final linha 0x00
 ; *(comandLineTokenized + (vTam + 5)) = 0x00;
-       move.l    (A5),A0
+       move.l    (A4),A0
        move.w    D5,D0
        addq.w    #5,D0
        and.l     #65535,D0
        clr.b     0(A0,D0.L)
 ; *(comandLineTokenized + (vTam + 6)) = 0x00;
-       move.l    (A5),A0
+       move.l    (A4),A0
        move.w    D5,D0
        addq.w    #6,D0
        and.l     #65535,D0
        clr.b     0(A0,D0.L)
 ; *(comandLineTokenized + (vTam + 7)) = 0x00;
-       move.l    (A5),A0
+       move.l    (A4),A0
        move.w    D5,D0
        addq.w    #7,D0
        and.l     #65535,D0
        clr.b     0(A0,D0.L)
 ; *(comandLineTokenized + (vTam + 8)) = 0x00;
-       move.l    (A5),A0
+       move.l    (A4),A0
        move.w    D5,D0
        addq.w    #8,D0
        and.l     #65535,D0
@@ -1622,6 +1705,8 @@ processLine_55:
 ; *nextAddrString = pStartString;
        move.l    _nextAddrString.L,A0
        move.l    _pStartString.L,(A0)
+; invalidateFindVariableCache();
+       jsr       @basic_invalidateFindVariableCache
 ; *vMaisTokens = 0;
        move.l    _vMaisTokens.L,A0
        clr.b     (A0)
@@ -1641,7 +1726,7 @@ processLine_55:
        move.l    _vTemIfAndOr.L,A0
        clr.b     (A0)
 ; *pointerRunProg = comandLineTokenized + 5;
-       move.l    (A5),D0
+       move.l    (A4),D0
        addq.l    #5,D0
        move.l    _pointerRunProg.L,A0
        move.l    D0,(A0)
@@ -3324,6 +3409,7 @@ delLine_18:
 ; //-----------------------------------------------------------------------------
 ; // Sintaxe:
 ; //      EDIT <num>          : Edita conteudo da linha <num>
+; // PS Ainda precisa ser ajustado
 ; //-----------------------------------------------------------------------------
 ; void editLine(unsigned char *pNumber)
 ; {
@@ -3716,15 +3802,15 @@ editLine_38:
 ; {
        xdef      _runProg
 _runProg:
-       link      A6,#-608
-       movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
+       link      A6,#-612
+       movem.l   D2/D3/D4/D5/D6/A2/A3/A4/A5,-(A7)
        lea       _changedPointer.L,A2
        lea       _vErroProc.L,A3
        lea       _pointerRunProg.L,A4
        lea       -82(A6),A5
 ; // Default rodar desde a primeira linha
 ; int pIni = 0, ix;
-       moveq     #0,D7
+       clr.l     D6
 ; unsigned char *vStartList = pStartProg;
        move.l    _pStartProg.L,D2
 ; unsigned long vNextList;
@@ -3751,64 +3837,35 @@ _runProg:
 ; *nextAddrString = pStartString;
        move.l    _nextAddrString.L,A0
        move.l    _pStartString.L,(A0)
-; for (ix = 0; ix < 0x2000; ix++)
-       clr.l     D3
-runProg_1:
-       cmp.l     #8192,D3
-       bge.s     runProg_3
-; *(pStartSimpVar + ix) = 0x00;
-       move.l    _pStartSimpVar.L,A0
-       clr.b     0(A0,D3.L)
-       addq.l    #1,D3
-       bra       runProg_1
-runProg_3:
-; for (ix = 0; ix < 0x6000; ix++)
-       clr.l     D3
-runProg_4:
-       cmp.l     #24576,D3
-       bge.s     runProg_6
-; *(pStartArrayVar + ix) = 0x00;
-       move.l    _pStartArrayVar.L,A0
-       clr.b     0(A0,D3.L)
-       addq.l    #1,D3
-       bra       runProg_4
-runProg_6:
-; for (ix = 0; ix < 0x800; ix++)
-       clr.l     D3
-runProg_7:
-       cmp.l     #2048,D3
-       bge.s     runProg_9
-; *(pForStack + ix) = 0x00;
-       move.l    -26(A6),A0
-       clr.b     0(A0,D3.L)
-       addq.l    #1,D3
-       bra       runProg_7
-runProg_9:
+; clearRuntimeData(pForStack);
+       move.l    -26(A6),-(A7)
+       jsr       @basic_clearRuntimeData
+       addq.w    #4,A7
 ; if (pNumber[0] != 0x00)
        move.l    8(A6),A0
        move.b    (A0),D0
-       beq.s     runProg_10
+       beq.s     runProg_1
 ; {
 ; // rodar desde uma linha especifica
 ; pIni = atoi(pNumber);
        move.l    8(A6),-(A7)
        jsr       _atoi
        addq.w    #4,A7
-       move.l    D0,D7
-runProg_10:
+       move.l    D0,D6
+runProg_1:
 ; }
 ; vStartList = findNumberLine(pIni, 0, 0);
        clr.l     -(A7)
        clr.l     -(A7)
-       and.l     #65535,D7
-       move.l    D7,-(A7)
+       and.l     #65535,D6
+       move.l    D6,-(A7)
        jsr       _findNumberLine
        add.w     #12,A7
        move.l    D0,D2
 ; // Nao achou numero de linha inicial
 ; if (!vStartList)
        tst.l     D2
-       bne.s     runProg_12
+       bne.s     runProg_3
 ; {
 ; printText("Non-existent line number\r\n\0");
        pea       @basic_119.L
@@ -3816,11 +3873,11 @@ runProg_10:
        jsr       (A0)
        addq.w    #4,A7
 ; return;
-       bra       runProg_52
-runProg_12:
+       bra       runProg_43
+runProg_3:
 ; }
 ; vNextList = vStartList;
-       move.l    D2,D5
+       move.l    D2,D4
 ; *ftos=0;
        move.l    _ftos.L,A0
        clr.l     (A0)
@@ -3845,16 +3902,16 @@ runProg_12:
        move.l    _onErrGoto.L,A0
        clr.l     (A0)
 ; while (1)
-runProg_15:
+runProg_6:
 ; {
 ; if (*changedPointer!=0)
        move.l    (A2),A0
        move.l    (A0),D0
-       beq.s     runProg_18
+       beq.s     runProg_9
 ; vStartList = *changedPointer;
        move.l    (A2),A0
        move.l    (A0),D2
-runProg_18:
+runProg_9:
 ; // Guarda proxima posicao
 ; vNextList = (*(vStartList) << 16) | (*(vStartList + 1) << 8) | *(vStartList + 2);
        move.l    D2,A0
@@ -3871,13 +3928,13 @@ runProg_18:
        move.b    2(A0),D1
        and.l     #255,D1
        or.l      D1,D0
-       move.l    D0,D5
+       move.l    D0,D4
 ; *nextAddr = vNextList;
        move.l    _nextAddr.L,A0
-       move.l    D5,(A0)
+       move.l    D4,(A0)
 ; if (vNextList)
-       tst.l     D5
-       beq       runProg_20
+       tst.l     D4
+       beq       runProg_11
 ; {
 ; // Pega numero da linha
 ; vNumLin = (*(vStartList + 3) << 8) | *(vStartList + 4);
@@ -3889,7 +3946,7 @@ runProg_18:
        move.b    4(A0),D1
        and.w     #255,D1
        or.w      D1,D0
-       move.w    D0,D6
+       move.w    D0,D5
 ; vStartList += 5;
        addq.l    #5,D2
 ; // Pega caracter a caracter da linha
@@ -3925,7 +3982,7 @@ runProg_18:
        clr.w     (A0)
 ; do
 ; {
-runProg_22:
+runProg_13:
 ; vBufRec = readChar();
        move.l    1074,A0
        jsr       (A0)
@@ -3933,17 +3990,17 @@ runProg_22:
 ; if (vBufRec==27)
        move.b    -1(A6),D0
        cmp.b     #27,D0
-       bne       runProg_24
+       bne       runProg_15
 ; {
 ; // volta para modo texto
 ; #ifndef __TESTE_TOKENIZE__
 ; if (vdpModeBas != VDP_MODE_TEXT)
        move.b    _vdpModeBas.L,D0
        cmp.b     #3,D0
-       beq.s     runProg_26
+       beq.s     runProg_17
 ; basText();
        jsr       _basText
-runProg_26:
+runProg_17:
 ; #endif
 ; // mostra mensagem de para subita
 ; printText("\r\nStopped at ");
@@ -3954,8 +4011,8 @@ runProg_26:
 ; itoa(vNumLin, sNumLin, 10);
        pea       10
        move.l    A5,-(A7)
-       and.l     #65535,D6
-       move.l    D6,-(A7)
+       and.l     #65535,D5
+       move.l    D5,-(A7)
        jsr       _itoa
        add.w     #12,A7
 ; printText(sNumLin);
@@ -3973,8 +4030,8 @@ runProg_26:
        move.l    _nextAddr.L,A0
        clr.l     (A0)
 ; break;
-       bra       runProg_23
-runProg_24:
+       bra       runProg_14
+runProg_15:
 ; }
 ; *doisPontos = 0;
        move.l    _doisPontos.L,A0
@@ -3988,7 +4045,7 @@ runProg_24:
 ; if (*traceOn)
        move.l    _traceOn.L,A0
        tst.b     (A0)
-       beq       runProg_28
+       beq       runProg_19
 ; {
 ; printText("\r\nExecuting at ");
        pea       @basic_125.L
@@ -3998,8 +4055,8 @@ runProg_24:
 ; itoa(vNumLin, sNumLin, 10);
        pea       10
        move.l    A5,-(A7)
-       and.l     #65535,D6
-       move.l    D6,-(A7)
+       and.l     #65535,D5
+       move.l    D5,-(A7)
        jsr       _itoa
        add.w     #12,A7
 ; printText(sNumLin);
@@ -4012,16 +4069,16 @@ runProg_24:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-runProg_28:
+runProg_19:
 ; }
 ; vTempPointer = *pointerRunProg;
        move.l    (A4),A0
-       move.l    (A0),D4
+       move.l    (A0),D3
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A4),A0
        addq.l    #1,(A0)
 ; vReta = executeToken(*vTempPointer);
-       move.l    D4,A0
+       move.l    D3,A0
        move.b    (A0),D1
        and.l     #255,D1
        move.l    D1,-(A7)
@@ -4031,15 +4088,15 @@ runProg_28:
 ; if (*vErroProc)
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     runProg_30
+       beq.s     runProg_21
 ; {
 ; if (*onErrGoto == 0)
        move.l    _onErrGoto.L,A0
        move.l    (A0),D0
-       bne.s     runProg_32
+       bne.s     runProg_23
 ; break;
-       bra       runProg_23
-runProg_32:
+       bra       runProg_14
+runProg_23:
 ; *vErroProc = 0;
        move.l    (A3),A0
        clr.w     (A0)
@@ -4047,12 +4104,12 @@ runProg_32:
        move.l    _onErrGoto.L,A0
        move.l    (A2),A1
        move.l    (A0),(A1)
-runProg_30:
+runProg_21:
 ; }
 ; if (*changedPointer!=0)
        move.l    (A2),A0
        move.l    (A0),D0
-       beq.s     runProg_36
+       beq.s     runProg_27
 ; {
 ; vPointerChangedPointer = *changedPointer;
        move.l    (A2),A0
@@ -4061,7 +4118,7 @@ runProg_30:
        move.l    -30(A6),A0
        move.b    (A0),D0
        cmp.b     #58,D0
-       bne.s     runProg_36
+       bne.s     runProg_27
 ; {
 ; *pointerRunProg = *changedPointer;
        move.l    (A2),A0
@@ -4070,22 +4127,22 @@ runProg_30:
 ; *changedPointer = 0;
        move.l    (A2),A0
        clr.l     (A0)
-runProg_36:
+runProg_27:
 ; }
 ; }
 ; vTempPointer = *pointerRunProg;
        move.l    (A4),A0
-       move.l    (A0),D4
+       move.l    (A0),D3
 ; if (*vTempPointer != 0x00)
-       move.l    D4,A0
+       move.l    D3,A0
        move.b    (A0),D0
-       beq       runProg_44
+       beq       runProg_35
 ; {
 ; if (*vTempPointer == 0x3A)
-       move.l    D4,A0
+       move.l    D3,A0
        move.b    (A0),D0
        cmp.b     #58,D0
-       bne.s     runProg_40
+       bne.s     runProg_31
 ; {
 ; *doisPontos = 1;
        move.l    _doisPontos.L,A0
@@ -4093,8 +4150,8 @@ runProg_36:
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A4),A0
        addq.l    #1,(A0)
-       bra.s     runProg_44
-runProg_40:
+       bra.s     runProg_35
+runProg_31:
 ; }
 ; else
 ; {
@@ -4102,17 +4159,17 @@ runProg_40:
        move.l    _doisPontos.L,A0
        move.b    (A0),D0
        and.l     #255,D0
-       beq.s     runProg_42
-       move.l    D4,A0
+       beq.s     runProg_33
+       move.l    D3,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #128,D0
-       bhi.s     runProg_42
+       bhi.s     runProg_33
 ; {
 ; // nao faz nada
 ; }
-       bra.s     runProg_44
-runProg_42:
+       bra.s     runProg_35
+runProg_33:
 ; else
 ; {
 ; nextToken();
@@ -4120,13 +4177,13 @@ runProg_42:
 ; if (*vErroProc) break;
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     runProg_44
-       bra.s     runProg_23
-runProg_44:
+       beq.s     runProg_35
+       bra.s     runProg_14
+runProg_35:
        move.l    _doisPontos.L,A0
        tst.b     (A0)
-       bne       runProg_22
-runProg_23:
+       bne       runProg_13
+runProg_14:
 ; }
 ; }
 ; }
@@ -4134,20 +4191,20 @@ runProg_23:
 ; if (*vErroProc)
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     runProg_46
+       beq.s     runProg_37
 ; {
 ; #ifndef __TESTE_TOKENIZE__
 ; if (vdpModeBas != VDP_MODE_TEXT)
        move.b    _vdpModeBas.L,D0
        cmp.b     #3,D0
-       beq.s     runProg_48
+       beq.s     runProg_39
 ; basText();
        jsr       _basText
-runProg_48:
+runProg_39:
 ; #endif
 ; showErrorMessage(*vErroProc, vNumLin);
-       and.l     #65535,D6
-       move.l    D6,-(A7)
+       and.l     #65535,D5
+       move.l    D5,-(A7)
        move.l    (A3),A0
        move.w    (A0),D1
        and.l     #65535,D1
@@ -4155,46 +4212,46 @@ runProg_48:
        jsr       _showErrorMessage
        addq.w    #8,A7
 ; break;
-       bra.s     runProg_17
-runProg_46:
+       bra.s     runProg_8
+runProg_37:
 ; }
 ; if (*nextAddr == 0)
        move.l    _nextAddr.L,A0
        move.l    (A0),D0
-       bne.s     runProg_50
+       bne.s     runProg_41
 ; break;
-       bra.s     runProg_17
-runProg_50:
+       bra.s     runProg_8
+runProg_41:
 ; vNextList = *nextAddr;
        move.l    _nextAddr.L,A0
-       move.l    (A0),D5
+       move.l    (A0),D4
 ; vStartList = vNextList;
-       move.l    D5,D2
-       bra.s     runProg_21
-runProg_20:
+       move.l    D4,D2
+       bra.s     runProg_12
+runProg_11:
 ; }
 ; else
 ; break;
-       bra.s     runProg_17
-runProg_21:
-       bra       runProg_15
-runProg_17:
+       bra.s     runProg_8
+runProg_12:
+       bra       runProg_6
+runProg_8:
 ; }
 ; #ifndef __TESTE_TOKENIZE__
 ; if (vdpModeBas != VDP_MODE_TEXT)
        move.b    _vdpModeBas.L,D0
        cmp.b     #3,D0
-       beq.s     runProg_52
+       beq.s     runProg_43
 ; basText();
        jsr       _basText
-runProg_52:
-       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
+runProg_43:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/A2/A3/A4/A5
        unlk      A6
        rts
 ; #endif
 ; }
 ; //-----------------------------------------------------------------------------
-; //
+; // Mostra mensagem de erro de acordo com o codigo do erro e numero da linha
 ; //-----------------------------------------------------------------------------
 ; void showErrorMessage(unsigned int pError, unsigned int pNumLine)
 ; {
@@ -4249,22 +4306,272 @@ showErrorMessage_1:
        unlk      A6
        rts
 ; }
+; //--------------------------------------------------------------------------------------
+; // Load basic program in memory, throught xmodem protocol
+; // Syntaxe:
+; //          XBASLOAD
+; //--------------------------------------------------------------------------------------
+; int basXBasLoad(void)
+; {
+       xdef      _basXBasLoad
+_basXBasLoad:
+       movem.l   D2/D3/D4/D5,-(A7)
+; unsigned char vRet = 0;
+       clr.b     D4
+; unsigned char vByte = 0;
+       clr.b     D2
+; unsigned char *vTemp = pStartXBasLoad;
+       move.l    _pStartXBasLoad.L,D5
+; unsigned char *vBufptr = &vbufInput;
+       lea       _vbufInput.L,A0
+       move.l    A0,D3
+; printText("Loading Basic Program...\r\n");
+       pea       @basic_128.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; // Carrega programa em outro ponto da memoria
+; vRet = loadSerialToMem(pStartXBasLoad,0);
+       clr.l     -(A7)
+       move.l    _pStartXBasLoad.L,-(A7)
+       move.l    1070,A0
+       jsr       (A0)
+       addq.w    #8,A7
+       move.b    D0,D4
+; // Se tudo OK, tokeniza como se estivesse sendo digitado
+; if (!vRet)
+       tst.b     D4
+       bne       basXBasLoad_1
+; {
+; printText("Done.\r\n");
+       pea       @basic_129.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("Processing...\r\n");
+       pea       @basic_130.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; while (1)
+basXBasLoad_3:
+; {
+; vByte = *vTemp++;
+       move.l    D5,A0
+       addq.l    #1,D5
+       move.b    (A0),D2
+; if (vByte != 0x1A)
+       cmp.b     #26,D2
+       beq.s     basXBasLoad_6
+; {
+; if (vByte != 0xD && vByte != 0x0A)
+       cmp.b     #13,D2
+       beq.s     basXBasLoad_8
+       cmp.b     #10,D2
+       beq.s     basXBasLoad_8
+; *vBufptr++ = vByte;
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    D2,(A0)
+       bra.s     basXBasLoad_9
+basXBasLoad_8:
+; else
+; {
+; vTemp++;
+       addq.l    #1,D5
+; *vBufptr = 0x00;
+       move.l    D3,A0
+       clr.b     (A0)
+; vBufptr = &vbufInput;
+       lea       _vbufInput.L,A0
+       move.l    A0,D3
+; processLine();
+       jsr       _processLine
+basXBasLoad_9:
+       bra.s     basXBasLoad_7
+basXBasLoad_6:
+; }
+; }
+; else
+; break;
+       bra.s     basXBasLoad_5
+basXBasLoad_7:
+       bra       basXBasLoad_3
+basXBasLoad_5:
+; }
+; printText("Done.\r\n");
+       pea       @basic_129.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+       bra.s     basXBasLoad_11
+basXBasLoad_1:
+; }
+; else
+; {
+; if (vRet == 0xFE)
+       and.w     #255,D4
+       cmp.w     #254,D4
+       bne.s     basXBasLoad_10
+; *vErroProc = 19;
+       move.l    _vErroProc.L,A0
+       move.w    #19,(A0)
+       bra.s     basXBasLoad_11
+basXBasLoad_10:
+; else
+; *vErroProc = 20;
+       move.l    _vErroProc.L,A0
+       move.w    #20,(A0)
+basXBasLoad_11:
+; }
+; return 0;
+       clr.l     D0
+       movem.l   (A7)+,D2/D3/D4/D5
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // Load basic program in memory, throught xmodem protocol with 1K blocks and CRC
+; // Syntaxe:
+; //          XBASLOAD1K
+; //--------------------------------------------------------------------------------------
+; int basXBasLoad1k(void)
+; {
+       xdef      _basXBasLoad1k
+_basXBasLoad1k:
+       movem.l   D2/D3/D4/D5,-(A7)
+; unsigned char vRet = 0;
+       clr.b     D4
+; unsigned char vByte = 0;
+       clr.b     D2
+; unsigned char *vTemp = pStartXBasLoad;
+       move.l    _pStartXBasLoad.L,D5
+; unsigned char *vBufptr = &vbufInput;
+       lea       _vbufInput.L,A0
+       move.l    A0,D3
+; printText("Loading Basic Program 1k...\r\n");
+       pea       @basic_131.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; // Carrega programa em outro ponto da memoria
+; vRet = loadSerialToMem2(pStartXBasLoad,0);
+       clr.l     -(A7)
+       move.l    _pStartXBasLoad.L,-(A7)
+       move.l    1210,A0
+       jsr       (A0)
+       addq.w    #8,A7
+       move.b    D0,D4
+; // Se tudo OK, tokeniza como se estivesse sendo digitado
+; if (!vRet)
+       tst.b     D4
+       bne       basXBasLoad1k_1
+; {
+; printText("Done.\r\n");
+       pea       @basic_129.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("Processing...\r\n");
+       pea       @basic_130.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; while (1)
+basXBasLoad1k_3:
+; {
+; vByte = *vTemp++;
+       move.l    D5,A0
+       addq.l    #1,D5
+       move.b    (A0),D2
+; if (vByte != 0x1A)
+       cmp.b     #26,D2
+       beq.s     basXBasLoad1k_6
+; {
+; if (vByte != 0xD && vByte != 0x0A)
+       cmp.b     #13,D2
+       beq.s     basXBasLoad1k_8
+       cmp.b     #10,D2
+       beq.s     basXBasLoad1k_8
+; *vBufptr++ = vByte;
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    D2,(A0)
+       bra.s     basXBasLoad1k_9
+basXBasLoad1k_8:
+; else
+; {
+; vTemp++;
+       addq.l    #1,D5
+; *vBufptr = 0x00;
+       move.l    D3,A0
+       clr.b     (A0)
+; vBufptr = &vbufInput;
+       lea       _vbufInput.L,A0
+       move.l    A0,D3
+; processLine();
+       jsr       _processLine
+basXBasLoad1k_9:
+       bra.s     basXBasLoad1k_7
+basXBasLoad1k_6:
+; }
+; }
+; else
+; break;
+       bra.s     basXBasLoad1k_5
+basXBasLoad1k_7:
+       bra       basXBasLoad1k_3
+basXBasLoad1k_5:
+; }
+; printText("Done.\r\n");
+       pea       @basic_129.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+       bra.s     basXBasLoad1k_11
+basXBasLoad1k_1:
+; }
+; else
+; {
+; if (vRet == 0xFE)
+       and.w     #255,D4
+       cmp.w     #254,D4
+       bne.s     basXBasLoad1k_10
+; *vErroProc = 19;
+       move.l    _vErroProc.L,A0
+       move.w    #19,(A0)
+       bra.s     basXBasLoad1k_11
+basXBasLoad1k_10:
+; else
+; *vErroProc = 20;
+       move.l    _vErroProc.L,A0
+       move.w    #20,(A0)
+basXBasLoad1k_11:
+; }
+; return 0;
+       clr.l     D0
+       movem.l   (A7)+,D2/D3/D4/D5
+       rts
+; }
+; /***************************************************************************************/
+; /* Secao CORE - Processamento das linhas apos RUN ou ENTER no processline sem numero   */
+; /* Controle do fluxo de execucao e ordem de leitura dentro da linha processando        */
+; /***************************************************************************************/
 ; //-----------------------------------------------------------------------------
-; //
+; // Executa cada token, chamando as funcoes de acordo
 ; //-----------------------------------------------------------------------------
 ; int executeToken(unsigned char pToken)
 ; {
        xdef      _executeToken
 _executeToken:
-       link      A6,#-24
-       movem.l   D2/D3/A2/A3,-(A7)
+       link      A6,#-28
+       movem.l   D2/A2/A3,-(A7)
        lea       _basTrig.L,A2
        lea       _basLeftRightMid.L,A3
 ; char vReta = 0;
        clr.b     D2
 ; #ifndef __TESTE_TOKENIZE__
 ; unsigned char *pForStack = forStack;
-       move.l    _forStack.L,-24(A6)
+       move.l    _forStack.L,-28(A6)
 ; int ix;
 ; unsigned char sqtdtam[20];
 ; switch (pToken)
@@ -4496,121 +4803,121 @@ executeToken_3:
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_4:
 ; case 0x80:  // Let
 ; vReta = basLet();
        jsr       _basLet
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_5:
 ; case 0x81:  // Print
 ; vReta = basPrint();
        jsr       _basPrint
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_6:
 ; case 0x82:  // IF
 ; vReta = basIf();
        jsr       _basIf
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_7:
 ; case 0x83:  // THEN - nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_8:
 ; case 0x85:  // FOR
 ; vReta = basFor();
        jsr       _basFor
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_9:
 ; case 0x86:  // TO - nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_10:
 ; case 0x87:  // NEXT
 ; vReta = basNext();
        jsr       _basNext
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_11:
 ; case 0x88:  // STEP - nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_12:
 ; case 0x89:  // GOTO
 ; vReta = basGoto();
        jsr       _basGoto
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_13:
 ; case 0x8A:  // GOSUB
 ; vReta = basGosub();
        jsr       _basGosub
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_14:
 ; case 0x8B:  // RETURN
 ; vReta = basReturn();
        jsr       _basReturn
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_15:
 ; case 0x8C:  // REM - Ignora todas a linha depois dele
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_16:
 ; case 0x8D:  // INVERSE
 ; vReta = basInverse();
        jsr       _basInverse
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_17:
 ; case 0x8E:  // NORMAL
 ; vReta = basNormal();
        jsr       _basNormal
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_18:
 ; case 0x8F:  // DIM
 ; vReta = basDim();
        jsr       _basDim
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_19:
 ; case 0x90:  // Nao fax nada, soh teste, pode ser retirado
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_20:
 ; case 0x91:  // DIM
 ; vReta = basOnVar();
        jsr       _basOnVar
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_21:
 ; case 0x92:  // Input
 ; vReta = basInputGet(250);
@@ -4619,7 +4926,7 @@ executeToken_21:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_22:
 ; case 0x93:  // Get
 ; vReta = basInputGet(1);
@@ -4628,136 +4935,107 @@ executeToken_22:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_23:
 ; case 0x94:  // vTAB
 ; vReta = basVtab();
        jsr       _basVtab
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_24:
 ; case 0x95:  // HTAB
 ; vReta = basHtab();
        jsr       _basHtab
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_25:
 ; case 0x96:  // Home
 ; clearScr();
        move.l    1054,A0
        jsr       (A0)
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_26:
 ; case 0x97:  // CLEAR - Clear all variables
-; for (ix = 0; ix < 0x2000; ix++)
-       clr.l     D3
-executeToken_98:
-       cmp.l     #8192,D3
-       bge.s     executeToken_100
-; *(pStartSimpVar + ix) = 0x00;
-       move.l    _pStartSimpVar.L,A0
-       clr.b     0(A0,D3.L)
-       addq.l    #1,D3
-       bra       executeToken_98
-executeToken_100:
-; for (ix = 0; ix < 0x6000; ix++)
-       clr.l     D3
-executeToken_101:
-       cmp.l     #24576,D3
-       bge.s     executeToken_103
-; *(pStartArrayVar + ix) = 0x00;
-       move.l    _pStartArrayVar.L,A0
-       clr.b     0(A0,D3.L)
-       addq.l    #1,D3
-       bra       executeToken_101
-executeToken_103:
-; for (ix = 0; ix < 0x800; ix++)
-       clr.l     D3
-executeToken_104:
-       cmp.l     #2048,D3
-       bge.s     executeToken_106
-; *(pForStack + ix) = 0x00;
-       move.l    -24(A6),A0
-       clr.b     0(A0,D3.L)
-       addq.l    #1,D3
-       bra       executeToken_104
-executeToken_106:
+; clearRuntimeData(pForStack);
+       move.l    -28(A6),-(A7)
+       jsr       @basic_clearRuntimeData
+       addq.w    #4,A7
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_27:
 ; case 0x98:  // DATA - Ignora toda a linha depois dele, READ vai ler essa linha
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_28:
 ; case 0x99:  // Read
 ; vReta = basRead();
        jsr       _basRead
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_29:
 ; case 0x9A:  // Restore
 ; vReta = basRestore();
        jsr       _basRestore
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_30:
 ; case 0x9E:  // END
 ; vReta = basEnd();
        jsr       _basEnd
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_31:
 ; case 0x9F:  // STOP
 ; vReta = basStop();
        jsr       _basStop
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_32:
 ; case 0xB0:  // TEXT
 ; vReta = basText();
        jsr       _basText
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_33:
 ; case 0xB1:  // GR
 ; vReta = basGr();
        jsr       _basGr
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_34:
 ; case 0xB2:  // HGR
 ; vReta = basHgr();
        jsr       _basHgr
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_35:
 ; case 0xB3:  // COLOR
 ; vReta = basColor();
        jsr       _basColor
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_36:
 ; case 0xB4:  // PLOT
 ; vReta = basPlot();
        jsr       _basPlot
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_37:
 ; case 0xB5:  // HLIN
 ; vReta = basHVlin(1);
@@ -4766,7 +5044,7 @@ executeToken_37:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_38:
 ; case 0xB6:  // VLIN
 ; vReta = basHVlin(2);
@@ -4775,41 +5053,41 @@ executeToken_38:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_39:
 ; case 0xB8:  // HCOLOR
 ; vReta = basHcolor();
        jsr       _basHcolor
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_40:
 ; case 0xB9:  // HPLOT
 ; vReta = basHplot();
        jsr       _basHplot
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_41:
 ; case 0xBA:  // AT - Nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_42:
 ; case 0xBB:  // ONERR
 ; vReta = basOnErr();
        jsr       _basOnErr
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_43:
 ; case 0xC4:  // ASC
 ; vReta = basAsc();
        jsr       _basAsc
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_44:
 ; case 0xCD:  // PEEK
 ; vReta = basPeekPoke('R');
@@ -4818,7 +5096,7 @@ executeToken_44:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_45:
 ; case 0xCE:  // POKE
 ; vReta = basPeekPoke('W');
@@ -4827,56 +5105,56 @@ executeToken_45:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_46:
 ; case 0xD1:  // RND
 ; vReta = basRnd();
        jsr       _basRnd
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_47:
 ; case 0xDB:  // Len
 ; vReta = basLen();
        jsr       _basLen
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_48:
 ; case 0xDC:  // Val
 ; vReta = basVal();
        jsr       _basVal
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_49:
 ; case 0xDD:  // Str$
 ; vReta = basStr();
        jsr       _basStr
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_50:
 ; case 0xE0:  // SCRN
 ; vReta = basScrn();
        jsr       _basScrn
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_51:
 ; case 0xE1:  // Chr$
 ; vReta = basChr();
        jsr       _basChr
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_52:
 ; case 0xE2:  // Fre(0)
 ; vReta = basFre();
        jsr       _basFre
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_53:
 ; case 0xE3:  // Sqrt
 ; vReta = basTrig(6);
@@ -4885,7 +5163,7 @@ executeToken_53:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_54:
 ; case 0xE4:  // Sin
 ; vReta = basTrig(1);
@@ -4894,7 +5172,7 @@ executeToken_54:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_55:
 ; case 0xE5:  // Cos
 ; vReta = basTrig(2);
@@ -4903,7 +5181,7 @@ executeToken_55:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_56:
 ; case 0xE6:  // Tan
 ; vReta = basTrig(3);
@@ -4912,7 +5190,7 @@ executeToken_56:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_57:
 ; case 0xE7:  // Log
 ; vReta = basTrig(4);
@@ -4921,7 +5199,7 @@ executeToken_57:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_58:
 ; case 0xE8:  // Exp
 ; vReta = basTrig(5);
@@ -4930,21 +5208,21 @@ executeToken_58:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_59:
 ; case 0xE9:  // SPC
 ; vReta = basSpc();
        jsr       _basSpc
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_60:
 ; case 0xEA:  // Tab
 ; vReta = basTab();
        jsr       _basTab
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_61:
 ; case 0xEB:  // Mid$
 ; vReta = basLeftRightMid('M');
@@ -4953,7 +5231,7 @@ executeToken_61:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_62:
 ; case 0xEC:  // Right$
 ; vReta = basLeftRightMid('R');
@@ -4962,7 +5240,7 @@ executeToken_62:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_63:
 ; case 0xED:  // Left$
 ; vReta = basLeftRightMid('L');
@@ -4971,28 +5249,28 @@ executeToken_63:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_108
+       bra       executeToken_99
 executeToken_64:
 ; case 0xEE:  // INT
 ; vReta = basInt();
        jsr       _basInt
        move.b    D0,D2
 ; break;
-       bra.s     executeToken_108
+       bra.s     executeToken_99
 executeToken_65:
 ; case 0xEF:  // ABS
 ; vReta = basAbs();
        jsr       _basAbs
        move.b    D0,D2
 ; break;
-       bra.s     executeToken_108
+       bra.s     executeToken_99
 executeToken_1:
 ; default:
 ; if (pToken < 0x80)  // variavel sem LET
        move.b    11(A6),D0
        and.w     #255,D0
        cmp.w     #128,D0
-       bhs.s     executeToken_107
+       bhs.s     executeToken_98
 ; {
 ; *pointerRunProg = *pointerRunProg - 1;
        move.l    _pointerRunProg.L,A0
@@ -5000,8 +5278,8 @@ executeToken_1:
 ; vReta = basLet();
        jsr       _basLet
        move.b    D0,D2
-       bra.s     executeToken_108
-executeToken_107:
+       bra.s     executeToken_99
+executeToken_98:
 ; }
 ; else // Nao forem operadores logicos
 ; {
@@ -5010,7 +5288,7 @@ executeToken_107:
        move.w    #14,(A0)
 ; vReta = 14;
        moveq     #14,D2
-executeToken_108:
+executeToken_99:
 ; }
 ; }
 ; #endif
@@ -5018,12 +5296,12 @@ executeToken_108:
        ext.w     D2
        ext.l     D2
        move.l    D2,D0
-       movem.l   (A7)+,D2/D3/A2/A3
+       movem.l   (A7)+,D2/A2/A3
        unlk      A6
        rts
 ; }
 ; //--------------------------------------------------------------------------------------
-; //
+; // Procura o proximo token ou componente da linha sendo processada
 ; //--------------------------------------------------------------------------------------
 ; int nextToken(void)
 ; {
@@ -5103,16 +5381,17 @@ nextToken_1:
        bra       nextToken_3
 nextToken_4:
 ; }
-; while(iswhite(*vTempPointer)) // skip over white space
+; while(*vTempPointer == ' ' || *vTempPointer == '\t') // skip over white space
 nextToken_6:
        move.l    D2,A0
-       move.b    (A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       jsr       _iswhite
-       addq.w    #4,A7
-       tst.l     D0
-       beq.s     nextToken_8
+       move.b    (A0),D0
+       cmp.b     #32,D0
+       beq.s     nextToken_9
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #9,D0
+       bne.s     nextToken_8
+nextToken_9:
 ; {
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A3),A0
@@ -5127,7 +5406,7 @@ nextToken_8:
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #13,D0
-       bne       nextToken_9
+       bne       nextToken_10
 ; *pointerRunProg = *pointerRunProg + 2;
        move.l    (A3),A0
        addq.l    #2,(A0)
@@ -5151,32 +5430,62 @@ nextToken_8:
        move.b    (A0),D0
        and.l     #255,D0
        bra       nextToken_3
-nextToken_9:
+nextToken_10:
 ; }
-; if (strchr("+-*^/=;:,><", *vTempPointer) || *vTempPointer >= 0xF0) { // delimiter
+; if ((*vTempPointer == '+' || *vTempPointer == '-' || *vTempPointer == '*' ||
        move.l    D2,A0
-       move.b    (A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       pea       @basic_128.L
-       jsr       _strchr
-       addq.w    #8,A7
-       tst.l     D0
-       bne.s     nextToken_13
+       move.b    (A0),D0
+       cmp.b     #43,D0
+       beq       nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #45,D0
+       beq       nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #42,D0
+       beq       nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #94,D0
+       beq       nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #47,D0
+       beq       nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #61,D0
+       beq       nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #59,D0
+       beq       nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #58,D0
+       beq       nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #44,D0
+       beq.s     nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #62,D0
+       beq.s     nextToken_14
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #60,D0
+       beq.s     nextToken_14
        move.l    D2,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #240,D0
-       blo.s     nextToken_14
-       moveq     #1,D0
-       bra.s     nextToken_15
+       blo.s     nextToken_12
 nextToken_14:
-       clr.l     D0
-nextToken_15:
-       ext.l     D0
-       tst.l     D0
-       beq.s     nextToken_11
-nextToken_13:
+; *vTempPointer == '^' || *vTempPointer == '/' || *vTempPointer == '=' ||
+; *vTempPointer == ';' || *vTempPointer == ':' || *vTempPointer == ',' ||
+; *vTempPointer == '>' || *vTempPointer == '<' || *vTempPointer >= 0xF0)) { // delimiter
 ; *temp = *vTempPointer;
        move.l    D2,A0
        move.l    D3,A1
@@ -5197,34 +5506,34 @@ nextToken_13:
        move.b    (A0),D0
        and.l     #255,D0
        bra       nextToken_3
-nextToken_11:
+nextToken_12:
 ; }
 ; if (*vTempPointer == 0x28 || *vTempPointer == 0x29)
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #40,D0
-       beq.s     nextToken_18
+       beq.s     nextToken_17
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #41,D0
-       bne       nextToken_16
-nextToken_18:
+       bne       nextToken_15
+nextToken_17:
 ; {
 ; if (*vTempPointer == 0x28)
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #40,D0
-       bne.s     nextToken_19
+       bne.s     nextToken_18
 ; *token_type = OPENPARENT;
        move.l    (A2),A0
        move.b    #8,(A0)
-       bra.s     nextToken_20
-nextToken_19:
+       bra.s     nextToken_19
+nextToken_18:
 ; else
 ; *token_type = CLOSEPARENT;
        move.l    (A2),A0
        move.b    #9,(A0)
-nextToken_20:
+nextToken_19:
 ; *token = *vTempPointer;
        move.l    D2,A0
        move.l    (A4),A1
@@ -5240,15 +5549,15 @@ nextToken_20:
        move.b    (A0),D0
        and.l     #255,D0
        bra       nextToken_3
-nextToken_16:
+nextToken_15:
 ; }
 ; if (*vTempPointer == ":")
        move.l    D2,A0
        move.b    (A0),D0
        and.l     #255,D0
-       lea       @basic_129.L,A0
+       lea       @basic_132.L,A0
        cmp.l     A0,D0
-       bne.s     nextToken_21
+       bne.s     nextToken_20
 ; {
 ; *doisPontos = 1;
        move.l    _doisPontos.L,A0
@@ -5261,13 +5570,13 @@ nextToken_16:
        move.b    (A0),D0
        and.l     #255,D0
        bra       nextToken_3
-nextToken_21:
+nextToken_20:
 ; }
 ; if (*vTempPointer == '"') { // quoted string
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #34,D0
-       bne       nextToken_23
+       bne       nextToken_22
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A3),A0
        addq.l    #1,(A0)
@@ -5275,15 +5584,15 @@ nextToken_21:
        move.l    (A3),A0
        move.l    (A0),D2
 ; while(*vTempPointer != '"'&& *vTempPointer != '\r')
-nextToken_25:
+nextToken_24:
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #34,D0
-       beq.s     nextToken_27
+       beq.s     nextToken_26
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #13,D0
-       beq.s     nextToken_27
+       beq.s     nextToken_26
 ; {
 ; *temp++ = *vTempPointer;
        move.l    D2,A0
@@ -5296,14 +5605,14 @@ nextToken_25:
 ; vTempPointer = *pointerRunProg;
        move.l    (A3),A0
        move.l    (A0),D2
-       bra       nextToken_25
-nextToken_27:
+       bra       nextToken_24
+nextToken_26:
 ; }
 ; if (*vTempPointer == '\r')
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #13,D0
-       bne.s     nextToken_28
+       bne.s     nextToken_27
 ; {
 ; *vErroProc = 14;
        move.l    _vErroProc.L,A0
@@ -5311,7 +5620,7 @@ nextToken_27:
 ; return 0;
        clr.l     D0
        bra       nextToken_3
-nextToken_28:
+nextToken_27:
 ; }
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A3),A0
@@ -5327,7 +5636,7 @@ nextToken_28:
        move.b    (A0),D0
        and.l     #255,D0
        bra       nextToken_3
-nextToken_23:
+nextToken_22:
 ; }
 ; if (isdigitus(*vTempPointer)) { // number
        move.l    D2,A0
@@ -5337,9 +5646,9 @@ nextToken_23:
        jsr       _isdigitus
        addq.w    #4,A7
        tst.l     D0
-       beq       nextToken_30
+       beq       nextToken_29
 ; while(!isdelim(*vTempPointer) && (*vTempPointer < 0x80 || *vTempPointer >= 0xF0))
-nextToken_32:
+nextToken_31:
        move.l    D2,A0
        move.b    (A0),D1
        and.l     #255,D1
@@ -5347,18 +5656,18 @@ nextToken_32:
        jsr       _isdelim
        addq.w    #4,A7
        tst.l     D0
-       bne       nextToken_34
+       bne       nextToken_33
        move.l    D2,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #128,D0
-       blo.s     nextToken_35
+       blo.s     nextToken_34
        move.l    D2,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #240,D0
-       blo.s     nextToken_34
-nextToken_35:
+       blo.s     nextToken_33
+nextToken_34:
 ; {
 ; *temp++ = *vTempPointer;
        move.l    D2,A0
@@ -5371,8 +5680,8 @@ nextToken_35:
 ; vTempPointer = *pointerRunProg;
        move.l    (A3),A0
        move.l    (A0),D2
-       bra       nextToken_32
-nextToken_34:
+       bra       nextToken_31
+nextToken_33:
 ; }
 ; *temp = '\0';
        move.l    D3,A0
@@ -5385,7 +5694,7 @@ nextToken_34:
        move.b    (A0),D0
        and.l     #255,D0
        bra       nextToken_3
-nextToken_30:
+nextToken_29:
 ; }
 ; if (isalphas(*vTempPointer)) { // var or command
        move.l    D2,A0
@@ -5395,9 +5704,9 @@ nextToken_30:
        jsr       _isalphas
        addq.w    #4,A7
        tst.l     D0
-       beq       nextToken_36
+       beq       nextToken_35
 ; while(!isdelim(*vTempPointer) && (*vTempPointer < 0x80 || *vTempPointer >= 0xF0))
-nextToken_38:
+nextToken_37:
        move.l    D2,A0
        move.b    (A0),D1
        and.l     #255,D1
@@ -5405,18 +5714,18 @@ nextToken_38:
        jsr       _isdelim
        addq.w    #4,A7
        tst.l     D0
-       bne       nextToken_40
+       bne       nextToken_39
        move.l    D2,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #128,D0
-       blo.s     nextToken_41
+       blo.s     nextToken_40
        move.l    D2,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #240,D0
-       blo.s     nextToken_40
-nextToken_41:
+       blo.s     nextToken_39
+nextToken_40:
 ; {
 ; *temp++ = *vTempPointer;
        move.l    D2,A0
@@ -5429,8 +5738,8 @@ nextToken_41:
 ; vTempPointer = *pointerRunProg;
        move.l    (A3),A0
        move.l    (A0),D2
-       bra       nextToken_38
-nextToken_40:
+       bra       nextToken_37
+nextToken_39:
 ; }
 ; *temp = '\0';
        move.l    D3,A0
@@ -5443,7 +5752,7 @@ nextToken_40:
        move.b    (A0),D0
        and.l     #255,D0
        bra.s     nextToken_3
-nextToken_36:
+nextToken_35:
 ; }
 ; *temp = '\0';
        move.l    D3,A0
@@ -5453,11 +5762,11 @@ nextToken_36:
        move.l    (A2),A0
        move.b    (A0),D0
        cmp.b     #5,D0
-       bne.s     nextToken_42
+       bne.s     nextToken_41
 ; *token_type = VARIABLE;
        move.l    (A2),A0
        move.b    #2,(A0)
-nextToken_42:
+nextToken_41:
 ; }
 ; return *token_type;
        move.l    (A2),A0
@@ -5469,7 +5778,8 @@ nextToken_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
-; //
+; // Procura o token na lista de keywords e devolve a posicao, se nao encontrar,
+; // devolve 14 (token desconhecido)
 ; //-----------------------------------------------------------------------------
 ; int findToken(unsigned char pToken)
 ; {
@@ -5519,7 +5829,8 @@ findToken_6:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
-; //
+; // Procura o numero da linha na lista de linhas do programa e devolve o endereco,
+; // se nao encontrar, devolve 0
 ; //-----------------------------------------------------------------------------
 ; unsigned long findNumberLine(unsigned short pNumber, unsigned char pTipoRet, unsigned char pTipoFind)
 ; {
@@ -5690,60 +6001,55 @@ _isdelim:
        move.l    D2,-(A7)
        move.b    11(A6),D2
        and.l     #255,D2
-; if (strchr(" ;,+-<>()/*^=:", c) || c==9 || c=='\r' || c==0 || c>=0xF0)
-       and.l     #255,D2
-       move.l    D2,-(A7)
-       pea       @basic_117.L
-       jsr       _strchr
-       addq.w    #8,A7
-       tst.l     D0
-       bne       isdelim_3
-       cmp.b     #9,D2
-       bne.s     isdelim_4
-       moveq     #1,D0
-       bra.s     isdelim_5
-isdelim_4:
-       clr.l     D0
-isdelim_5:
-       and.l     #255,D0
-       bne       isdelim_3
-       cmp.b     #13,D2
-       bne.s     isdelim_6
-       moveq     #1,D0
-       bra.s     isdelim_7
-isdelim_6:
-       clr.l     D0
-isdelim_7:
-       and.l     #255,D0
-       bne       isdelim_3
-       tst.b     D2
-       bne.s     isdelim_8
-       moveq     #1,D0
-       bra.s     isdelim_9
-isdelim_8:
-       clr.l     D0
-isdelim_9:
-       and.l     #255,D0
-       bne.s     isdelim_3
+; if (c >= 0xF0 || c == 0 || c == '\r' || c == '\t' || c == ' ' ||
        and.w     #255,D2
        cmp.w     #240,D2
-       blo.s     isdelim_10
-       moveq     #1,D0
-       bra.s     isdelim_11
-isdelim_10:
-       clr.l     D0
-isdelim_11:
-       ext.l     D0
-       tst.l     D0
-       beq.s     isdelim_1
+       bhs       isdelim_3
+       tst.b     D2
+       beq       isdelim_3
+       cmp.b     #13,D2
+       beq       isdelim_3
+       cmp.b     #9,D2
+       beq       isdelim_3
+       cmp.b     #32,D2
+       beq       isdelim_3
+       cmp.b     #59,D2
+       beq       isdelim_3
+       cmp.b     #44,D2
+       beq       isdelim_3
+       cmp.b     #43,D2
+       beq       isdelim_3
+       cmp.b     #45,D2
+       beq       isdelim_3
+       cmp.b     #60,D2
+       beq       isdelim_3
+       cmp.b     #62,D2
+       beq.s     isdelim_3
+       cmp.b     #40,D2
+       beq.s     isdelim_3
+       cmp.b     #41,D2
+       beq.s     isdelim_3
+       cmp.b     #47,D2
+       beq.s     isdelim_3
+       cmp.b     #42,D2
+       beq.s     isdelim_3
+       cmp.b     #94,D2
+       beq.s     isdelim_3
+       cmp.b     #61,D2
+       beq.s     isdelim_3
+       cmp.b     #58,D2
+       bne.s     isdelim_1
 isdelim_3:
+; c == ';' || c == ',' || c == '+' || c == '-' || c == '<' ||
+; c == '>' || c == '(' || c == ')' || c == '/' || c == '*' ||
+; c == '^' || c == '=' || c == ':')
 ; return 1;
        moveq     #1,D0
-       bra.s     isdelim_12
+       bra.s     isdelim_4
 isdelim_1:
 ; return 0;
        clr.l     D0
-isdelim_12:
+isdelim_4:
        move.l    (A7)+,D2
        unlk      A6
        rts
@@ -5771,1729 +6077,6 @@ iswhite_1:
 ; return 0;
        clr.l     D0
 iswhite_4:
-       unlk      A6
-       rts
-; }
-; //--------------------------------------------------------------------------------------
-; // Load basic program in memory, throught xmodem protocol
-; // Syntaxe:
-; //          XBASLOAD
-; //--------------------------------------------------------------------------------------
-; int basXBasLoad(void)
-; {
-       xdef      _basXBasLoad
-_basXBasLoad:
-       movem.l   D2/D3/D4/D5,-(A7)
-; unsigned char vRet = 0;
-       clr.b     D4
-; unsigned char vByte = 0;
-       clr.b     D2
-; unsigned char *vTemp = pStartXBasLoad;
-       move.l    _pStartXBasLoad.L,D5
-; unsigned char *vBufptr = &vbufInput;
-       lea       _vbufInput.L,A0
-       move.l    A0,D3
-; printText("Loading Basic Program...\r\n");
-       pea       @basic_130.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; // Carrega programa em outro ponto da memoria
-; vRet = loadSerialToMem(pStartXBasLoad,0);
-       clr.l     -(A7)
-       move.l    _pStartXBasLoad.L,-(A7)
-       move.l    1070,A0
-       jsr       (A0)
-       addq.w    #8,A7
-       move.b    D0,D4
-; // Se tudo OK, tokeniza como se estivesse sendo digitado
-; if (!vRet)
-       tst.b     D4
-       bne       basXBasLoad_1
-; {
-; printText("Done.\r\n");
-       pea       @basic_131.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; printText("Processing...\r\n");
-       pea       @basic_132.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; while (1)
-basXBasLoad_3:
-; {
-; vByte = *vTemp++;
-       move.l    D5,A0
-       addq.l    #1,D5
-       move.b    (A0),D2
-; if (vByte != 0x1A)
-       cmp.b     #26,D2
-       beq.s     basXBasLoad_6
-; {
-; if (vByte != 0xD && vByte != 0x0A)
-       cmp.b     #13,D2
-       beq.s     basXBasLoad_8
-       cmp.b     #10,D2
-       beq.s     basXBasLoad_8
-; *vBufptr++ = vByte;
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    D2,(A0)
-       bra.s     basXBasLoad_9
-basXBasLoad_8:
-; else
-; {
-; vTemp++;
-       addq.l    #1,D5
-; *vBufptr = 0x00;
-       move.l    D3,A0
-       clr.b     (A0)
-; vBufptr = &vbufInput;
-       lea       _vbufInput.L,A0
-       move.l    A0,D3
-; processLine();
-       jsr       _processLine
-basXBasLoad_9:
-       bra.s     basXBasLoad_7
-basXBasLoad_6:
-; }
-; }
-; else
-; break;
-       bra.s     basXBasLoad_5
-basXBasLoad_7:
-       bra       basXBasLoad_3
-basXBasLoad_5:
-; }
-; printText("Done.\r\n");
-       pea       @basic_131.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-       bra.s     basXBasLoad_11
-basXBasLoad_1:
-; }
-; else
-; {
-; if (vRet == 0xFE)
-       and.w     #255,D4
-       cmp.w     #254,D4
-       bne.s     basXBasLoad_10
-; *vErroProc = 19;
-       move.l    _vErroProc.L,A0
-       move.w    #19,(A0)
-       bra.s     basXBasLoad_11
-basXBasLoad_10:
-; else
-; *vErroProc = 20;
-       move.l    _vErroProc.L,A0
-       move.w    #20,(A0)
-basXBasLoad_11:
-; }
-; return 0;
-       clr.l     D0
-       movem.l   (A7)+,D2/D3/D4/D5
-       rts
-; }
-; //--------------------------------------------------------------------------------------
-; // Load basic program in memory, throught xmodem protocol with 1K blocks and CRC
-; // Syntaxe:
-; //          XBASLOAD1K
-; //--------------------------------------------------------------------------------------
-; int basXBasLoad1k(void)
-; {
-       xdef      _basXBasLoad1k
-_basXBasLoad1k:
-       movem.l   D2/D3/D4/D5,-(A7)
-; unsigned char vRet = 0;
-       clr.b     D4
-; unsigned char vByte = 0;
-       clr.b     D2
-; unsigned char *vTemp = pStartXBasLoad;
-       move.l    _pStartXBasLoad.L,D5
-; unsigned char *vBufptr = &vbufInput;
-       lea       _vbufInput.L,A0
-       move.l    A0,D3
-; printText("Loading Basic Program...\r\n");
-       pea       @basic_130.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; // Carrega programa em outro ponto da memoria
-; vRet = loadSerialToMem2(pStartXBasLoad,0);
-       clr.l     -(A7)
-       move.l    _pStartXBasLoad.L,-(A7)
-       move.l    1210,A0
-       jsr       (A0)
-       addq.w    #8,A7
-       move.b    D0,D4
-; // Se tudo OK, tokeniza como se estivesse sendo digitado
-; if (!vRet)
-       tst.b     D4
-       bne       basXBasLoad1k_1
-; {
-; printText("Done.\r\n");
-       pea       @basic_131.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; printText("Processing...\r\n");
-       pea       @basic_132.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; while (1)
-basXBasLoad1k_3:
-; {
-; vByte = *vTemp++;
-       move.l    D5,A0
-       addq.l    #1,D5
-       move.b    (A0),D2
-; if (vByte != 0x1A)
-       cmp.b     #26,D2
-       beq.s     basXBasLoad1k_6
-; {
-; if (vByte != 0xD && vByte != 0x0A)
-       cmp.b     #13,D2
-       beq.s     basXBasLoad1k_8
-       cmp.b     #10,D2
-       beq.s     basXBasLoad1k_8
-; *vBufptr++ = vByte;
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    D2,(A0)
-       bra.s     basXBasLoad1k_9
-basXBasLoad1k_8:
-; else
-; {
-; vTemp++;
-       addq.l    #1,D5
-; *vBufptr = 0x00;
-       move.l    D3,A0
-       clr.b     (A0)
-; vBufptr = &vbufInput;
-       lea       _vbufInput.L,A0
-       move.l    A0,D3
-; processLine();
-       jsr       _processLine
-basXBasLoad1k_9:
-       bra.s     basXBasLoad1k_7
-basXBasLoad1k_6:
-; }
-; }
-; else
-; break;
-       bra.s     basXBasLoad1k_5
-basXBasLoad1k_7:
-       bra       basXBasLoad1k_3
-basXBasLoad1k_5:
-; }
-; printText("Done.\r\n");
-       pea       @basic_131.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-       bra.s     basXBasLoad1k_11
-basXBasLoad1k_1:
-; }
-; else
-; {
-; if (vRet == 0xFE)
-       and.w     #255,D4
-       cmp.w     #254,D4
-       bne.s     basXBasLoad1k_10
-; *vErroProc = 19;
-       move.l    _vErroProc.L,A0
-       move.w    #19,(A0)
-       bra.s     basXBasLoad1k_11
-basXBasLoad1k_10:
-; else
-; *vErroProc = 20;
-       move.l    _vErroProc.L,A0
-       move.w    #20,(A0)
-basXBasLoad1k_11:
-; }
-; return 0;
-       clr.l     D0
-       movem.l   (A7)+,D2/D3/D4/D5
-       rts
-; }
-; #ifndef __TESTE_TOKENIZE__
-; //-----------------------------------------------------------------------------
-; // Calcula o endereco do valor dentro da area de dados de uma variavel array.
-; // Retorna 0 em caso de erro de limite e ajusta vErroProc.
-; //-----------------------------------------------------------------------------
-; static unsigned char* getArrayValuePointer(unsigned char ixDim, unsigned char* vLista, unsigned char* vDim, unsigned char vTamValue)
-; {
-@basic_getArrayValuePointer:
-       link      A6,#-4
-       movem.l   D2/D3/D4/D5/D6/D7,-(A7)
-       move.l    12(A6),D6
-; int ix;
-; int iw;
-; unsigned char ixDimAnt;
-; unsigned char* vPosValueVar;
-; unsigned short iDim;
-; unsigned long vOffSet;
-; iw = (ixDim - 1);
-       move.b    11(A6),D0
-       and.l     #255,D0
-       subq.l    #1,D0
-       move.l    D0,D5
-; ixDimAnt = 1;
-       moveq     #1,D4
-; vPosValueVar = 0;
-       clr.l     D3
-; for (ix = ((ixDim - 1) * 2 ); ix >= 0; ix -= 2)
-       move.b    11(A6),D0
-       subq.b    #1,D0
-       and.w     #255,D0
-       mulu.w    #2,D0
-       and.l     #65535,D0
-       move.l    D0,D2
-@basic_getArrayValuePointer_1:
-       cmp.l     #0,D2
-       blt       @basic_getArrayValuePointer_3
-; {
-; iDim = ((vLista[ix + 8] << 8) | vLista[ix + 9]);
-       move.l    D6,A0
-       move.l    D2,A1
-       move.b    8(A1,A0.L),D0
-       and.w     #255,D0
-       lsl.w     #8,D0
-       move.l    D6,A0
-       move.l    D2,A1
-       move.b    9(A1,A0.L),D1
-       and.w     #255,D1
-       or.w      D1,D0
-       move.w    D0,D7
-; if (vDim[iw] > iDim)
-       move.l    16(A6),A0
-       move.b    0(A0,D5.L),D0
-       and.w     #255,D0
-       cmp.w     D7,D0
-       bls.s     @basic_getArrayValuePointer_4
-; {
-; *vErroProc = 21;
-       move.l    _vErroProc.L,A0
-       move.w    #21,(A0)
-; return 0;
-       clr.l     D0
-       bra       @basic_getArrayValuePointer_6
-@basic_getArrayValuePointer_4:
-; }
-; vPosValueVar = vPosValueVar + ((vDim[iw] - 1 ) * ixDimAnt * vTamValue);
-       move.l    16(A6),A0
-       move.b    0(A0,D5.L),D0
-       subq.b    #1,D0
-       and.w     #255,D0
-       and.w     #255,D4
-       mulu.w    D4,D0
-       and.w     #255,D0
-       move.b    23(A6),D1
-       and.w     #255,D1
-       mulu.w    D1,D0
-       and.l     #255,D0
-       add.l     D0,D3
-; ixDimAnt = ixDimAnt * iDim;
-       move.b    D4,D0
-       and.w     #255,D0
-       mulu.w    D7,D0
-       move.b    D0,D4
-; iw--;
-       subq.l    #1,D5
-       subq.l    #2,D2
-       bra       @basic_getArrayValuePointer_1
-@basic_getArrayValuePointer_3:
-; }
-; vOffSet = vLista;
-       move.l    D6,-4(A6)
-; vPosValueVar = vPosValueVar + (vOffSet + 8 + (ixDim * 2));
-       move.l    -4(A6),D0
-       addq.l    #8,D0
-       move.b    11(A6),D1
-       and.w     #255,D1
-       mulu.w    #2,D1
-       and.l     #255,D1
-       add.l     D1,D0
-       add.l     D0,D3
-; return vPosValueVar;
-       move.l    D3,D0
-@basic_getArrayValuePointer_6:
-       movem.l   (A7)+,D2/D3/D4/D5/D6/D7
-       unlk      A6
-       rts
-; }
-; //-----------------------------------------------------------------------------
-; // Retornos: -1 - Erro, 0 - Nao Existe, 1 - eh um valor numeral
-; //           [endereco > 1] - Endereco da variavel
-; //
-; //           se retorno > 1: pVariable vai conter o valor numeral (qdo 1) ou
-; //                           o conteudo da variavel (qdo endereco)
-; //-----------------------------------------------------------------------------
-; long findVariable(unsigned char* pVariable)
-; {
-       xdef      _findVariable
-_findVariable:
-       link      A6,#-136
-       movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
-       lea       -20(A6),A2
-       move.l    8(A6),D4
-       lea       _vErroProc.L,A3
-       lea       _itoa.L,A4
-; unsigned char* vLista = pStartSimpVar;
-       move.l    _pStartSimpVar.L,D2
-; unsigned char* vTemp = pStartSimpVar;
-       move.l    _pStartSimpVar.L,-134(A6)
-; long vEnder = 0;
-       clr.l     -130(A6)
-; int ix = 0, iy = 0, iz = 0;
-       clr.l     D6
-       clr.l     -126(A6)
-       clr.l     -122(A6)
-; unsigned char vDim[88];
-; unsigned int vTempDim = 0;
-       clr.l     -30(A6)
-; unsigned long vOffSet;
-; unsigned char ixDim = 0;
-       clr.b     -26(A6)
-; unsigned char vArray = 0;
-       clr.b     D5
-; unsigned long vPosNextVar = 0;
-       move.w    #0,A5
-; unsigned char* vPosValueVar = 0;
-       clr.l     D3
-; unsigned char vTamValue = 4;
-       move.b    #4,-25(A6)
-; unsigned char *vTempPointer;
-; unsigned char sqtdtam[20];
-; // Verifica se eh array (tem parenteses logo depois do nome da variavel)
-; vTempPointer = *pointerRunProg;
-       move.l    _pointerRunProg.L,A0
-       move.l    (A0),-24(A6)
-; if (*vTempPointer == 0x28)
-       move.l    -24(A6),A0
-       move.b    (A0),D0
-       cmp.b     #40,D0
-       bne       findVariable_27
-; {
-; // Define que eh array
-; vArray = 1;
-       moveq     #1,D5
-; // Procura as dimensoes
-; nextToken();
-       jsr       _nextToken
-; if (*vErroProc) return 0;
-       move.l    (A3),A0
-       tst.w     (A0)
-       beq.s     findVariable_3
-       clr.l     D0
-       bra       findVariable_5
-findVariable_3:
-; // Erro, primeiro caracter depois da variavel, deve ser abre parenteses
-; if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
-       move.l    _tok.L,A0
-       move.b    (A0),D0
-       and.w     #255,D0
-       cmp.w     #226,D0
-       beq.s     findVariable_8
-       move.l    _tok.L,A0
-       move.b    (A0),D0
-       and.w     #255,D0
-       cmp.w     #224,D0
-       beq.s     findVariable_8
-       move.l    _token_type.L,A0
-       move.b    (A0),D0
-       cmp.b     #8,D0
-       beq.s     findVariable_6
-findVariable_8:
-; {
-; *vErroProc = 15;
-       move.l    (A3),A0
-       move.w    #15,(A0)
-; return 0;
-       clr.l     D0
-       bra       findVariable_5
-findVariable_6:
-; }
-; do
-; {
-findVariable_9:
-; nextToken();
-       jsr       _nextToken
-; if (*vErroProc) return 0;
-       move.l    (A3),A0
-       tst.w     (A0)
-       beq.s     findVariable_11
-       clr.l     D0
-       bra       findVariable_5
-findVariable_11:
-; if (*token_type == QUOTE) { // is string, error
-       move.l    _token_type.L,A0
-       move.b    (A0),D0
-       cmp.b     #6,D0
-       bne.s     findVariable_13
-; *vErroProc = 16;
-       move.l    (A3),A0
-       move.w    #16,(A0)
-; return 0;
-       clr.l     D0
-       bra       findVariable_5
-findVariable_13:
-; }
-; else { // is expression
-; putback();
-       jsr       _putback
-; getExp(&vTempDim);
-       pea       -30(A6)
-       jsr       _getExp
-       addq.w    #4,A7
-; if (*vErroProc) return 0;
-       move.l    (A3),A0
-       tst.w     (A0)
-       beq.s     findVariable_15
-       clr.l     D0
-       bra       findVariable_5
-findVariable_15:
-; if (*value_type == '$')
-       move.l    _value_type.L,A0
-       move.b    (A0),D0
-       cmp.b     #36,D0
-       bne.s     findVariable_17
-; {
-; *vErroProc = 16;
-       move.l    (A3),A0
-       move.w    #16,(A0)
-; return 0;
-       clr.l     D0
-       bra       findVariable_5
-findVariable_17:
-; }
-; if (*value_type == '#')
-       move.l    _value_type.L,A0
-       move.b    (A0),D0
-       cmp.b     #35,D0
-       bne.s     findVariable_19
-; {
-; vTempDim = fppInt(vTempDim);
-       move.l    -30(A6),-(A7)
-       jsr       _fppInt
-       addq.w    #4,A7
-       move.l    D0,-30(A6)
-; *value_type = '%';
-       move.l    _value_type.L,A0
-       move.b    #37,(A0)
-findVariable_19:
-; }
-; vDim[ixDim] = vTempDim + 1;
-       move.l    -30(A6),D0
-       addq.l    #1,D0
-       move.b    -26(A6),D1
-       and.l     #255,D1
-       move.b    D0,-118(A6,D1.L)
-; ixDim++;
-       addq.b    #1,-26(A6)
-; }
-; if (*token == ',')
-       move.l    _token.L,A0
-       move.b    (A0),D0
-       cmp.b     #44,D0
-       bne.s     findVariable_21
-; {
-; *pointerRunProg = *pointerRunProg + 1;
-       move.l    _pointerRunProg.L,A0
-       addq.l    #1,(A0)
-; vTempPointer = *pointerRunProg;
-       move.l    _pointerRunProg.L,A0
-       move.l    (A0),-24(A6)
-       bra.s     findVariable_22
-findVariable_21:
-; }
-; else
-; break;
-       bra.s     findVariable_10
-findVariable_22:
-       bra       findVariable_9
-findVariable_10:
-; } while(1);
-; // Deve ter pelo menos 1 elemento
-; if (ixDim < 1)
-       move.b    -26(A6),D0
-       cmp.b     #1,D0
-       bhs.s     findVariable_23
-; {
-; *vErroProc = 21;
-       move.l    (A3),A0
-       move.w    #21,(A0)
-; return 0;
-       clr.l     D0
-       bra       findVariable_5
-findVariable_23:
-; }
-; nextToken();
-       jsr       _nextToken
-; if (*vErroProc) return 0;
-       move.l    (A3),A0
-       tst.w     (A0)
-       beq.s     findVariable_25
-       clr.l     D0
-       bra       findVariable_5
-findVariable_25:
-; // Ultimo caracter deve ser fecha parenteses
-; if (*token_type!=CLOSEPARENT)
-       move.l    _token_type.L,A0
-       move.b    (A0),D0
-       cmp.b     #9,D0
-       beq.s     findVariable_27
-; {
-; *vErroProc = 15;
-       move.l    (A3),A0
-       move.w    #15,(A0)
-; return 0;
-       clr.l     D0
-       bra       findVariable_5
-findVariable_27:
-; }
-; }
-; // Procura na lista geral de variaveis simples / array
-; if (vArray)
-       tst.b     D5
-       beq.s     findVariable_29
-; vLista = pStartArrayVar;
-       move.l    _pStartArrayVar.L,D2
-       bra.s     findVariable_30
-findVariable_29:
-; else
-; vLista = pStartSimpVar;
-       move.l    _pStartSimpVar.L,D2
-findVariable_30:
-; while(1)
-findVariable_31:
-; {
-; vPosNextVar  = (((unsigned long)*(vLista + 3) << 24) & 0xFF000000);
-       move.l    D2,A0
-       move.b    3(A0),D0
-       and.l     #255,D0
-       lsl.l     #8,D0
-       lsl.l     #8,D0
-       lsl.l     #8,D0
-       and.l     #-16777216,D0
-       move.l    D0,A5
-; vPosNextVar |= (((unsigned long)*(vLista + 4) << 16) & 0x00FF0000);
-       move.l    D2,A0
-       move.b    4(A0),D0
-       and.l     #255,D0
-       lsl.l     #8,D0
-       lsl.l     #8,D0
-       and.l     #16711680,D0
-       move.l    A5,D1
-       or.l      D0,D1
-       move.l    D1,A5
-; vPosNextVar |= (((unsigned long)*(vLista + 5) << 8) & 0x0000FF00);
-       move.l    D2,A0
-       move.b    5(A0),D0
-       and.l     #255,D0
-       lsl.l     #8,D0
-       and.l     #65280,D0
-       move.l    A5,D1
-       or.l      D0,D1
-       move.l    D1,A5
-; vPosNextVar |= ((unsigned long)*(vLista + 6) & 0x000000FF);
-       move.l    D2,A0
-       move.b    6(A0),D0
-       and.l     #255,D0
-       and.l     #255,D0
-       move.l    A5,D1
-       or.l      D0,D1
-       move.l    D1,A5
-; *value_type = *vLista;
-       move.l    D2,A0
-       move.l    _value_type.L,A1
-       move.b    (A0),(A1)
-; if (*(vLista + 1) == pVariable[0] && *(vLista + 2) ==  pVariable[1])
-       move.l    D2,A0
-       move.l    D4,A1
-       move.b    1(A0),D0
-       cmp.b     (A1),D0
-       bne       findVariable_34
-       move.l    D2,A0
-       move.l    D4,A1
-       move.b    2(A0),D0
-       cmp.b     1(A1),D0
-       bne       findVariable_34
-; {
-; // Pega endereco da variavel pra delvover
-; if (vArray)
-       tst.b     D5
-       beq       findVariable_36
-; {
-; if (*vLista == '$')
-       move.l    D2,A0
-       move.b    (A0),D0
-       cmp.b     #36,D0
-       bne.s     findVariable_38
-; vTamValue = 5;
-       move.b    #5,-25(A6)
-findVariable_38:
-; // Verifica se os tamanhos da dimensao informada e da variavel sao iguais
-; if (ixDim != vLista[7])
-       move.l    D2,A0
-       move.b    -26(A6),D0
-       cmp.b     7(A0),D0
-       beq.s     findVariable_40
-; {
-; *vErroProc = 21;
-       move.l    (A3),A0
-       move.w    #21,(A0)
-; return 0;
-       clr.l     D0
-       bra       findVariable_5
-findVariable_40:
-; }
-; vPosValueVar = getArrayValuePointer(ixDim, vLista, vDim, vTamValue);
-       move.b    -25(A6),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       pea       -118(A6)
-       move.l    D2,-(A7)
-       move.b    -26(A6),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       jsr       @basic_getArrayValuePointer
-       add.w     #16,A7
-       move.l    D0,D3
-; if (*vErroProc)
-       move.l    (A3),A0
-       tst.w     (A0)
-       beq.s     findVariable_42
-; return 0;
-       clr.l     D0
-       bra       findVariable_5
-findVariable_42:
-; vEnder = vPosValueVar;
-       move.l    D3,-130(A6)
-       bra.s     findVariable_37
-findVariable_36:
-; }
-; else
-; {
-; vPosValueVar = vLista + 3;
-       move.l    D2,D0
-       addq.l    #3,D0
-       move.l    D0,D3
-; vEnder = vLista;
-       move.l    D2,-130(A6)
-findVariable_37:
-; }
-; // Pelo tipo da variavel, ja retorna na variavel de nome o conteudo da variavel
-; if (*vLista == '$')
-       move.l    D2,A0
-       move.b    (A0),D0
-       cmp.b     #36,D0
-       bne       findVariable_44
-; {
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq       findVariable_46
-; {
-; writeLongSerial("Aqui 333.666.0-[");
-       pea       @basic_133.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeSerial(*vLista);
-       move.l    D2,A0
-       move.b    (A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       move.l    1162,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_134.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(vPosValueVar,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D3,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n");
-       pea       @basic_135.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-findVariable_46:
-; }
-; vOffSet  = (((unsigned long)*(vPosValueVar + 1) << 24) & 0xFF000000);
-       move.l    D3,A0
-       move.b    1(A0),D0
-       and.l     #255,D0
-       lsl.l     #8,D0
-       lsl.l     #8,D0
-       lsl.l     #8,D0
-       and.l     #-16777216,D0
-       move.l    D0,D7
-; vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
-       move.l    D3,A0
-       move.b    2(A0),D0
-       and.l     #255,D0
-       lsl.l     #8,D0
-       lsl.l     #8,D0
-       and.l     #16711680,D0
-       or.l      D0,D7
-; vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
-       move.l    D3,A0
-       move.b    3(A0),D0
-       and.l     #255,D0
-       lsl.l     #8,D0
-       and.l     #65280,D0
-       or.l      D0,D7
-; vOffSet |= ((unsigned long)*(vPosValueVar + 4) & 0x000000FF);
-       move.l    D3,A0
-       move.b    4(A0),D0
-       and.l     #255,D0
-       and.l     #255,D0
-       or.l      D0,D7
-; vTemp = vOffSet;
-       move.l    D7,-134(A6)
-; iy = *vPosValueVar;
-       move.l    D3,A0
-       move.b    (A0),D0
-       and.l     #255,D0
-       move.l    D0,-126(A6)
-; iz = 0;
-       clr.l     -122(A6)
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq       findVariable_48
-; {
-; writeLongSerial("Aqui 333.666.1-[");
-       pea       @basic_136.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(vTemp,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    -134(A6),-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_134.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-findVariable_48:
-; }
-; for (ix = 0; ix < iy; ix++)
-       clr.l     D6
-findVariable_50:
-       cmp.l     -126(A6),D6
-       bge       findVariable_52
-; {
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq       findVariable_53
-; {
-; itoa(ix,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D6,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_134.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(iz,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    -122(A6),-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_134.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(*(vTemp + ix),sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    -134(A6),A0
-       move.b    0(A0,D6.L),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_134.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-findVariable_53:
-; }
-; pVariable[iz++] = *(vTemp + ix); // Numero gerado
-       move.l    -134(A6),A0
-       move.l    D4,A1
-       move.l    -122(A6),D0
-       addq.l    #1,-122(A6)
-       move.b    0(A0,D6.L),0(A1,D0.L)
-; pVariable[iz] = 0x00;
-       move.l    D4,A0
-       move.l    -122(A6),D0
-       clr.b     0(A0,D0.L)
-       addq.l    #1,D6
-       bra       findVariable_50
-findVariable_52:
-; }
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq.s     findVariable_55
-; {
-; writeLongSerial("]\r\n");
-       pea       @basic_135.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-findVariable_55:
-; }
-; pVariable[iz++] = 0x00;
-       move.l    D4,A0
-       move.l    -122(A6),D0
-       addq.l    #1,-122(A6)
-       clr.b     0(A0,D0.L)
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq       findVariable_57
-; {
-; writeLongSerial("Aqui 333.666.2-[");
-       pea       @basic_137.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(vOffSet,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D7,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_134.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(pVariable[0],sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D4,A0
-       move.b    (A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_134.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(pVariable[1],sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D4,A0
-       move.b    1(A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_134.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(pVariable[2],sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D4,A0
-       move.b    2(A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_134.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(pVariable[3],sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D4,A0
-       move.b    3(A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n");
-       pea       @basic_135.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-findVariable_57:
-       bra       findVariable_45
-findVariable_44:
-; }
-; }
-; else
-; {
-; if (!vArray)
-       tst.b     D5
-       bne.s     findVariable_59
-; vPosValueVar++;
-       addq.l    #1,D3
-findVariable_59:
-; pVariable[0] = *(vPosValueVar);
-       move.l    D3,A0
-       move.l    D4,A1
-       move.b    (A0),(A1)
-; pVariable[1] = *(vPosValueVar + 1);
-       move.l    D3,A0
-       move.l    D4,A1
-       move.b    1(A0),1(A1)
-; pVariable[2] = *(vPosValueVar + 2);
-       move.l    D3,A0
-       move.l    D4,A1
-       move.b    2(A0),2(A1)
-; pVariable[3] = *(vPosValueVar + 3);
-       move.l    D3,A0
-       move.l    D4,A1
-       move.b    3(A0),3(A1)
-; pVariable[4] = 0x00;
-       move.l    D4,A0
-       clr.b     4(A0)
-findVariable_45:
-; }
-; return vEnder;
-       move.l    -130(A6),D0
-       bra       findVariable_5
-findVariable_34:
-; }
-; if (vArray)
-       tst.b     D5
-       beq.s     findVariable_61
-; vLista = vPosNextVar;
-       move.l    A5,D2
-       bra.s     findVariable_62
-findVariable_61:
-; else
-; vLista += 8;
-       addq.l    #8,D2
-findVariable_62:
-; if ((!vArray && vLista >= pStartArrayVar) || (vArray && vLista >= pStartProg) || *vLista == 0x00)
-       tst.b     D5
-       bne.s     findVariable_67
-       moveq     #1,D0
-       bra.s     findVariable_68
-findVariable_67:
-       clr.l     D0
-findVariable_68:
-       and.l     #255,D0
-       beq.s     findVariable_66
-       cmp.l     _pStartArrayVar.L,D2
-       bhs.s     findVariable_65
-findVariable_66:
-       and.l     #255,D5
-       beq.s     findVariable_69
-       cmp.l     _pStartProg.L,D2
-       bhs.s     findVariable_65
-findVariable_69:
-       move.l    D2,A0
-       move.b    (A0),D0
-       bne.s     findVariable_63
-findVariable_65:
-; break;
-       bra.s     findVariable_33
-findVariable_63:
-       bra       findVariable_31
-findVariable_33:
-; }
-; return 0;
-       clr.l     D0
-findVariable_5:
-       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
-       unlk      A6
-       rts
-; }
-; //-----------------------------------------------------------------------------
-; //
-; //-----------------------------------------------------------------------------
-; char createVariable(unsigned char* pVariable, unsigned char* pValor, char pType)
-; {
-       xdef      _createVariable
-_createVariable:
-       link      A6,#-40
-       movem.l   D2/D3/D4/A2,-(A7)
-       move.l    8(A6),D3
-       lea       _nextAddrSimpVar.L,A2
-; char vRet = 0;
-       clr.b     D4
-; long vTemp = 0;
-       clr.l     -38(A6)
-; char vBuffer [sizeof(long)*8+1];
-; unsigned char* vNextSimpVar;
-; char vLenVar = 0;
-       clr.b     -1(A6)
-; vTemp = *nextAddrSimpVar;
-       move.l    (A2),A0
-       move.l    (A0),-38(A6)
-; vNextSimpVar = *nextAddrSimpVar;
-       move.l    (A2),A0
-       move.l    (A0),D2
-; vLenVar = strlen(pVariable);
-       move.l    D3,-(A7)
-       jsr       _strlen
-       addq.w    #4,A7
-       move.b    D0,-1(A6)
-; *vNextSimpVar++ = pType;
-       move.l    D2,A0
-       addq.l    #1,D2
-       move.b    19(A6),(A0)
-; *vNextSimpVar++ = pVariable[0];
-       move.l    D3,A0
-       move.l    D2,A1
-       addq.l    #1,D2
-       move.b    (A0),(A1)
-; *vNextSimpVar++ = pVariable[1];
-       move.l    D3,A0
-       move.l    D2,A1
-       addq.l    #1,D2
-       move.b    1(A0),(A1)
-; vRet = updateVariable(vNextSimpVar, pValor, pType, 0);
-       clr.l     -(A7)
-       move.b    19(A6),D1
-       ext.w     D1
-       ext.l     D1
-       move.l    D1,-(A7)
-       move.l    12(A6),-(A7)
-       move.l    D2,-(A7)
-       jsr       _updateVariable
-       add.w     #16,A7
-       move.b    D0,D4
-; *nextAddrSimpVar += 8;
-       move.l    (A2),A0
-       addq.l    #8,(A0)
-; return vRet;
-       move.b    D4,D0
-       movem.l   (A7)+,D2/D3/D4/A2
-       unlk      A6
-       rts
-; }
-; //-----------------------------------------------------------------------------
-; //
-; //-----------------------------------------------------------------------------
-; char updateVariable(unsigned long* pVariable, unsigned char* pValor, char pType, char pOper)
-; {
-       xdef      _updateVariable
-_updateVariable:
-       link      A6,#-36
-       movem.l   D2/D3/D4/D5/D6/D7/A2/A3,-(A7)
-       move.l    12(A6),D4
-       lea       _nextAddrString.L,A3
-; long vNumVal = 0;
-       clr.l     D6
-; int ix, iz = 0;
-       clr.l     D5
-; char vBuffer [sizeof(long)*8+1];
-; unsigned char* vNextSimpVar;
-; unsigned char* vNextString;
-; char pNewStr = 0;
-       clr.b     -1(A6)
-; unsigned long vOffSet;
-; //    unsigned char* sqtdtam[20];
-; vNextSimpVar = pVariable;
-       move.l    8(A6),D2
-; *atuVarAddr = pVariable;
-       move.l    _atuVarAddr.L,A0
-       move.l    8(A6),(A0)
-; /*writeLongSerial("Aqui 333.666.0-[");
-; itoa(pVariable,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(pValor,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(pType,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; if (pType == '#' || pType == '%')   // Real ou Inteiro
-       move.b    19(A6),D0
-       cmp.b     #35,D0
-       beq.s     updateVariable_3
-       move.b    19(A6),D0
-       cmp.b     #37,D0
-       bne       updateVariable_1
-updateVariable_3:
-; {
-; if (vNextSimpVar < pStartArrayVar)
-       cmp.l     _pStartArrayVar.L,D2
-       bhs.s     updateVariable_4
-; *vNextSimpVar++ = 0x00;
-       move.l    D2,A0
-       addq.l    #1,D2
-       clr.b     (A0)
-updateVariable_4:
-; *vNextSimpVar++ = pValor[0];
-       move.l    D4,A0
-       move.l    D2,A1
-       addq.l    #1,D2
-       move.b    (A0),(A1)
-; *vNextSimpVar++ = pValor[1];
-       move.l    D4,A0
-       move.l    D2,A1
-       addq.l    #1,D2
-       move.b    1(A0),(A1)
-; *vNextSimpVar++ = pValor[2];
-       move.l    D4,A0
-       move.l    D2,A1
-       addq.l    #1,D2
-       move.b    2(A0),(A1)
-; *vNextSimpVar++ = pValor[3];
-       move.l    D4,A0
-       move.l    D2,A1
-       addq.l    #1,D2
-       move.b    3(A0),(A1)
-       bra       updateVariable_2
-updateVariable_1:
-; }
-; else // String
-; {
-; iz = strlen(pValor);    // Tamanho da strings
-       move.l    D4,-(A7)
-       jsr       _strlen
-       addq.w    #4,A7
-       move.l    D0,D5
-; /*writeLongSerial("Aqui 333.666.1-[");
-; itoa(*vNextSimpVar,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(iz,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(pOper,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; // Se for o mesmo tamanho ou menor, usa a mesma posicao
-; if (*vNextSimpVar <= iz && pOper)
-       move.l    D2,A0
-       move.b    (A0),D0
-       and.l     #255,D0
-       cmp.l     D5,D0
-       bhi       updateVariable_6
-       move.b    23(A6),D0
-       ext.w     D0
-       ext.l     D0
-       tst.l     D0
-       beq       updateVariable_6
-; {
-; vOffSet  = (((unsigned long)*(vNextSimpVar + 1) << 24) & 0xFF000000);
-       move.l    D2,A0
-       move.b    1(A0),D0
-       and.l     #255,D0
-       lsl.l     #8,D0
-       lsl.l     #8,D0
-       lsl.l     #8,D0
-       and.l     #-16777216,D0
-       move.l    D0,D7
-; vOffSet |= (((unsigned long)*(vNextSimpVar + 2) << 16) & 0x00FF0000);
-       move.l    D2,A0
-       move.b    2(A0),D0
-       and.l     #255,D0
-       lsl.l     #8,D0
-       lsl.l     #8,D0
-       and.l     #16711680,D0
-       or.l      D0,D7
-; vOffSet |= (((unsigned long)*(vNextSimpVar + 3) << 8) & 0x0000FF00);
-       move.l    D2,A0
-       move.b    3(A0),D0
-       and.l     #255,D0
-       lsl.l     #8,D0
-       and.l     #65280,D0
-       or.l      D0,D7
-; vOffSet |= ((unsigned long)*(vNextSimpVar + 4) & 0x000000FF);
-       move.l    D2,A0
-       move.b    4(A0),D0
-       and.l     #255,D0
-       and.l     #255,D0
-       or.l      D0,D7
-; vNextString = vOffSet;
-       move.l    D7,D3
-; if (pOper == 2 && vNextString == 0)
-       move.b    23(A6),D0
-       cmp.b     #2,D0
-       bne.s     updateVariable_8
-       tst.l     D3
-       bne.s     updateVariable_8
-; {
-; vNextString = *nextAddrString;
-       move.l    (A3),A0
-       move.l    (A0),D3
-; pNewStr = 1;
-       move.b    #1,-1(A6)
-updateVariable_8:
-       bra.s     updateVariable_7
-updateVariable_6:
-; }
-; }
-; else
-; vNextString = *nextAddrString;
-       move.l    (A3),A0
-       move.l    (A0),D3
-updateVariable_7:
-; vNumVal = vNextString;
-       move.l    D3,D6
-; /*writeLongSerial("Aqui 333.666.2-[");
-; itoa(nextAddrString,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(vNextString,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(vNumVal,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; for (ix = 0; ix < iz; ix++)
-       move.w    #0,A2
-updateVariable_10:
-       move.l    A2,D0
-       cmp.l     D5,D0
-       bge.s     updateVariable_12
-; {
-; *vNextString++ = pValor[ix];
-       move.l    D4,A0
-       move.l    D3,A1
-       addq.l    #1,D3
-       move.b    0(A0,A2.L),(A1)
-       addq.w    #1,A2
-       bra       updateVariable_10
-updateVariable_12:
-; }
-; /*writeLongSerial("Aqui 333.666.3-[");
-; itoa(nextAddrString,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(vNextString,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(vNumVal,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; if (*vNextSimpVar > iz || !pOper || pNewStr)
-       move.l    D2,A0
-       move.b    (A0),D0
-       and.l     #255,D0
-       cmp.l     D5,D0
-       bhi.s     updateVariable_15
-       tst.b     23(A6)
-       bne.s     updateVariable_16
-       moveq     #1,D0
-       bra.s     updateVariable_17
-updateVariable_16:
-       clr.l     D0
-updateVariable_17:
-       ext.w     D0
-       ext.l     D0
-       tst.l     D0
-       bne.s     updateVariable_15
-       move.b    -1(A6),D0
-       ext.w     D0
-       ext.l     D0
-       tst.l     D0
-       beq.s     updateVariable_13
-updateVariable_15:
-; *nextAddrString = vNextString;
-       move.l    (A3),A0
-       move.l    D3,(A0)
-updateVariable_13:
-; /*writeLongSerial("Aqui 333.666.4-[");
-; itoa(vNextString,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(vNumVal,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; *vNextSimpVar++ = iz;
-       move.l    D2,A0
-       addq.l    #1,D2
-       move.b    D5,(A0)
-; /*writeLongSerial("Aqui 333.666.5-[");
-; itoa(vNextString,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; *vNextSimpVar++ = ((vNumVal & 0xFF000000) >>24);
-       move.l    D6,D0
-       and.l     #-16777216,D0
-       lsr.l     #8,D0
-       lsr.l     #8,D0
-       lsr.l     #8,D0
-       move.l    D2,A0
-       addq.l    #1,D2
-       move.b    D0,(A0)
-; *vNextSimpVar++ = ((vNumVal & 0x00FF0000) >>16);
-       move.l    D6,D0
-       and.l     #16711680,D0
-       asr.l     #8,D0
-       asr.l     #8,D0
-       move.l    D2,A0
-       addq.l    #1,D2
-       move.b    D0,(A0)
-; *vNextSimpVar++ = ((vNumVal & 0x0000FF00) >>8);
-       move.l    D6,D0
-       and.l     #65280,D0
-       asr.l     #8,D0
-       move.l    D2,A0
-       addq.l    #1,D2
-       move.b    D0,(A0)
-; *vNextSimpVar++ = (vNumVal & 0x000000FF);
-       move.l    D6,D0
-       and.l     #255,D0
-       move.l    D2,A0
-       addq.l    #1,D2
-       move.b    D0,(A0)
-updateVariable_2:
-; /*writeLongSerial("Aqui 333.666.6-[");
-; itoa(vNextString,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; }
-; /*    *(vNextSimpVar + 1) = 0x00;
-; *(vNextSimpVar + 2) = 0x00;
-; *(vNextSimpVar + 3) = 0x00;
-; *(vNextSimpVar + 4) = 0x00;*/
-; return 0;
-       clr.b     D0
-       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3
-       unlk      A6
-       rts
-; }
-; //--------------------------------------------------------------------------------------
-; char createVariableArray(unsigned char* pVariable, char pType, unsigned int pNumDim, unsigned int *pDim)
-; {
-       xdef      _createVariableArray
-_createVariableArray:
-       link      A6,#-44
-       movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4,-(A7)
-       move.l    20(A6),D5
-       move.l    16(A6),D6
-       lea       _nextAddrArrayVar.L,A3
-       move.l    8(A6),A4
-; char vRet = 0;
-       clr.b     -43(A6)
-; long vTemp = 0;
-       clr.l     -42(A6)
-; unsigned char* vTempC = &vTemp;
-       lea       -42(A6),A0
-       move.l    A0,A2
-; char vBuffer [sizeof(long)*8+1];
-; unsigned char* vNextArrayVar;
-; char vLenVar = 0;
-       clr.b     -5(A6)
-; int ix, vTam;
-; long vAreaFree = (pStartString - *nextAddrArrayVar);
-       move.l    _pStartString.L,D0
-       move.l    (A3),A0
-       sub.l     (A0),D0
-       move.l    D0,-4(A6)
-; long vSizeTotal = 0;
-       moveq     #0,D7
-; //    unsigned char sqtdtam[20];
-; vTemp = *nextAddrArrayVar;
-       move.l    (A3),A0
-       move.l    (A0),-42(A6)
-; vNextArrayVar = *nextAddrArrayVar;
-       move.l    (A3),A0
-       move.l    (A0),D3
-; vLenVar = strlen(pVariable);
-       move.l    A4,-(A7)
-       jsr       _strlen
-       addq.w    #4,A7
-       move.b    D0,-5(A6)
-; *vNextArrayVar++ = pType;
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    15(A6),(A0)
-; *vNextArrayVar++ = pVariable[0];
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    (A4),(A0)
-; *vNextArrayVar++ = pVariable[1];
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    1(A4),(A0)
-; vTam = 0;
-       clr.l     D4
-; for (ix = 0; ix < pNumDim; ix++)
-       clr.l     D2
-createVariableArray_1:
-       cmp.l     D6,D2
-       bhs       createVariableArray_3
-; {
-; // Somando mais 1, porque 0 = 1 em quantidade e e em posicao (igual ao c)
-; pDim[ix] = pDim[ix] /*+ 1*/ ;
-       move.l    D5,A0
-       move.l    D2,D0
-       lsl.l     #2,D0
-       move.l    D5,A1
-       move.l    D2,D1
-       lsl.l     #2,D1
-       move.l    0(A0,D0.L),0(A1,D1.L)
-; // Definir o tamanho do campo de dados do array
-; if (vTam == 0)
-       tst.l     D4
-       bne.s     createVariableArray_4
-; vTam = pDim[ix] /*- 1*/ ;
-       move.l    D5,A0
-       move.l    D2,D0
-       lsl.l     #2,D0
-       move.l    0(A0,D0.L),D4
-       bra.s     createVariableArray_5
-createVariableArray_4:
-; else
-; vTam = vTam * (pDim[ix] /*- 1*/ );
-       move.l    D5,A0
-       move.l    D2,D0
-       lsl.l     #2,D0
-       move.l    D4,-(A7)
-       move.l    0(A0,D0.L),-(A7)
-       jsr       ULMUL
-       move.l    (A7),D0
-       addq.w    #8,A7
-       move.l    D0,D4
-createVariableArray_5:
-       addq.l    #1,D2
-       bra       createVariableArray_1
-createVariableArray_3:
-; /*writeLongSerial("Aqui 333.666.0-[");
-; itoa(vTam,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(ix,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(pDim[ix],sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; }
-; /*writeLongSerial("Aqui 333.666.1-[");
-; itoa(vTam,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(pNumDim,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; if (pType == '$')
-       move.b    15(A6),D0
-       cmp.b     #36,D0
-       bne.s     createVariableArray_6
-; vTam = vTam * 5;
-       move.l    D4,-(A7)
-       pea       5
-       jsr       LMUL
-       move.l    (A7),D4
-       addq.w    #8,A7
-       bra.s     createVariableArray_7
-createVariableArray_6:
-; else
-; vTam = vTam * 4;
-       move.l    D4,-(A7)
-       pea       4
-       jsr       LMUL
-       move.l    (A7),D4
-       addq.w    #8,A7
-createVariableArray_7:
-; /*writeLongSerial("Aqui 333.666.2-[");
-; itoa(pType,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(vTam,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; vSizeTotal = vTam + 8;
-       move.l    D4,D0
-       addq.l    #8,D0
-       move.l    D0,D7
-; vSizeTotal = vSizeTotal + (pNumDim *2);
-       move.l    D7,D0
-       move.l    D6,-(A7)
-       pea       2
-       jsr       ULMUL
-       move.l    (A7),D1
-       addq.w    #8,A7
-       add.l     D1,D0
-       move.l    D0,D7
-; /*writeLongSerial("Aqui 333.666.3-[");
-; itoa(pStartString,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(*nextAddrArrayVar,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(vAreaFree,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]-[");
-; itoa(vSizeTotal,sqtdtam,16);
-; writeLongSerial(sqtdtam);
-; writeLongSerial("]\r\n");*/
-; if (vSizeTotal > vAreaFree)
-       cmp.l     -4(A6),D7
-       ble.s     createVariableArray_8
-; {
-; *vErroProc = 22;
-       move.l    _vErroProc.L,A0
-       move.w    #22,(A0)
-; return 0;
-       clr.b     D0
-       bra       createVariableArray_10
-createVariableArray_8:
-; }
-; // Coloca setup do array
-; vTemp = vTemp + vTam + 8 + (pNumDim * 2);
-       move.l    -42(A6),D0
-       add.l     D4,D0
-       addq.l    #8,D0
-       move.l    D6,-(A7)
-       pea       2
-       jsr       ULMUL
-       move.l    (A7),D1
-       addq.w    #8,A7
-       add.l     D1,D0
-       move.l    D0,-42(A6)
-; *vNextArrayVar++ = vTempC[0];
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    (A2),(A0)
-; *vNextArrayVar++ = vTempC[1];
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    1(A2),(A0)
-; *vNextArrayVar++ = vTempC[2];
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    2(A2),(A0)
-; *vNextArrayVar++ = vTempC[3];
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    3(A2),(A0)
-; *vNextArrayVar++ = pNumDim;
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    D6,(A0)
-; for (ix = 0; ix < pNumDim; ix++)
-       clr.l     D2
-createVariableArray_11:
-       cmp.l     D6,D2
-       bhs       createVariableArray_13
-; {
-; *vNextArrayVar++ = (pDim[ix] >> 8);
-       move.l    D5,A0
-       move.l    D2,D0
-       lsl.l     #2,D0
-       move.l    0(A0,D0.L),D0
-       lsr.l     #8,D0
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    D0,(A0)
-; *vNextArrayVar++ = (pDim[ix] & 0xFF);
-       move.l    D5,A0
-       move.l    D2,D0
-       lsl.l     #2,D0
-       move.l    0(A0,D0.L),D0
-       and.l     #255,D0
-       move.l    D3,A0
-       addq.l    #1,D3
-       move.b    D0,(A0)
-       addq.l    #1,D2
-       bra       createVariableArray_11
-createVariableArray_13:
-; }
-; // Limpa area de dados (zera)
-; for (ix = 0; ix < vTam; ix++)
-       clr.l     D2
-createVariableArray_14:
-       cmp.l     D4,D2
-       bge.s     createVariableArray_16
-; *(vNextArrayVar + ix) = 0x00;
-       move.l    D3,A0
-       clr.b     0(A0,D2.L)
-       addq.l    #1,D2
-       bra       createVariableArray_14
-createVariableArray_16:
-; *nextAddrArrayVar = vTemp;
-       move.l    (A3),A0
-       move.l    -42(A6),(A0)
-; return 0;
-       clr.b     D0
-createVariableArray_10:
-       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4
        unlk      A6
        rts
 ; }
@@ -7587,43 +6170,1671 @@ ustrcmp_3:
        xdef      _getExp
 _getExp:
        link      A6,#-12
-       move.l    A2,-(A7)
-       lea       _vErroProc.L,A2
 ; unsigned char sqtdtam[10];
+; #ifdef USE_ITERATIVE_PARSER
+; parseExpressionIterative(result);
+       move.l    8(A6),-(A7)
+       jsr       _parseExpressionIterative
+       addq.w    #4,A7
+; if (*vErroProc) return;
+       move.l    _vErroProc.L,A0
+       tst.w     (A0)
+       beq.s     getExp_1
+       bra.s     getExp_3
+getExp_1:
+; putback(); // return last token read to input stream
+       jsr       _putback
+; return;
+getExp_3:
+       unlk      A6
+       rts
+; #else
+; nextToken();
+; if (*vErroProc) return;
+; if (!*token) {
+; *vErroProc = 2;
+; return;
+; }
+; level2(result);
+; if (*vErroProc) return;
+; putback(); // return last token read to input stream
+; return;
+; #endif
+; }
+; // -----------------------------------------------------------------------------
+; // Precedência dos operadores
+; // -----------------------------------------------------------------------------
+; int getPrec(unsigned char op)
+; {
+       xdef      _getPrec
+_getPrec:
+       link      A6,#0
+; switch (op)
+       move.b    11(A6),D0
+       and.l     #255,D0
+       cmp.l     #62,D0
+       beq       getPrec_4
+       bhi       getPrec_18
+       cmp.l     #45,D0
+       beq       getPrec_12
+       bhi.s     getPrec_19
+       cmp.l     #42,D0
+       beq       getPrec_14
+       bhi.s     getPrec_20
+       cmp.l     #40,D0
+       beq       getPrec_3
+       bra       getPrec_1
+getPrec_20:
+       cmp.l     #43,D0
+       beq       getPrec_12
+       bra       getPrec_1
+getPrec_19:
+       cmp.l     #60,D0
+       beq       getPrec_4
+       bhi.s     getPrec_21
+       cmp.l     #47,D0
+       beq       getPrec_14
+       bra       getPrec_1
+getPrec_21:
+       cmp.l     #61,D0
+       beq       getPrec_4
+       bra       getPrec_1
+getPrec_18:
+       cmp.l     #245,D0
+       beq       getPrec_4
+       bhi.s     getPrec_22
+       cmp.l     #243,D0
+       beq       getPrec_10
+       bhi.s     getPrec_23
+       cmp.l     #94,D0
+       beq       getPrec_16
+       bra       getPrec_1
+getPrec_23:
+       cmp.l     #244,D0
+       beq.s     getPrec_10
+       bra       getPrec_1
+getPrec_22:
+       cmp.l     #247,D0
+       beq.s     getPrec_4
+       bhi.s     getPrec_1
+       cmp.l     #246,D0
+       beq.s     getPrec_4
+       bra.s     getPrec_1
+getPrec_3:
+; {
+; case '(':
+; return 0;
+       clr.l     D0
+       bra.s     getPrec_24
+getPrec_4:
+; case '=':
+; case '<':
+; case '>':
+; case 0xF5:
+; case 0xF6:
+; case 0xF7:
+; return 1; // comparadores
+       moveq     #1,D0
+       bra.s     getPrec_24
+getPrec_10:
+; case 0xF3:
+; case 0xF4:
+; return 1; // AND, OR
+       moveq     #1,D0
+       bra.s     getPrec_24
+getPrec_12:
+; case '+':
+; case '-':
+; return 2;
+       moveq     #2,D0
+       bra.s     getPrec_24
+getPrec_14:
+; case '*':
+; case '/':
+; return 3;
+       moveq     #3,D0
+       bra.s     getPrec_24
+getPrec_16:
+; case '^':
+; return 4;
+       moveq     #4,D0
+       bra.s     getPrec_24
+getPrec_1:
+; default:
+; return 0;
+       clr.l     D0
+getPrec_24:
+       unlk      A6
+       rts
+; }
+; }
+; // -----------------------------------------------------------------------------
+; // Associatividade: ^ é direita, resto esquerda
+; // -----------------------------------------------------------------------------
+; int isRightAssoc(char op) {
+       xdef      _isRightAssoc
+_isRightAssoc:
+       link      A6,#0
+; return (op == '^');
+       move.b    11(A6),D0
+       cmp.b     #94,D0
+       bne.s     isRightAssoc_1
+       moveq     #1,D0
+       bra.s     isRightAssoc_2
+isRightAssoc_1:
+       clr.l     D0
+isRightAssoc_2:
+       unlk      A6
+       rts
+; }
+; // -----------------------------------------------------------------------------
+; // Parser iterativo (experimental, ativado por USE_ITERATIVE_PARSER)
+; // -----------------------------------------------------------------------------
+; void parseExpressionIterative(unsigned char *result) {
+       xdef      _parseExpressionIterative
+_parseExpressionIterative:
+       link      A6,#-40
+       movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
+       lea       _vErroProc.L,A2
+       lea       @basic_temp.L,A3
+       lea       @basic_valTypeStack.L,A4
+       lea       _token.L,A5
+; int opTop = -1, valTop = -1;
+       moveq     #-1,D7
+       moveq     #-1,D3
+; unsigned char op, currentOp;
+; char typeA, typeB;
+; unsigned char tokenType, tokenChar, valueType;
+; unsigned char *a, *b;
+; unsigned char *vRet;
+; unsigned long numberValue;
+; unsigned char *numberBytes;
+; unsigned char tokenLen;
+; unsigned char *commandPointer;
+; int expectValue = 1; // Para detectar unário
+       move.l    #1,-14(A6)
+; char pendingUnary = 0; // 0: nenhum, '+': unário +, '-': unário -
+       clr.b     -9(A6)
+; int currentPrec, topPrec;
 ; nextToken();
        jsr       _nextToken
 ; if (*vErroProc) return;
        move.l    (A2),A0
        tst.w     (A0)
-       beq.s     getExp_1
-       bra.s     getExp_3
-getExp_1:
+       beq.s     parseExpressionIterative_1
+       bra       parseExpressionIterative_3
+parseExpressionIterative_1:
 ; if (!*token) {
-       move.l    _token.L,A0
+       move.l    (A5),A0
        tst.b     (A0)
-       bne.s     getExp_4
+       bne.s     parseExpressionIterative_4
 ; *vErroProc = 2;
        move.l    (A2),A0
        move.w    #2,(A0)
 ; return;
-       bra.s     getExp_3
-getExp_4:
+       bra       parseExpressionIterative_3
+parseExpressionIterative_4:
 ; }
-; level2(result);
-       move.l    8(A6),-(A7)
-       jsr       _level2
+; while (1) {
+parseExpressionIterative_6:
+; tokenType = *token_type;
+       move.l    _token_type.L,A0
+       move.b    (A0),-35(A6)
+; tokenChar = *token;
+       move.l    (A5),A0
+       move.b    (A0),-34(A6)
+; if (expectValue) {
+       tst.l     -14(A6)
+       beq       parseExpressionIterative_64
+; if (tokenType == DELIMITER && (tokenChar == '+' || tokenChar == '-')) {
+       move.b    -35(A6),D0
+       cmp.b     #1,D0
+       bne.s     parseExpressionIterative_11
+       move.b    -34(A6),D0
+       cmp.b     #43,D0
+       beq.s     parseExpressionIterative_13
+       move.b    -34(A6),D0
+       cmp.b     #45,D0
+       bne.s     parseExpressionIterative_11
+parseExpressionIterative_13:
+; pendingUnary = tokenChar;
+       move.b    -34(A6),-9(A6)
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     parseExpressionIterative_14
+       bra       parseExpressionIterative_3
+parseExpressionIterative_14:
+; continue;
+       bra       parseExpressionIterative_7
+parseExpressionIterative_11:
+; }
+; if (tokenType == NUMBER || tokenType == VARIABLE || tokenType == QUOTE || tokenType == COMMAND) {
+       move.b    -35(A6),D0
+       cmp.b     #3,D0
+       beq.s     parseExpressionIterative_18
+       move.b    -35(A6),D0
+       cmp.b     #2,D0
+       beq.s     parseExpressionIterative_18
+       move.b    -35(A6),D0
+       cmp.b     #6,D0
+       beq.s     parseExpressionIterative_18
+       move.b    -35(A6),D0
+       cmp.b     #4,D0
+       bne       parseExpressionIterative_16
+parseExpressionIterative_18:
+; if (tokenType == VARIABLE) {
+       move.b    -35(A6),D0
+       cmp.b     #2,D0
+       bne       parseExpressionIterative_19
+; tokenLen = 0;
+       clr.b     -19(A6)
+; while (token[tokenLen])
+parseExpressionIterative_21:
+       move.l    (A5),A0
+       move.b    -19(A6),D0
+       and.l     #255,D0
+       tst.b     0(A0,D0.L)
+       beq.s     parseExpressionIterative_23
+; tokenLen++;
+       addq.b    #1,-19(A6)
+       bra       parseExpressionIterative_21
+parseExpressionIterative_23:
+; if (tokenLen < 3)
+       move.b    -19(A6),D0
+       cmp.b     #3,D0
+       bhs.s     parseExpressionIterative_24
+; {
+; valueType = VARTYPEDEFAULT;
+       move.b    #35,-33(A6)
+; if (tokenLen == 2 && token[1] < 0x30)
+       move.b    -19(A6),D0
+       cmp.b     #2,D0
+       bne.s     parseExpressionIterative_26
+       move.l    (A5),A0
+       move.b    1(A0),D0
+       cmp.b     #48,D0
+       bhs.s     parseExpressionIterative_26
+; valueType = token[1];
+       move.l    (A5),A0
+       move.b    1(A0),-33(A6)
+parseExpressionIterative_26:
+       bra.s     parseExpressionIterative_25
+parseExpressionIterative_24:
+; }
+; else
+; {
+; valueType = token[2];
+       move.l    (A5),A0
+       move.b    2(A0),-33(A6)
+parseExpressionIterative_25:
+; }
+; vRet = find_var((char*)token);
+       move.l    (A5),-(A7)
+       jsr       _find_var
+       addq.w    #4,A7
+       move.l    D0,-32(A6)
+; if (vRet == 0)
+       move.l    -32(A6),D0
+       bne.s     parseExpressionIterative_28
+; {
+; if (*vErroProc == 0)
+       move.l    (A2),A0
+       move.w    (A0),D0
+       bne.s     parseExpressionIterative_30
+; *vErroProc = 4;
+       move.l    (A2),A0
+       move.w    #4,(A0)
+parseExpressionIterative_30:
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_28:
+; }
+; valueType = *value_type;
+       move.l    _value_type.L,A0
+       move.b    (A0),-33(A6)
+; if (valueType == '$')
+       move.b    -33(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_32
+; strcpy((char*)temp, (char*)vRet);
+       move.l    -32(A6),-(A7)
+       move.l    A3,-(A7)
+       jsr       _strcpy
+       addq.w    #8,A7
+       bra.s     parseExpressionIterative_33
+parseExpressionIterative_32:
+; else
+; {
+; temp[0] = vRet[0];
+       move.l    -32(A6),A0
+       move.b    (A0),(A3)
+; temp[1] = vRet[1];
+       move.l    -32(A6),A0
+       move.b    1(A0),1(A3)
+; temp[2] = vRet[2];
+       move.l    -32(A6),A0
+       move.b    2(A0),2(A3)
+; temp[3] = vRet[3];
+       move.l    -32(A6),A0
+       move.b    3(A0),3(A3)
+parseExpressionIterative_33:
+; }
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     parseExpressionIterative_34
+       bra       parseExpressionIterative_3
+parseExpressionIterative_34:
+       bra       parseExpressionIterative_52
+parseExpressionIterative_19:
+; }
+; else if (tokenType == QUOTE) {
+       move.b    -35(A6),D0
+       cmp.b     #6,D0
+       bne.s     parseExpressionIterative_36
+; valueType = '$';
+       move.b    #36,-33(A6)
+; strcpy((char*)temp, (char*)token);
+       move.l    (A5),-(A7)
+       move.l    A3,-(A7)
+       jsr       _strcpy
+       addq.w    #8,A7
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     parseExpressionIterative_38
+       bra       parseExpressionIterative_3
+parseExpressionIterative_38:
+       bra       parseExpressionIterative_52
+parseExpressionIterative_36:
+; }
+; else if (tokenType == NUMBER) {
+       move.b    -35(A6),D0
+       cmp.b     #3,D0
+       bne       parseExpressionIterative_40
+; if (strchr((char*)token, '.'))
+       pea       46
+       move.l    (A5),-(A7)
+       jsr       _strchr
+       addq.w    #8,A7
+       tst.l     D0
+       beq.s     parseExpressionIterative_42
+; {
+; valueType = '#';
+       move.b    #35,-33(A6)
+; numberValue = floatStringToFpp(token);
+       move.l    (A5),-(A7)
+       jsr       _floatStringToFpp
+       addq.w    #4,A7
+       move.l    D0,-28(A6)
+; if (*vErroProc) return;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     parseExpressionIterative_44
+       bra       parseExpressionIterative_3
+parseExpressionIterative_44:
+       bra.s     parseExpressionIterative_43
+parseExpressionIterative_42:
+; }
+; else
+; {
+; valueType = '%';
+       move.b    #37,-33(A6)
+; numberValue = atoi((char*)token);
+       move.l    (A5),-(A7)
+       jsr       _atoi
+       addq.w    #4,A7
+       move.l    D0,-28(A6)
+parseExpressionIterative_43:
+; }
+; numberBytes = (unsigned char*)&numberValue;
+       lea       -28(A6),A0
+       move.l    A0,-24(A6)
+; temp[0] = numberBytes[0];
+       move.l    -24(A6),A0
+       move.b    (A0),(A3)
+; temp[1] = numberBytes[1];
+       move.l    -24(A6),A0
+       move.b    1(A0),1(A3)
+; temp[2] = numberBytes[2];
+       move.l    -24(A6),A0
+       move.b    2(A0),2(A3)
+; temp[3] = numberBytes[3];
+       move.l    -24(A6),A0
+       move.b    3(A0),3(A3)
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     parseExpressionIterative_46
+       bra       parseExpressionIterative_3
+parseExpressionIterative_46:
+       bra       parseExpressionIterative_52
+parseExpressionIterative_40:
+; }
+; else {
+; commandPointer = *pointerRunProg;
+       move.l    _pointerRunProg.L,A0
+       move.l    (A0),-18(A6)
+; *token = *commandPointer;
+       move.l    -18(A6),A0
+       move.l    (A5),A1
+       move.b    (A0),(A1)
+; *pointerRunProg = *pointerRunProg + 1;
+       move.l    _pointerRunProg.L,A0
+       addq.l    #1,(A0)
+; executeToken(*commandPointer);
+       move.l    -18(A6),A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       _executeToken
        addq.w    #4,A7
 ; if (*vErroProc) return;
        move.l    (A2),A0
        tst.w     (A0)
-       beq.s     getExp_6
-       bra.s     getExp_3
-getExp_6:
-; putback(); // return last token read to input stream
-       jsr       _putback
+       beq.s     parseExpressionIterative_48
+       bra       parseExpressionIterative_3
+parseExpressionIterative_48:
+; valueType = *value_type;
+       move.l    _value_type.L,A0
+       move.b    (A0),-33(A6)
+; if (valueType == '$')
+       move.b    -33(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_50
+; strcpy((char*)temp, (char*)token);
+       move.l    (A5),-(A7)
+       move.l    A3,-(A7)
+       jsr       _strcpy
+       addq.w    #8,A7
+       bra.s     parseExpressionIterative_51
+parseExpressionIterative_50:
+; else
+; {
+; temp[0] = token[0];
+       move.l    (A5),A0
+       move.b    (A0),(A3)
+; temp[1] = token[1];
+       move.l    (A5),A0
+       move.b    1(A0),1(A3)
+; temp[2] = token[2];
+       move.l    (A5),A0
+       move.b    2(A0),2(A3)
+; temp[3] = token[3];
+       move.l    (A5),A0
+       move.b    3(A0),3(A3)
+parseExpressionIterative_51:
+; }
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     parseExpressionIterative_52
+       bra       parseExpressionIterative_3
+parseExpressionIterative_52:
+; }
+; if (pendingUnary) {
+       tst.b     -9(A6)
+       beq       parseExpressionIterative_54
+; if (valueType == '$') {
+       move.b    -33(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_56
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
 ; return;
-getExp_3:
-       move.l    (A7)+,A2
+       bra       parseExpressionIterative_3
+parseExpressionIterative_56:
+; }
+; if (valueType == '#')
+       move.b    -33(A6),D0
+       cmp.b     #35,D0
+       bne.s     parseExpressionIterative_58
+; unaryReal(pendingUnary, (int*)temp);
+       move.l    A3,-(A7)
+       move.b    -9(A6),D1
+       ext.w     D1
+       ext.l     D1
+       move.l    D1,-(A7)
+       jsr       _unaryReal
+       addq.w    #8,A7
+       bra.s     parseExpressionIterative_59
+parseExpressionIterative_58:
+; else
+; unaryInt(pendingUnary, (int*)temp);
+       move.l    A3,-(A7)
+       move.b    -9(A6),D1
+       ext.w     D1
+       ext.l     D1
+       move.l    D1,-(A7)
+       jsr       _unaryInt
+       addq.w    #8,A7
+parseExpressionIterative_59:
+; pendingUnary = 0;
+       clr.b     -9(A6)
+parseExpressionIterative_54:
+; }
+; if (valTop + 1 >= PARSER_STACK_SIZE) {
+       move.l    D3,D0
+       addq.l    #1,D0
+       cmp.l     #32,D0
+       blt.s     parseExpressionIterative_60
+; *vErroProc = 14;
+       move.l    (A2),A0
+       move.w    #14,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_60:
+; }
+; valTop++;
+       addq.l    #1,D3
+; if (valueType == '$')
+       move.b    -33(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_62
+; strcpy((char*)valStack[valTop], (char*)temp);
+       move.l    A3,-(A7)
+       lea       @basic_valStack.L,A0
+       move.l    D3,D1
+       muls      #50,D1
+       add.l     D1,A0
+       move.l    A0,-(A7)
+       jsr       _strcpy
+       addq.w    #8,A7
+       bra.s     parseExpressionIterative_63
+parseExpressionIterative_62:
+; else
+; *(unsigned int*)valStack[valTop] = *(unsigned int*)temp;
+       lea       @basic_valStack.L,A0
+       move.l    D3,D0
+       muls      #50,D0
+       add.l     D0,A0
+       move.l    (A3),(A0)
+parseExpressionIterative_63:
+; valTypeStack[valTop] = valueType;
+       move.b    -33(A6),0(A4,D3.L)
+; expectValue = 0;
+       clr.l     -14(A6)
+; continue;
+       bra       parseExpressionIterative_7
+parseExpressionIterative_16:
+; }
+; if (tokenChar == '(') {
+       move.b    -34(A6),D0
+       cmp.b     #40,D0
+       bne       parseExpressionIterative_64
+; if (pendingUnary) {
+       tst.b     -9(A6)
+       beq       parseExpressionIterative_66
+; if (pendingUnary == '-') {
+       move.b    -9(A6),D0
+       cmp.b     #45,D0
+       bne       parseExpressionIterative_68
+; if (valTop + 1 >= PARSER_STACK_SIZE) {
+       move.l    D3,D0
+       addq.l    #1,D0
+       cmp.l     #32,D0
+       blt.s     parseExpressionIterative_70
+; *vErroProc = 14;
+       move.l    (A2),A0
+       move.w    #14,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_70:
+; }
+; valTop++;
+       addq.l    #1,D3
+; *(unsigned int*)valStack[valTop] = 0;
+       lea       @basic_valStack.L,A0
+       move.l    D3,D0
+       muls      #50,D0
+       add.l     D0,A0
+       clr.l     (A0)
+; valTypeStack[valTop] = '%';
+       move.b    #37,0(A4,D3.L)
+; if (opTop + 1 >= PARSER_STACK_SIZE) {
+       move.l    D7,D0
+       addq.l    #1,D0
+       cmp.l     #32,D0
+       blt.s     parseExpressionIterative_72
+; *vErroProc = 14;
+       move.l    (A2),A0
+       move.w    #14,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_72:
+; }
+; opTop++;
+       addq.l    #1,D7
+; opStack[opTop] = '-';
+       lea       @basic_opStack.L,A0
+       move.b    #45,0(A0,D7.L)
+; opPrecStack[opTop] = 2;
+       lea       @basic_opPrecStack.L,A0
+       move.b    #2,0(A0,D7.L)
+parseExpressionIterative_68:
+; }
+; pendingUnary = 0;
+       clr.b     -9(A6)
+parseExpressionIterative_66:
+; }
+; if (opTop + 1 >= PARSER_STACK_SIZE) {
+       move.l    D7,D0
+       addq.l    #1,D0
+       cmp.l     #32,D0
+       blt.s     parseExpressionIterative_74
+; *vErroProc = 14;
+       move.l    (A2),A0
+       move.w    #14,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_74:
+; }
+; opTop++;
+       addq.l    #1,D7
+; opStack[opTop] = '(';
+       lea       @basic_opStack.L,A0
+       move.b    #40,0(A0,D7.L)
+; opPrecStack[opTop] = 0;
+       lea       @basic_opPrecStack.L,A0
+       clr.b     0(A0,D7.L)
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     parseExpressionIterative_76
+       bra       parseExpressionIterative_3
+parseExpressionIterative_76:
+; continue;
+       bra       parseExpressionIterative_7
+parseExpressionIterative_64:
+; }
+; }
+; if (tokenChar == ')') {
+       move.b    -34(A6),D0
+       cmp.b     #41,D0
+       bne       parseExpressionIterative_78
+; char foundOpenParen = 0;
+       clr.b     -38(A6)
+; while (opTop >= 0) {
+parseExpressionIterative_80:
+       cmp.l     #0,D7
+       blt       parseExpressionIterative_82
+; if (opStack[opTop] == '(') {
+       lea       @basic_opStack.L,A0
+       move.b    0(A0,D7.L),D0
+       cmp.b     #40,D0
+       bne.s     parseExpressionIterative_83
+; foundOpenParen = 1;
+       move.b    #1,-38(A6)
+; break;
+       bra       parseExpressionIterative_82
+parseExpressionIterative_83:
+; }
+; op = opStack[opTop--];
+       move.l    D7,D0
+       subq.l    #1,D7
+       lea       @basic_opStack.L,A0
+       move.b    0(A0,D0.L),D2
+; if (valTop < 1) {
+       cmp.l     #1,D3
+       bge.s     parseExpressionIterative_85
+; *vErroProc = 14;
+       move.l    (A2),A0
+       move.w    #14,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_85:
+; }
+; b = valStack[valTop];
+       lea       @basic_valStack.L,A0
+       move.l    D3,D0
+       muls      #50,D0
+       add.l     D0,A0
+       move.l    A0,D6
+; typeB = valTypeStack[valTop];
+       move.b    0(A4,D3.L),-36(A6)
+; valTop--;
+       subq.l    #1,D3
+; a = valStack[valTop];
+       lea       @basic_valStack.L,A0
+       move.l    D3,D0
+       muls      #50,D0
+       add.l     D0,A0
+       move.l    A0,D4
+; typeA = valTypeStack[valTop];
+       move.b    0(A4,D3.L),D5
+; if (typeA != typeB) {
+       cmp.b     -36(A6),D5
+       beq       parseExpressionIterative_93
+; if (typeA == '$' || typeB == '$') {
+       cmp.b     #36,D5
+       beq.s     parseExpressionIterative_91
+       move.b    -36(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_89
+parseExpressionIterative_91:
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_89:
+; }
+; if (typeA == '#')
+       cmp.b     #35,D5
+       bne.s     parseExpressionIterative_92
+; *(unsigned int*)b = fppReal(*(unsigned int*)b);
+       move.l    D6,A0
+       move.l    (A0),-(A7)
+       jsr       _fppReal
+       addq.w    #4,A7
+       move.l    D6,A0
+       move.l    D0,(A0)
+       bra.s     parseExpressionIterative_93
+parseExpressionIterative_92:
+; else {
+; *(unsigned int*)a = fppReal(*(unsigned int*)a);
+       move.l    D4,A0
+       move.l    (A0),-(A7)
+       jsr       _fppReal
+       addq.w    #4,A7
+       move.l    D4,A0
+       move.l    D0,(A0)
+; typeA = '#';
+       moveq     #35,D5
+parseExpressionIterative_93:
+; }
+; }
+; if (op == 0xF3 || op == 0xF4) {
+       and.w     #255,D2
+       cmp.w     #243,D2
+       beq.s     parseExpressionIterative_96
+       and.w     #255,D2
+       cmp.w     #244,D2
+       bne       parseExpressionIterative_94
+parseExpressionIterative_96:
+; if (typeA == '$' || typeB == '$') {
+       cmp.b     #36,D5
+       beq.s     parseExpressionIterative_99
+       move.b    -36(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_97
+parseExpressionIterative_99:
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_97:
+; }
+; if (op == 0xF3)
+       and.w     #255,D2
+       cmp.w     #243,D2
+       bne.s     parseExpressionIterative_100
+; *(int*)a = (*(int*)a && *(int*)b);
+       move.l    D4,A0
+       tst.l     (A0)
+       beq.s     parseExpressionIterative_102
+       move.l    D6,A0
+       tst.l     (A0)
+       beq.s     parseExpressionIterative_102
+       moveq     #1,D0
+       bra.s     parseExpressionIterative_103
+parseExpressionIterative_102:
+       clr.l     D0
+parseExpressionIterative_103:
+       move.l    D4,A0
+       move.l    D0,(A0)
+       bra.s     parseExpressionIterative_101
+parseExpressionIterative_100:
+; else
+; *(int*)a = (*(int*)a || *(int*)b);
+       move.l    D4,A0
+       tst.l     (A0)
+       bne.s     parseExpressionIterative_106
+       move.l    D6,A0
+       tst.l     (A0)
+       beq.s     parseExpressionIterative_104
+parseExpressionIterative_106:
+       moveq     #1,D0
+       bra.s     parseExpressionIterative_105
+parseExpressionIterative_104:
+       clr.l     D0
+parseExpressionIterative_105:
+       move.l    D4,A0
+       move.l    D0,(A0)
+parseExpressionIterative_101:
+; valTypeStack[valTop] = '%';
+       move.b    #37,0(A4,D3.L)
+       bra       parseExpressionIterative_108
+parseExpressionIterative_94:
+; } else if (op == '=' || op == '<' || op == '>' || op == 0xF5 || op == 0xF6 || op == 0xF7) {
+       cmp.b     #61,D2
+       beq.s     parseExpressionIterative_109
+       cmp.b     #60,D2
+       beq.s     parseExpressionIterative_109
+       cmp.b     #62,D2
+       beq.s     parseExpressionIterative_109
+       and.w     #255,D2
+       cmp.w     #245,D2
+       beq.s     parseExpressionIterative_109
+       and.w     #255,D2
+       cmp.w     #246,D2
+       beq.s     parseExpressionIterative_109
+       and.w     #255,D2
+       cmp.w     #247,D2
+       bne       parseExpressionIterative_107
+parseExpressionIterative_109:
+; if (typeA == '$')
+       cmp.b     #36,D5
+       bne.s     parseExpressionIterative_110
+; logicalString(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _logicalString
+       add.w     #12,A7
+       bra.s     parseExpressionIterative_113
+parseExpressionIterative_110:
+; else if (typeA == '#')
+       cmp.b     #35,D5
+       bne.s     parseExpressionIterative_112
+; logicalNumericFloat(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _logicalNumericFloat
+       add.w     #12,A7
+       bra.s     parseExpressionIterative_113
+parseExpressionIterative_112:
+; else
+; logicalNumericInt(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _logicalNumericInt
+       add.w     #12,A7
+parseExpressionIterative_113:
+; valTypeStack[valTop] = '%';
+       move.b    #37,0(A4,D3.L)
+       bra       parseExpressionIterative_108
+parseExpressionIterative_107:
+; } else {
+; if (typeA == '#')
+       cmp.b     #35,D5
+       bne.s     parseExpressionIterative_114
+; arithReal(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       ext.w     D2
+       ext.l     D2
+       move.l    D2,-(A7)
+       jsr       _arithReal
+       add.w     #12,A7
+       bra.s     parseExpressionIterative_115
+parseExpressionIterative_114:
+; else
+; arithInt(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       ext.w     D2
+       ext.l     D2
+       move.l    D2,-(A7)
+       jsr       _arithInt
+       add.w     #12,A7
+parseExpressionIterative_115:
+; valTypeStack[valTop] = typeA;
+       move.b    D5,0(A4,D3.L)
+parseExpressionIterative_108:
+       bra       parseExpressionIterative_80
+parseExpressionIterative_82:
+; }
+; }
+; if (foundOpenParen) {
+       tst.b     -38(A6)
+       beq.s     parseExpressionIterative_116
+; opTop--;
+       subq.l    #1,D7
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     parseExpressionIterative_118
+       bra       parseExpressionIterative_3
+parseExpressionIterative_118:
+; expectValue = 0;
+       clr.l     -14(A6)
+; continue;
+       bra       parseExpressionIterative_7
+parseExpressionIterative_116:
+; }
+; break;
+       bra       parseExpressionIterative_8
+parseExpressionIterative_78:
+; }
+; if (tokenChar == '+' || tokenChar == '-' || tokenChar == '*' || tokenChar == '/' || tokenChar == '^' ||
+       move.b    -34(A6),D0
+       cmp.b     #43,D0
+       beq       parseExpressionIterative_122
+       move.b    -34(A6),D0
+       cmp.b     #45,D0
+       beq       parseExpressionIterative_122
+       move.b    -34(A6),D0
+       cmp.b     #42,D0
+       beq       parseExpressionIterative_122
+       move.b    -34(A6),D0
+       cmp.b     #47,D0
+       beq       parseExpressionIterative_122
+       move.b    -34(A6),D0
+       cmp.b     #94,D0
+       beq       parseExpressionIterative_122
+       move.b    -34(A6),D0
+       cmp.b     #61,D0
+       beq       parseExpressionIterative_122
+       move.b    -34(A6),D0
+       cmp.b     #60,D0
+       beq       parseExpressionIterative_122
+       move.b    -34(A6),D0
+       cmp.b     #62,D0
+       beq       parseExpressionIterative_122
+       move.b    -34(A6),D0
+       and.w     #255,D0
+       cmp.w     #245,D0
+       beq       parseExpressionIterative_122
+       move.b    -34(A6),D0
+       and.w     #255,D0
+       cmp.w     #246,D0
+       beq.s     parseExpressionIterative_122
+       move.b    -34(A6),D0
+       and.w     #255,D0
+       cmp.w     #247,D0
+       beq.s     parseExpressionIterative_122
+       move.b    -34(A6),D0
+       and.w     #255,D0
+       cmp.w     #243,D0
+       beq.s     parseExpressionIterative_122
+       move.b    -34(A6),D0
+       and.w     #255,D0
+       cmp.w     #244,D0
+       bne       parseExpressionIterative_120
+parseExpressionIterative_122:
+; tokenChar == '=' || tokenChar == '<' || tokenChar == '>' || tokenChar == 0xF5 || tokenChar == 0xF6 || tokenChar == 0xF7 ||
+; tokenChar == 0xF3 || tokenChar == 0xF4) {
+; currentOp = tokenChar;
+       move.b    -34(A6),-37(A6)
+; switch ((unsigned char)currentOp) {
+       move.b    -37(A6),D0
+       and.l     #255,D0
+       cmp.l     #62,D0
+       beq       parseExpressionIterative_125
+       bhi       parseExpressionIterative_139
+       cmp.l     #47,D0
+       beq       parseExpressionIterative_135
+       bhi.s     parseExpressionIterative_140
+       cmp.l     #43,D0
+       beq       parseExpressionIterative_133
+       bhi.s     parseExpressionIterative_141
+       cmp.l     #42,D0
+       beq       parseExpressionIterative_135
+       bra       parseExpressionIterative_123
+parseExpressionIterative_141:
+       cmp.l     #45,D0
+       beq       parseExpressionIterative_133
+       bra       parseExpressionIterative_123
+parseExpressionIterative_140:
+       cmp.l     #61,D0
+       beq       parseExpressionIterative_125
+       bhi       parseExpressionIterative_123
+       cmp.l     #60,D0
+       beq       parseExpressionIterative_125
+       bra       parseExpressionIterative_123
+parseExpressionIterative_139:
+       cmp.l     #245,D0
+       beq       parseExpressionIterative_125
+       bhi.s     parseExpressionIterative_142
+       cmp.l     #243,D0
+       beq.s     parseExpressionIterative_125
+       bhi.s     parseExpressionIterative_143
+       cmp.l     #94,D0
+       beq       parseExpressionIterative_137
+       bra       parseExpressionIterative_123
+parseExpressionIterative_143:
+       cmp.l     #244,D0
+       beq.s     parseExpressionIterative_125
+       bra.s     parseExpressionIterative_123
+parseExpressionIterative_142:
+       cmp.l     #247,D0
+       beq.s     parseExpressionIterative_125
+       bhi.s     parseExpressionIterative_123
+       cmp.l     #246,D0
+       beq.s     parseExpressionIterative_125
+       bra.s     parseExpressionIterative_123
+parseExpressionIterative_125:
+; case '=':
+; case '<':
+; case '>':
+; case 0xF5:
+; case 0xF6:
+; case 0xF7:
+; case 0xF3:
+; case 0xF4:
+; currentPrec = 1;
+       move.l    #1,-8(A6)
+; break;
+       bra.s     parseExpressionIterative_124
+parseExpressionIterative_133:
+; case '+':
+; case '-':
+; currentPrec = 2;
+       move.l    #2,-8(A6)
+; break;
+       bra.s     parseExpressionIterative_124
+parseExpressionIterative_135:
+; case '*':
+; case '/':
+; currentPrec = 3;
+       move.l    #3,-8(A6)
+; break;
+       bra.s     parseExpressionIterative_124
+parseExpressionIterative_137:
+; case '^':
+; currentPrec = 4;
+       move.l    #4,-8(A6)
+; break;
+       bra.s     parseExpressionIterative_124
+parseExpressionIterative_123:
+; default:
+; currentPrec = 0;
+       clr.l     -8(A6)
+; break;
+parseExpressionIterative_124:
+; }
+; while (opTop >= 0) {
+parseExpressionIterative_144:
+       cmp.l     #0,D7
+       blt       parseExpressionIterative_146
+; topPrec = opPrecStack[opTop];
+       lea       @basic_opPrecStack.L,A0
+       move.b    0(A0,D7.L),D0
+       and.l     #255,D0
+       move.l    D0,-4(A6)
+; if (topPrec < currentPrec)
+       move.l    -4(A6),D0
+       cmp.l     -8(A6),D0
+       bge.s     parseExpressionIterative_147
+; break;
+       bra       parseExpressionIterative_146
+parseExpressionIterative_147:
+; if (currentOp == '^' && topPrec == currentPrec)
+       move.b    -37(A6),D0
+       cmp.b     #94,D0
+       bne.s     parseExpressionIterative_149
+       move.l    -4(A6),D0
+       cmp.l     -8(A6),D0
+       bne.s     parseExpressionIterative_149
+; break;
+       bra       parseExpressionIterative_146
+parseExpressionIterative_149:
+; op = opStack[opTop--];
+       move.l    D7,D0
+       subq.l    #1,D7
+       lea       @basic_opStack.L,A0
+       move.b    0(A0,D0.L),D2
+; if (valTop < 1) {
+       cmp.l     #1,D3
+       bge.s     parseExpressionIterative_151
+; *vErroProc = 14;
+       move.l    (A2),A0
+       move.w    #14,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_151:
+; }
+; b = valStack[valTop];
+       lea       @basic_valStack.L,A0
+       move.l    D3,D0
+       muls      #50,D0
+       add.l     D0,A0
+       move.l    A0,D6
+; typeB = valTypeStack[valTop];
+       move.b    0(A4,D3.L),-36(A6)
+; valTop--;
+       subq.l    #1,D3
+; a = valStack[valTop];
+       lea       @basic_valStack.L,A0
+       move.l    D3,D0
+       muls      #50,D0
+       add.l     D0,A0
+       move.l    A0,D4
+; typeA = valTypeStack[valTop];
+       move.b    0(A4,D3.L),D5
+; if (typeA != typeB) {
+       cmp.b     -36(A6),D5
+       beq       parseExpressionIterative_159
+; if (typeA == '$' || typeB == '$') {
+       cmp.b     #36,D5
+       beq.s     parseExpressionIterative_157
+       move.b    -36(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_155
+parseExpressionIterative_157:
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_155:
+; }
+; if (typeA == '#')
+       cmp.b     #35,D5
+       bne.s     parseExpressionIterative_158
+; *(unsigned int*)b = fppReal(*(unsigned int*)b);
+       move.l    D6,A0
+       move.l    (A0),-(A7)
+       jsr       _fppReal
+       addq.w    #4,A7
+       move.l    D6,A0
+       move.l    D0,(A0)
+       bra.s     parseExpressionIterative_159
+parseExpressionIterative_158:
+; else {
+; *(unsigned int*)a = fppReal(*(unsigned int*)a);
+       move.l    D4,A0
+       move.l    (A0),-(A7)
+       jsr       _fppReal
+       addq.w    #4,A7
+       move.l    D4,A0
+       move.l    D0,(A0)
+; typeA = '#';
+       moveq     #35,D5
+parseExpressionIterative_159:
+; }
+; }
+; if (op == 0xF3 || op == 0xF4) {
+       and.w     #255,D2
+       cmp.w     #243,D2
+       beq.s     parseExpressionIterative_162
+       and.w     #255,D2
+       cmp.w     #244,D2
+       bne       parseExpressionIterative_160
+parseExpressionIterative_162:
+; if (typeA == '$' || typeB == '$') {
+       cmp.b     #36,D5
+       beq.s     parseExpressionIterative_165
+       move.b    -36(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_163
+parseExpressionIterative_165:
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_163:
+; }
+; if (op == 0xF3)
+       and.w     #255,D2
+       cmp.w     #243,D2
+       bne.s     parseExpressionIterative_166
+; *(int*)a = (*(int*)a && *(int*)b);
+       move.l    D4,A0
+       tst.l     (A0)
+       beq.s     parseExpressionIterative_168
+       move.l    D6,A0
+       tst.l     (A0)
+       beq.s     parseExpressionIterative_168
+       moveq     #1,D0
+       bra.s     parseExpressionIterative_169
+parseExpressionIterative_168:
+       clr.l     D0
+parseExpressionIterative_169:
+       move.l    D4,A0
+       move.l    D0,(A0)
+       bra.s     parseExpressionIterative_167
+parseExpressionIterative_166:
+; else
+; *(int*)a = (*(int*)a || *(int*)b);
+       move.l    D4,A0
+       tst.l     (A0)
+       bne.s     parseExpressionIterative_172
+       move.l    D6,A0
+       tst.l     (A0)
+       beq.s     parseExpressionIterative_170
+parseExpressionIterative_172:
+       moveq     #1,D0
+       bra.s     parseExpressionIterative_171
+parseExpressionIterative_170:
+       clr.l     D0
+parseExpressionIterative_171:
+       move.l    D4,A0
+       move.l    D0,(A0)
+parseExpressionIterative_167:
+; valTypeStack[valTop] = '%';
+       move.b    #37,0(A4,D3.L)
+       bra       parseExpressionIterative_174
+parseExpressionIterative_160:
+; } else if (op == '=' || op == '<' || op == '>' || op == 0xF5 || op == 0xF6 || op == 0xF7) {
+       cmp.b     #61,D2
+       beq.s     parseExpressionIterative_175
+       cmp.b     #60,D2
+       beq.s     parseExpressionIterative_175
+       cmp.b     #62,D2
+       beq.s     parseExpressionIterative_175
+       and.w     #255,D2
+       cmp.w     #245,D2
+       beq.s     parseExpressionIterative_175
+       and.w     #255,D2
+       cmp.w     #246,D2
+       beq.s     parseExpressionIterative_175
+       and.w     #255,D2
+       cmp.w     #247,D2
+       bne       parseExpressionIterative_173
+parseExpressionIterative_175:
+; if (typeA == '$')
+       cmp.b     #36,D5
+       bne.s     parseExpressionIterative_176
+; logicalString(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _logicalString
+       add.w     #12,A7
+       bra.s     parseExpressionIterative_179
+parseExpressionIterative_176:
+; else if (typeA == '#')
+       cmp.b     #35,D5
+       bne.s     parseExpressionIterative_178
+; logicalNumericFloat(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _logicalNumericFloat
+       add.w     #12,A7
+       bra.s     parseExpressionIterative_179
+parseExpressionIterative_178:
+; else
+; logicalNumericInt(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _logicalNumericInt
+       add.w     #12,A7
+parseExpressionIterative_179:
+; valTypeStack[valTop] = '%';
+       move.b    #37,0(A4,D3.L)
+       bra       parseExpressionIterative_174
+parseExpressionIterative_173:
+; } else {
+; if (typeA == '#')
+       cmp.b     #35,D5
+       bne.s     parseExpressionIterative_180
+; arithReal(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       ext.w     D2
+       ext.l     D2
+       move.l    D2,-(A7)
+       jsr       _arithReal
+       add.w     #12,A7
+       bra.s     parseExpressionIterative_181
+parseExpressionIterative_180:
+; else
+; arithInt(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       ext.w     D2
+       ext.l     D2
+       move.l    D2,-(A7)
+       jsr       _arithInt
+       add.w     #12,A7
+parseExpressionIterative_181:
+; valTypeStack[valTop] = typeA;
+       move.b    D5,0(A4,D3.L)
+parseExpressionIterative_174:
+       bra       parseExpressionIterative_144
+parseExpressionIterative_146:
+; }
+; }
+; if (opTop + 1 >= PARSER_STACK_SIZE) {
+       move.l    D7,D0
+       addq.l    #1,D0
+       cmp.l     #32,D0
+       blt.s     parseExpressionIterative_182
+; *vErroProc = 14;
+       move.l    (A2),A0
+       move.w    #14,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_182:
+; }
+; opTop++;
+       addq.l    #1,D7
+; opStack[opTop] = currentOp;
+       lea       @basic_opStack.L,A0
+       move.b    -37(A6),0(A0,D7.L)
+; opPrecStack[opTop] = (unsigned char)currentPrec;
+       move.l    -8(A6),D0
+       lea       @basic_opPrecStack.L,A0
+       move.b    D0,0(A0,D7.L)
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     parseExpressionIterative_184
+       bra       parseExpressionIterative_3
+parseExpressionIterative_184:
+; expectValue = 1;
+       move.l    #1,-14(A6)
+; continue;
+       bra.s     parseExpressionIterative_7
+parseExpressionIterative_120:
+; }
+; break;
+       bra.s     parseExpressionIterative_8
+parseExpressionIterative_7:
+       bra       parseExpressionIterative_6
+parseExpressionIterative_8:
+; }
+; while (opTop >= 0) {
+parseExpressionIterative_186:
+       cmp.l     #0,D7
+       blt       parseExpressionIterative_188
+; op = opStack[opTop--];
+       move.l    D7,D0
+       subq.l    #1,D7
+       lea       @basic_opStack.L,A0
+       move.b    0(A0,D0.L),D2
+; if (op == '(') {
+       cmp.b     #40,D2
+       bne.s     parseExpressionIterative_189
+; *vErroProc = 15;
+       move.l    (A2),A0
+       move.w    #15,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_189:
+; }
+; if (valTop < 1) {
+       cmp.l     #1,D3
+       bge.s     parseExpressionIterative_191
+; *vErroProc = 14;
+       move.l    (A2),A0
+       move.w    #14,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_191:
+; }
+; b = valStack[valTop];
+       lea       @basic_valStack.L,A0
+       move.l    D3,D0
+       muls      #50,D0
+       add.l     D0,A0
+       move.l    A0,D6
+; typeB = valTypeStack[valTop];
+       move.b    0(A4,D3.L),-36(A6)
+; valTop--;
+       subq.l    #1,D3
+; a = valStack[valTop];
+       lea       @basic_valStack.L,A0
+       move.l    D3,D0
+       muls      #50,D0
+       add.l     D0,A0
+       move.l    A0,D4
+; typeA = valTypeStack[valTop];
+       move.b    0(A4,D3.L),D5
+; if (typeA != typeB) {
+       cmp.b     -36(A6),D5
+       beq       parseExpressionIterative_199
+; if (typeA == '$' || typeB == '$') {
+       cmp.b     #36,D5
+       beq.s     parseExpressionIterative_197
+       move.b    -36(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_195
+parseExpressionIterative_197:
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_195:
+; }
+; if (typeA == '#')
+       cmp.b     #35,D5
+       bne.s     parseExpressionIterative_198
+; *(unsigned int*)b = fppReal(*(unsigned int*)b);
+       move.l    D6,A0
+       move.l    (A0),-(A7)
+       jsr       _fppReal
+       addq.w    #4,A7
+       move.l    D6,A0
+       move.l    D0,(A0)
+       bra.s     parseExpressionIterative_199
+parseExpressionIterative_198:
+; else {
+; *(unsigned int*)a = fppReal(*(unsigned int*)a);
+       move.l    D4,A0
+       move.l    (A0),-(A7)
+       jsr       _fppReal
+       addq.w    #4,A7
+       move.l    D4,A0
+       move.l    D0,(A0)
+; typeA = '#';
+       moveq     #35,D5
+parseExpressionIterative_199:
+; }
+; }
+; if (op == 0xF3 || op == 0xF4) {
+       and.w     #255,D2
+       cmp.w     #243,D2
+       beq.s     parseExpressionIterative_202
+       and.w     #255,D2
+       cmp.w     #244,D2
+       bne       parseExpressionIterative_200
+parseExpressionIterative_202:
+; if (typeA == '$' || typeB == '$') {
+       cmp.b     #36,D5
+       beq.s     parseExpressionIterative_205
+       move.b    -36(A6),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_203
+parseExpressionIterative_205:
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_203:
+; }
+; if (op == 0xF3)
+       and.w     #255,D2
+       cmp.w     #243,D2
+       bne.s     parseExpressionIterative_206
+; *(int*)a = (*(int*)a && *(int*)b);
+       move.l    D4,A0
+       tst.l     (A0)
+       beq.s     parseExpressionIterative_208
+       move.l    D6,A0
+       tst.l     (A0)
+       beq.s     parseExpressionIterative_208
+       moveq     #1,D0
+       bra.s     parseExpressionIterative_209
+parseExpressionIterative_208:
+       clr.l     D0
+parseExpressionIterative_209:
+       move.l    D4,A0
+       move.l    D0,(A0)
+       bra.s     parseExpressionIterative_207
+parseExpressionIterative_206:
+; else
+; *(int*)a = (*(int*)a || *(int*)b);
+       move.l    D4,A0
+       tst.l     (A0)
+       bne.s     parseExpressionIterative_212
+       move.l    D6,A0
+       tst.l     (A0)
+       beq.s     parseExpressionIterative_210
+parseExpressionIterative_212:
+       moveq     #1,D0
+       bra.s     parseExpressionIterative_211
+parseExpressionIterative_210:
+       clr.l     D0
+parseExpressionIterative_211:
+       move.l    D4,A0
+       move.l    D0,(A0)
+parseExpressionIterative_207:
+; valTypeStack[valTop] = '%';
+       move.b    #37,0(A4,D3.L)
+       bra       parseExpressionIterative_214
+parseExpressionIterative_200:
+; } else if (op == '=' || op == '<' || op == '>' || op == 0xF5 || op == 0xF6 || op == 0xF7) {
+       cmp.b     #61,D2
+       beq.s     parseExpressionIterative_215
+       cmp.b     #60,D2
+       beq.s     parseExpressionIterative_215
+       cmp.b     #62,D2
+       beq.s     parseExpressionIterative_215
+       and.w     #255,D2
+       cmp.w     #245,D2
+       beq.s     parseExpressionIterative_215
+       and.w     #255,D2
+       cmp.w     #246,D2
+       beq.s     parseExpressionIterative_215
+       and.w     #255,D2
+       cmp.w     #247,D2
+       bne       parseExpressionIterative_213
+parseExpressionIterative_215:
+; if (typeA == '$')
+       cmp.b     #36,D5
+       bne.s     parseExpressionIterative_216
+; logicalString(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _logicalString
+       add.w     #12,A7
+       bra.s     parseExpressionIterative_219
+parseExpressionIterative_216:
+; else if (typeA == '#')
+       cmp.b     #35,D5
+       bne.s     parseExpressionIterative_218
+; logicalNumericFloat(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _logicalNumericFloat
+       add.w     #12,A7
+       bra.s     parseExpressionIterative_219
+parseExpressionIterative_218:
+; else
+; logicalNumericInt(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _logicalNumericInt
+       add.w     #12,A7
+parseExpressionIterative_219:
+; valTypeStack[valTop] = '%';
+       move.b    #37,0(A4,D3.L)
+       bra       parseExpressionIterative_214
+parseExpressionIterative_213:
+; } else {
+; if (typeA == '#')
+       cmp.b     #35,D5
+       bne.s     parseExpressionIterative_220
+; arithReal(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       ext.w     D2
+       ext.l     D2
+       move.l    D2,-(A7)
+       jsr       _arithReal
+       add.w     #12,A7
+       bra.s     parseExpressionIterative_221
+parseExpressionIterative_220:
+; else
+; arithInt(op, a, b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       ext.w     D2
+       ext.l     D2
+       move.l    D2,-(A7)
+       jsr       _arithInt
+       add.w     #12,A7
+parseExpressionIterative_221:
+; valTypeStack[valTop] = typeA;
+       move.b    D5,0(A4,D3.L)
+parseExpressionIterative_214:
+       bra       parseExpressionIterative_186
+parseExpressionIterative_188:
+; }
+; }
+; if (valTop < 0) {
+       cmp.l     #0,D3
+       bge.s     parseExpressionIterative_222
+; *vErroProc = 14;
+       move.l    (A2),A0
+       move.w    #14,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_222:
+; }
+; *value_type = valTypeStack[valTop];
+       move.l    _value_type.L,A0
+       move.b    0(A4,D3.L),(A0)
+; if (*value_type == '$')
+       move.l    _value_type.L,A0
+       move.b    (A0),D0
+       cmp.b     #36,D0
+       bne.s     parseExpressionIterative_224
+; strcpy((char*)result, (char*)valStack[valTop]);
+       lea       @basic_valStack.L,A0
+       move.l    D3,D1
+       muls      #50,D1
+       add.l     D1,A0
+       move.l    A0,-(A7)
+       move.l    8(A6),-(A7)
+       jsr       _strcpy
+       addq.w    #8,A7
+       bra.s     parseExpressionIterative_225
+parseExpressionIterative_224:
+; else
+; *(unsigned int*)result = *(unsigned int*)valStack[valTop];
+       lea       @basic_valStack.L,A0
+       move.l    D3,D0
+       muls      #50,D0
+       add.l     D0,A0
+       move.l    8(A6),D0
+       move.l    D0,A1
+       move.l    (A0),(A1)
+parseExpressionIterative_225:
+; return;
+parseExpressionIterative_3:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
        unlk      A6
        rts
 ; }
@@ -8157,7 +8368,7 @@ level30_5:
        rts
 ; }
 ; //--------------------------------------------------------------------------------------
-; // Process logic conditions
+; // Process logic conditions AND or OR.
 ; //--------------------------------------------------------------------------------------
 ; void level31(unsigned char *result)
 ; {
@@ -8779,7 +8990,7 @@ level6_5:
        xdef      _primitive
 _primitive:
        link      A6,#-16
-       movem.l   D2/D3/D4/D5/A2/A3/A4/A5,-(A7)
+       movem.l   D2/D3/D4/D5/D6/A2/A3/A4/A5,-(A7)
        lea       _token.L,A2
        move.l    8(A6),D2
        lea       _vErroProc.L,A3
@@ -8792,6 +9003,8 @@ _primitive:
 ; unsigned char* vRet;
 ; unsigned char sqtdtam[10];
 ; unsigned char *vTempPointer;
+; unsigned char tokenLen = 0;
+       clr.b     D4
 ; switch(*token_type) {
        move.l    _token_type.L,A0
        move.b    (A0),D0
@@ -8811,33 +9024,37 @@ primitive_3:
        dc.w      primitive_5-primitive_3
 primitive_4:
 ; case VARIABLE:
-; if (strlen(token) < 3)
-       move.l    (A2),-(A7)
-       jsr       _strlen
-       addq.w    #4,A7
-       cmp.l     #3,D0
-       bge.s     primitive_9
+; while (token[tokenLen])
+primitive_9:
+       move.l    (A2),A0
+       and.l     #255,D4
+       tst.b     0(A0,D4.L)
+       beq.s     primitive_11
+; tokenLen++;
+       addq.b    #1,D4
+       bra       primitive_9
+primitive_11:
+; if (tokenLen < 3)
+       cmp.b     #3,D4
+       bhs.s     primitive_12
 ; {
 ; *value_type=VARTYPEDEFAULT;
        move.l    (A4),A0
        move.b    #35,(A0)
-; if (strlen(token) == 2 && *(token + 1) < 0x30)
-       move.l    (A2),-(A7)
-       jsr       _strlen
-       addq.w    #4,A7
-       cmp.l     #2,D0
-       bne.s     primitive_11
+; if (tokenLen == 2 && *(token + 1) < 0x30)
+       cmp.b     #2,D4
+       bne.s     primitive_14
        move.l    (A2),A0
        move.b    1(A0),D0
        cmp.b     #48,D0
-       bhs.s     primitive_11
+       bhs.s     primitive_14
 ; *value_type = *(token + 1);
        move.l    (A2),A0
        move.l    (A4),A1
        move.b    1(A0),(A1)
-primitive_11:
-       bra.s     primitive_10
-primitive_9:
+primitive_14:
+       bra.s     primitive_13
+primitive_12:
 ; }
 ; else
 ; {
@@ -8845,59 +9062,59 @@ primitive_9:
        move.l    (A2),A0
        move.l    (A4),A1
        move.b    2(A0),(A1)
-primitive_10:
+primitive_13:
 ; }
 ; vRet = find_var(token);
        move.l    (A2),-(A7)
        jsr       _find_var
        addq.w    #4,A7
-       move.l    D0,D5
+       move.l    D0,D6
 ; if (*vErroProc) return;
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     primitive_13
-       bra       primitive_15
-primitive_13:
+       beq.s     primitive_16
+       bra       primitive_18
+primitive_16:
 ; if (*value_type == '$')  // Tipo da variavel
        move.l    (A4),A0
        move.b    (A0),D0
        cmp.b     #36,D0
-       bne.s     primitive_16
+       bne.s     primitive_19
 ; strcpy(result,vRet);
-       move.l    D5,-(A7)
+       move.l    D6,-(A7)
        move.l    D2,-(A7)
        jsr       _strcpy
        addq.w    #8,A7
-       bra.s     primitive_20
-primitive_16:
+       bra.s     primitive_23
+primitive_19:
 ; else
 ; {
 ; for (ix = 0;ix < 5;ix++)
        clr.l     -14(A6)
-primitive_18:
+primitive_21:
        move.l    -14(A6),D0
        cmp.l     #5,D0
-       bhs.s     primitive_20
+       bhs.s     primitive_23
 ; result[ix] = vRet[ix];
-       move.l    D5,A0
+       move.l    D6,A0
        move.l    -14(A6),D0
        move.l    D2,A1
        move.l    -14(A6),D1
        move.b    0(A0,D0.L),0(A1,D1.L)
        addq.l    #1,-14(A6)
-       bra       primitive_18
-primitive_20:
+       bra       primitive_21
+primitive_23:
 ; }
 ; nextToken();
        jsr       (A5)
 ; if (*vErroProc) return;
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     primitive_21
-       bra       primitive_15
-primitive_21:
+       beq.s     primitive_24
+       bra       primitive_18
+primitive_24:
 ; return;
-       bra       primitive_15
+       bra       primitive_18
 primitive_5:
 ; case QUOTE:
 ; *value_type='$';
@@ -8913,11 +9130,11 @@ primitive_5:
 ; if (*vErroProc) return;
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     primitive_23
-       bra       primitive_15
-primitive_23:
+       beq.s     primitive_26
+       bra       primitive_18
+primitive_26:
 ; return;
-       bra       primitive_15
+       bra       primitive_18
 primitive_6:
 ; case NUMBER:
 ; if (strchr(token,'.'))  // verifica se eh numero inteiro ou real
@@ -8926,7 +9143,7 @@ primitive_6:
        jsr       _strchr
        addq.w    #8,A7
        tst.l     D0
-       beq.s     primitive_25
+       beq.s     primitive_28
 ; {
 ; *value_type='#'; // Real
        move.l    (A4),A0
@@ -8939,11 +9156,11 @@ primitive_6:
 ; if (*vErroProc) return;
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     primitive_27
-       bra       primitive_15
-primitive_27:
-       bra.s     primitive_26
-primitive_25:
+       beq.s     primitive_30
+       bra       primitive_18
+primitive_30:
+       bra.s     primitive_29
+primitive_28:
 ; }
 ; else
 ; {
@@ -8955,7 +9172,7 @@ primitive_25:
        jsr       _atoi
        addq.w    #4,A7
        move.l    D0,-14(A6)
-primitive_26:
+primitive_29:
 ; }
 ; vix = &ix;
        lea       -14(A6),A0
@@ -8981,25 +9198,25 @@ primitive_26:
 ; if (*vErroProc) return;
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     primitive_29
-       bra       primitive_15
-primitive_29:
+       beq.s     primitive_32
+       bra       primitive_18
+primitive_32:
 ; return;
-       bra       primitive_15
+       bra       primitive_18
 primitive_7:
 ; case COMMAND:
 ; vTempPointer = *pointerRunProg;
        move.l    _pointerRunProg.L,A0
-       move.l    (A0),D4
+       move.l    (A0),D5
 ; *token = *vTempPointer;
-       move.l    D4,A0
+       move.l    D5,A0
        move.l    (A2),A1
        move.b    (A0),(A1)
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    _pointerRunProg.L,A0
        addq.l    #1,(A0)
 ; executeToken(*vTempPointer);  // Retorno do resultado da funcao deve voltar pela variavel token. *value_type tera o tipo de retorno
-       move.l    D4,A0
+       move.l    D5,A0
        move.b    (A0),D1
        and.l     #255,D1
        move.l    D1,-(A7)
@@ -9008,29 +9225,29 @@ primitive_7:
 ; if (*vErroProc) return;
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     primitive_31
-       bra       primitive_15
-primitive_31:
+       beq.s     primitive_34
+       bra       primitive_18
+primitive_34:
 ; if (*value_type == '$')  // Tipo do retorno
        move.l    (A4),A0
        move.b    (A0),D0
        cmp.b     #36,D0
-       bne.s     primitive_33
+       bne.s     primitive_36
 ; strcpy(result,token);
        move.l    (A2),-(A7)
        move.l    D2,-(A7)
        jsr       _strcpy
        addq.w    #8,A7
-       bra.s     primitive_37
-primitive_33:
+       bra.s     primitive_40
+primitive_36:
 ; else
 ; {
 ; for (ix = 0; ix < 4; ix++)
        clr.l     -14(A6)
-primitive_35:
+primitive_38:
        move.l    -14(A6),D0
        cmp.l     #4,D0
-       bhs.s     primitive_37
+       bhs.s     primitive_40
 ; {
 ; result[ix] = *(token + ix);
        move.l    (A2),A0
@@ -9039,8 +9256,8 @@ primitive_35:
        move.l    -14(A6),D1
        move.b    0(A0,D0.L),0(A1,D1.L)
        addq.l    #1,-14(A6)
-       bra       primitive_35
-primitive_37:
+       bra       primitive_38
+primitive_40:
 ; }
 ; }
 ; nextToken();
@@ -9048,19 +9265,19 @@ primitive_37:
 ; if (*vErroProc) return;
        move.l    (A3),A0
        tst.w     (A0)
-       beq.s     primitive_38
-       bra.s     primitive_15
-primitive_38:
+       beq.s     primitive_41
+       bra.s     primitive_18
+primitive_41:
 ; return;
-       bra.s     primitive_15
+       bra.s     primitive_18
 primitive_1:
 ; default:
 ; *vErroProc = 14;
        move.l    (A3),A0
        move.w    #14,(A0)
 ; return;
-primitive_15:
-       movem.l   (A7)+,D2/D3/D4/D5/A2/A3/A4/A5
+primitive_18:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/A2/A3/A4/A5
        unlk      A6
        rts
 ; }
@@ -9910,119 +10127,146 @@ unaryReal_1:
 ; {
        xdef      _find_var
 _find_var:
-       link      A6,#-252
-       movem.l   D2/A2/A3/A4,-(A7)
-       move.l    8(A6),D2
-       lea       -250(A6),A2
-       lea       _strlen.L,A3
-       lea       _vErroProc.L,A4
-; unsigned char vTemp[250];
+       link      A6,#0
+       movem.l   D2/D3/D4/A2,-(A7)
+       move.l    8(A6),D3
+       lea       _vErroProc.L,A2
+; static unsigned char vTempPool[4][250];
+; static unsigned char vTempDepth = 0;
+; unsigned char *vTemp;
+; unsigned char vLen = 0;
+       clr.b     D4
+; vTemp = vTempPool[vTempDepth & 0x03];
+       lea       find_var_vTempPool.L,A0
+       move.b    find_var_vTempDepth.L,D0
+       and.l     #255,D0
+       and.l     #3,D0
+       muls      #250,D0
+       add.l     D0,A0
+       move.l    A0,D2
+; vTempDepth++;
+       addq.b    #1,find_var_vTempDepth.L
+; while (s[vLen])
+find_var_3:
+       move.l    D3,A0
+       and.l     #255,D4
+       tst.b     0(A0,D4.L)
+       beq.s     find_var_5
+; vLen++;
+       addq.b    #1,D4
+       bra       find_var_3
+find_var_5:
 ; *vErroProc = 0x00;
-       move.l    (A4),A0
+       move.l    (A2),A0
        clr.w     (A0)
 ; if (!isalphas(*s)){
-       move.l    D2,A0
+       move.l    D3,A0
        move.b    (A0),D1
        and.l     #255,D1
        move.l    D1,-(A7)
        jsr       _isalphas
        addq.w    #4,A7
        tst.l     D0
-       bne.s     find_var_1
+       bne.s     find_var_6
 ; *vErroProc = 4; // not a variable
-       move.l    (A4),A0
+       move.l    (A2),A0
        move.w    #4,(A0)
+; vTempDepth--;
+       subq.b    #1,find_var_vTempDepth.L
 ; return 0;
        clr.l     D0
-       bra       find_var_3
-find_var_1:
+       bra       find_var_8
+find_var_6:
 ; }
-; if (strlen(s) < 3)
-       move.l    D2,-(A7)
-       jsr       (A3)
-       addq.w    #4,A7
-       cmp.l     #3,D0
-       bge       find_var_4
+; if (vLen < 3)
+       cmp.b     #3,D4
+       bhs       find_var_9
 ; {
 ; vTemp[0] = *s;
-       move.l    D2,A0
-       move.b    (A0),(A2)
+       move.l    D3,A0
+       move.l    D2,A1
+       move.b    (A0),(A1)
 ; vTemp[2] = VARTYPEDEFAULT;
-       move.b    #35,2(A2)
-; if (strlen(s) == 2 && *(s + 1) < 0x30)
-       move.l    D2,-(A7)
-       jsr       (A3)
-       addq.w    #4,A7
-       cmp.l     #2,D0
-       bne.s     find_var_6
        move.l    D2,A0
+       move.b    #35,2(A0)
+; if (vLen == 2 && *(s + 1) < 0x30)
+       cmp.b     #2,D4
+       bne.s     find_var_11
+       move.l    D3,A0
        move.b    1(A0),D0
        cmp.b     #48,D0
-       bge.s     find_var_6
+       bge.s     find_var_11
 ; vTemp[2] = *(s + 1);
-       move.l    D2,A0
-       move.b    1(A0),2(A2)
-find_var_6:
-; if (strlen(s) == 2 && isalphas(*(s + 1)))
-       move.l    D2,-(A7)
-       jsr       (A3)
-       addq.w    #4,A7
-       cmp.l     #2,D0
-       bne.s     find_var_8
-       move.l    D2,A0
+       move.l    D3,A0
+       move.l    D2,A1
+       move.b    1(A0),2(A1)
+find_var_11:
+; if (vLen == 2 && isalphas(*(s + 1)))
+       cmp.b     #2,D4
+       bne.s     find_var_13
+       move.l    D3,A0
        move.b    1(A0),D1
        and.l     #255,D1
        move.l    D1,-(A7)
        jsr       _isalphas
        addq.w    #4,A7
        tst.l     D0
-       beq.s     find_var_8
+       beq.s     find_var_13
 ; vTemp[1] = *(s + 1);
-       move.l    D2,A0
-       move.b    1(A0),1(A2)
-       bra.s     find_var_9
-find_var_8:
+       move.l    D3,A0
+       move.l    D2,A1
+       move.b    1(A0),1(A1)
+       bra.s     find_var_14
+find_var_13:
 ; else
 ; vTemp[1] = 0x00;
-       clr.b     1(A2)
+       move.l    D2,A0
+       clr.b     1(A0)
+find_var_14:
+       bra.s     find_var_10
 find_var_9:
-       bra.s     find_var_5
-find_var_4:
 ; }
 ; else
 ; {
 ; vTemp[0] = *s++;
-       move.l    D2,A0
-       addq.l    #1,D2
-       move.b    (A0),(A2)
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.l    D2,A1
+       move.b    (A0),(A1)
 ; vTemp[1] = *s++;
-       move.l    D2,A0
-       addq.l    #1,D2
-       move.b    (A0),1(A2)
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.l    D2,A1
+       move.b    (A0),1(A1)
 ; vTemp[2] = *s;
-       move.l    D2,A0
-       move.b    (A0),2(A2)
-find_var_5:
+       move.l    D3,A0
+       move.l    D2,A1
+       move.b    (A0),2(A1)
+find_var_10:
 ; }
-; if (!findVariable(&vTemp))
-       move.l    A2,-(A7)
+; if (!findVariable(vTemp))
+       move.l    D2,-(A7)
        jsr       _findVariable
        addq.w    #4,A7
        tst.l     D0
-       bne.s     find_var_10
+       bne.s     find_var_15
 ; {
 ; *vErroProc = 4; // not a variable
-       move.l    (A4),A0
+       move.l    (A2),A0
        move.w    #4,(A0)
+; vTempDepth--;
+       subq.b    #1,find_var_vTempDepth.L
 ; return 0;
        clr.l     D0
-       bra.s     find_var_3
-find_var_10:
+       bra.s     find_var_8
+find_var_15:
 ; }
+; vTempDepth--;
+       subq.b    #1,find_var_vTempDepth.L
 ; return vTemp;
-       move.l    A2,D0
-find_var_3:
-       movem.l   (A7)+,D2/A2/A3/A4
+       move.l    D2,D0
+find_var_8:
+       movem.l   (A7)+,D2/D3/D4/A2
        unlk      A6
        rts
 ; }
@@ -11237,9 +11481,1823 @@ procParam_3:
        unlk      A6
        rts
 ; }
+; /*****************************************************************************/
+; /* CONTROLE DE VARIAVEIS                                                     */
+; /*****************************************************************************/
 ; //-----------------------------------------------------------------------------
-; // FUNCOES BASIC
+; // Calcula o endereco do valor dentro da area de dados de uma variavel array.
+; // Retorna 0 em caso de erro de limite e ajusta vErroProc.
 ; //-----------------------------------------------------------------------------
+; static unsigned char* getArrayValuePointer(unsigned char ixDim, unsigned char* vLista, unsigned char* vDim, unsigned char vTamValue)
+; {
+@basic_getArrayValuePointer:
+       link      A6,#-4
+       movem.l   D2/D3/D4/D5/D6/D7,-(A7)
+       move.l    12(A6),D6
+; int ix;
+; int iw;
+; unsigned char ixDimAnt;
+; unsigned char* vPosValueVar;
+; unsigned short iDim;
+; unsigned long vOffSet;
+; iw = (ixDim - 1);
+       move.b    11(A6),D0
+       and.l     #255,D0
+       subq.l    #1,D0
+       move.l    D0,D5
+; ixDimAnt = 1;
+       moveq     #1,D4
+; vPosValueVar = 0;
+       clr.l     D3
+; for (ix = ((ixDim - 1) * 2 ); ix >= 0; ix -= 2)
+       move.b    11(A6),D0
+       subq.b    #1,D0
+       and.w     #255,D0
+       mulu.w    #2,D0
+       and.l     #65535,D0
+       move.l    D0,D2
+@basic_getArrayValuePointer_1:
+       cmp.l     #0,D2
+       blt       @basic_getArrayValuePointer_3
+; {
+; iDim = ((vLista[ix + 8] << 8) | vLista[ix + 9]);
+       move.l    D6,A0
+       move.l    D2,A1
+       move.b    8(A1,A0.L),D0
+       and.w     #255,D0
+       lsl.w     #8,D0
+       move.l    D6,A0
+       move.l    D2,A1
+       move.b    9(A1,A0.L),D1
+       and.w     #255,D1
+       or.w      D1,D0
+       move.w    D0,D7
+; if (vDim[iw] > iDim)
+       move.l    16(A6),A0
+       move.b    0(A0,D5.L),D0
+       and.w     #255,D0
+       cmp.w     D7,D0
+       bls.s     @basic_getArrayValuePointer_4
+; {
+; *vErroProc = 21;
+       move.l    _vErroProc.L,A0
+       move.w    #21,(A0)
+; return 0;
+       clr.l     D0
+       bra       @basic_getArrayValuePointer_6
+@basic_getArrayValuePointer_4:
+; }
+; vPosValueVar = vPosValueVar + ((vDim[iw] - 1 ) * ixDimAnt * vTamValue);
+       move.l    16(A6),A0
+       move.b    0(A0,D5.L),D0
+       subq.b    #1,D0
+       and.w     #255,D0
+       and.w     #255,D4
+       mulu.w    D4,D0
+       and.w     #255,D0
+       move.b    23(A6),D1
+       and.w     #255,D1
+       mulu.w    D1,D0
+       and.l     #255,D0
+       add.l     D0,D3
+; ixDimAnt = ixDimAnt * iDim;
+       move.b    D4,D0
+       and.w     #255,D0
+       mulu.w    D7,D0
+       move.b    D0,D4
+; iw--;
+       subq.l    #1,D5
+       subq.l    #2,D2
+       bra       @basic_getArrayValuePointer_1
+@basic_getArrayValuePointer_3:
+; }
+; vOffSet = vLista;
+       move.l    D6,-4(A6)
+; vPosValueVar = vPosValueVar + (vOffSet + 8 + (ixDim * 2));
+       move.l    -4(A6),D0
+       addq.l    #8,D0
+       move.b    11(A6),D1
+       and.w     #255,D1
+       mulu.w    #2,D1
+       and.l     #255,D1
+       add.l     D1,D0
+       add.l     D0,D3
+; return vPosValueVar;
+       move.l    D3,D0
+@basic_getArrayValuePointer_6:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; // Retornos: -1 - Erro, 0 - Nao Existe, 1 - eh um valor numeral
+; //           [endereco > 1] - Endereco da variavel
+; //
+; //           se retorno > 1: pVariable vai conter o valor numeral (qdo 1) ou
+; //                           o conteudo da variavel (qdo endereco)
+; //-----------------------------------------------------------------------------
+; long findVariable(unsigned char* pVariable)
+; {
+       xdef      _findVariable
+_findVariable:
+       link      A6,#-152
+       movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
+       lea       -24(A6),A2
+       move.l    8(A6),D4
+       lea       _vErroProc.L,A3
+       lea       _itoa.L,A4
+; unsigned char* vLista = pStartSimpVar;
+       move.l    _pStartSimpVar.L,D2
+; unsigned char* vTemp = pStartSimpVar;
+       move.l    _pStartSimpVar.L,-150(A6)
+; unsigned char vVarName0 = pVariable[0];
+       move.l    D4,A0
+       move.b    (A0),-146(A6)
+; unsigned char vVarName1 = pVariable[1];
+       move.l    D4,A0
+       move.b    1(A0),-145(A6)
+; long vEnder = 0;
+       clr.l     -144(A6)
+; int ix = 0, iy = 0, iz = 0;
+       clr.l     D5
+       clr.l     -140(A6)
+       clr.l     -136(A6)
+; unsigned char vDim[88];
+; unsigned int vTempDim = 0;
+       clr.l     -44(A6)
+; unsigned long vOffSet;
+; unsigned char ixDim = 0;
+       clr.b     -39(A6)
+; unsigned char vArray = 0;
+       moveq     #0,D7
+; unsigned long vPosNextVar = 0;
+       clr.l     -38(A6)
+; unsigned char* vPosValueVar = 0;
+       clr.l     D3
+; unsigned char vTamValue = 4;
+       move.b    #4,-33(A6)
+; unsigned char *vTempPointer;
+; unsigned char *pDst;
+; unsigned char *pSrc;
+; unsigned char sqtdtam[20];
+; int vCacheIx;
+; // Verifica se eh array (tem parenteses logo depois do nome da variavel)
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       findVariable_1
+; {
+; writeLongSerial("Aqui 333.666.0 varName-[");
+       pea       @basic_133.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(pVariable[0],sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D4,A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(pVariable[1],sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D4,A0
+       move.b    1(A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n");
+       pea       @basic_135.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+findVariable_1:
+; }
+; vTempPointer = *pointerRunProg;
+       move.l    _pointerRunProg.L,A0
+       move.l    (A0),-32(A6)
+; if (*vTempPointer == 0x28)
+       move.l    -32(A6),A0
+       move.b    (A0),D0
+       cmp.b     #40,D0
+       bne       findVariable_29
+; {
+; // Define que eh array
+; vArray = 1;
+       moveq     #1,D7
+; // Procura as dimensoes
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return 0;
+       move.l    (A3),A0
+       tst.w     (A0)
+       beq.s     findVariable_5
+       clr.l     D0
+       bra       findVariable_7
+findVariable_5:
+; // Erro, primeiro caracter depois da variavel, deve ser abre parenteses
+; if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
+       move.l    _tok.L,A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #226,D0
+       beq.s     findVariable_10
+       move.l    _tok.L,A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #224,D0
+       beq.s     findVariable_10
+       move.l    _token_type.L,A0
+       move.b    (A0),D0
+       cmp.b     #8,D0
+       beq.s     findVariable_8
+findVariable_10:
+; {
+; *vErroProc = 15;
+       move.l    (A3),A0
+       move.w    #15,(A0)
+; return 0;
+       clr.l     D0
+       bra       findVariable_7
+findVariable_8:
+; }
+; do
+; {
+findVariable_11:
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return 0;
+       move.l    (A3),A0
+       tst.w     (A0)
+       beq.s     findVariable_13
+       clr.l     D0
+       bra       findVariable_7
+findVariable_13:
+; if (*token_type == QUOTE) { // is string, error
+       move.l    _token_type.L,A0
+       move.b    (A0),D0
+       cmp.b     #6,D0
+       bne.s     findVariable_15
+; *vErroProc = 16;
+       move.l    (A3),A0
+       move.w    #16,(A0)
+; return 0;
+       clr.l     D0
+       bra       findVariable_7
+findVariable_15:
+; }
+; else { // is expression
+; putback();
+       jsr       _putback
+; getExp(&vTempDim);
+       pea       -44(A6)
+       jsr       _getExp
+       addq.w    #4,A7
+; if (*vErroProc) return 0;
+       move.l    (A3),A0
+       tst.w     (A0)
+       beq.s     findVariable_17
+       clr.l     D0
+       bra       findVariable_7
+findVariable_17:
+; if (*value_type == '$')
+       move.l    _value_type.L,A0
+       move.b    (A0),D0
+       cmp.b     #36,D0
+       bne.s     findVariable_19
+; {
+; *vErroProc = 16;
+       move.l    (A3),A0
+       move.w    #16,(A0)
+; return 0;
+       clr.l     D0
+       bra       findVariable_7
+findVariable_19:
+; }
+; if (*value_type == '#')
+       move.l    _value_type.L,A0
+       move.b    (A0),D0
+       cmp.b     #35,D0
+       bne.s     findVariable_21
+; {
+; vTempDim = fppInt(vTempDim);
+       move.l    -44(A6),-(A7)
+       jsr       _fppInt
+       addq.w    #4,A7
+       move.l    D0,-44(A6)
+; *value_type = '%';
+       move.l    _value_type.L,A0
+       move.b    #37,(A0)
+findVariable_21:
+; }
+; vDim[ixDim] = vTempDim + 1;
+       move.l    -44(A6),D0
+       addq.l    #1,D0
+       move.b    -39(A6),D1
+       and.l     #255,D1
+       lea       -132(A6),A0
+       move.b    D0,0(A0,D1.L)
+; ixDim++;
+       addq.b    #1,-39(A6)
+; }
+; if (*token == ',')
+       move.l    _token.L,A0
+       move.b    (A0),D0
+       cmp.b     #44,D0
+       bne.s     findVariable_23
+; {
+; *pointerRunProg = *pointerRunProg + 1;
+       move.l    _pointerRunProg.L,A0
+       addq.l    #1,(A0)
+; vTempPointer = *pointerRunProg;
+       move.l    _pointerRunProg.L,A0
+       move.l    (A0),-32(A6)
+       bra.s     findVariable_24
+findVariable_23:
+; }
+; else
+; break;
+       bra.s     findVariable_12
+findVariable_24:
+       bra       findVariable_11
+findVariable_12:
+; } while(1);
+; // Deve ter pelo menos 1 elemento
+; if (ixDim < 1)
+       move.b    -39(A6),D0
+       cmp.b     #1,D0
+       bhs.s     findVariable_25
+; {
+; *vErroProc = 21;
+       move.l    (A3),A0
+       move.w    #21,(A0)
+; return 0;
+       clr.l     D0
+       bra       findVariable_7
+findVariable_25:
+; }
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return 0;
+       move.l    (A3),A0
+       tst.w     (A0)
+       beq.s     findVariable_27
+       clr.l     D0
+       bra       findVariable_7
+findVariable_27:
+; // Ultimo caracter deve ser fecha parenteses
+; if (*token_type!=CLOSEPARENT)
+       move.l    _token_type.L,A0
+       move.b    (A0),D0
+       cmp.b     #9,D0
+       beq.s     findVariable_29
+; {
+; *vErroProc = 15;
+       move.l    (A3),A0
+       move.w    #15,(A0)
+; return 0;
+       clr.l     D0
+       bra       findVariable_7
+findVariable_29:
+; }
+; }
+; // Procura na lista geral de variaveis simples / array
+; if (vArray)
+       tst.b     D7
+       beq.s     findVariable_31
+; vLista = pStartArrayVar;
+       move.l    _pStartArrayVar.L,D2
+       bra.s     findVariable_32
+findVariable_31:
+; else
+; vLista = pStartSimpVar;
+       move.l    _pStartSimpVar.L,D2
+findVariable_32:
+; if (1)  // (!vArray)
+; {
+; for (vCacheIx = 0; vCacheIx < SIMPLE_VAR_CACHE_SLOTS; vCacheIx++)
+       clr.l     -4(A6)
+findVariable_35:
+       move.l    -4(A6),D0
+       cmp.l     #8,D0
+       bge       findVariable_37
+; {
+; if (lastVarCacheAddr[vCacheIx] &&
+       move.l    -4(A6),D0
+       lsl.l     #2,D0
+       lea       @basic_lastVarCacheAddr.L,A0
+       tst.l     0(A0,D0.L)
+       beq       findVariable_38
+       move.l    -4(A6),D0
+       lea       @basic_lastVarCacheName0.L,A0
+       move.b    0(A0,D0.L),D1
+       cmp.b     -146(A6),D1
+       bne.s     findVariable_40
+       moveq     #1,D0
+       bra.s     findVariable_41
+findVariable_40:
+       clr.l     D0
+findVariable_41:
+       and.l     #255,D0
+       beq       findVariable_38
+       move.l    -4(A6),D0
+       lea       @basic_lastVarCacheName1.L,A0
+       move.b    0(A0,D0.L),D1
+       cmp.b     -145(A6),D1
+       bne.s     findVariable_42
+       moveq     #1,D0
+       bra.s     findVariable_43
+findVariable_42:
+       clr.l     D0
+findVariable_43:
+       and.l     #255,D0
+       beq       findVariable_38
+; lastVarCacheName0[vCacheIx] == vVarName0 &&
+; lastVarCacheName1[vCacheIx] == vVarName1)
+; {
+; vLista = lastVarCacheAddr[vCacheIx];
+       move.l    -4(A6),D0
+       lsl.l     #2,D0
+       lea       @basic_lastVarCacheAddr.L,A0
+       move.l    0(A0,D0.L),D2
+; *value_type = *vLista;
+       move.l    D2,A0
+       move.l    _value_type.L,A1
+       move.b    (A0),(A1)
+; if (vArray)
+       tst.b     D7
+       beq       findVariable_44
+; {
+; if (*vLista == '$')
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #36,D0
+       bne.s     findVariable_46
+; vTamValue = 5;
+       move.b    #5,-33(A6)
+findVariable_46:
+; // Verifica se os tamanhos da dimensao informada e da variavel sao iguais
+; if (ixDim != vLista[7])
+       move.l    D2,A0
+       move.b    -39(A6),D0
+       cmp.b     7(A0),D0
+       beq.s     findVariable_48
+; {
+; *vErroProc = 21;
+       move.l    (A3),A0
+       move.w    #21,(A0)
+; return 0;
+       clr.l     D0
+       bra       findVariable_7
+findVariable_48:
+; }
+; vPosValueVar = getArrayValuePointer(ixDim, vLista, vDim, vTamValue);
+       move.b    -33(A6),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       pea       -132(A6)
+       move.l    D2,-(A7)
+       move.b    -39(A6),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       @basic_getArrayValuePointer
+       add.w     #16,A7
+       move.l    D0,D3
+; if (*vErroProc)
+       move.l    (A3),A0
+       tst.w     (A0)
+       beq.s     findVariable_50
+; return 0;
+       clr.l     D0
+       bra       findVariable_7
+findVariable_50:
+       bra.s     findVariable_45
+findVariable_44:
+; }
+; else
+; {
+; vPosValueVar = vLista + 3;
+       move.l    D2,D0
+       addq.l    #3,D0
+       move.l    D0,D3
+findVariable_45:
+; }
+; if (*vLista == '$')
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #36,D0
+       bne       findVariable_52
+; {
+; vOffSet  = (((unsigned long)*(vPosValueVar + 1) << 24) & 0xFF000000);
+       move.l    D3,A0
+       move.b    1(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       and.l     #-16777216,D0
+       move.l    D0,D6
+; vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
+       move.l    D3,A0
+       move.b    2(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       and.l     #16711680,D0
+       or.l      D0,D6
+; vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
+       move.l    D3,A0
+       move.b    3(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       and.l     #65280,D0
+       or.l      D0,D6
+; vOffSet |= ((unsigned long)*(vPosValueVar + 4) & 0x000000FF);
+       move.l    D3,A0
+       move.b    4(A0),D0
+       and.l     #255,D0
+       and.l     #255,D0
+       or.l      D0,D6
+; vTempPointer = vOffSet;
+       move.l    D6,-32(A6)
+; iy = *vPosValueVar;
+       move.l    D3,A0
+       move.b    (A0),D0
+       and.l     #255,D0
+       move.l    D0,-140(A6)
+; pDst = pVariable;
+       move.l    D4,A5
+; pSrc = vTempPointer;
+       move.l    -32(A6),-28(A6)
+; for (ix = 0; ix < iy; ix++)
+       clr.l     D5
+findVariable_54:
+       cmp.l     -140(A6),D5
+       bge.s     findVariable_56
+; {
+; *pDst++ = *pSrc++;
+       move.l    -28(A6),A0
+       addq.l    #1,-28(A6)
+       move.b    (A0),(A5)+
+       addq.l    #1,D5
+       bra       findVariable_54
+findVariable_56:
+; }
+; *pDst = 0x00;
+       clr.b     (A5)
+       bra.s     findVariable_53
+findVariable_52:
+; }
+; else
+; {
+; vPosValueVar++;
+       addq.l    #1,D3
+; pVariable[0] = *(vPosValueVar);
+       move.l    D3,A0
+       move.l    D4,A1
+       move.b    (A0),(A1)
+; pVariable[1] = *(vPosValueVar + 1);
+       move.l    D3,A0
+       move.l    D4,A1
+       move.b    1(A0),1(A1)
+; pVariable[2] = *(vPosValueVar + 2);
+       move.l    D3,A0
+       move.l    D4,A1
+       move.b    2(A0),2(A1)
+; pVariable[3] = *(vPosValueVar + 3);
+       move.l    D3,A0
+       move.l    D4,A1
+       move.b    3(A0),3(A1)
+; pVariable[4] = 0x00;
+       move.l    D4,A0
+       clr.b     4(A0)
+findVariable_53:
+; }
+; return (long)vLista;
+       move.l    D2,D0
+       bra       findVariable_7
+findVariable_38:
+       addq.l    #1,-4(A6)
+       bra       findVariable_35
+findVariable_37:
+; }
+; }
+; }
+; while(1)
+findVariable_57:
+; {
+; vPosNextVar  = (((unsigned long)*(vLista + 3) << 24) & 0xFF000000);
+       move.l    D2,A0
+       move.b    3(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       and.l     #-16777216,D0
+       move.l    D0,-38(A6)
+; vPosNextVar |= (((unsigned long)*(vLista + 4) << 16) & 0x00FF0000);
+       move.l    D2,A0
+       move.b    4(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       and.l     #16711680,D0
+       or.l      D0,-38(A6)
+; vPosNextVar |= (((unsigned long)*(vLista + 5) << 8) & 0x0000FF00);
+       move.l    D2,A0
+       move.b    5(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       and.l     #65280,D0
+       or.l      D0,-38(A6)
+; vPosNextVar |= ((unsigned long)*(vLista + 6) & 0x000000FF);
+       move.l    D2,A0
+       move.b    6(A0),D0
+       and.l     #255,D0
+       and.l     #255,D0
+       or.l      D0,-38(A6)
+; *value_type = *vLista;
+       move.l    D2,A0
+       move.l    _value_type.L,A1
+       move.b    (A0),(A1)
+; if (*(vLista + 1) == pVariable[0] && *(vLista + 2) ==  pVariable[1])
+       move.l    D2,A0
+       move.l    D4,A1
+       move.b    1(A0),D0
+       cmp.b     (A1),D0
+       bne       findVariable_60
+       move.l    D2,A0
+       move.l    D4,A1
+       move.b    2(A0),D0
+       cmp.b     1(A1),D0
+       bne       findVariable_60
+; {
+; // Pega endereco da variavel pra delvover
+; if (vArray)
+       tst.b     D7
+       beq       findVariable_62
+; {
+; if (*vLista == '$')
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #36,D0
+       bne.s     findVariable_64
+; vTamValue = 5;
+       move.b    #5,-33(A6)
+findVariable_64:
+; // Verifica se os tamanhos da dimensao informada e da variavel sao iguais
+; if (ixDim != vLista[7])
+       move.l    D2,A0
+       move.b    -39(A6),D0
+       cmp.b     7(A0),D0
+       beq.s     findVariable_66
+; {
+; *vErroProc = 21;
+       move.l    (A3),A0
+       move.w    #21,(A0)
+; return 0;
+       clr.l     D0
+       bra       findVariable_7
+findVariable_66:
+; }
+; vPosValueVar = getArrayValuePointer(ixDim, vLista, vDim, vTamValue);
+       move.b    -33(A6),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       pea       -132(A6)
+       move.l    D2,-(A7)
+       move.b    -39(A6),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       @basic_getArrayValuePointer
+       add.w     #16,A7
+       move.l    D0,D3
+; if (*vErroProc)
+       move.l    (A3),A0
+       tst.w     (A0)
+       beq.s     findVariable_68
+; return 0;
+       clr.l     D0
+       bra       findVariable_7
+findVariable_68:
+; vEnder = vPosValueVar;
+       move.l    D3,-144(A6)
+       bra.s     findVariable_63
+findVariable_62:
+; }
+; else
+; {
+; vPosValueVar = vLista + 3;
+       move.l    D2,D0
+       addq.l    #3,D0
+       move.l    D0,D3
+; vEnder = vLista;
+       move.l    D2,-144(A6)
+findVariable_63:
+; }
+; // Pelo tipo da variavel, ja retorna na variavel de nome o conteudo da variavel
+; if (*vLista == '$')
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #36,D0
+       bne       findVariable_70
+; {
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       findVariable_72
+; {
+; writeLongSerial("Aqui 333.666.0-[");
+       pea       @basic_136.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeSerial(*vLista);
+       move.l    D2,A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1162,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vPosValueVar,sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D3,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n");
+       pea       @basic_135.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+findVariable_72:
+; }
+; vOffSet  = (((unsigned long)*(vPosValueVar + 1) << 24) & 0xFF000000);
+       move.l    D3,A0
+       move.b    1(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       and.l     #-16777216,D0
+       move.l    D0,D6
+; vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
+       move.l    D3,A0
+       move.b    2(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       and.l     #16711680,D0
+       or.l      D0,D6
+; vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
+       move.l    D3,A0
+       move.b    3(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       and.l     #65280,D0
+       or.l      D0,D6
+; vOffSet |= ((unsigned long)*(vPosValueVar + 4) & 0x000000FF);
+       move.l    D3,A0
+       move.b    4(A0),D0
+       and.l     #255,D0
+       and.l     #255,D0
+       or.l      D0,D6
+; vTemp = vOffSet;
+       move.l    D6,-150(A6)
+; iy = *vPosValueVar;
+       move.l    D3,A0
+       move.b    (A0),D0
+       and.l     #255,D0
+       move.l    D0,-140(A6)
+; pDst = pVariable;
+       move.l    D4,A5
+; pSrc = vTemp;
+       move.l    -150(A6),-28(A6)
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       findVariable_74
+; {
+; writeLongSerial("Aqui 333.666.1-[");
+       pea       @basic_137.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vTemp,sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    -150(A6),-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+findVariable_74:
+; }
+; for (ix = 0; ix < iy; ix++)
+       clr.l     D5
+findVariable_76:
+       cmp.l     -140(A6),D5
+       bge       findVariable_78
+; {
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       findVariable_79
+; {
+; itoa(ix,sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D5,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa((unsigned long)(pDst - pVariable),sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    A5,D1
+       sub.l     D4,D1
+       move.l    D1,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(*pSrc,sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    -28(A6),A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+findVariable_79:
+; }
+; *pDst = *pSrc;
+       move.l    -28(A6),A0
+       move.b    (A0),(A5)
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq.s     findVariable_81
+; {
+; itoa(*pDst,sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.b    (A5),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+findVariable_81:
+; }
+; pDst++;
+       addq.w    #1,A5
+; pSrc++;
+       addq.l    #1,-28(A6)
+       addq.l    #1,D5
+       bra       findVariable_76
+findVariable_78:
+; }
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq.s     findVariable_83
+; {
+; writeLongSerial("]\r\n");
+       pea       @basic_135.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+findVariable_83:
+; }
+; *pDst = 0x00;
+       clr.b     (A5)
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       findVariable_85
+; {
+; writeLongSerial("Aqui 333.666.2-[");
+       pea       @basic_138.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vOffSet,sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D6,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(pVariable[0],sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D4,A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(pVariable[1],sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D4,A0
+       move.b    1(A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(pVariable[2],sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D4,A0
+       move.b    2(A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_134.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(pVariable[3],sqtdtam,16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D4,A0
+       move.b    3(A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n");
+       pea       @basic_135.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+findVariable_85:
+       bra       findVariable_71
+findVariable_70:
+; }
+; }
+; else
+; {
+; if (!vArray)
+       tst.b     D7
+       bne.s     findVariable_87
+; vPosValueVar++;
+       addq.l    #1,D3
+findVariable_87:
+; pVariable[0] = *(vPosValueVar);
+       move.l    D3,A0
+       move.l    D4,A1
+       move.b    (A0),(A1)
+; pVariable[1] = *(vPosValueVar + 1);
+       move.l    D3,A0
+       move.l    D4,A1
+       move.b    1(A0),1(A1)
+; pVariable[2] = *(vPosValueVar + 2);
+       move.l    D3,A0
+       move.l    D4,A1
+       move.b    2(A0),2(A1)
+; pVariable[3] = *(vPosValueVar + 3);
+       move.l    D3,A0
+       move.l    D4,A1
+       move.b    3(A0),3(A1)
+; pVariable[4] = 0x00;
+       move.l    D4,A0
+       clr.b     4(A0)
+findVariable_71:
+; }
+; if (!vArray)
+       tst.b     D7
+       bne       findVariable_89
+; {
+; for (ix = (SIMPLE_VAR_CACHE_SLOTS - 1); ix > 0; ix--)
+       moveq     #7,D5
+findVariable_91:
+       cmp.l     #0,D5
+       ble       findVariable_93
+; {
+; lastVarCacheName0[ix] = lastVarCacheName0[ix - 1];
+       move.l    D5,D0
+       subq.l    #1,D0
+       lea       @basic_lastVarCacheName0.L,A0
+       lea       @basic_lastVarCacheName0.L,A1
+       move.b    0(A0,D0.L),0(A1,D5.L)
+; lastVarCacheName1[ix] = lastVarCacheName1[ix - 1];
+       move.l    D5,D0
+       subq.l    #1,D0
+       lea       @basic_lastVarCacheName1.L,A0
+       lea       @basic_lastVarCacheName1.L,A1
+       move.b    0(A0,D0.L),0(A1,D5.L)
+; lastVarCacheAddr[ix] = lastVarCacheAddr[ix - 1];
+       move.l    D5,D0
+       subq.l    #1,D0
+       lsl.l     #2,D0
+       lea       @basic_lastVarCacheAddr.L,A0
+       move.l    D5,D1
+       lsl.l     #2,D1
+       lea       @basic_lastVarCacheAddr.L,A1
+       move.l    0(A0,D0.L),0(A1,D1.L)
+       subq.l    #1,D5
+       bra       findVariable_91
+findVariable_93:
+; }
+; lastVarCacheName0[0] = vVarName0;
+       move.b    -146(A6),@basic_lastVarCacheName0.L
+; lastVarCacheName1[0] = vVarName1;
+       move.b    -145(A6),@basic_lastVarCacheName1.L
+; lastVarCacheAddr[0] = vLista;
+       move.l    D2,@basic_lastVarCacheAddr.L
+findVariable_89:
+; }
+; return vEnder;
+       move.l    -144(A6),D0
+       bra       findVariable_7
+findVariable_60:
+; }
+; if (vArray)
+       tst.b     D7
+       beq.s     findVariable_94
+; vLista = vPosNextVar;
+       move.l    -38(A6),D2
+       bra.s     findVariable_95
+findVariable_94:
+; else
+; vLista += 8;
+       addq.l    #8,D2
+findVariable_95:
+; if ((!vArray && vLista >= pStartArrayVar) || (vArray && vLista >= pStartProg) || *vLista == 0x00)
+       tst.b     D7
+       bne.s     findVariable_100
+       moveq     #1,D0
+       bra.s     findVariable_101
+findVariable_100:
+       clr.l     D0
+findVariable_101:
+       and.l     #255,D0
+       beq.s     findVariable_99
+       cmp.l     _pStartArrayVar.L,D2
+       bhs.s     findVariable_98
+findVariable_99:
+       and.l     #255,D7
+       beq.s     findVariable_102
+       cmp.l     _pStartProg.L,D2
+       bhs.s     findVariable_98
+findVariable_102:
+       move.l    D2,A0
+       move.b    (A0),D0
+       bne.s     findVariable_96
+findVariable_98:
+; break;
+       bra.s     findVariable_59
+findVariable_96:
+       bra       findVariable_57
+findVariable_59:
+; }
+; return 0;
+       clr.l     D0
+findVariable_7:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; // Cria a Variavel NO ENDEREÇO DEFINIDO POR nextAddrSimpVar OU nextAddrArrayVar,
+; // DE ACORDO COM O TIPO E NOME INFORMADOS
+; //-----------------------------------------------------------------------------
+; char createVariable(unsigned char* pVariable, unsigned char* pValor, char pType)
+; {
+       xdef      _createVariable
+_createVariable:
+       link      A6,#-40
+       movem.l   D2/D3/D4/A2,-(A7)
+       move.l    8(A6),D3
+       lea       _nextAddrSimpVar.L,A2
+; char vRet = 0;
+       clr.b     D4
+; long vTemp = 0;
+       clr.l     -38(A6)
+; char vBuffer [sizeof(long)*8+1];
+; unsigned char* vNextSimpVar;
+; char vLenVar = 0;
+       clr.b     -1(A6)
+; vTemp = *nextAddrSimpVar;
+       move.l    (A2),A0
+       move.l    (A0),-38(A6)
+; vNextSimpVar = *nextAddrSimpVar;
+       move.l    (A2),A0
+       move.l    (A0),D2
+; vLenVar = strlen(pVariable);
+       move.l    D3,-(A7)
+       jsr       _strlen
+       addq.w    #4,A7
+       move.b    D0,-1(A6)
+; *vNextSimpVar++ = pType;
+       move.l    D2,A0
+       addq.l    #1,D2
+       move.b    19(A6),(A0)
+; *vNextSimpVar++ = pVariable[0];
+       move.l    D3,A0
+       move.l    D2,A1
+       addq.l    #1,D2
+       move.b    (A0),(A1)
+; *vNextSimpVar++ = pVariable[1];
+       move.l    D3,A0
+       move.l    D2,A1
+       addq.l    #1,D2
+       move.b    1(A0),(A1)
+; vRet = updateVariable(vNextSimpVar, pValor, pType, 0);
+       clr.l     -(A7)
+       move.b    19(A6),D1
+       ext.w     D1
+       ext.l     D1
+       move.l    D1,-(A7)
+       move.l    12(A6),-(A7)
+       move.l    D2,-(A7)
+       jsr       _updateVariable
+       add.w     #16,A7
+       move.b    D0,D4
+; *nextAddrSimpVar += 8;
+       move.l    (A2),A0
+       addq.l    #8,(A0)
+; return vRet;
+       move.b    D4,D0
+       movem.l   (A7)+,D2/D3/D4/A2
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; // Atualiza o valor da Variavel no ENDEREÇO DEFINIDO POR nextAddrSimpVar OU nextAddrArrayVar,
+; // DE ACORDO COM O TIPO E NOME INFORMADOS
+; //-----------------------------------------------------------------------------
+; char updateVariable(unsigned long* pVariable, unsigned char* pValor, char pType, char pOper)
+; {
+       xdef      _updateVariable
+_updateVariable:
+       link      A6,#-36
+       movem.l   D2/D3/D4/D5/D6/D7/A2/A3,-(A7)
+       move.l    12(A6),D4
+       lea       _nextAddrString.L,A3
+; long vNumVal = 0;
+       clr.l     D6
+; int ix, iz = 0;
+       clr.l     D5
+; char vBuffer [sizeof(long)*8+1];
+; unsigned char* vNextSimpVar;
+; unsigned char* vNextString;
+; char pNewStr = 0;
+       clr.b     -1(A6)
+; unsigned long vOffSet;
+; //    unsigned char* sqtdtam[20];
+; vNextSimpVar = pVariable;
+       move.l    8(A6),D2
+; *atuVarAddr = pVariable;
+       move.l    _atuVarAddr.L,A0
+       move.l    8(A6),(A0)
+; /*writeLongSerial("Aqui 333.666.0-[");
+; itoa(pVariable,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(pValor,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(pType,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; if (pType == '#' || pType == '%')   // Real ou Inteiro
+       move.b    19(A6),D0
+       cmp.b     #35,D0
+       beq.s     updateVariable_3
+       move.b    19(A6),D0
+       cmp.b     #37,D0
+       bne       updateVariable_1
+updateVariable_3:
+; {
+; if (vNextSimpVar < pStartArrayVar)
+       cmp.l     _pStartArrayVar.L,D2
+       bhs.s     updateVariable_4
+; *vNextSimpVar++ = 0x00;
+       move.l    D2,A0
+       addq.l    #1,D2
+       clr.b     (A0)
+updateVariable_4:
+; *vNextSimpVar++ = pValor[0];
+       move.l    D4,A0
+       move.l    D2,A1
+       addq.l    #1,D2
+       move.b    (A0),(A1)
+; *vNextSimpVar++ = pValor[1];
+       move.l    D4,A0
+       move.l    D2,A1
+       addq.l    #1,D2
+       move.b    1(A0),(A1)
+; *vNextSimpVar++ = pValor[2];
+       move.l    D4,A0
+       move.l    D2,A1
+       addq.l    #1,D2
+       move.b    2(A0),(A1)
+; *vNextSimpVar++ = pValor[3];
+       move.l    D4,A0
+       move.l    D2,A1
+       addq.l    #1,D2
+       move.b    3(A0),(A1)
+       bra       updateVariable_2
+updateVariable_1:
+; }
+; else // String
+; {
+; iz = strlen(pValor);    // Tamanho da strings
+       move.l    D4,-(A7)
+       jsr       _strlen
+       addq.w    #4,A7
+       move.l    D0,D5
+; /*writeLongSerial("Aqui 333.666.1-[");
+; itoa(*vNextSimpVar,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(iz,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(pOper,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; // Se for o mesmo tamanho ou menor, usa a mesma posicao
+; if (*vNextSimpVar <= iz && pOper)
+       move.l    D2,A0
+       move.b    (A0),D0
+       and.l     #255,D0
+       cmp.l     D5,D0
+       bhi       updateVariable_6
+       move.b    23(A6),D0
+       ext.w     D0
+       ext.l     D0
+       tst.l     D0
+       beq       updateVariable_6
+; {
+; vOffSet  = (((unsigned long)*(vNextSimpVar + 1) << 24) & 0xFF000000);
+       move.l    D2,A0
+       move.b    1(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       and.l     #-16777216,D0
+       move.l    D0,D7
+; vOffSet |= (((unsigned long)*(vNextSimpVar + 2) << 16) & 0x00FF0000);
+       move.l    D2,A0
+       move.b    2(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       lsl.l     #8,D0
+       and.l     #16711680,D0
+       or.l      D0,D7
+; vOffSet |= (((unsigned long)*(vNextSimpVar + 3) << 8) & 0x0000FF00);
+       move.l    D2,A0
+       move.b    3(A0),D0
+       and.l     #255,D0
+       lsl.l     #8,D0
+       and.l     #65280,D0
+       or.l      D0,D7
+; vOffSet |= ((unsigned long)*(vNextSimpVar + 4) & 0x000000FF);
+       move.l    D2,A0
+       move.b    4(A0),D0
+       and.l     #255,D0
+       and.l     #255,D0
+       or.l      D0,D7
+; vNextString = vOffSet;
+       move.l    D7,D3
+; if (pOper == 2 && vNextString == 0)
+       move.b    23(A6),D0
+       cmp.b     #2,D0
+       bne.s     updateVariable_8
+       tst.l     D3
+       bne.s     updateVariable_8
+; {
+; vNextString = *nextAddrString;
+       move.l    (A3),A0
+       move.l    (A0),D3
+; pNewStr = 1;
+       move.b    #1,-1(A6)
+updateVariable_8:
+       bra.s     updateVariable_7
+updateVariable_6:
+; }
+; }
+; else
+; vNextString = *nextAddrString;
+       move.l    (A3),A0
+       move.l    (A0),D3
+updateVariable_7:
+; vNumVal = vNextString;
+       move.l    D3,D6
+; /*writeLongSerial("Aqui 333.666.2-[");
+; itoa(nextAddrString,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(vNextString,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(vNumVal,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; for (ix = 0; ix < iz; ix++)
+       move.w    #0,A2
+updateVariable_10:
+       move.l    A2,D0
+       cmp.l     D5,D0
+       bge.s     updateVariable_12
+; {
+; *vNextString++ = pValor[ix];
+       move.l    D4,A0
+       move.l    D3,A1
+       addq.l    #1,D3
+       move.b    0(A0,A2.L),(A1)
+       addq.w    #1,A2
+       bra       updateVariable_10
+updateVariable_12:
+; }
+; /*writeLongSerial("Aqui 333.666.3-[");
+; itoa(nextAddrString,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(vNextString,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(vNumVal,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; if (*vNextSimpVar > iz || !pOper || pNewStr)
+       move.l    D2,A0
+       move.b    (A0),D0
+       and.l     #255,D0
+       cmp.l     D5,D0
+       bhi.s     updateVariable_15
+       tst.b     23(A6)
+       bne.s     updateVariable_16
+       moveq     #1,D0
+       bra.s     updateVariable_17
+updateVariable_16:
+       clr.l     D0
+updateVariable_17:
+       ext.w     D0
+       ext.l     D0
+       tst.l     D0
+       bne.s     updateVariable_15
+       move.b    -1(A6),D0
+       ext.w     D0
+       ext.l     D0
+       tst.l     D0
+       beq.s     updateVariable_13
+updateVariable_15:
+; *nextAddrString = vNextString;
+       move.l    (A3),A0
+       move.l    D3,(A0)
+updateVariable_13:
+; /*writeLongSerial("Aqui 333.666.4-[");
+; itoa(vNextString,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(vNumVal,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; *vNextSimpVar++ = iz;
+       move.l    D2,A0
+       addq.l    #1,D2
+       move.b    D5,(A0)
+; /*writeLongSerial("Aqui 333.666.5-[");
+; itoa(vNextString,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; *vNextSimpVar++ = ((vNumVal & 0xFF000000) >>24);
+       move.l    D6,D0
+       and.l     #-16777216,D0
+       lsr.l     #8,D0
+       lsr.l     #8,D0
+       lsr.l     #8,D0
+       move.l    D2,A0
+       addq.l    #1,D2
+       move.b    D0,(A0)
+; *vNextSimpVar++ = ((vNumVal & 0x00FF0000) >>16);
+       move.l    D6,D0
+       and.l     #16711680,D0
+       asr.l     #8,D0
+       asr.l     #8,D0
+       move.l    D2,A0
+       addq.l    #1,D2
+       move.b    D0,(A0)
+; *vNextSimpVar++ = ((vNumVal & 0x0000FF00) >>8);
+       move.l    D6,D0
+       and.l     #65280,D0
+       asr.l     #8,D0
+       move.l    D2,A0
+       addq.l    #1,D2
+       move.b    D0,(A0)
+; *vNextSimpVar++ = (vNumVal & 0x000000FF);
+       move.l    D6,D0
+       and.l     #255,D0
+       move.l    D2,A0
+       addq.l    #1,D2
+       move.b    D0,(A0)
+updateVariable_2:
+; /*writeLongSerial("Aqui 333.666.6-[");
+; itoa(vNextString,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; }
+; /*    *(vNextSimpVar + 1) = 0x00;
+; *(vNextSimpVar + 2) = 0x00;
+; *(vNextSimpVar + 3) = 0x00;
+; *(vNextSimpVar + 4) = 0x00;*/
+; return 0;
+       clr.b     D0
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3
+       unlk      A6
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // Cria a Variavel Array NO ENDEREÇO DEFINIDO POR nextAddrArrayVar, DE ACORDO COM O TIPO,
+; // NOME E DIMENSÕES INFORMADOS
+; //--------------------------------------------------------------------------------------
+; char createVariableArray(unsigned char* pVariable, char pType, unsigned int pNumDim, unsigned int *pDim)
+; {
+       xdef      _createVariableArray
+_createVariableArray:
+       link      A6,#-44
+       movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4,-(A7)
+       move.l    20(A6),D5
+       move.l    16(A6),D6
+       lea       _nextAddrArrayVar.L,A3
+       move.l    8(A6),A4
+; char vRet = 0;
+       clr.b     -43(A6)
+; long vTemp = 0;
+       clr.l     -42(A6)
+; unsigned char* vTempC = &vTemp;
+       lea       -42(A6),A0
+       move.l    A0,A2
+; char vBuffer [sizeof(long)*8+1];
+; unsigned char* vNextArrayVar;
+; char vLenVar = 0;
+       clr.b     -5(A6)
+; int ix, vTam;
+; long vAreaFree = (pStartString - *nextAddrArrayVar);
+       move.l    _pStartString.L,D0
+       move.l    (A3),A0
+       sub.l     (A0),D0
+       move.l    D0,-4(A6)
+; long vSizeTotal = 0;
+       moveq     #0,D7
+; //    unsigned char sqtdtam[20];
+; vTemp = *nextAddrArrayVar;
+       move.l    (A3),A0
+       move.l    (A0),-42(A6)
+; vNextArrayVar = *nextAddrArrayVar;
+       move.l    (A3),A0
+       move.l    (A0),D3
+; vLenVar = strlen(pVariable);
+       move.l    A4,-(A7)
+       jsr       _strlen
+       addq.w    #4,A7
+       move.b    D0,-5(A6)
+; *vNextArrayVar++ = pType;
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    15(A6),(A0)
+; *vNextArrayVar++ = pVariable[0];
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    (A4),(A0)
+; *vNextArrayVar++ = pVariable[1];
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    1(A4),(A0)
+; vTam = 0;
+       clr.l     D4
+; for (ix = 0; ix < pNumDim; ix++)
+       clr.l     D2
+createVariableArray_1:
+       cmp.l     D6,D2
+       bhs       createVariableArray_3
+; {
+; // Somando mais 1, porque 0 = 1 em quantidade e e em posicao (igual ao c)
+; pDim[ix] = pDim[ix] /*+ 1*/ ;
+       move.l    D5,A0
+       move.l    D2,D0
+       lsl.l     #2,D0
+       move.l    D5,A1
+       move.l    D2,D1
+       lsl.l     #2,D1
+       move.l    0(A0,D0.L),0(A1,D1.L)
+; // Definir o tamanho do campo de dados do array
+; if (vTam == 0)
+       tst.l     D4
+       bne.s     createVariableArray_4
+; vTam = pDim[ix] /*- 1*/ ;
+       move.l    D5,A0
+       move.l    D2,D0
+       lsl.l     #2,D0
+       move.l    0(A0,D0.L),D4
+       bra.s     createVariableArray_5
+createVariableArray_4:
+; else
+; vTam = vTam * (pDim[ix] /*- 1*/ );
+       move.l    D5,A0
+       move.l    D2,D0
+       lsl.l     #2,D0
+       move.l    D4,-(A7)
+       move.l    0(A0,D0.L),-(A7)
+       jsr       ULMUL
+       move.l    (A7),D0
+       addq.w    #8,A7
+       move.l    D0,D4
+createVariableArray_5:
+       addq.l    #1,D2
+       bra       createVariableArray_1
+createVariableArray_3:
+; /*writeLongSerial("Aqui 333.666.0-[");
+; itoa(vTam,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(ix,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(pDim[ix],sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; }
+; /*writeLongSerial("Aqui 333.666.1-[");
+; itoa(vTam,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(pNumDim,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; if (pType == '$')
+       move.b    15(A6),D0
+       cmp.b     #36,D0
+       bne.s     createVariableArray_6
+; vTam = vTam * 5;
+       move.l    D4,-(A7)
+       pea       5
+       jsr       LMUL
+       move.l    (A7),D4
+       addq.w    #8,A7
+       bra.s     createVariableArray_7
+createVariableArray_6:
+; else
+; vTam = vTam * 4;
+       move.l    D4,-(A7)
+       pea       4
+       jsr       LMUL
+       move.l    (A7),D4
+       addq.w    #8,A7
+createVariableArray_7:
+; /*writeLongSerial("Aqui 333.666.2-[");
+; itoa(pType,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(vTam,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; vSizeTotal = vTam + 8;
+       move.l    D4,D0
+       addq.l    #8,D0
+       move.l    D0,D7
+; vSizeTotal = vSizeTotal + (pNumDim *2);
+       move.l    D7,D0
+       move.l    D6,-(A7)
+       pea       2
+       jsr       ULMUL
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       move.l    D0,D7
+; /*writeLongSerial("Aqui 333.666.3-[");
+; itoa(pStartString,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(*nextAddrArrayVar,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(vAreaFree,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]-[");
+; itoa(vSizeTotal,sqtdtam,16);
+; writeLongSerial(sqtdtam);
+; writeLongSerial("]\r\n");*/
+; if (vSizeTotal > vAreaFree)
+       cmp.l     -4(A6),D7
+       ble.s     createVariableArray_8
+; {
+; *vErroProc = 22;
+       move.l    _vErroProc.L,A0
+       move.w    #22,(A0)
+; return 0;
+       clr.b     D0
+       bra       createVariableArray_10
+createVariableArray_8:
+; }
+; // Coloca setup do array
+; vTemp = vTemp + vTam + 8 + (pNumDim * 2);
+       move.l    -42(A6),D0
+       add.l     D4,D0
+       addq.l    #8,D0
+       move.l    D6,-(A7)
+       pea       2
+       jsr       ULMUL
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       move.l    D0,-42(A6)
+; *vNextArrayVar++ = vTempC[0];
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    (A2),(A0)
+; *vNextArrayVar++ = vTempC[1];
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    1(A2),(A0)
+; *vNextArrayVar++ = vTempC[2];
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    2(A2),(A0)
+; *vNextArrayVar++ = vTempC[3];
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    3(A2),(A0)
+; *vNextArrayVar++ = pNumDim;
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    D6,(A0)
+; for (ix = 0; ix < pNumDim; ix++)
+       clr.l     D2
+createVariableArray_11:
+       cmp.l     D6,D2
+       bhs       createVariableArray_13
+; {
+; *vNextArrayVar++ = (pDim[ix] >> 8);
+       move.l    D5,A0
+       move.l    D2,D0
+       lsl.l     #2,D0
+       move.l    0(A0,D0.L),D0
+       lsr.l     #8,D0
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    D0,(A0)
+; *vNextArrayVar++ = (pDim[ix] & 0xFF);
+       move.l    D5,A0
+       move.l    D2,D0
+       lsl.l     #2,D0
+       move.l    0(A0,D0.L),D0
+       and.l     #255,D0
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    D0,(A0)
+       addq.l    #1,D2
+       bra       createVariableArray_11
+createVariableArray_13:
+; }
+; // Limpa area de dados (zera)
+; for (ix = 0; ix < vTam; ix++)
+       clr.l     D2
+createVariableArray_14:
+       cmp.l     D4,D2
+       bge.s     createVariableArray_16
+; *(vNextArrayVar + ix) = 0x00;
+       move.l    D3,A0
+       clr.b     0(A0,D2.L)
+       addq.l    #1,D2
+       bra       createVariableArray_14
+createVariableArray_16:
+; *nextAddrArrayVar = vTemp;
+       move.l    (A3),A0
+       move.l    -42(A6),(A0)
+; return 0;
+       clr.b     D0
+createVariableArray_10:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4
+       unlk      A6
+       rts
+; }
+; /*****************************************************************************/
+; /* FUNCOES BASIC                                                             */
+; /*****************************************************************************/
 ; //-----------------------------------------------------------------------------
 ; // Joga pra tela Texto.
 ; // Syntaxe:
@@ -15079,15 +17137,39 @@ _basFor:
 ; char vResLog3 = 0, vResLog4 = 0;
        clr.b     -1(A6)
        moveq     #0,D7
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq.s     basFor_1
+; {
+; writeLongSerial("Aqui 444.666.0\r\n");
+       pea       @basic_139.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+basFor_1:
+; }
 ; basLet();
        jsr       _basLet
 ; if (*vErroProc) return 0;
        move.l    _vErroProc.L,A0
        tst.w     (A0)
-       beq.s     basFor_1
+       beq.s     basFor_3
        clr.l     D0
-       bra       basFor_3
-basFor_1:
+       bra       basFor_5
+basFor_3:
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq.s     basFor_6
+; {
+; writeLongSerial("Aqui 444.666.1]\r\n");
+       pea       @basic_140.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+basFor_6:
+; }
 ; endLastVar = *atuVarAddr - 3;
        move.l    _atuVarAddr.L,A0
        move.l    (A0),D0
@@ -15106,7 +17188,7 @@ basFor_1:
        move.b    D0,D6
 ; if (vRetVar < 0)
        cmp.b     #0,D6
-       bge.s     basFor_4
+       bge.s     basFor_8
 ; {
 ; i.nameVar[0]=endLastVar[1];
        move.l    D5,A0
@@ -15123,14 +17205,14 @@ basFor_1:
        move.l    A2,D0
        move.l    D0,A1
        move.b    (A0),2(A1)
-basFor_4:
+basFor_8:
 ; }
 ; if (i.nameVar[2] == '#')
        move.l    A2,D0
        move.l    D0,A0
        move.b    2(A0),D0
        cmp.b     #35,D0
-       bne.s     basFor_6
+       bne.s     basFor_10
 ; i.step = fppReal(iStep);
        move.l    -22(A6),-(A7)
        jsr       (A5)
@@ -15138,14 +17220,14 @@ basFor_4:
        move.l    A2,D1
        move.l    D1,A0
        move.l    D0,12(A0)
-       bra.s     basFor_7
-basFor_6:
+       bra.s     basFor_11
+basFor_10:
 ; else
 ; i.step = iStep;
        move.l    A2,D0
        move.l    D0,A0
        move.l    -22(A6),12(A0)
-basFor_7:
+basFor_11:
 ; i.endVar = endVarCont;
        move.l    A2,D0
        move.l    D0,A0
@@ -15155,28 +17237,57 @@ basFor_7:
 ; if (*vErroProc) return 0;
        move.l    _vErroProc.L,A0
        tst.w     (A0)
-       beq.s     basFor_8
+       beq.s     basFor_12
        clr.l     D0
-       bra       basFor_3
-basFor_8:
+       bra       basFor_5
+basFor_12:
 ; if (*tok!=0x86) /* read and discard the TO */
        move.l    _tok.L,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #134,D0
-       beq.s     basFor_10
+       beq.s     basFor_14
 ; {
 ; *vErroProc = 9;
        move.l    _vErroProc.L,A0
        move.w    #9,(A0)
 ; return 0;
        clr.l     D0
-       bra       basFor_3
-basFor_10:
+       bra       basFor_5
+basFor_14:
 ; }
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A3),A0
        addq.l    #1,(A0)
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       basFor_16
+; {
+; writeLongSerial("Aqui 444.666.2 varName-[");
+       pea       @basic_141.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(*pointerRunProg,sqtdtam,16);
+       pea       16
+       pea       -14(A6)
+       move.l    (A3),A0
+       move.l    (A0),-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       pea       -14(A6)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n");
+       pea       @basic_135.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+basFor_16:
+; }
 ; getExp(&iTarget); /* get target value */
        pea       -18(A6)
        jsr       _getExp
@@ -15186,11 +17297,11 @@ basFor_10:
        move.l    D0,A0
        move.b    2(A0),D0
        cmp.b     #35,D0
-       bne.s     basFor_12
+       bne.s     basFor_18
        move.l    _value_type.L,A0
        move.b    (A0),D0
        cmp.b     #37,D0
-       bne.s     basFor_12
+       bne.s     basFor_18
 ; i.target = fppReal(iTarget);
        move.l    -18(A6),-(A7)
        jsr       (A5)
@@ -15198,20 +17309,20 @@ basFor_10:
        move.l    A2,D1
        move.l    D1,A0
        move.l    D0,8(A0)
-       bra.s     basFor_13
-basFor_12:
+       bra.s     basFor_19
+basFor_18:
 ; else
 ; i.target = iTarget;
        move.l    A2,D0
        move.l    D0,A0
        move.l    -18(A6),8(A0)
-basFor_13:
+basFor_19:
 ; if (*tok==0x88) /* read STEP */
        move.l    _tok.L,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #136,D0
-       bne       basFor_17
+       bne       basFor_23
 ; {
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A3),A0
@@ -15225,11 +17336,11 @@ basFor_13:
        move.l    D0,A0
        move.b    2(A0),D0
        cmp.b     #35,D0
-       bne.s     basFor_16
+       bne.s     basFor_22
        move.l    _value_type.L,A0
        move.b    (A0),D0
        cmp.b     #37,D0
-       bne.s     basFor_16
+       bne.s     basFor_22
 ; i.step = fppReal(iStep);
        move.l    -22(A6),-(A7)
        jsr       (A5)
@@ -15237,14 +17348,14 @@ basFor_13:
        move.l    A2,D1
        move.l    D1,A0
        move.l    D0,12(A0)
-       bra.s     basFor_17
-basFor_16:
+       bra.s     basFor_23
+basFor_22:
 ; else
 ; i.step = iStep;
        move.l    A2,D0
        move.l    D0,A0
        move.l    -22(A6),12(A0)
-basFor_17:
+basFor_23:
 ; }
 ; endVarCont=i.endVar;
        move.l    A2,D0
@@ -15256,7 +17367,7 @@ basFor_17:
        move.l    D0,A0
        move.b    2(A0),D0
        cmp.b     #35,D0
-       bne       basFor_18
+       bne       basFor_24
 ; {
 ; vResLog1 = logicalNumericFloatLong(0xF6 /* <= */, *endVarCont, i.target);
        move.l    A2,D1
@@ -15296,8 +17407,8 @@ basFor_17:
        jsr       (A4)
        add.w     #12,A7
        move.b    D0,D7
-       bra       basFor_19
-basFor_18:
+       bra       basFor_25
+basFor_24:
 ; }
 ; else
 ; {
@@ -15307,12 +17418,12 @@ basFor_18:
        move.l    D0,A1
        move.l    (A0),D0
        cmp.l     8(A1),D0
-       bgt.s     basFor_20
+       bgt.s     basFor_26
        moveq     #1,D0
-       bra.s     basFor_21
-basFor_20:
+       bra.s     basFor_27
+basFor_26:
        clr.l     D0
-basFor_21:
+basFor_27:
        move.b    D0,-3(A6)
 ; vResLog2 = (*endVarCont >= i.target);
        move.l    D3,A0
@@ -15320,50 +17431,50 @@ basFor_21:
        move.l    D0,A1
        move.l    (A0),D0
        cmp.l     8(A1),D0
-       blt.s     basFor_22
+       blt.s     basFor_28
        moveq     #1,D0
-       bra.s     basFor_23
-basFor_22:
+       bra.s     basFor_29
+basFor_28:
        clr.l     D0
-basFor_23:
+basFor_29:
        move.b    D0,-2(A6)
 ; vResLog3 = (i.step > 0);
        move.l    A2,D0
        move.l    D0,A0
        move.l    12(A0),D0
        cmp.l     #0,D0
-       ble.s     basFor_24
+       ble.s     basFor_30
        moveq     #1,D0
-       bra.s     basFor_25
-basFor_24:
+       bra.s     basFor_31
+basFor_30:
        clr.l     D0
-basFor_25:
+basFor_31:
        move.b    D0,-1(A6)
 ; vResLog4 = (i.step < 0);
        move.l    A2,D0
        move.l    D0,A0
        move.l    12(A0),D0
        cmp.l     #0,D0
-       bge.s     basFor_26
+       bge.s     basFor_32
        moveq     #1,D0
-       bra.s     basFor_27
-basFor_26:
+       bra.s     basFor_33
+basFor_32:
        clr.l     D0
-basFor_27:
+basFor_33:
        move.b    D0,D7
-basFor_19:
+basFor_25:
 ; }
 ; if (vResLog3 && vResLog1 || (vResLog4 && vResLog2))
        tst.b     -1(A6)
-       beq.s     basFor_31
+       beq.s     basFor_37
        tst.b     -3(A6)
-       bne.s     basFor_30
-basFor_31:
+       bne.s     basFor_36
+basFor_37:
        tst.b     D7
-       beq       basFor_28
+       beq       basFor_34
        tst.b     -2(A6)
-       beq       basFor_28
-basFor_30:
+       beq       basFor_34
+basFor_36:
 ; {
 ; vTempPointer = *pointerRunProg;
        move.l    (A3),A0
@@ -15372,15 +17483,15 @@ basFor_30:
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #58,D0
-       bne.s     basFor_32
+       bne.s     basFor_38
 ; {
 ; i.progPosPointerRet = *pointerRunProg;
        move.l    (A3),A0
        move.l    A2,D0
        move.l    D0,A1
        move.l    (A0),16(A1)
-       bra.s     basFor_33
-basFor_32:
+       bra.s     basFor_39
+basFor_38:
 ; }
 ; else
 ; i.progPosPointerRet = *nextAddr;
@@ -15388,10 +17499,10 @@ basFor_32:
        move.l    A2,D0
        move.l    D0,A1
        move.l    (A0),16(A1)
-basFor_33:
+basFor_39:
 ; if (vRetVar < 0)
        cmp.b     #0,D6
-       bge.s     basFor_34
+       bge.s     basFor_40
 ; forPush(i);
        move.l    A2,D1
        move.l    D1,A0
@@ -15401,8 +17512,8 @@ basFor_33:
        dbra      D1,*-2
        jsr       _forPush
        add.w     #20,A7
-       bra       basFor_35
-basFor_34:
+       bra       basFor_41
+basFor_40:
 ; else
 ; {
 ; j = (forStack + vRetVar);
@@ -15435,9 +17546,9 @@ basFor_34:
        move.l    D0,A0
        move.l    D4,A1
        move.l    16(A0),16(A1)
-basFor_35:
-       bra       basFor_38
-basFor_28:
+basFor_41:
+       bra       basFor_44
+basFor_34:
 ; }
 ; }
 ; else  /* otherwise, skip loop code alltogether */
@@ -15446,12 +17557,12 @@ basFor_28:
        move.l    (A3),A0
        move.l    (A0),D2
 ; while(*vTempPointer != 0x87) // Search NEXT
-basFor_36:
+basFor_42:
        move.l    D2,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #135,D0
-       beq       basFor_38
+       beq       basFor_44
 ; {
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A3),A0
@@ -15465,13 +17576,13 @@ basFor_36:
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #135,D0
-       bne       basFor_45
+       bne       basFor_51
 ; {
 ; // Verifica se tem letra, se nao tiver, usa ele
 ; if (*(vTempPointer + 1)!=0x00)
        move.l    D2,A0
        move.b    1(A0),D0
-       beq       basFor_45
+       beq       basFor_51
 ; {
 ; // verifica se é a mesma variavel que ele tem
 ; if (*(vTempPointer + 1) != i.nameVar[0])
@@ -15480,7 +17591,7 @@ basFor_36:
        move.l    D0,A1
        move.b    1(A0),D0
        cmp.b     (A1),D0
-       beq.s     basFor_43
+       beq.s     basFor_49
 ; {
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A3),A0
@@ -15488,8 +17599,8 @@ basFor_36:
 ; vTempPointer = *pointerRunProg;
        move.l    (A3),A0
        move.l    (A0),D2
-       bra       basFor_45
-basFor_43:
+       bra       basFor_51
+basFor_49:
 ; }
 ; else
 ; {
@@ -15499,13 +17610,13 @@ basFor_43:
        move.l    D0,A1
        move.b    2(A0),D0
        cmp.b     1(A1),D0
-       beq.s     basFor_45
+       beq.s     basFor_51
        move.l    D2,A0
        move.l    A2,D0
        move.l    D0,A1
        move.b    2(A0),D0
        cmp.b     2(A1),D0
-       beq.s     basFor_45
+       beq.s     basFor_51
 ; {
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A3),A0
@@ -15513,9 +17624,9 @@ basFor_43:
 ; vTempPointer = *pointerRunProg;
        move.l    (A3),A0
        move.l    (A0),D2
-basFor_45:
-       bra       basFor_36
-basFor_38:
+basFor_51:
+       bra       basFor_42
+basFor_44:
 ; }
 ; }
 ; }
@@ -15524,7 +17635,7 @@ basFor_38:
 ; }
 ; return 0;
        clr.l     D0
-basFor_3:
+basFor_5:
        movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
        unlk      A6
        rts
@@ -20107,7 +22218,6 @@ _basRestore:
        clr.l     D0
        rts
 ; }
-; #endif
        section   const
 @basic_1:
        dc.b      63,114,101,115,101,114,118,101,100,32,48,0
@@ -20321,8 +22431,8 @@ _basRestore:
 @basic_94:
        dc.b      78,79,84,0
 @basic_95:
-       dc.b      77,77,83,74,45,66,65,83,73,67,32,118,49,46,48
-       dc.b      101,0
+       dc.b      77,77,83,74,45,66,65,83,73,67,32,118,49,46,49
+       dc.b      97,48,51,0
 @basic_96:
        dc.b      13,10,0
 @basic_97:
@@ -20399,31 +22509,45 @@ _basRestore:
 @basic_127:
        dc.b      32,33,13,10,0
 @basic_128:
-       dc.b      43,45,42,94,47,61,59,58,44,62,60,0
-@basic_129:
-       dc.b      58,0
-@basic_130:
        dc.b      76,111,97,100,105,110,103,32,66,97,115,105,99
        dc.b      32,80,114,111,103,114,97,109,46,46,46,13,10
        dc.b      0
-@basic_131:
+@basic_129:
        dc.b      68,111,110,101,46,13,10,0
-@basic_132:
+@basic_130:
        dc.b      80,114,111,99,101,115,115,105,110,103,46,46
        dc.b      46,13,10,0
+@basic_131:
+       dc.b      76,111,97,100,105,110,103,32,66,97,115,105,99
+       dc.b      32,80,114,111,103,114,97,109,32,49,107,46,46
+       dc.b      46,13,10,0
+@basic_132:
+       dc.b      58,0
 @basic_133:
        dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,48
-       dc.b      45,91,0
+       dc.b      32,118,97,114,78,97,109,101,45,91,0
 @basic_134:
        dc.b      93,45,91,0
 @basic_135:
        dc.b      93,13,10,0
 @basic_136:
-       dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,49
+       dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,48
        dc.b      45,91,0
 @basic_137:
+       dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,49
+       dc.b      45,91,0
+@basic_138:
        dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,50
        dc.b      45,91,0
+@basic_139:
+       dc.b      65,113,117,105,32,52,52,52,46,54,54,54,46,48
+       dc.b      13,10,0
+@basic_140:
+       dc.b      65,113,117,105,32,52,52,52,46,54,54,54,46,49
+       dc.b      93,13,10,0
+@basic_141:
+       dc.b      65,113,117,105,32,52,52,52,46,54,54,54,46,50
+       dc.b      32,118,97,114,78,97,109,101,45,91,0
        xdef      _keywords_count
 _keywords_count:
        dc.l      67
@@ -20493,13 +22617,13 @@ _pStartArrayVar:
        dc.l      8400896
        xdef      _pStartString
 _pStartString:
-       dc.l      8454144
+       dc.l      8585216
        xdef      _pStartProg
 _pStartProg:
-       dc.l      8585216
+       dc.l      8716288
        xdef      _pStartXBasLoad
 _pStartXBasLoad:
-       dc.l      8978432
+       dc.l      9109504
        xdef      _pStartStack
 _pStartStack:
        dc.l      9428992
@@ -20651,6 +22775,14 @@ _atuVarAddr:
        dc.l      @basic_16,@basic_17,@basic_18,@basic_19,@basic_20
        dc.l      @basic_21,@basic_22,@basic_23,@basic_24,@basic_25
        dc.l      @basic_26,@basic_27
+@basic_lastVarCacheName0:
+       dc.b      0,0,0,0,0,0,0,0
+@basic_lastVarCacheName1:
+       dc.b      0,0,0,0,0,0,0,0
+@basic_lastVarCacheAddr:
+       dc.l      0,0,0,0,0,0,0,0
+find_var_vTempDepth:
+       dc.b      0
        section   bss
        xdef      _vbufInput
 _vbufInput:
@@ -20688,6 +22820,18 @@ _videoCursorPosColX:
        xdef      _videoCursorPosRowY
 _videoCursorPosRowY:
        ds.b      2
+@basic_valStack:
+       ds.b      1600
+@basic_opStack:
+       ds.b      32
+@basic_opPrecStack:
+       ds.b      32
+@basic_valTypeStack:
+       ds.b      32
+@basic_temp:
+       ds.b      50
+find_var_vTempPool:
+       ds.b      1000
        xref      _Reg_TACR
        xref      _strcpy
        xref      _itoa
@@ -20707,6 +22851,7 @@ _videoCursorPosRowY:
        xref      _STR_TO_FP
        xref      _FPP_FPP
        xref      _FPP_SQRT
+       xref      _memset
        xref      _FPP_COSH
        xref      _FPP_PWR
        xref      _FP_TO_STR

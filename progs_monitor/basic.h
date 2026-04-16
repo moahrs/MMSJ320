@@ -33,12 +33,24 @@ unsigned short videoCursorPosRow;  // Posical atual caracter do cursor na linha 
 unsigned short videoCursorPosColX;  // Posicao atual do cursor na coluna (0 a 255)
 unsigned short videoCursorPosRowY;  // Posical atual do cursor na linha (0 a 191)
 
-unsigned char *pStartSimpVar        = 0x00800000;   // Area Variaveis Simples
-unsigned char *pStartArrayVar       = 0x00803000;   // Area Arrays
-unsigned char *pStartString         = 0x00810000;   // Area Strings
-unsigned char *pStartProg           = 0x00830000;   // Area Programa  deve ser 0x00810000
-unsigned char *pStartXBasLoad       = 0x00890000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
-unsigned char *pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
+//#define RUN_ON_FLASH 0
+#define USE_ITERATIVE_PARSER // Comente para usar o parser antigo
+
+#ifdef RUN_ON_FLASH
+  unsigned char *pStartSimpVar        = 0x00800000;   // Area Variaveis Simples
+  unsigned char *pStartArrayVar       = 0x00803000;   // Area Arrays
+  unsigned char *pStartString         = 0x00810000;   // Area Strings
+  unsigned char *pStartProg           = 0x00830000;   // Area Programa  deve ser 0x00810000
+  unsigned char *pStartXBasLoad       = 0x00890000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+  unsigned char *pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
+#else
+  unsigned char *pStartSimpVar        = 0x00800000;   // Area Variaveis Simples
+  unsigned char *pStartArrayVar       = 0x00803000;   // Area Arrays
+  unsigned char *pStartString         = 0x00830000;   // Area Strings
+  unsigned char *pStartProg           = 0x00850000;   // Area Programa  deve ser 0x00810000
+  unsigned char *pStartXBasLoad       = 0x008B0000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+  unsigned char *pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
+#endif
 
 unsigned char *pProcess             = 0x008FFFFE;
 unsigned char *pTypeLine            = 0x008FFFFC; // 0x00 = Proxima linha tem "READY" e ">". 0x01 = Proxima linha tem somente ">"
@@ -263,6 +275,7 @@ int isalphas(unsigned char c);
 int isdigitus(unsigned char c);
 int iswhite(unsigned char c);
 int isdelim(unsigned char c);
+void parseExpressionIterative(unsigned char *result);
 void getExp(unsigned char *result);
 void level2(unsigned char *result);
 void level3(unsigned char *result);
