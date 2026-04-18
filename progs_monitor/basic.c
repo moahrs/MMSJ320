@@ -2287,24 +2287,25 @@ int getPrec(unsigned char op)
     {
         case '(':
             return 0;
+        case 0xF4:
+            return 1; // OR
+        case 0xF3:
+            return 2; // AND
         case '=':
         case '<':
         case '>':
         case 0xF5:
         case 0xF6:
         case 0xF7:
-            return 1; // comparadores
-        case 0xF3:
-        case 0xF4:
-            return 1; // AND, OR
+            return 3; // comparadores
         case '+':
         case '-':
-            return 2;
+            return 4;
         case '*':
         case '/':
-            return 3;
+            return 5;
         case '^':
-            return 4;
+            return 6;
         default:
             return 0;
     }
@@ -2693,33 +2694,7 @@ writeLongSerial("]\r\n\0");
             tokenChar == '=' || tokenChar == '<' || tokenChar == '>' || tokenChar == 0xF5 || tokenChar == 0xF6 || tokenChar == 0xF7 ||
             tokenChar == 0xF3 || tokenChar == 0xF4) {
             currentOp = tokenChar;
-
-            switch ((unsigned char)currentOp) {
-                case '=':
-                case '<':
-                case '>':
-                case 0xF5:
-                case 0xF6:
-                case 0xF7:
-                case 0xF3:
-                case 0xF4:
-                    currentPrec = 1;
-                    break;
-                case '+':
-                case '-':
-                    currentPrec = 2;
-                    break;
-                case '*':
-                case '/':
-                    currentPrec = 3;
-                    break;
-                case '^':
-                    currentPrec = 4;
-                    break;
-                default:
-                    currentPrec = 0;
-                    break;
-            }
+            currentPrec = getPrec(currentOp);
 
             while (opTop >= 0) {
                 topPrec = opPrecStack[opTop];
@@ -4477,7 +4452,7 @@ writeLongSerial(sqtdtam);
     else
         vLista = pStartSimpVar;
 
-    if (!vArray)
+    if (1) // (!vArray)
     {
         for (vCacheIx = 0; vCacheIx < SIMPLE_VAR_CACHE_SLOTS; vCacheIx++)
         {
