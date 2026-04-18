@@ -163,24 +163,24 @@ static const struct keyword_token keywords[] =
   {"ON",      0x91},   // .. .. ok
   {"INPUT", 	0x92},   // .. ok ok
   {"GET",     0x93},   // .. ok ok
-  {"VTAB",    0x94},   // .. .. ok
-  {"HTAB",    0x95},   // .. .. ok
-  {"HOME", 		0x96},   // ok ok ok
+  {"RESERVED",        0x94},   // reservado
+  {"LOCATE",  0x95},   // .. .. ok
+  {"CLS", 		0x96},   // ok ok ok
   {"CLEAR", 	0x97},   // .. .. ok
   {"DATA", 		0x98},   // .. .. ok
   {"READ", 		0x99},   // .. .. ok
   {"RESTORE", 0x9A},   // .. .. ok
   {"END",     0x9E},   // .. .. ok
   {"STOP",    0x9F},   // .. .. ok
-  {"TEXT",    0xB0},   // .. .. ok
-  {"GR",      0xB1},   // .. .. ok
-  {"HGR",     0xB2},   // .. .. ok
+  {"SCREEN",  0xB0},   // .. .. ok
+  {"CIRCLE",  0xB1},   // .. .. ok
+  {"RECT",    0xB2},   // .. .. ok
   {"COLOR",   0xB3},   // .. .. ok
   {"PLOT",    0xB4},   // .. .. ok
   {"HLIN",    0xB5},   // .. .. ok
   {"VLIN",    0xB6},   // .. .. ok
-  {"HCOLOR",  0xB8},   // .. .. ok
-  {"HPLOT",   0xB9},   // .. .. ok
+  {"RESERVED",  0xB8},   // .. .. ok
+  {"LINE",    0xB9},   // .. .. ok
   {"AT",      0xBA},   // .. .. ok
   {"ONERR",   0xBB},   // .. .. ok
   {"ASC",     0xC4},   // .. .. ok
@@ -324,8 +324,6 @@ int basGoto(void);
 int basGosub(void);
 int basReturn(void);
 int basRnd(void);
-int basVtab(void);
-int basHtab(void);
 int basEnd(void);
 int basStop(void);
 int basSpc(void);
@@ -339,15 +337,16 @@ int basDim(void);
 int basInverse(void);
 int basNormal(void);
 int basOnVar(void);
+int basScreen(void);
+int basLocate(void);
 int basText(void);
-int basGr(void);
-int basHgr(void);
 int basColor(void);
+int basCircle(void);
+int basRect(void);
 int basPlot(void);
 int basHVlin(unsigned char vTipo);   // 1 - HLIN, 2 - VLIN
 int basScrn(void);
-int basHcolor(void);
-int basHplot(void);
+int basLine(void);
 int basRead(void);
 int basRestore(void);
 int basTrig(unsigned char pFunc);

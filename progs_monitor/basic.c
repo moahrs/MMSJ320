@@ -530,7 +530,7 @@ void processLine(void)
                 linhacomando[iz] = toupper(linhacomando[iz]);
 
             // Comando Direto
-            if (!strcmp(linhacomando,"HOME") && iy == 4)
+            if (!strcmp(linhacomando,"CLS") && iy == 3)
             {
                 clearScr();
             }
@@ -1810,13 +1810,13 @@ int executeToken(unsigned char pToken)
         case 0x93:  // Get
             vReta = basInputGet(1);
             break;
-        case 0x94:  // vTAB
-            vReta = basVtab();
+        case 0x94:  // reservado
+            vReta = 0;
             break;
-        case 0x95:  // HTAB
-            vReta = basHtab();
+        case 0x95:  // LOCATE
+            vReta = basLocate();
             break;
-        case 0x96:  // Home
+        case 0x96:  // CLS
             clearScr();
             break;
         case 0x97:  // CLEAR - Clear all variables
@@ -1839,14 +1839,14 @@ int executeToken(unsigned char pToken)
         case 0x9F:  // STOP
             vReta = basStop();
             break;
-        case 0xB0:  // TEXT
-            vReta = basText();
+        case 0xB0:  // SCREEN
+            vReta = basScreen();
             break;
-        case 0xB1:  // GR
-            vReta = basGr();
+        case 0xB1:  // CIRCLE
+            vReta = basCircle();
             break;
-        case 0xB2:  // HGR
-            vReta = basHgr();
+        case 0xB2:  // RECT
+            vReta = basRect();
             break;
         case 0xB3:  // COLOR
             vReta = basColor();
@@ -1860,11 +1860,11 @@ int executeToken(unsigned char pToken)
         case 0xB6:  // VLIN
             vReta = basHVlin(2);
             break;
-        case 0xB8:  // HCOLOR
-            vReta = basHcolor();
+        case 0xB8:  // RESERVED
+            vReta = 0;
             break;
-        case 0xB9:  // HPLOT
-            vReta = basHplot();
+        case 0xB9:  // LINE
+            vReta = basLine();
             break;
         case 0xBA:  // AT - Nao faz nada
             vReta = 0;
@@ -2870,11 +2870,22 @@ writeLongSerial("]\r\n\0");
             valTypeStack[valTop] = typeA;
         }
     }
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.78 - [\0");
+itoa(valTop,sqtdtam,10);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
 
     if (valTop < 0) {
         *vErroProc = 14;
         return;
     }
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.79\r\n\0");
+}
 
     *value_type = valTypeStack[valTop];
 
@@ -7178,55 +7189,95 @@ int basRnd(void)
 }
 
 //--------------------------------------------------------------------------------------
-// Seta posicao vertical (linha em texto e y em grafico)
+// Posiciona o cursor na tela atual.
 // Syntaxe:
-//          VTAB <numero>
+//          LOCATE <x>,<y>
 //--------------------------------------------------------------------------------------
-int basVtab(void)
+int basLocate(void)
 {
-    unsigned int vRow = 0;
+    int vColumn = 0;
+    int vRow = 0;
+    unsigned char answer[20];
+    int *iVal = answer;
 
-    getExp(&vRow);
+    nextToken();
+    if (*vErroProc) return 0;
 
-    if (*value_type == '$') {
+    if (*token_type == QUOTE) { /* is string, error */
         *vErroProc = 16;
         return 0;
     }
+    else { /* is expression */
+        putback();
 
-    if (*value_type == '#')
-    {
-        vRow = fppInt(vRow);
-        *value_type = '%';
+        getExp(&answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type == '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
+        }
     }
 
-    vdp_set_cursor(videoCursorPosColX, vRow);
+    vColumn = *iVal;
 
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-// Seta posicao horizontal (coluna em texto e x em grafico)
-// Syntaxe:
-//          HTAB <numero>
-//--------------------------------------------------------------------------------------
-int basHtab(void)
-{
-    unsigned int vColumn = 0;
-
-    getExp(&vColumn);
-
-    if (*value_type == '$') {
-        *vErroProc = 16;
+    if (vColumn < 0 || vColumn > vdpMaxCols)
+    {
+        *vErroProc = 5;
         return 0;
     }
 
-    if (*value_type == '#')
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
     {
-        vColumn = fppInt(vColumn);
-        *value_type = '%';
+        *vErroProc = 18;
+        return 0;
     }
 
-    vdp_set_cursor(vColumn, videoCursorPosRowY);
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type == QUOTE) { /* is string, error */
+        *vErroProc = 16;
+        return 0;
+    }
+    else { /* is expression */
+        putback();
+
+        getExp(&answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type == '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
+        }
+    }
+
+    vRow = *iVal;
+
+    if (vRow < 0 || vRow > vdpMaxRows)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    vdp_set_cursor(vColumn, vRow);
 
     return 0;
 }
@@ -7410,10 +7461,76 @@ int basTab(void)
 }
 
 //--------------------------------------------------------------------------------------
-// Text Screen Mode (40 cols x 24 rows)
+// Screen Mode Switch
 // Syntaxe:
-//          TEXT
+//          SCREEN <0|1|2>
+//              0: Text Screen Mode (40 cols x 24 rows)
+//              1: Low Resolution Screen Mode (64x48)   
+//              2: High Resolution Screen Mode (256x192)
 //--------------------------------------------------------------------------------------
+int basScreen(void)
+{
+    unsigned char answer[20];
+    int *iVal = answer;
+    int vModeAux;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type == QUOTE) { /* is string, error */
+        *vErroProc = 16;
+        return 0;
+    }
+
+    putback();
+
+    getExp(&answer);
+    if (*vErroProc) return 0;
+
+    if (*value_type == '$')
+    {
+        *vErroProc = 16;
+        return 0;
+    }
+
+    if (*value_type == '#')
+    {
+        *iVal = fppInt(*iVal);
+        *value_type = '%';
+    }
+
+    vModeAux = *iVal;
+
+    if (vModeAux < 0 || vModeAux > 2)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    switch (vModeAux)
+    {
+        case 0:
+           
+            break;
+        case 1:
+            vdp_init(VDP_MODE_MULTICOLOR, 0, 0, 0);
+            vdpMaxCols = 63;
+            vdpMaxRows = 47;
+            vdpModeBas = VDP_MODE_MULTICOLOR;
+            break;
+        case 2:
+            vdp_init(VDP_MODE_G2, 0x0, 1, 0);
+            vdpMaxCols = 255;
+            vdpMaxRows = 191;
+            vdpModeBas = VDP_MODE_G2;
+            vdp_set_bdcolor(VDP_BLACK);
+            bgcolorBas = VDP_BLACK;
+            break;
+    }
+
+    return 0;
+}
+
 int basText(void)
 {
     fgcolorBas = VDP_WHITE;
@@ -7422,37 +7539,7 @@ int basText(void)
     vdpMaxCols = 39;
     vdpMaxRows = 23;
     vdpModeBas = VDP_MODE_TEXT;
-    clearScr();
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-// Low Resolution Screen Mode (64x48)
-// Syntaxe:
-//          GR
-//--------------------------------------------------------------------------------------
-int basGr(void)
-{
-    vdp_init(VDP_MODE_MULTICOLOR, 0, 0, 0);
-    vdpMaxCols = 63;
-    vdpMaxRows = 47;
-    vdpModeBas = VDP_MODE_MULTICOLOR;
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-// High Resolution Screen Mode (256x192)
-// Syntaxe:
-//          HGR
-//--------------------------------------------------------------------------------------
-int basHgr(void)
-{
-    vdp_init(VDP_MODE_G2, 0x0, 1, 0);
-    vdpMaxCols = 255;
-    vdpMaxRows = 191;
-    vdpModeBas = VDP_MODE_G2;
-    vdp_set_bdcolor(VDP_BLACK);
-    bgcolorBas = VDP_BLACK;
+    clearScr();     
     return 0;
 }
 
@@ -7498,43 +7585,35 @@ int basNormal(void)
 }
 
 //--------------------------------------------------------------------------------------
-// Muda a cor do plot em baixa/alta resolucao (GR or HGR from basHcolor)
+// Muda as cores atuais de frente e fundo.
 // Syntaxe:
-//          COLOR=<color>
+//          COLOR <foreground>,<background>
+//          COLOR ,<background>
+//          COLOR <foreground>
 //--------------------------------------------------------------------------------------
 int basColor(void)
 {
-    int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
     unsigned char answer[20];
     int  *iVal = answer;
-    unsigned char vTab, vColumn;
-    unsigned char sqtdtam[10];
-    unsigned char *vTempPointer;
-
-    if (vdpModeBas != VDP_MODE_MULTICOLOR && vdpModeBas != VDP_MODE_G2)
-    {
-        *vErroProc = 24;
-        return 0;
-    }
-
-    vTempPointer = *pointerRunProg;
-    if (*vTempPointer != '=')
-    {
-        *vErroProc = 3;
-        return 0;
-    }
-
-    *pointerRunProg = *pointerRunProg + 1;
-    vTempPointer = *pointerRunProg;
+    int foreground = fgcolorBas;
+    int background = bgcolorBas;
 
     nextToken();
     if (*vErroProc) return 0;
 
-    if (*token_type == QUOTE) { /* is string, error */
-        *vErroProc = 16;
+    if (*tok == EOL || *tok == FINISHED)
+    {
+        *vErroProc = 18;
         return 0;
     }
-    else { /* is expression */
+
+    if (*token != ',')
+    {
+        if (*token_type == QUOTE) { /* is string, error */
+            *vErroProc = 16;
+            return 0;
+        }
+
         putback();
 
         getExp(&answer);
@@ -7551,11 +7630,371 @@ int basColor(void)
             *iVal = fppInt(*iVal);
             *value_type = '%';
         }
+
+        foreground = *iVal;
+
+        if (foreground < 0 || foreground > 15)
+        {
+            *vErroProc = 5;
+            return 0;
+        }
+
+        nextToken();
+        if (*vErroProc) return 0;        
     }
 
-    fgcolorBas=(char)*iVal;
+    if (*token == ',')
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        if (*tok == EOL || *tok == FINISHED)
+        {
+            *vErroProc = 18;
+            return 0;
+        }
+
+        if (*token_type == QUOTE) { /* is string, error */
+            *vErroProc = 16;
+            return 0;
+        }
+
+        putback();
+
+        getExp(&answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type == '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
+        }
+
+        background = *iVal;
+
+        if (background < 0 || background > 15)
+        {
+            *vErroProc = 5;
+            return 0;
+        }
+    }
+
+    fgcolorBas = (unsigned char)foreground;
+    bgcolorBas = (unsigned char)background;
+
+    vdp_textcolor(fgcolorBas, bgcolorBas);
 
     *value_type='%';
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Desenha um circulo ou ovoide.
+// Syntaxe:
+//          CIRCLE x,y,rh[,rv]
+//--------------------------------------------------------------------------------------
+static void basPlotEllipsePoints(int x0, int y0, int dx, int dy)
+{
+    vdp_plot_hires((unsigned char)(x0 + dx), (unsigned char)(y0 + dy), fgcolorBas, bgcolorBas);
+    vdp_plot_hires((unsigned char)(x0 - dx), (unsigned char)(y0 + dy), fgcolorBas, bgcolorBas);
+    vdp_plot_hires((unsigned char)(x0 + dx), (unsigned char)(y0 - dy), fgcolorBas, bgcolorBas);
+    vdp_plot_hires((unsigned char)(x0 - dx), (unsigned char)(y0 - dy), fgcolorBas, bgcolorBas);
+}
+
+static void basReadNumericArg(int *pValue)
+{
+    unsigned char answer[20];
+    int  *iVal = answer;
+
+    if (*token_type == QUOTE)
+    {
+        *vErroProc = 16;
+        return;
+    }
+
+    if (*token_type == DELIMITER && (*token == '\r' || *token == 0x00))
+    {
+        *vErroProc = 2;
+        return;
+    }
+
+    putback();
+
+    getExp(&answer);
+    if (*vErroProc) return;
+
+    if (*value_type == '$')
+    {
+        *vErroProc = 16;
+        return;
+    }
+
+    if (*value_type == '#')
+    {
+        *iVal = fppInt(*iVal);
+        *value_type = '%';
+    }
+
+    *pValue = *iVal;
+}
+
+int basCircle(void)
+{
+    int centerX = 0, centerY = 0, horizontalRadius = 0, verticalRadius = 0;
+    long rx2, ry2, twoRx2, twoRy2, d1, d2, dx, dy;
+    int x, y;
+
+    if (vdpModeBas != VDP_MODE_G2)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&centerX);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&centerY);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&horizontalRadius);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token == ',')
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        basReadNumericArg(&verticalRadius);
+        if (*vErroProc) return 0;
+    }
+    else
+    {
+        verticalRadius = horizontalRadius;
+    }
+
+    if (horizontalRadius < 0)
+        horizontalRadius = -horizontalRadius;
+
+    if (verticalRadius < 0)
+        verticalRadius = -verticalRadius;
+
+    if (horizontalRadius == 0 && verticalRadius == 0)
+    {
+        vdp_plot_hires((unsigned char)centerX, (unsigned char)centerY, fgcolorBas, bgcolorBas);
+    }
+    else if (horizontalRadius == 0)
+    {
+        for (y = -verticalRadius; y <= verticalRadius; y++)
+            vdp_plot_hires((unsigned char)centerX, (unsigned char)(centerY + y), fgcolorBas, bgcolorBas);
+    }
+    else if (verticalRadius == 0)
+    {
+        for (x = -horizontalRadius; x <= horizontalRadius; x++)
+            vdp_plot_hires((unsigned char)(centerX + x), (unsigned char)centerY, fgcolorBas, bgcolorBas);
+    }
+    else
+    {
+        rx2 = (long)horizontalRadius * (long)horizontalRadius;
+        ry2 = (long)verticalRadius * (long)verticalRadius;
+        twoRx2 = rx2 << 1;
+        twoRy2 = ry2 << 1;
+
+        x = 0;
+        y = verticalRadius;
+        dx = 0;
+        dy = twoRx2 * y;
+        d1 = ry2 - (rx2 * verticalRadius) + (rx2 / 4);
+
+        while (dx < dy)
+        {
+            basPlotEllipsePoints(centerX, centerY, x, y);
+
+            if (d1 < 0)
+            {
+                x++;
+                dx += twoRy2;
+                d1 += dx + ry2;
+            }
+            else
+            {
+                x++;
+                y--;
+                dx += twoRy2;
+                dy -= twoRx2;
+                d1 += dx - dy + ry2;
+            }
+        }
+
+        d2 = (ry2 * (long)(x * x)) + (ry2 * x) + (ry2 / 4) + (rx2 * (long)(y * y)) - (twoRx2 * y) + rx2 - (rx2 * ry2);
+
+        while (y >= 0)
+        {
+            basPlotEllipsePoints(centerX, centerY, x, y);
+
+            if (d2 > 0)
+            {
+                y--;
+                dy -= twoRx2;
+                d2 += rx2 - dy;
+            }
+            else
+            {
+                x++;
+                y--;
+                dx += twoRy2;
+                dy -= twoRx2;
+                d2 += dx - dy + rx2;
+            }
+        }
+    }
+
+    *value_type = '%';
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Desenha um retangulo de x1,y1 ate x2,y2
+// Syntaxe:
+//          RECT x1,y1,x2,y2
+//--------------------------------------------------------------------------------------
+int basRect(void)
+{
+    int x1 = 0, y1 = 0, x2 = 0, y2 = 0, temp;
+    int ix, iy, left, right, top, bottom;
+
+    if (vdpModeBas != VDP_MODE_G2)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&x1);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+    
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&y1);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+    
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&x2);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&y2);
+    if (*vErroProc) return 0;
+
+    left = x1;
+    right = x2;
+    top = y1;
+    bottom = y2;
+
+    if (right < left)
+    {
+        temp = left;
+        left = right;
+        right = temp;
+    }
+
+    if (bottom < top)
+    {
+        temp = top;
+        top = bottom;
+        bottom = temp;
+    }
+
+    for (ix = left; ix <= right; ix++)
+        vdp_plot_hires((unsigned char)ix, (unsigned char)top, fgcolorBas, bgcolorBas);
+
+    for (iy = top; iy <= bottom; iy++)
+        vdp_plot_hires((unsigned char)left, (unsigned char)iy, fgcolorBas, bgcolorBas);
+
+    if (bottom != top)
+    {
+        for (ix = left; ix <= right; ix++)
+            vdp_plot_hires((unsigned char)ix, (unsigned char)bottom, fgcolorBas, bgcolorBas);
+    }
+
+    if (right != left)
+    {
+        for (iy = top; iy <= bottom; iy++)
+            vdp_plot_hires((unsigned char)right, (unsigned char)iy, fgcolorBas, bgcolorBas);
+    }
+
+    *value_type = '%';
 
     return 0;
 }
@@ -7899,28 +8338,9 @@ int basScrn(void)
 //--------------------------------------------------------------------------------------
 //
 // Syntaxe:
-//
+//     LINE x,y TO x,y [TO x,y...]
 //--------------------------------------------------------------------------------------
-int basHcolor(void)
-{
-    if (vdpModeBas != VDP_MODE_G2)
-    {
-        *vErroProc = 24;
-        return 0;
-    }
-
-    basColor();
-    if (*vErroProc) return 0;
-
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-//
-// Syntaxe:
-//
-//--------------------------------------------------------------------------------------
-int basHplot(void)
+int basLine(void)
 {
     int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
     unsigned char answer[20];
