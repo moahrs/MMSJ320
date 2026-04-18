@@ -62,11 +62,12 @@
 static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 static unsigned char *lastVarCacheAddr[SIMPLE_VAR_CACHE_SLOTS] = {0,0,0,0,0,0,0,0};
-static unsigned char valStack[32][50];
+/*static unsigned char valStack[32][50];
 static unsigned char opStack[PARSER_STACK_SIZE];
 static unsigned char opPrecStack[PARSER_STACK_SIZE];
 static char valTypeStack[PARSER_STACK_SIZE];
 static unsigned char temp[50];
+static int opTop = -1, valTop = -1;*/
 
 static void invalidateFindVariableCache(void)
 {
@@ -2320,7 +2321,6 @@ int isRightAssoc(char op) {
 // Parser iterativo (experimental, ativado por USE_ITERATIVE_PARSER)
 // -----------------------------------------------------------------------------
 void parseExpressionIterative(unsigned char *result) {
-    int opTop = -1, valTop = -1;
     unsigned char op, currentOp;
     char typeA, typeB;
     unsigned char tokenType, tokenChar, valueType;
@@ -2333,6 +2333,15 @@ void parseExpressionIterative(unsigned char *result) {
     int expectValue = 1; // Para detectar unário
     char pendingUnary = 0; // 0: nenhum, '+': unário +, '-': unário -
     int currentPrec, topPrec;
+    unsigned char sqtdtam[20];
+    unsigned char valStack[32][50];
+    unsigned char opStack[PARSER_STACK_SIZE];
+    unsigned char opPrecStack[PARSER_STACK_SIZE];
+    char valTypeStack[PARSER_STACK_SIZE];
+    unsigned char temp[50];
+    unsigned char tokenVarAtu[3];
+    unsigned char tokenVarAtuLen;
+    int opTop = -1, valTop = -1;
 
     nextToken();
     if (*vErroProc) return;
@@ -2354,6 +2363,16 @@ void parseExpressionIterative(unsigned char *result) {
             }
 
             if (tokenType == NUMBER || tokenType == VARIABLE || tokenType == QUOTE || tokenType == COMMAND) {
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.5 - [\0");
+itoa(tokenType,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(tokenChar,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
                 if (tokenType == VARIABLE) {
                     tokenLen = 0;
                     while (token[tokenLen])
@@ -2371,7 +2390,21 @@ void parseExpressionIterative(unsigned char *result) {
                         valueType = token[2];
                     }
 
-                    vRet = find_var((char*)token);
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.0 - [\0");
+itoa(*(char*)token,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*(char*)(token + 1),sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+                    tokenVarAtuLen = tokenLen;
+                    tokenVarAtu[0] = token[0];
+                    tokenVarAtu[1] = token[1];
+                    tokenVarAtu[2] = token[2];
+                    vRet = find_var((char*)tokenVarAtu);
                     if (vRet == 0)
                     {
                         if (*vErroProc == 0)
@@ -2379,7 +2412,10 @@ void parseExpressionIterative(unsigned char *result) {
                         return;
                     }
 
-                    valueType = *value_type;
+                    if (tokenLen < 3)
+                        valueType = valueType;   // *value_type;
+                    else
+                        valueType = tokenVarAtu[2];
 
                     if (valueType == '$')
                         strcpy((char*)temp, (char*)vRet);
@@ -2389,8 +2425,24 @@ void parseExpressionIterative(unsigned char *result) {
                         temp[1] = vRet[1];
                         temp[2] = vRet[2];
                         temp[3] = vRet[3];
+                        temp[4] = 0x00;
                     }
 
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.1 - [\0");
+itoa(*(unsigned int*)vRet,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*(unsigned int*)temp,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(tokenLen,sqtdtam,10);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+writeSerial(valueType);
+writeLongSerial("]\r\n\0");
+}
                     nextToken();
                     if (*vErroProc) return;
                 }
@@ -2418,6 +2470,7 @@ void parseExpressionIterative(unsigned char *result) {
                     temp[1] = numberBytes[1];
                     temp[2] = numberBytes[2];
                     temp[3] = numberBytes[3];
+                    temp[4] = 0x00;
 
                     nextToken();
                     if (*vErroProc) return;
@@ -2439,6 +2492,7 @@ void parseExpressionIterative(unsigned char *result) {
                         temp[1] = token[1];
                         temp[2] = token[2];
                         temp[3] = token[3];
+                        temp[4] = 0x00;
                     }
 
                     nextToken();
@@ -2469,7 +2523,24 @@ void parseExpressionIterative(unsigned char *result) {
                 if (valueType == '$')
                     strcpy((char*)valStack[valTop], (char*)temp);
                 else
+                {
                     *(unsigned int*)valStack[valTop] = *(unsigned int*)temp;
+                    valStack[valTop][4] = 0x00;
+                }
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.3 - [\0");
+itoa(*(unsigned int*)temp,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(valTop,sqtdtam,10);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*(unsigned int*)valStack[valTop],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
 
                 valTypeStack[valTop] = valueType;
                 expectValue = 0;
@@ -2541,14 +2612,33 @@ void parseExpressionIterative(unsigned char *result) {
                 a = valStack[valTop];
                 typeA = valTypeStack[valTop];
 
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.4 - [\0");
+itoa(*(unsigned int*)a,sqtdtam,10);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+writeSerial(typeA);
+writeLongSerial("]-[");
+itoa(*(unsigned int*)b,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+writeSerial(typeB);
+writeLongSerial("]-[");
+writeSerial(op);
+writeLongSerial("]\r\n\0");
+}
+
                 if (typeA != typeB) {
                     if (typeA == '$' || typeB == '$') {
                         *vErroProc = 16;
                         return;
                     }
 
-                    if (typeA == '#')
+                    if (typeA == '#') {
                         *(unsigned int*)b = fppReal(*(unsigned int*)b);
+                        typeB = '#';
+                    }
                     else {
                         *(unsigned int*)a = fppReal(*(unsigned int*)a);
                         typeA = '#';
@@ -2654,6 +2744,23 @@ void parseExpressionIterative(unsigned char *result) {
                 a = valStack[valTop];
                 typeA = valTypeStack[valTop];
 
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.2 - [\0");
+itoa(*(unsigned int*)a,sqtdtam,10);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+writeSerial(typeA);
+writeLongSerial("]-[");
+itoa(*(unsigned int*)b,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+writeSerial(typeB);
+writeLongSerial("]-[");
+writeSerial(op);
+writeLongSerial("]\r\n\0");
+}
+
                 if (typeA != typeB) {
                     if (typeA == '$' || typeB == '$') {
                         *vErroProc = 16;
@@ -2661,7 +2768,10 @@ void parseExpressionIterative(unsigned char *result) {
                     }
 
                     if (typeA == '#')
+                    {
                         *(unsigned int*)b = fppReal(*(unsigned int*)b);
+                        typeB = '#';
+                    }
                     else {
                         *(unsigned int*)a = fppReal(*(unsigned int*)a);
                         typeA = '#';
@@ -2745,8 +2855,10 @@ void parseExpressionIterative(unsigned char *result) {
                 return;
             }
 
-            if (typeA == '#')
+            if (typeA == '#') {
                 *(unsigned int*)b = fppReal(*(unsigned int*)b);
+                typeB = '#';
+            }
             else {
                 *(unsigned int*)a = fppReal(*(unsigned int*)a);
                 typeA = '#';
@@ -3353,6 +3465,7 @@ void arithInt(char o, char *r, char *h)
     r[1] = vRval[1];
     r[2] = vRval[2];
     r[3] = vRval[3];
+    r[4] = 0x00;
 }
 
 
@@ -3383,6 +3496,8 @@ void arithReal(char o, char *r, char *h)
             *rVal = fppPwr(*rVal, *hVal);
             break;
     }
+
+    r[4] = 0x00;
 }
 
 //--------------------------------------------------------------------------------------
@@ -4283,6 +4398,20 @@ writeLongSerial("]\r\n");
 
                 getExp(&vTempDim);
 
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.99 varName-[");
+itoa(vTempDim,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*vErroProc,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*token,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
+
                 if (*vErroProc) return 0;
 
                 if (*value_type == '$')
@@ -4304,9 +4433,20 @@ writeLongSerial("]\r\n");
 
             if (*token == ',')
             {
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.98 varName-\r\n\0");
+}
+
                 *pointerRunProg = *pointerRunProg + 1;
 
                 vTempPointer = *pointerRunProg;
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.97 varName-\r\n\0");
+itoa(*pointerRunProg,sqtdtam,16);
+writeLongSerial(sqtdtam);
+}
             }
             else
                 break;
@@ -4337,7 +4477,7 @@ writeLongSerial("]\r\n");
     else
         vLista = pStartSimpVar;
 
-    if (1)  // (!vArray)
+    if (!vArray)
     {
         for (vCacheIx = 0; vCacheIx < SIMPLE_VAR_CACHE_SLOTS; vCacheIx++)
         {
@@ -4388,7 +4528,9 @@ writeLongSerial("]\r\n");
                 }
                 else
                 {
-                    vPosValueVar++;
+                    if (!vArray)
+                        vPosValueVar++;
+
                     pVariable[0] = *(vPosValueVar);
                     pVariable[1] = *(vPosValueVar + 1);
                     pVariable[2] = *(vPosValueVar + 2);
