@@ -20,6 +20,7 @@
 ; * 25/07/2023  1.0d    Moacir Jr.   Ajuste no basInputGet, quando Get, mandar 1 pro inputLine e sem manipulacoa cursor
 ; * 20/01/2024  1.0e    Moacir Jr.   Colocar para iniciar direto no Basic
 ; * 14/04/2026  1.1a03  Moacir Jr.   Ajustes para por cache variaveis e simplificar parse, retirando recursividade
+; * 18/04/2026  1.2a02  Moacir Jr.   Novas funcoes. Basic Proprio. Ajustes gerais.
 ; *--------------------------------------------------------------------------------
 ; * Variables Simples: start at 00800000
 ; *   --------------------------------------------------------
@@ -52,7 +53,7 @@
 ; #include "../monitor.h"
 ; #include "../monitorapi.h"
 ; #include "basic.h"
-; #define versionBasic "1.1a03"
+; #define versionBasic "1.2a02"
 ; //#define __TESTE_TOKENIZE__ 1
 ; //#define __DEBUG_ARRAYS__ 1
 ; #define SIMPLE_VAR_CACHE_SLOTS 8
@@ -26262,8 +26263,8 @@ _basRestore:
 @basic_96:
        dc.b      78,79,84,0
 @basic_97:
-       dc.b      77,77,83,74,45,66,65,83,73,67,32,118,49,46,49
-       dc.b      97,48,51,0
+       dc.b      77,77,83,74,45,66,65,83,73,67,32,118,49,46,50
+       dc.b      97,48,50,0
 @basic_98:
        dc.b      13,10,0
 @basic_99:
