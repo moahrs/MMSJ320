@@ -2314,7 +2314,7 @@ void getExp(unsigned char *result)
         nextToken();
         if (*vErroProc) return;
 
-        if (!*token) {
+        if (!*token && *token_type != QUOTE) {
             *vErroProc = 2;
             return;
         }
@@ -2396,7 +2396,7 @@ void parseExpressionIterative(unsigned char *result) {
 
     nextToken();
     if (*vErroProc) return;
-    if (!*token) {
+    if (!*token && *token_type != QUOTE) {
         *vErroProc = 2;
         return;
     }
