@@ -61,6 +61,9 @@
 #define PARSER_STACK_SIZE 32
 #define PAINT_STACK_SIZE 4096
 
+unsigned char *vvdgBASd = 0x00400041; // VDP TMS9118 Data Mode
+unsigned char *vvdgBASc = 0x00400043; // VDP TMS9118 Registers/Address Mode
+
 static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 static unsigned char *lastVarCacheAddr[SIMPLE_VAR_CACHE_SLOTS] = {0,0,0,0,0,0,0,0};
@@ -1902,11 +1905,11 @@ int executeToken(unsigned char pToken)
         case 0xB4:  // PLOT
             vReta = basPlot();
             break;
-        case 0xB5:  // HLIN
-            vReta = basHVlin(1);
+        case 0xB5:  // FILL
+            vReta = basFill();
             break;
-        case 0xB6:  // VLIN
-            vReta = basHVlin(2);
+        case 0xB6:  // RESERVED
+            vReta = 0;
             break;
         case 0xB7:  // SPRITEPOS
             vReta = basSpritePos();
@@ -4456,7 +4459,7 @@ writeLongSerial("]\r\n");
                 *vErroProc = 16;
                 return 0;
             }
-            
+
             else { // is expression
 
                 putback();
@@ -4542,7 +4545,7 @@ writeLongSerial(sqtdtam);
     else
         vLista = pStartSimpVar;
 
-    if (!vArray) // sem array por enquanto, para ajustar tamanho variavel no cache
+    if (1)  // (!vArray) // sem array por enquanto, para ajustar tamanho variavel no cache
     {
         for (vCacheIx = 0; vCacheIx < SIMPLE_VAR_CACHE_SLOTS; vCacheIx++)
         {
@@ -8314,6 +8317,209 @@ int basPaint(void)
 }
 
 //--------------------------------------------------------------------------------------
+// Pinta um retangulo de x1,y1 ate x2,y2 com uma determinada cor
+// Syntaxe:
+//          FILL <x1>,<y1>,<x2>,<y2>,<color>
+//--------------------------------------------------------------------------------------
+int basFill (void)
+{
+    int x1 = 0, y1 = 0;
+    int x2 = 0, y2 = 0;
+    int fillColor = 0;
+    unsigned char t, fillIsBackground;
+    unsigned char startBit, endBit;
+    unsigned char maskLeft, maskRight, maskSingle;
+    unsigned char colorByte;
+    unsigned char pixel;
+    unsigned int startByte, endByte;
+    unsigned int y;
+    unsigned int rowBase;
+    unsigned int offset;
+    unsigned int bx;
+    unsigned char sqtdtam[20];
+
+    if (vdpModeBas != VDP_MODE_G2)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&x1);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&y1);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&x2);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&y2);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token == ',')
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        basReadNumericArg(&fillColor);
+        if (*vErroProc) return 0;
+    }
+    else
+    {
+        putback();
+    }
+
+    /* Ajusta coordenadas */
+    if (x1 > x2)
+    {
+        t = x1;
+        x1 = x2;
+        x2 = t;
+    }
+
+    if (y1 > y2)
+    {
+        t = y1;
+        y1 = y2;
+        y2 = t;
+    }
+
+    fillColor &= 0x0F;
+
+    colorByte = (fillColor << 4) | bgcolorBas;
+    fillIsBackground = (fillColor == bgcolorBas) ? 1 : 0;
+
+    startByte = ((unsigned int)(x1 >> 3)) << 3;
+    endByte   = ((unsigned int)(x2 >> 3)) << 3;
+
+    startBit = x1 & 0x07;
+    endBit   = x2 & 0x07;
+
+    maskLeft   = (unsigned char)(0xFF >> startBit);
+    maskRight  = (unsigned char)(0xFF << (7 - endBit));
+    maskSingle = (unsigned char)(maskLeft & maskRight);
+
+    for (y = y1; y <= y2; y++)
+    {
+        rowBase = (((unsigned int)(y >> 3)) << 8) + (y & 0x07);
+
+        if (startByte == endByte)
+        {
+            offset = rowBase + startByte;
+
+            setReadAddress(paintPatternTable + offset);
+            setReadAddress(paintPatternTable + offset);
+            pixel = *vvdgBASd;
+
+            if (fillIsBackground)
+                pixel &= (unsigned char)(~maskSingle);
+            else
+                pixel |= maskSingle;
+
+            setWriteAddress(paintPatternTable + offset);
+            *vvdgBASd = pixel;
+
+            setWriteAddress(paintColorTable + offset);
+            *vvdgBASd = colorByte;
+        }
+        else
+        {
+            /* byte inicial */
+            offset = rowBase + startByte;
+
+            setReadAddress(paintPatternTable + offset);
+            setReadAddress(paintPatternTable + offset);
+            pixel = *vvdgBASd;
+
+            if (fillIsBackground)
+                pixel &= (unsigned char)(~maskLeft);
+            else
+                pixel |= maskLeft;
+
+            setWriteAddress(paintPatternTable + offset);
+            *vvdgBASd = pixel;
+
+            setWriteAddress(paintColorTable + offset);
+            *vvdgBASd = colorByte;
+
+            /* bytes centrais */
+            for (bx = startByte + 8; bx < endByte; bx += 8)
+            {
+                offset = rowBase + bx;
+
+                setWriteAddress(paintPatternTable + offset);
+                *vvdgBASd = fillIsBackground ? 0x00 : 0xFF;
+
+                setWriteAddress(paintColorTable + offset);
+                *vvdgBASd = colorByte;
+            }
+
+            /* byte final */
+            offset = rowBase + endByte;
+
+            setReadAddress(paintPatternTable + offset);
+            setReadAddress(paintPatternTable + offset);
+            pixel = *vvdgBASd;
+
+            if (fillIsBackground)
+                pixel &= (unsigned char)(~maskRight);
+            else
+                pixel |= maskRight;
+
+            setWriteAddress(paintPatternTable + offset);
+            *vvdgBASd = pixel;
+
+            setWriteAddress(paintColorTable + offset);
+            *vvdgBASd = colorByte;
+        }
+    }
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
 // Carrega dados do sprite para a tabela de padroes.
 // Syntaxe:
 //          SPRITESET <number>,<var$>
@@ -8749,153 +8955,6 @@ int basPlot(void)
 
     vdp_plot_color(vx, vy, fgcolorBas);
 
-    *value_type='%';
-
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-// Desenha uma linha horizontal de x1, y1 até x2, y1
-// Syntaxe:
-//          HLIN <x1>, <x2> at <y1>
-//               x1 e x2 : de 0 a 63
-//                    y1 : de 0 a 47
-//
-// Desenha uma linha vertical de x1, y1 até x1, y2
-// Syntaxe:
-//          VLIN <y1>, <y2> at <x1>
-//                    x1 : de 0 a 63
-//               y1 e y2 : de 0 a 47
-//--------------------------------------------------------------------------------------
-int basHVlin(unsigned char vTipo)   // 1 - HLIN, 2 - VLIN
-{
-    int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
-    unsigned char answer[20];
-    int  *iVal = answer;
-    unsigned char vx1, vx2, vy;
-    unsigned char sqtdtam[10];
-
-    if (vdpModeBas != VDP_MODE_MULTICOLOR)
-    {
-        *vErroProc = 24;
-        return 0;
-    }
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    if (*token_type == QUOTE) { /* is string, error */
-        *vErroProc = 16;
-        return 0;
-    }
-    else { /* is expression */
-        putback();
-
-        getExp(&answer);
-        if (*vErroProc) return 0;
-
-        if (*value_type == '$')
-        {
-            *vErroProc = 16;
-            return 0;
-        }
-
-        if (*value_type == '#')
-        {
-            *iVal = fppInt(*iVal);
-            *value_type = '%';
-        }
-    }
-
-    vx1=(char)*iVal;
-
-    if (*token != ',')
-    {
-        *vErroProc = 18;
-        return 0;
-    }
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    if (*token_type == QUOTE) { /* is string, error */
-        *vErroProc = 16;
-        return 0;
-    }
-    else { /* is expression */
-        //putback();
-
-        getExp(&answer);
-        if (*vErroProc) return 0;
-
-        if (*value_type == '$')
-        {
-            *vErroProc = 16;
-            return 0;
-        }
-
-        if (*value_type == '#')
-        {
-            *iVal = fppInt(*iVal);
-            *value_type = '%';
-        }
-    }
-
-    vx2=(char)*iVal;
-
-    if (*token != 0xBA) // AT Token
-    {
-        *vErroProc = 18;
-        return 0;
-    }
-
-    *pointerRunProg = *pointerRunProg + 1;
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    if (*token_type == QUOTE) { /* is string, error */
-        *vErroProc = 16;
-        return 0;
-    }
-    else { /* is expression */
-        putback();
-
-        getExp(&answer);
-        if (*vErroProc) return 0;
-
-        if (*value_type == '$')
-        {
-            *vErroProc = 16;
-            return 0;
-        }
-
-        if (*value_type == '#')
-        {
-            *iVal = fppInt(*iVal);
-            *value_type = '%';
-        }
-    }
-
-    vy=(char)*iVal;
-
-    if (vx2 < vx1)
-    {
-        ix = vx1;
-        vx1 = vx2;
-        vx2 = ix;
-    }
-
-    if (vTipo == 1)   // HLIN
-    {
-        for(ix = vx1; ix <= vx2; ix++)
-            vdp_plot_color(ix, vy, fgcolorBas);
-    }
-    else   // VLIN
-    {
-        for(ix = vx1; ix <= vx2; ix++)
-            vdp_plot_color(vy, ix, fgcolorBas);
-    }
     *value_type='%';
 
     return 0;
