@@ -7477,7 +7477,7 @@ int basTab(void)
 //          SCREEN <mode>, [spriteSize]
 //              Mode: (0,1,2)
 //                  0: Text Screen Mode (40 cols x 24 rows)
-//                  1: Low Resolution Screen Mode (64x48)   
+//                  1: Low Resolution Screen Mode (64x48)
 //                  2: High Resolution Screen Mode (256x192)
 //
 //              SpriteSize: (0,1,2,3)
@@ -7491,9 +7491,18 @@ int basScreen(void)
     unsigned char answer[20];
     int *iVal = answer;
     int vModeAux;
+    int vModeSpriteAux = 99;
+    char vSpriteSize = 0;
+    char vSpriteMag = 0;
 
     nextToken();
     if (*vErroProc) return 0;
+
+    if (*tok == EOL || *tok == FINISHED)
+    {
+        *vErroProc = 18;
+        return 0;
+    }
 
     if (*token_type == QUOTE) { /* is string, error */
         *vErroProc = 16;
@@ -7517,6 +7526,9 @@ int basScreen(void)
         *value_type = '%';
     }
 
+    nextToken();
+    if (*vErroProc) return 0;
+
     vModeAux = *iVal;
 
     if (vModeAux < 0 || vModeAux > 2)
@@ -7525,25 +7537,96 @@ int basScreen(void)
         return 0;
     }
 
+    if (*token == ',')
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        if (*tok == EOL || *tok == FINISHED)
+        {
+            *vErroProc = 18;
+            return 0;
+        }
+
+        if (*token_type == QUOTE) { /* is string, error */
+            *vErroProc = 16;
+            return 0;
+        }
+
+        putback();
+
+        getExp(&answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type == '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
+        }
+
+        vModeSpriteAux = *iVal;
+
+        if (vModeSpriteAux < 0 || vModeSpriteAux > 3)
+        {
+            *vErroProc = 5;
+            return 0;
+        }
+    }
+    else
+        putback();
+
+    switch (vModeSpriteAux)
+    {
+        case 0:
+            vSpriteSize = 0;
+            vSpriteMag = 0;
+            break;
+        case 1:
+            vSpriteSize = 0;
+            vSpriteMag = 1;
+            break;
+        case 2:
+            vSpriteSize = 1;
+            vSpriteMag = 0;
+            break;
+        case 3:
+            vSpriteSize = 1;
+            vSpriteMag = 1;
+            break;
+    }
+
     switch (vModeAux)
     {
         case 0:
-            basText();
+            if (vdpModeBas != VDP_MODE_TEXT)
+                basText();
             break;
         case 1:
-            vdp_init(VDP_MODE_MULTICOLOR, 0, 0, 0);
-            vdpMaxCols = 63;
-            vdpMaxRows = 47;
-            vdpModeBas = VDP_MODE_MULTICOLOR;
+            if (vdpModeBas != VDP_MODE_MULTICOLOR)
+            {
+                vdp_init(VDP_MODE_MULTICOLOR, 0, vSpriteSize, vSpriteMag);
+                vdpMaxCols = 63;
+                vdpMaxRows = 47;
+                vdpModeBas = VDP_MODE_MULTICOLOR;
+            }
             break;
         case 2:
-            vdp_init(VDP_MODE_G2, 0x0, 1, 0);
-            vdpMaxCols = 255;
-            vdpMaxRows = 191;
-            vdpModeBas = VDP_MODE_G2;
-            vdp_set_bdcolor(VDP_BLACK);
-            bgcolorBas = VDP_BLACK;
-            basPaintSyncTables();
+            if (vdpModeBas != VDP_MODE_G2)
+            {
+                vdp_init(VDP_MODE_G2, 0x0, vSpriteSize, vSpriteMag);
+                vdpMaxCols = 255;
+                vdpMaxRows = 191;
+                vdpModeBas = VDP_MODE_G2;
+                vdp_set_bdcolor(VDP_BLACK);
+                bgcolorBas = VDP_BLACK;
+                basPaintSyncTables();
+            }
             break;
     }
 
@@ -7558,7 +7641,7 @@ int basText(void)
     vdpMaxCols = 39;
     vdpMaxRows = 23;
     vdpModeBas = VDP_MODE_TEXT;
-    clearScr();     
+    clearScr();
     return 0;
 }
 
@@ -7618,7 +7701,7 @@ int basColor(void)
         }
 
         nextToken();
-        if (*vErroProc) return 0;        
+        if (*vErroProc) return 0;
     }
 
     if (*token == ',')
@@ -7662,6 +7745,8 @@ int basColor(void)
             return 0;
         }
     }
+    else
+        putback();
 
     fgcolorBas = (unsigned char)foreground;
     bgcolorBas = (unsigned char)background;
@@ -7785,6 +7870,8 @@ int basCircle(void)
     else
     {
         verticalRadius = horizontalRadius;
+
+        putback();
     }
 
     if (horizontalRadius < 0)
@@ -7892,7 +7979,7 @@ int basRect(void)
 
     nextToken();
     if (*vErroProc) return 0;
-    
+
     if (*token != ',')
     {
         *vErroProc = 18;
@@ -7907,7 +7994,7 @@ int basRect(void)
 
     nextToken();
     if (*vErroProc) return 0;
-    
+
     if (*token != ',')
     {
         *vErroProc = 18;
@@ -8061,7 +8148,7 @@ int basPaint(void)
 
     nextToken();
     if (*vErroProc) return 0;
-    
+
     if (*token != ',')
     {
         *vErroProc = 18;

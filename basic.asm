@@ -20534,7 +20534,7 @@ basTab_3:
 ; //          SCREEN <mode>, [spriteSize]
 ; //              Mode: (0,1,2)
 ; //                  0: Text Screen Mode (40 cols x 24 rows)
-; //                  1: Low Resolution Screen Mode (64x48)   
+; //                  1: Low Resolution Screen Mode (64x48)
 ; //                  2: High Resolution Screen Mode (256x192)
 ; //
 ; //              SpriteSize: (0,1,2,3)
@@ -20548,14 +20548,22 @@ basTab_3:
        xdef      _basScreen
 _basScreen:
        link      A6,#-20
-       movem.l   D2/D3/A2/A3,-(A7)
+       movem.l   D2/D3/D4/D5/D6/A2/A3/A4/A5,-(A7)
        lea       _vErroProc.L,A2
        lea       _value_type.L,A3
+       lea       _tok.L,A4
+       lea       _putback.L,A5
 ; unsigned char answer[20];
 ; int *iVal = answer;
        lea       -20(A6),A0
-       move.l    A0,D3
+       move.l    A0,D4
 ; int vModeAux;
+; int vModeSpriteAux = 99;
+       moveq     #99,D5
+; char vSpriteSize = 0;
+       clr.b     D3
+; char vSpriteMag = 0;
+       clr.b     D2
 ; nextToken();
        jsr       _nextToken
 ; if (*vErroProc) return 0;
@@ -20565,21 +20573,42 @@ _basScreen:
        clr.l     D0
        bra       basScreen_3
 basScreen_1:
+; if (*tok == EOL || *tok == FINISHED)
+       move.l    (A4),A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #226,D0
+       beq.s     basScreen_6
+       move.l    (A4),A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #224,D0
+       bne.s     basScreen_4
+basScreen_6:
+; {
+; *vErroProc = 18;
+       move.l    (A2),A0
+       move.w    #18,(A0)
+; return 0;
+       clr.l     D0
+       bra       basScreen_3
+basScreen_4:
+; }
 ; if (*token_type == QUOTE) { /* is string, error */
        move.l    _token_type.L,A0
        move.b    (A0),D0
        cmp.b     #6,D0
-       bne.s     basScreen_4
+       bne.s     basScreen_7
 ; *vErroProc = 16;
        move.l    (A2),A0
        move.w    #16,(A0)
 ; return 0;
        clr.l     D0
        bra       basScreen_3
-basScreen_4:
+basScreen_7:
 ; }
 ; putback();
-       jsr       _putback
+       jsr       (A5)
 ; getExp(&answer);
        pea       -20(A6)
        jsr       _getExp
@@ -20587,15 +20616,15 @@ basScreen_4:
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
-       beq.s     basScreen_6
+       beq.s     basScreen_9
        clr.l     D0
        bra       basScreen_3
-basScreen_6:
+basScreen_9:
 ; if (*value_type == '$')
        move.l    (A3),A0
        move.b    (A0),D0
        cmp.b     #36,D0
-       bne.s     basScreen_8
+       bne.s     basScreen_11
 ; {
 ; *vErroProc = 16;
        move.l    (A2),A0
@@ -20603,35 +20632,44 @@ basScreen_6:
 ; return 0;
        clr.l     D0
        bra       basScreen_3
-basScreen_8:
+basScreen_11:
 ; }
 ; if (*value_type == '#')
        move.l    (A3),A0
        move.b    (A0),D0
        cmp.b     #35,D0
-       bne.s     basScreen_10
+       bne.s     basScreen_13
 ; {
 ; *iVal = fppInt(*iVal);
-       move.l    D3,A0
+       move.l    D4,A0
        move.l    (A0),-(A7)
        jsr       _fppInt
        addq.w    #4,A7
-       move.l    D3,A0
+       move.l    D4,A0
        move.l    D0,(A0)
 ; *value_type = '%';
        move.l    (A3),A0
        move.b    #37,(A0)
-basScreen_10:
+basScreen_13:
 ; }
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return 0;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     basScreen_15
+       clr.l     D0
+       bra       basScreen_3
+basScreen_15:
 ; vModeAux = *iVal;
-       move.l    D3,A0
-       move.l    (A0),D2
+       move.l    D4,A0
+       move.l    (A0),D6
 ; if (vModeAux < 0 || vModeAux > 2)
-       cmp.l     #0,D2
-       blt.s     basScreen_14
-       cmp.l     #2,D2
-       ble.s     basScreen_12
-basScreen_14:
+       cmp.l     #0,D6
+       blt.s     basScreen_19
+       cmp.l     #2,D6
+       ble.s     basScreen_17
+basScreen_19:
 ; {
 ; *vErroProc = 5;
        move.l    (A2),A0
@@ -20639,31 +20677,208 @@ basScreen_14:
 ; return 0;
        clr.l     D0
        bra       basScreen_3
-basScreen_12:
-; }
-; switch (vModeAux)
-       cmp.l     #1,D2
-       beq.s     basScreen_18
-       bgt.s     basScreen_20
-       tst.l     D2
-       beq.s     basScreen_17
-       bra       basScreen_16
-basScreen_20:
-       cmp.l     #2,D2
-       beq.s     basScreen_19
-       bra       basScreen_16
 basScreen_17:
+; }
+; if (*token == ',')
+       move.l    _token.L,A0
+       move.b    (A0),D0
+       cmp.b     #44,D0
+       bne       basScreen_20
+; {
+; nextToken();
+       jsr       _nextToken
+; if (*vErroProc) return 0;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     basScreen_22
+       clr.l     D0
+       bra       basScreen_3
+basScreen_22:
+; if (*tok == EOL || *tok == FINISHED)
+       move.l    (A4),A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #226,D0
+       beq.s     basScreen_26
+       move.l    (A4),A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #224,D0
+       bne.s     basScreen_24
+basScreen_26:
+; {
+; *vErroProc = 18;
+       move.l    (A2),A0
+       move.w    #18,(A0)
+; return 0;
+       clr.l     D0
+       bra       basScreen_3
+basScreen_24:
+; }
+; if (*token_type == QUOTE) { /* is string, error */
+       move.l    _token_type.L,A0
+       move.b    (A0),D0
+       cmp.b     #6,D0
+       bne.s     basScreen_27
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return 0;
+       clr.l     D0
+       bra       basScreen_3
+basScreen_27:
+; }
+; putback();
+       jsr       (A5)
+; getExp(&answer);
+       pea       -20(A6)
+       jsr       _getExp
+       addq.w    #4,A7
+; if (*vErroProc) return 0;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     basScreen_29
+       clr.l     D0
+       bra       basScreen_3
+basScreen_29:
+; if (*value_type == '$')
+       move.l    (A3),A0
+       move.b    (A0),D0
+       cmp.b     #36,D0
+       bne.s     basScreen_31
+; {
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return 0;
+       clr.l     D0
+       bra       basScreen_3
+basScreen_31:
+; }
+; if (*value_type == '#')
+       move.l    (A3),A0
+       move.b    (A0),D0
+       cmp.b     #35,D0
+       bne.s     basScreen_33
+; {
+; *iVal = fppInt(*iVal);
+       move.l    D4,A0
+       move.l    (A0),-(A7)
+       jsr       _fppInt
+       addq.w    #4,A7
+       move.l    D4,A0
+       move.l    D0,(A0)
+; *value_type = '%';
+       move.l    (A3),A0
+       move.b    #37,(A0)
+basScreen_33:
+; }
+; vModeSpriteAux = *iVal;
+       move.l    D4,A0
+       move.l    (A0),D5
+; if (vModeSpriteAux < 0 || vModeSpriteAux > 3)
+       cmp.l     #0,D5
+       blt.s     basScreen_37
+       cmp.l     #3,D5
+       ble.s     basScreen_35
+basScreen_37:
+; {
+; *vErroProc = 5;
+       move.l    (A2),A0
+       move.w    #5,(A0)
+; return 0;
+       clr.l     D0
+       bra       basScreen_3
+basScreen_35:
+       bra.s     basScreen_21
+basScreen_20:
+; }
+; }
+; else
+; putback();
+       jsr       (A5)
+basScreen_21:
+; switch (vModeSpriteAux)
+       move.l    D5,D0
+       cmp.l     #4,D0
+       bhs       basScreen_39
+       asl.l     #1,D0
+       move.w    basScreen_40(PC,D0.L),D0
+       jmp       basScreen_40(PC,D0.W)
+basScreen_40:
+       dc.w      basScreen_41-basScreen_40
+       dc.w      basScreen_42-basScreen_40
+       dc.w      basScreen_43-basScreen_40
+       dc.w      basScreen_44-basScreen_40
+basScreen_41:
 ; {
 ; case 0:
+; vSpriteSize = 0;
+       clr.b     D3
+; vSpriteMag = 0;
+       clr.b     D2
+; break;
+       bra.s     basScreen_39
+basScreen_42:
+; case 1:
+; vSpriteSize = 0;
+       clr.b     D3
+; vSpriteMag = 1;
+       moveq     #1,D2
+; break;
+       bra.s     basScreen_39
+basScreen_43:
+; case 2:
+; vSpriteSize = 1;
+       moveq     #1,D3
+; vSpriteMag = 0;
+       clr.b     D2
+; break;
+       bra.s     basScreen_39
+basScreen_44:
+; case 3:
+; vSpriteSize = 1;
+       moveq     #1,D3
+; vSpriteMag = 1;
+       moveq     #1,D2
+; break;
+basScreen_39:
+; }
+; switch (vModeAux)
+       cmp.l     #1,D6
+       beq.s     basScreen_48
+       bgt.s     basScreen_50
+       tst.l     D6
+       beq.s     basScreen_47
+       bra       basScreen_46
+basScreen_50:
+       cmp.l     #2,D6
+       beq       basScreen_49
+       bra       basScreen_46
+basScreen_47:
+; {
+; case 0:
+; if (vdpModeBas != VDP_MODE_TEXT)
+       move.b    _vdpModeBas.L,D0
+       cmp.b     #3,D0
+       beq.s     basScreen_51
 ; basText();
        jsr       _basText
+basScreen_51:
 ; break;
-       bra       basScreen_16
-basScreen_18:
+       bra       basScreen_46
+basScreen_48:
 ; case 1:
-; vdp_init(VDP_MODE_MULTICOLOR, 0, 0, 0);
-       clr.l     -(A7)
-       clr.l     -(A7)
+; if (vdpModeBas != VDP_MODE_MULTICOLOR)
+       move.b    _vdpModeBas.L,D0
+       cmp.b     #2,D0
+       beq.s     basScreen_53
+; {
+; vdp_init(VDP_MODE_MULTICOLOR, 0, vSpriteSize, vSpriteMag);
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       and.l     #255,D3
+       move.l    D3,-(A7)
        clr.l     -(A7)
        pea       2
        move.l    1094,A0
@@ -20675,13 +20890,22 @@ basScreen_18:
        move.b    #47,_vdpMaxRows.L
 ; vdpModeBas = VDP_MODE_MULTICOLOR;
        move.b    #2,_vdpModeBas.L
+basScreen_53:
+; }
 ; break;
-       bra       basScreen_16
-basScreen_19:
+       bra       basScreen_46
+basScreen_49:
 ; case 2:
-; vdp_init(VDP_MODE_G2, 0x0, 1, 0);
-       clr.l     -(A7)
-       pea       1
+; if (vdpModeBas != VDP_MODE_G2)
+       move.b    _vdpModeBas.L,D0
+       cmp.b     #1,D0
+       beq       basScreen_55
+; {
+; vdp_init(VDP_MODE_G2, 0x0, vSpriteSize, vSpriteMag);
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       and.l     #255,D3
+       move.l    D3,-(A7)
        clr.l     -(A7)
        pea       1
        move.l    1094,A0
@@ -20702,13 +20926,15 @@ basScreen_19:
        move.b    #1,_bgcolorBas.L
 ; basPaintSyncTables();
        jsr       @basic_basPaintSyncTables
+basScreen_55:
+; }
 ; break;
-basScreen_16:
+basScreen_46:
 ; }
 ; return 0;
        clr.l     D0
 basScreen_3:
-       movem.l   (A7)+,D2/D3/A2/A3
+       movem.l   (A7)+,D2/D3/D4/D5/D6/A2/A3/A4/A5
        unlk      A6
        rts
 ; }
@@ -20742,7 +20968,7 @@ _basText:
        move.b    #23,_vdpMaxRows.L
 ; vdpModeBas = VDP_MODE_TEXT;
        move.b    #3,_vdpModeBas.L
-; clearScr();     
+; clearScr();
        move.l    1054,A0
        jsr       (A0)
 ; return 0;
@@ -20765,7 +20991,7 @@ _basColor:
        lea       _vErroProc.L,A2
        lea       _value_type.L,A3
        lea       _tok.L,A4
-       lea       _nextToken.L,A5
+       lea       _putback.L,A5
 ; unsigned char answer[20];
 ; int  *iVal = answer;
        lea       -20(A6),A0
@@ -20779,7 +21005,7 @@ _basColor:
        and.l     #255,D0
        move.l    D0,D3
 ; nextToken();
-       jsr       (A5)
+       jsr       _nextToken
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -20828,7 +21054,7 @@ basColor_4:
 basColor_9:
 ; }
 ; putback();
-       jsr       _putback
+       jsr       (A5)
 ; getExp(&answer);
        pea       -20(A6)
        jsr       _getExp
@@ -20891,8 +21117,8 @@ basColor_19:
 basColor_17:
 ; }
 ; nextToken();
-       jsr       (A5)
-; if (*vErroProc) return 0;        
+       jsr       _nextToken
+; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
        beq.s     basColor_20
@@ -20904,10 +21130,10 @@ basColor_20:
        move.l    _token.L,A0
        move.b    (A0),D0
        cmp.b     #44,D0
-       bne       basColor_37
+       bne       basColor_22
 ; {
 ; nextToken();
-       jsr       (A5)
+       jsr       _nextToken
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -20950,7 +21176,7 @@ basColor_26:
 basColor_29:
 ; }
 ; putback();
-       jsr       _putback
+       jsr       (A5)
 ; getExp(&answer);
        pea       -20(A6)
        jsr       _getExp
@@ -21009,10 +21235,16 @@ basColor_39:
        move.w    #5,(A0)
 ; return 0;
        clr.l     D0
-       bra.s     basColor_3
+       bra       basColor_3
 basColor_37:
+       bra.s     basColor_23
+basColor_22:
 ; }
 ; }
+; else
+; putback();
+       jsr       (A5)
+basColor_23:
 ; fgcolorBas = (unsigned char)foreground;
        move.b    D4,_fgcolorBas.L
 ; bgcolorBas = (unsigned char)background;
@@ -21400,6 +21632,8 @@ basCircle_26:
 ; {
 ; verticalRadius = horizontalRadius;
        move.l    -16(A6),-12(A6)
+; putback();
+       jsr       _putback
 basCircle_27:
 ; }
 ; if (horizontalRadius < 0)
