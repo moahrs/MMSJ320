@@ -611,6 +611,8 @@ char vdp_read_color_pixel(unsigned char x, unsigned char y)
 {
     char vRetColor = -1;
     unsigned int addr = 0;
+    unsigned char pixel;
+    unsigned char color;
 
     if (vdp_mode == VDP_MODE_MULTICOLOR)
     {
@@ -623,6 +625,22 @@ char vdp_read_color_pixel(unsigned char x, unsigned char y)
             vRetColor = (*vvdgd & 0x0f);
         else
             vRetColor = (*vvdgd >> 4);
+    }
+    else if (vdp_mode == VDP_MODE_G2)
+    {
+        addr = pattern_table + (8 * (x / 8)) + (y % 8) + (256 * (y / 8));
+
+        setReadAddress(addr);
+        setReadAddress(addr);
+        pixel = *vvdgd;
+        setReadAddress(color_table + (addr - pattern_table));
+        setReadAddress(color_table + (addr - pattern_table));
+        color = *vvdgd;
+
+        if (pixel & (0x80 >> (x % 8)))
+            vRetColor = (color >> 4) & 0x0f;
+        else
+            vRetColor = color & 0x0f;
     }
 
     return vRetColor;

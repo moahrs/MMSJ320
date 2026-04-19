@@ -157,8 +157,8 @@ static const struct keyword_token keywords[] =
   {"GOSUB", 	0x8A},   // .. .. ok
   {"RETURN", 	0x8B},   // .. .. ok
   {"REM", 		0x8C},   // .. .. ok
-  {"INVERSE", 0x8D},   // .. .. ok
-  {"NORMAL",  0x8E},   // .. .. ok
+  {"RESERVED", 0x8D},   // .. .. ok
+  {"RESERVED", 0x8E},   // .. .. ok
   {"DIM", 		0x8F},   // .. .. ok
   {"ON",      0x91},   // .. .. ok
   {"INPUT", 	0x92},   // .. ok ok
@@ -179,7 +179,7 @@ static const struct keyword_token keywords[] =
   {"PLOT",    0xB4},   // .. .. ok
   {"HLIN",    0xB5},   // .. .. ok
   {"VLIN",    0xB6},   // .. .. ok
-  {"RESERVED",  0xB8},   // .. .. ok
+  {"PAINT",   0xB8},   // .. .. ok
   {"LINE",    0xB9},   // .. .. ok
   {"AT",      0xBA},   // .. .. ok
   {"ONERR",   0xBB},   // .. .. ok
@@ -190,7 +190,7 @@ static const struct keyword_token keywords[] =
   {"LEN",     0xDB},   // ok ok ok
   {"VAL",     0xDC},   // ok ok ok
   {"STR$",    0xDD},   // ok ok ok
-  {"SCRN",    0xE0},   // .. .. ok
+  {"POINT",   0xE0},   // .. .. ok
   {"CHR$",    0xE1},   // ok ok ok
   {"FRE",     0xE2},   // ok ok ok
   {"SQRT",    0xE3},   // ok ok ok
@@ -334,8 +334,6 @@ int basInt(void);
 int basAbs(void);
 int basPeekPoke(char pTipo);
 int basDim(void);
-int basInverse(void);
-int basNormal(void);
 int basOnVar(void);
 int basScreen(void);
 int basLocate(void);
@@ -343,9 +341,10 @@ int basText(void);
 int basColor(void);
 int basCircle(void);
 int basRect(void);
+int basPaint(void);
 int basPlot(void);
 int basHVlin(unsigned char vTipo);   // 1 - HLIN, 2 - VLIN
-int basScrn(void);
+int basPoint(void);
 int basLine(void);
 int basRead(void);
 int basRestore(void);

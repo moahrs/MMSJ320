@@ -58,10 +58,16 @@
 
 #define SIMPLE_VAR_CACHE_SLOTS 8
 #define PARSER_STACK_SIZE 32
+#define PAINT_STACK_SIZE 4096
 
 static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 static unsigned char *lastVarCacheAddr[SIMPLE_VAR_CACHE_SLOTS] = {0,0,0,0,0,0,0,0};
+static unsigned char paintStackX[PAINT_STACK_SIZE];
+static unsigned char paintStackY[PAINT_STACK_SIZE];
+static unsigned int paintPatternTable = 0x0000;
+static unsigned int paintColorTable = 0x2000;
+static unsigned char *paintVdpData = (unsigned char *)0x00400041;
 /*static unsigned char valStack[32][50];
 static unsigned char opStack[PARSER_STACK_SIZE];
 static unsigned char opPrecStack[PARSER_STACK_SIZE];
@@ -87,6 +93,11 @@ static void clearRuntimeData(unsigned char *pForStack)
     memset(pStartSimpVar, 0x00, 0x2000);
     memset(pStartArrayVar, 0x00, 0x6000);
     memset(pForStack, 0x00, 0x800);
+}
+
+static void basPaintSyncTables(void)
+{
+    vdp_get_cfg(&paintPatternTable, &paintColorTable);
 }
 
 //-----------------------------------------------------------------------------
@@ -1789,11 +1800,11 @@ int executeToken(unsigned char pToken)
         case 0x8C:  // REM - Ignora todas a linha depois dele
             vReta = 0;
             break;
-        case 0x8D:  // INVERSE
-            vReta = basInverse();
+        case 0x8D:  // RESERVED
+            vReta = 0;
             break;
-        case 0x8E:  // NORMAL
-            vReta = basNormal();
+        case 0x8E:  // RESERVED
+            vReta = 0;
             break;
         case 0x8F:  // DIM
             vReta = basDim();
@@ -1860,8 +1871,8 @@ int executeToken(unsigned char pToken)
         case 0xB6:  // VLIN
             vReta = basHVlin(2);
             break;
-        case 0xB8:  // RESERVED
-            vReta = 0;
+        case 0xB8:  // PAINT
+            vReta = basPaint();
             break;
         case 0xB9:  // LINE
             vReta = basLine();
@@ -1893,8 +1904,8 @@ int executeToken(unsigned char pToken)
         case 0xDD:  // Str$
             vReta = basStr();
             break;
-        case 0xE0:  // SCRN
-            vReta = basScrn();
+        case 0xE0:  // POINT
+            vReta = basPoint();
             break;
         case 0xE1:  // Chr$
             vReta = basChr();
@@ -7463,10 +7474,17 @@ int basTab(void)
 //--------------------------------------------------------------------------------------
 // Screen Mode Switch
 // Syntaxe:
-//          SCREEN <0|1|2>
-//              0: Text Screen Mode (40 cols x 24 rows)
-//              1: Low Resolution Screen Mode (64x48)   
-//              2: High Resolution Screen Mode (256x192)
+//          SCREEN <mode>, [spriteSize]
+//              Mode: (0,1,2)
+//                  0: Text Screen Mode (40 cols x 24 rows)
+//                  1: Low Resolution Screen Mode (64x48)   
+//                  2: High Resolution Screen Mode (256x192)
+//
+//              SpriteSize: (0,1,2,3)
+//                  0: 8x8 pixels (standard).  (Default)
+//                  1: 8x8 pixels (magnified to 16x16).
+//                  2: 16x16 pixels (standard).
+//                  3: 16x16 pixels (magnified to 32x32).
 //--------------------------------------------------------------------------------------
 int basScreen(void)
 {
@@ -7510,7 +7528,7 @@ int basScreen(void)
     switch (vModeAux)
     {
         case 0:
-           
+            basText();
             break;
         case 1:
             vdp_init(VDP_MODE_MULTICOLOR, 0, 0, 0);
@@ -7525,6 +7543,7 @@ int basScreen(void)
             vdpModeBas = VDP_MODE_G2;
             vdp_set_bdcolor(VDP_BLACK);
             bgcolorBas = VDP_BLACK;
+            basPaintSyncTables();
             break;
     }
 
@@ -7540,47 +7559,6 @@ int basText(void)
     vdpMaxRows = 23;
     vdpModeBas = VDP_MODE_TEXT;
     clearScr();     
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-// Inverte as Cores de tela (COR FRENTE <> COR NORMAL)
-// Syntaxe:
-//          INVERSE
-//
-//    **********************************************************************************
-//    ** SOMENTE PARA COMPATIBILIDADE, NO TMS91xx E TMS99xx NAO FUNCIONA COR POR CHAR **
-//    **********************************************************************************
-//--------------------------------------------------------------------------------------
-int basInverse(void)
-{
-/*    unsigned char vTempCor;
-
-    fgcolorBasAnt = fgcolorBas;
-    bgcolorBasAnt = bgcolorBas;
-    vTempCor = fgcolorBas;
-    fgcolorBas = bgcolorBas;
-    bgcolorBas = vTempCor;
-    vdp_textcolor(fgcolorBas,bgcolorBas);*/
-
-    return 0;
-}
-
-//--------------------------------------------------------------------------------------
-// Volta as cores de tela as cores iniciais
-// Syntaxe:
-//          NORMAL
-//
-//    **********************************************************************************
-//    ** SOMENTE PARA COMPATIBILIDADE, NO TMS91xx E TMS99xx NAO FUNCIONA COR POR CHAR **
-//    **********************************************************************************
-//--------------------------------------------------------------------------------------
-int basNormal(void)
-{
-/*    fgcolorBas = fgcolorBasAnt;
-    bgcolorBas = bgcolorBasAnt;
-    vdp_textcolor(fgcolorBas,bgcolorBas);*/
-
     return 0;
 }
 
@@ -8000,9 +7978,184 @@ int basRect(void)
 }
 
 //--------------------------------------------------------------------------------------
+// Flood fill a partir de um ponto ate encontrar bordas de outra cor.
+// Syntaxe:
+//          PAINT x,y,c
+//--------------------------------------------------------------------------------------
+static unsigned char basPaintReadPixel(unsigned char x, unsigned char y)
+{
+    unsigned int offset;
+    unsigned char pixel;
+    unsigned char color;
+
+    offset = (unsigned int)(8 * (x / 8)) + (unsigned int)(y % 8) + (unsigned int)(256 * (y / 8));
+
+    setReadAddress(paintPatternTable + offset);
+    setReadAddress(paintPatternTable + offset);
+    pixel = *paintVdpData;
+    setReadAddress(paintColorTable + offset);
+    setReadAddress(paintColorTable + offset);
+    color = *paintVdpData;
+
+    if (pixel & (0x80 >> (x % 8)))
+        return (color >> 4) & 0x0F;
+
+    return color & 0x0F;
+}
+
+static int basPaintPush(unsigned int *stackTop, unsigned char x, unsigned char y)
+{
+    if (*stackTop >= PAINT_STACK_SIZE)
+    {
+        *vErroProc = 21;
+        return 0;
+    }
+
+    paintStackX[*stackTop] = x;
+    paintStackY[*stackTop] = y;
+    *stackTop = *stackTop + 1;
+    return 1;
+}
+
+static int basPaintQueueRow(unsigned int *stackTop, unsigned char left, unsigned char right, unsigned char y, unsigned char targetColor)
+{
+    unsigned int x = left;
+
+    while (x <= right)
+    {
+        if (basPaintReadPixel((unsigned char)x, y) == targetColor)
+        {
+            if (!basPaintPush(stackTop, (unsigned char)x, y))
+                return 0;
+
+            while (x <= right && basPaintReadPixel((unsigned char)x, y) == targetColor)
+                x++;
+        }
+
+        x++;
+    }
+
+    return 1;
+}
+
+int basPaint(void)
+{
+    int xValue = 0, yValue = 0, colorValue = 0;
+    unsigned char startX, startY, fillColor, targetColor;
+    unsigned int stackTop = 0;
+    int left, right, x, y;
+
+    if (vdpModeBas != VDP_MODE_G2)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    basPaintSyncTables();
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&xValue);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+    
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&yValue);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&colorValue);
+    if (*vErroProc) return 0;
+
+    if (xValue < 0 || xValue > vdpMaxCols || yValue < 0 || yValue > vdpMaxRows)
+    {
+        *vErroProc = 25;
+        return 0;
+    }
+
+    if (colorValue < 0 || colorValue > 15)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    startX = (unsigned char)xValue;
+    startY = (unsigned char)yValue;
+    fillColor = (unsigned char)colorValue;
+    targetColor = basPaintReadPixel(startX, startY);
+
+    if (targetColor == fillColor)
+    {
+        *value_type = '%';
+        return 0;
+    }
+
+    if (!basPaintPush(&stackTop, startX, startY))
+        return 0;
+
+    while (stackTop > 0)
+    {
+        stackTop--;
+        x = paintStackX[stackTop];
+        y = paintStackY[stackTop];
+
+        if (basPaintReadPixel((unsigned char)x, (unsigned char)y) != targetColor)
+            continue;
+
+        left = x;
+        while (left > 0 && basPaintReadPixel((unsigned char)(left - 1), (unsigned char)y) == targetColor)
+            left--;
+
+        right = x;
+        while (right < vdpMaxCols && basPaintReadPixel((unsigned char)(right + 1), (unsigned char)y) == targetColor)
+            right++;
+
+        for (x = left; x <= right; x++)
+            vdp_plot_hires((unsigned char)x, (unsigned char)y, fillColor, 0);
+
+        if (y > 0)
+        {
+            if (!basPaintQueueRow(&stackTop, (unsigned char)left, (unsigned char)right, (unsigned char)(y - 1), targetColor))
+                return 0;
+        }
+
+        if (y < vdpMaxRows)
+        {
+            if (!basPaintQueueRow(&stackTop, (unsigned char)left, (unsigned char)right, (unsigned char)(y + 1), targetColor))
+                return 0;
+        }
+    }
+
+    *value_type = '%';
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
 // Coloca um dot ou preenche uma area com a color previamente definida
 // Syntaxe:
-//          PLOT <x entre 0 e 63>, <y entre 0 e 47>
+//          PLOT <x entre 0 e 63/255>, <y entre 0 e 47/191>
 //--------------------------------------------------------------------------------------
 int basPlot(void)
 {
@@ -8012,7 +8165,7 @@ int basPlot(void)
     unsigned char vx, vy;
     unsigned char sqtdtam[10];
 
-    if (vdpModeBas != VDP_MODE_MULTICOLOR)
+    if (vdpModeBas == VDP_MODE_TEXT)
     {
         *vErroProc = 24;
         return 0;
@@ -8239,7 +8392,7 @@ int basHVlin(unsigned char vTipo)   // 1 - HLIN, 2 - VLIN
 // Syntaxe:
 //
 //--------------------------------------------------------------------------------------
-int basScrn(void)
+int basPoint(void)
 {
     int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
     unsigned char answer[20];
@@ -8248,7 +8401,7 @@ int basScrn(void)
     unsigned char vx, vy;
     unsigned char sqtdtam[10];
 
-    if (vdpModeBas != VDP_MODE_MULTICOLOR)
+    if (vdpModeBas == VDP_MODE_TEXT)
     {
         *vErroProc = 24;
         return 0;
