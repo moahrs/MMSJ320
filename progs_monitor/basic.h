@@ -102,7 +102,7 @@ unsigned long *vDataLineAtu         = 0x008FE95E; //
 for_stack *forStack                 = 0x008FF6BE; // stack for FOR/NEXT loop
 unsigned long *atuVarAddr           = 0x008FF6B0; // Endereco da variavel atualmente usada pelo basLet
 
-const keywords_count = 67;
+const keywords_count = 68;
 
 // -------------------------------------------------------------------------------
 // Mensagens de Erro
@@ -157,13 +157,13 @@ static const struct keyword_token keywords[] =
   {"GOSUB", 	0x8A},   // .. .. ok
   {"RETURN", 	0x8B},   // .. .. ok
   {"REM", 		0x8C},   // .. .. ok
-  {"RESERVED", 0x8D},   // .. .. ok
-  {"RESERVED", 0x8E},   // .. .. ok
+  {"SPRITESET", 0x8D},  // .. .. ok
+  {"SPRITEPUT", 0x8E},  // .. .. ok
   {"DIM", 		0x8F},   // .. .. ok
   {"ON",      0x91},   // .. .. ok
   {"INPUT", 	0x92},   // .. ok ok
   {"GET",     0x93},   // .. ok ok
-  {"RESERVED",        0x94},   // reservado
+  {"SPRITECOLOR",     0x94},   // .. .. ok
   {"LOCATE",  0x95},   // .. .. ok
   {"CLS", 		0x96},   // ok ok ok
   {"CLEAR", 	0x97},   // .. .. ok
@@ -179,6 +179,7 @@ static const struct keyword_token keywords[] =
   {"PLOT",    0xB4},   // .. .. ok
   {"HLIN",    0xB5},   // .. .. ok
   {"VLIN",    0xB6},   // .. .. ok
+  {"SPRITEPOS", 0xB7}, // .. .. ok
   {"PAINT",   0xB8},   // .. .. ok
   {"LINE",    0xB9},   // .. .. ok
   {"AT",      0xBA},   // .. .. ok
@@ -342,6 +343,10 @@ int basColor(void);
 int basCircle(void);
 int basRect(void);
 int basPaint(void);
+int basSpriteSet(void);
+int basSpritePut(void);
+int basSpriteColor(void);
+int basSpritePos(void);
 int basPlot(void);
 int basHVlin(unsigned char vTipo);   // 1 - HLIN, 2 - VLIN
 int basPoint(void);

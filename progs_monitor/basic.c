@@ -100,6 +100,41 @@ static void basPaintSyncTables(void)
     vdp_get_cfg(&paintPatternTable, &paintColorTable);
 }
 
+static unsigned int spriteHandleCache[256] = {0};
+static unsigned char spriteSizeSelBas = 0;
+
+static void basSpriteResetCache(void)
+{
+    memset(spriteHandleCache, 0x00, sizeof(spriteHandleCache));
+}
+
+static unsigned int basSpritePatternLimit(void)
+{
+    if (spriteSizeSelBas)
+        return 63;
+
+    return 255;
+}
+
+static unsigned int basSpritePatternBytes(void)
+{
+    if (spriteSizeSelBas)
+        return 32;
+
+    return 8;
+}
+
+static unsigned int basSpriteResolveHandle(unsigned char spriteNumber)
+{
+    unsigned int handle;
+
+    if (vdpModeBas == VDP_MODE_TEXT)
+        return 0;
+
+    handle = spriteHandleCache[spriteNumber];
+    return handle;
+}
+
 //-----------------------------------------------------------------------------
 // Principal
 //-----------------------------------------------------------------------------
@@ -132,6 +167,7 @@ void main(void)
     *debugOn = 0;
     *lastHgrX = 0;
     *lastHgrY = 0;
+    spriteSizeSelBas = 0;
     //vdpcolor = vdp_get_color();
     vdpcolor.fg = VDP_WHITE;
     vdpcolor.bg = VDP_BLACK;
@@ -1800,11 +1836,11 @@ int executeToken(unsigned char pToken)
         case 0x8C:  // REM - Ignora todas a linha depois dele
             vReta = 0;
             break;
-        case 0x8D:  // RESERVED
-            vReta = 0;
+        case 0x8D:  // SPRITESET
+            vReta = basSpriteSet();
             break;
-        case 0x8E:  // RESERVED
-            vReta = 0;
+        case 0x8E:  // SPRITEPUT
+            vReta = basSpritePut();
             break;
         case 0x8F:  // DIM
             vReta = basDim();
@@ -1821,8 +1857,8 @@ int executeToken(unsigned char pToken)
         case 0x93:  // Get
             vReta = basInputGet(1);
             break;
-        case 0x94:  // reservado
-            vReta = 0;
+        case 0x94:  // SPRITECOLOR
+            vReta = basSpriteColor();
             break;
         case 0x95:  // LOCATE
             vReta = basLocate();
@@ -1870,6 +1906,9 @@ int executeToken(unsigned char pToken)
             break;
         case 0xB6:  // VLIN
             vReta = basHVlin(2);
+            break;
+        case 0xB7:  // SPRITEPOS
+            vReta = basSpritePos();
             break;
         case 0xB8:  // PAINT
             vReta = basPaint();
@@ -7614,6 +7653,8 @@ int basScreen(void)
                 vdpMaxCols = 63;
                 vdpMaxRows = 47;
                 vdpModeBas = VDP_MODE_MULTICOLOR;
+                spriteSizeSelBas = vSpriteSize;
+                basSpriteResetCache();
             }
             break;
         case 2:
@@ -7625,7 +7666,9 @@ int basScreen(void)
                 vdpModeBas = VDP_MODE_G2;
                 vdp_set_bdcolor(VDP_BLACK);
                 bgcolorBas = VDP_BLACK;
+                spriteSizeSelBas = vSpriteSize;
                 basPaintSyncTables();
+                basSpriteResetCache();
             }
             break;
     }
@@ -7641,6 +7684,8 @@ int basText(void)
     vdpMaxCols = 39;
     vdpMaxRows = 23;
     vdpModeBas = VDP_MODE_TEXT;
+    spriteSizeSelBas = 0;
+    basSpriteResetCache();
     clearScr();
     return 0;
 }
@@ -8236,6 +8281,359 @@ int basPaint(void)
     }
 
     *value_type = '%';
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Carrega dados do sprite para a tabela de padroes.
+// Syntaxe:
+//          SPRITESET <number>,<var$>
+//--------------------------------------------------------------------------------------
+int basSpriteSet(void)
+{
+    int spriteNumber = 0;
+    unsigned char answer[256];
+    unsigned char spriteData[32];
+    unsigned int spriteLimit;
+    unsigned int spriteBytes;
+    unsigned int copyBytes;
+
+    if (vdpModeBas == VDP_MODE_TEXT)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&spriteNumber);
+    if (*vErroProc) return 0;
+
+    spriteLimit = basSpritePatternLimit();
+    if (spriteNumber < 0 || spriteNumber > (int)spriteLimit)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*tok == EOL || *tok == FINISHED)
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    memset(spriteData, 0x00, sizeof(spriteData));
+    spriteBytes = basSpritePatternBytes();
+
+    if (*token_type == QUOTE)
+    {
+        copyBytes = strlen((char *)token);
+        if (copyBytes > spriteBytes)
+            copyBytes = spriteBytes;
+        memcpy(spriteData, token, copyBytes);
+    }
+    else
+    {
+        putback();
+
+        getExp(&answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type != '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        copyBytes = strlen((char *)answer);
+        if (copyBytes > spriteBytes)
+            copyBytes = spriteBytes;
+        memcpy(spriteData, answer, copyBytes);
+    }
+
+    vdp_set_sprite_pattern((unsigned char)spriteNumber, spriteData);
+    *value_type = '%';
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Ativa um sprite, define o plano, a posicao e a cor inicial.
+// Syntaxe:
+//          SPRITEPUT <number>,<plano>,<x>,<y>,<cor>
+//--------------------------------------------------------------------------------------
+int basSpritePut(void)
+{
+    int spriteNumber = 0;
+    int plane = 0;
+    int xValue = 0;
+    int yValue = 0;
+    int colorValue = 0;
+    unsigned int spriteLimit;
+    unsigned int spriteHandle;
+
+    if (vdpModeBas == VDP_MODE_TEXT)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&spriteNumber);
+    if (*vErroProc) return 0;
+
+    spriteLimit = basSpritePatternLimit();
+    if (spriteNumber < 0 || spriteNumber > (int)spriteLimit)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&plane);
+    if (*vErroProc) return 0;
+
+    if (plane < 0 || plane > 31)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&xValue);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&yValue);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&colorValue);
+    if (*vErroProc) return 0;
+
+    if (xValue < 0 || xValue > 255 || yValue < 0 || yValue > 191)
+    {
+        *vErroProc = 25;
+        return 0;
+    }
+
+    if (colorValue < 0 || colorValue > 15)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    spriteHandle = vdp_sprite_init((unsigned char)spriteNumber, (unsigned char)plane, (unsigned char)colorValue);
+    spriteHandleCache[(unsigned char)spriteNumber] = spriteHandle;
+    vdp_sprite_set_position(spriteHandle, (unsigned int)xValue, (unsigned char)yValue);
+
+    *value_type = '%';
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Altera apenas a cor de um sprite ja ativado.
+// Syntaxe:
+//          SPRITECOLOR <number>,<cor>
+//--------------------------------------------------------------------------------------
+int basSpriteColor(void)
+{
+    int spriteNumber = 0;
+    int colorValue = 0;
+    unsigned int spriteLimit;
+    unsigned int spriteHandle;
+
+    if (vdpModeBas == VDP_MODE_TEXT)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&spriteNumber);
+    if (*vErroProc) return 0;
+
+    spriteLimit = basSpritePatternLimit();
+    if (spriteNumber < 0 || spriteNumber > (int)spriteLimit)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&colorValue);
+    if (*vErroProc) return 0;
+
+    if (colorValue < 0 || colorValue > 15)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    spriteHandle = basSpriteResolveHandle((unsigned char)spriteNumber);
+    if (spriteHandle == 0)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    vdp_sprite_color(spriteHandle, (unsigned char)colorValue);
+    *value_type = '%';
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Altera a posicao de um sprite ja ativado.
+// Syntaxe:
+//          SPRITEPOS <number>,<x>,<y>
+//--------------------------------------------------------------------------------------
+int basSpritePos(void)
+{
+    int spriteNumber = 0;
+    int xValue = 0;
+    int yValue = 0;
+    unsigned int spriteLimit;
+    unsigned int spriteHandle;
+
+    if (vdpModeBas == VDP_MODE_TEXT)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&spriteNumber);
+    if (*vErroProc) return 0;
+
+    spriteLimit = basSpritePatternLimit();
+    if (spriteNumber < 0 || spriteNumber > (int)spriteLimit)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&xValue);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&yValue);
+    if (*vErroProc) return 0;
+
+    if (xValue < 0 || xValue > 255 || yValue < 0 || yValue > 191)
+    {
+        *vErroProc = 25;
+        return 0;
+    }
+
+    spriteHandle = basSpriteResolveHandle((unsigned char)spriteNumber);
+    if (spriteHandle == 0)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    vdp_sprite_set_position(spriteHandle, (unsigned int)xValue, (unsigned char)yValue);
+    *value_type = '%';
+
     return 0;
 }
 
