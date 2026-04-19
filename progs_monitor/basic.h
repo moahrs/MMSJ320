@@ -303,6 +303,7 @@ for_stack forPop(void);
 void gosubPush(unsigned long i);
 unsigned long gosubPop(void);
 int procParam(unsigned char tipoRetorno, unsigned char temParenteses, unsigned char tipoSeparador, unsigned char qtdParam, unsigned char *tipoParams,  unsigned char *retParams);
+void fillRect(int x1, int y1, int x2, int y2, int fillColor);
 
 // -------------------------------------------------------------------------------
 // Funcoes dos Comandos Basic

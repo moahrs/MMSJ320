@@ -1,7 +1,7 @@
-# MMSJ-BASIC - Referência Rápida de Comandos
+# MMSJ-BASIC - Referência Rápida de Comandos e Funções
 
-Esta referência cobre somente comandos e palavras-chave de uso direto do BASIC do monitor.
-Funções internas como `ASC`, `ABS`, `CHR$`, `STR$` e similares foram omitidas de propósito.
+Esta referência cobre os comandos e as funções de uso direto do BASIC do monitor.
+Rotinas internas sem token continuam fora.
 
 ## Controle de programa
 
@@ -61,6 +61,34 @@ Funções internas como `ASC`, `ABS`, `CHR$`, `STR$` e similares foram omitidas 
 | `SPRITEPUT` | `SPRITEPUT <number>,<plano>,<x>,<y>,<cor>` | Ativa o sprite, define plano, posição e cor inicial. | `SPRITEPUT 0,1,100,80,15` |
 | `SPRITECOLOR` | `SPRITECOLOR <number>,<cor>` | Muda só a cor de um sprite já ativo. | `SPRITECOLOR 0,7` |
 | `SPRITEPOS` | `SPRITEPOS <number>,<x>,<y>` | Move um sprite já ativo. | `SPRITEPOS 0,120,90` |
+
+## Funções do BASIC
+
+| Função | Sintaxe | O que faz | Exemplo |
+|---|---|---|---|
+| `ABS` | `ABS(<number real>)` | Retorna o valor absoluto. | `PRINT ABS(-10)` |
+| `ASC` | `ASC(<string>)` | Retorna o código ASCII do primeiro caractere. | `PRINT ASC("A")` |
+| `CHR$` | `CHR$(<codigo ascii>)` | Retorna uma string com o caractere correspondente ao código. | `A$ = CHR$(65)` |
+| `COS` | `COS(<number real>)` | Retorna o cosseno do ângulo. | `PRINT COS(0)` |
+| `EXP` | `EXP(<number real>)` | Retorna $e^x$. | `PRINT EXP(1)` |
+| `FRE` | `FRE(0)` | Retorna a memória livre disponível para o BASIC. | `PRINT FRE(0)` |
+| `INT` | `INT(<number real>)` | Converte o valor para inteiro. | `PRINT INT(3.9)` |
+| `LEN` | `LEN(<string>)` | Retorna o tamanho da string. | `PRINT LEN(A$)` |
+| `LEFT$` | `LEFT$(<string>,<qtd>)` | Retorna os primeiros caracteres da string. | `PRINT LEFT$(A$,3)` |
+| `LOG` | `LOG(<number real>)` | Retorna o logaritmo natural. | `PRINT LOG(10)` |
+| `MID$` | `MID$(<string>,<inicio>[,<qtd>])` | Retorna uma parte da string a partir da posição informada. | `PRINT MID$(A$,2,4)` |
+| `PEEK` | `PEEK(<endereco>)` | Lê um byte da memória. | `PRINT PEEK(4096)` |
+| `POINT` | `POINT(<x>,<y>)` | Retorna a cor do pixel na posição informada. | `C = POINT(10,20)` |
+| `POKE` | `POKE(<endereco>,<byte>)` | Grava um byte na memória. | `POKE 4096,255` |
+| `RND` | `RND(<number>)` | Retorna um número pseudoaleatório. | `PRINT RND(1)` |
+| `RIGHT$` | `RIGHT$(<string>,<qtd>)` | Retorna os últimos caracteres da string. | `PRINT RIGHT$(A$,2)` |
+| `SIN` | `SIN(<number real>)` | Retorna o seno do ângulo. | `PRINT SIN(0)` |
+| `SPC` | `SPC(<numero>)` | Gera um bloco de espaços para uso em `PRINT`. | `PRINT "A";SPC(5);"B"` |
+| `SQRT` | `SQRT(<number real>)` | Retorna a raiz quadrada. | `PRINT SQRT(9)` |
+| `STR$` | `STR$(<numero>)` | Converte número para string. | `A$ = STR$(123)` |
+| `TAB` | `TAB(<numero>)` | Avança a coluna do `PRINT`. | `PRINT TAB(10);"X"` |
+| `TAN` | `TAN(<number real>)` | Retorna a tangente do ângulo. | `PRINT TAN(0)` |
+| `VAL` | `VAL(<string>)` | Converte string numérica para valor. | `PRINT VAL("123")` |
 
 ## Palavras-chave auxiliares
 

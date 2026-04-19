@@ -4897,121 +4897,121 @@ executeToken_3:
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_4:
 ; case 0x80:  // Let
 ; vReta = basLet();
        jsr       _basLet
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_5:
 ; case 0x81:  // Print
 ; vReta = basPrint();
        jsr       _basPrint
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_6:
 ; case 0x82:  // IF
 ; vReta = basIf();
        jsr       _basIf
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_7:
 ; case 0x83:  // THEN - nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_8:
 ; case 0x85:  // FOR
 ; vReta = basFor();
        jsr       _basFor
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_9:
 ; case 0x86:  // TO - nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_10:
 ; case 0x87:  // NEXT
 ; vReta = basNext();
        jsr       _basNext
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_11:
 ; case 0x88:  // STEP - nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_12:
 ; case 0x89:  // GOTO
 ; vReta = basGoto();
        jsr       _basGoto
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_13:
 ; case 0x8A:  // GOSUB
 ; vReta = basGosub();
        jsr       _basGosub
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_14:
 ; case 0x8B:  // RETURN
 ; vReta = basReturn();
        jsr       _basReturn
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_15:
 ; case 0x8C:  // REM - Ignora todas a linha depois dele
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_16:
 ; case 0x8D:  // SPRITESET
 ; vReta = basSpriteSet();
        jsr       _basSpriteSet
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_17:
 ; case 0x8E:  // SPRITEPUT
 ; vReta = basSpritePut();
        jsr       _basSpritePut
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_18:
 ; case 0x8F:  // DIM
 ; vReta = basDim();
        jsr       _basDim
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_19:
 ; case 0x90:  // Nao fax nada, soh teste, pode ser retirado
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_20:
 ; case 0x91:  // DIM
 ; vReta = basOnVar();
        jsr       _basOnVar
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_21:
 ; case 0x92:  // Input
 ; vReta = basInputGet(250);
@@ -5020,7 +5020,7 @@ executeToken_21:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_22:
 ; case 0x93:  // Get
 ; vReta = basInputGet(1);
@@ -5029,28 +5029,50 @@ executeToken_22:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_23:
 ; case 0x94:  // SPRITECOLOR
 ; vReta = basSpriteColor();
        jsr       _basSpriteColor
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_24:
 ; case 0x95:  // LOCATE
 ; vReta = basLocate();
        jsr       _basLocate
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_25:
 ; case 0x96:  // CLS
+; // Limpa dependendo do modo de video, se for texto limpa a tela, se for grafico limpa o grafico
+; if (vdpModeBas == VDP_MODE_TEXT)
+       move.b    _vdpModeBas.L,D0
+       cmp.b     #3,D0
+       bne.s     executeToken_99
 ; clearScr();
        move.l    1054,A0
        jsr       (A0)
+       bra.s     executeToken_101
+executeToken_99:
+; else if (vdpModeBas == VDP_MODE_G2)
+       move.b    _vdpModeBas.L,D0
+       cmp.b     #1,D0
+       bne.s     executeToken_101
+; fillRect(0, 0, 255, 191, bgcolorBas);
+       move.b    _bgcolorBas.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       pea       191
+       pea       255
+       clr.l     -(A7)
+       clr.l     -(A7)
+       jsr       _fillRect
+       add.w     #20,A7
+executeToken_101:
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_26:
 ; case 0x97:  // CLEAR - Clear all variables
 ; clearRuntimeData(pForStack);
@@ -5060,130 +5082,130 @@ executeToken_26:
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_27:
 ; case 0x98:  // DATA - Ignora toda a linha depois dele, READ vai ler essa linha
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_28:
 ; case 0x99:  // Read
 ; vReta = basRead();
        jsr       _basRead
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_29:
 ; case 0x9A:  // Restore
 ; vReta = basRestore();
        jsr       _basRestore
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_30:
 ; case 0x9E:  // END
 ; vReta = basEnd();
        jsr       _basEnd
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_31:
 ; case 0x9F:  // STOP
 ; vReta = basStop();
        jsr       _basStop
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_32:
 ; case 0xB0:  // SCREEN
 ; vReta = basScreen();
        jsr       _basScreen
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_33:
 ; case 0xB1:  // CIRCLE
 ; vReta = basCircle();
        jsr       _basCircle
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_34:
 ; case 0xB2:  // RECT
 ; vReta = basRect();
        jsr       _basRect
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_35:
 ; case 0xB3:  // COLOR
 ; vReta = basColor();
        jsr       _basColor
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_36:
 ; case 0xB4:  // PLOT
 ; vReta = basPlot();
        jsr       _basPlot
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_37:
 ; case 0xB5:  // FILL
 ; vReta = basFill();
        jsr       _basFill
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_38:
 ; case 0xB6:  // RESERVED
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_39:
 ; case 0xB7:  // SPRITEPOS
 ; vReta = basSpritePos();
        jsr       _basSpritePos
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_40:
 ; case 0xB8:  // PAINT
 ; vReta = basPaint();
        jsr       _basPaint
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_41:
 ; case 0xB9:  // LINE
 ; vReta = basLine();
        jsr       _basLine
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_42:
 ; case 0xBA:  // AT - Nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_43:
 ; case 0xBB:  // ONERR
 ; vReta = basOnErr();
        jsr       _basOnErr
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_44:
 ; case 0xC4:  // ASC
 ; vReta = basAsc();
        jsr       _basAsc
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_45:
 ; case 0xCD:  // PEEK
 ; vReta = basPeekPoke('R');
@@ -5192,7 +5214,7 @@ executeToken_45:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_46:
 ; case 0xCE:  // POKE
 ; vReta = basPeekPoke('W');
@@ -5201,56 +5223,56 @@ executeToken_46:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_47:
 ; case 0xD1:  // RND
 ; vReta = basRnd();
        jsr       _basRnd
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_48:
 ; case 0xDB:  // Len
 ; vReta = basLen();
        jsr       _basLen
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_49:
 ; case 0xDC:  // Val
 ; vReta = basVal();
        jsr       _basVal
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_50:
 ; case 0xDD:  // Str$
 ; vReta = basStr();
        jsr       _basStr
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_51:
 ; case 0xE0:  // POINT
 ; vReta = basPoint();
        jsr       _basPoint
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_52:
 ; case 0xE1:  // Chr$
 ; vReta = basChr();
        jsr       _basChr
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_53:
 ; case 0xE2:  // Fre(0)
 ; vReta = basFre();
        jsr       _basFre
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_54:
 ; case 0xE3:  // Sqrt
 ; vReta = basTrig(6);
@@ -5259,7 +5281,7 @@ executeToken_54:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_55:
 ; case 0xE4:  // Sin
 ; vReta = basTrig(1);
@@ -5268,7 +5290,7 @@ executeToken_55:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_56:
 ; case 0xE5:  // Cos
 ; vReta = basTrig(2);
@@ -5277,7 +5299,7 @@ executeToken_56:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_57:
 ; case 0xE6:  // Tan
 ; vReta = basTrig(3);
@@ -5286,7 +5308,7 @@ executeToken_57:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_58:
 ; case 0xE7:  // Log
 ; vReta = basTrig(4);
@@ -5295,7 +5317,7 @@ executeToken_58:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_59:
 ; case 0xE8:  // Exp
 ; vReta = basTrig(5);
@@ -5304,21 +5326,21 @@ executeToken_59:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_60:
 ; case 0xE9:  // SPC
 ; vReta = basSpc();
        jsr       _basSpc
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_61:
 ; case 0xEA:  // Tab
 ; vReta = basTab();
        jsr       _basTab
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_62:
 ; case 0xEB:  // Mid$
 ; vReta = basLeftRightMid('M');
@@ -5327,7 +5349,7 @@ executeToken_62:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_63:
 ; case 0xEC:  // Right$
 ; vReta = basLeftRightMid('R');
@@ -5336,7 +5358,7 @@ executeToken_63:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_64:
 ; case 0xED:  // Left$
 ; vReta = basLeftRightMid('L');
@@ -5345,28 +5367,28 @@ executeToken_64:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_100
+       bra       executeToken_104
 executeToken_65:
 ; case 0xEE:  // INT
 ; vReta = basInt();
        jsr       _basInt
        move.b    D0,D2
 ; break;
-       bra.s     executeToken_100
+       bra.s     executeToken_104
 executeToken_66:
 ; case 0xEF:  // ABS
 ; vReta = basAbs();
        jsr       _basAbs
        move.b    D0,D2
 ; break;
-       bra.s     executeToken_100
+       bra.s     executeToken_104
 executeToken_1:
 ; default:
 ; if (pToken < 0x80)  // variavel sem LET
        move.b    11(A6),D0
        and.w     #255,D0
        cmp.w     #128,D0
-       bhs.s     executeToken_99
+       bhs.s     executeToken_103
 ; {
 ; *pointerRunProg = *pointerRunProg - 1;
        move.l    _pointerRunProg.L,A0
@@ -5374,8 +5396,8 @@ executeToken_1:
 ; vReta = basLet();
        jsr       _basLet
        move.b    D0,D2
-       bra.s     executeToken_100
-executeToken_99:
+       bra.s     executeToken_104
+executeToken_103:
 ; }
 ; else // Nao forem operadores logicos
 ; {
@@ -5384,7 +5406,7 @@ executeToken_99:
        move.w    #14,(A0)
 ; vReta = 14;
        moveq     #14,D2
-executeToken_100:
+executeToken_104:
 ; }
 ; }
 ; #endif
@@ -23061,24 +23083,15 @@ basPaint_3:
 ; // Syntaxe:
 ; //          FILL <x1>,<y1>,<x2>,<y2>,<color>
 ; //--------------------------------------------------------------------------------------
-; int basFill (void)
+; void fillRect(int x1, int y1, int x2, int y2, int fillColor)
 ; {
-       xdef      _basFill
-_basFill:
-       link      A6,#-56
+       xdef      _fillRect
+_fillRect:
+       link      A6,#-12
        movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
-       lea       _vErroProc.L,A2
-       lea       _vvdgBASd.L,A3
-       lea       @basic_paintPatternTable.L,A4
-       lea       _nextToken.L,A5
-; int x1 = 0, y1 = 0;
-       clr.l     -56(A6)
-       clr.l     -52(A6)
-; int x2 = 0, y2 = 0;
-       clr.l     -48(A6)
-       clr.l     -44(A6)
-; int fillColor = 0;
-       clr.l     -40(A6)
+       lea       _vvdgBASd.L,A2
+       lea       @basic_paintPatternTable.L,A3
+       move.l    16(A6),A4
 ; unsigned char t, fillIsBackground;
 ; unsigned char startBit, endBit;
 ; unsigned char maskLeft, maskRight, maskSingle;
@@ -23089,7 +23102,358 @@ _basFill:
 ; unsigned int rowBase;
 ; unsigned int offset;
 ; unsigned int bx;
-; unsigned char sqtdtam[20];
+; /* Ajusta coordenadas */
+; if (x1 > x2)
+       move.l    A4,D0
+       cmp.l     8(A6),D0
+       bge.s     fillRect_1
+; {
+; t = x1;
+       move.l    8(A6),D0
+       move.b    D0,-11(A6)
+; x1 = x2;
+       move.l    A4,8(A6)
+; x2 = t;
+       move.b    -11(A6),D0
+       and.l     #255,D0
+       move.l    D0,A4
+fillRect_1:
+; }
+; if (y1 > y2)
+       move.l    12(A6),D0
+       cmp.l     20(A6),D0
+       ble.s     fillRect_3
+; {
+; t = y1;
+       move.l    12(A6),D0
+       move.b    D0,-11(A6)
+; y1 = y2;
+       move.l    20(A6),12(A6)
+; y2 = t;
+       move.b    -11(A6),D0
+       and.l     #255,D0
+       move.l    D0,20(A6)
+fillRect_3:
+; }
+; fillColor &= 0x0F;
+       and.l     #15,24(A6)
+; colorByte = (fillColor << 4) | bgcolorBas;
+       move.l    24(A6),D0
+       asl.l     #4,D0
+       move.b    _bgcolorBas.L,D1
+       and.l     #255,D1
+       or.l      D1,D0
+       move.b    D0,-5(A6)
+; fillIsBackground = (fillColor == bgcolorBas) ? 1 : 0;
+       move.b    _bgcolorBas.L,D0
+       and.l     #255,D0
+       cmp.l     24(A6),D0
+       bne.s     fillRect_5
+       moveq     #1,D0
+       bra.s     fillRect_6
+fillRect_5:
+       clr.b     D0
+fillRect_6:
+       move.b    D0,D7
+; startByte = ((unsigned int)(x1 >> 3)) << 3;
+       move.l    8(A6),D0
+       asr.l     #3,D0
+       lsl.l     #3,D0
+       move.l    D0,D6
+; endByte   = ((unsigned int)(x2 >> 3)) << 3;
+       move.l    A4,D0
+       asr.l     #3,D0
+       lsl.l     #3,D0
+       move.l    D0,-4(A6)
+; startBit = x1 & 0x07;
+       move.l    8(A6),D0
+       and.l     #7,D0
+       move.b    D0,-10(A6)
+; endBit   = x2 & 0x07;
+       move.l    A4,D0
+       and.l     #7,D0
+       move.b    D0,-9(A6)
+; maskLeft   = (unsigned char)(0xFF >> startBit);
+       move.w    #255,D0
+       move.b    -10(A6),D1
+       and.w     #255,D1
+       asr.w     D1,D0
+       move.b    D0,-8(A6)
+; maskRight  = (unsigned char)(0xFF << (7 - endBit));
+       move.w    #255,D0
+       moveq     #7,D1
+       sub.b     -9(A6),D1
+       and.w     #255,D1
+       asl.w     D1,D0
+       move.b    D0,-7(A6)
+; maskSingle = (unsigned char)(maskLeft & maskRight);
+       move.b    -8(A6),D0
+       and.b     -7(A6),D0
+       move.b    D0,-6(A6)
+; for (y = y1; y <= y2; y++)
+       move.l    12(A6),D5
+fillRect_7:
+       cmp.l     20(A6),D5
+       bhi       fillRect_9
+; {
+; rowBase = (((unsigned int)(y >> 3)) << 8) + (y & 0x07);
+       move.l    D5,D0
+       lsr.l     #3,D0
+       lsl.l     #8,D0
+       move.l    D5,D1
+       and.l     #7,D1
+       add.l     D1,D0
+       move.l    D0,D4
+; if (startByte == endByte)
+       cmp.l     -4(A6),D6
+       bne       fillRect_10
+; {
+; offset = rowBase + startByte;
+       move.l    D4,D0
+       add.l     D6,D0
+       move.l    D0,D2
+; setReadAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1198,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; setReadAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1198,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; pixel = *vvdgBASd;
+       move.l    (A2),A0
+       move.b    (A0),D3
+; if (fillIsBackground)
+       tst.b     D7
+       beq.s     fillRect_12
+; pixel &= (unsigned char)(~maskSingle);
+       move.b    -6(A6),D0
+       not.b     D0
+       and.b     D0,D3
+       bra.s     fillRect_13
+fillRect_12:
+; else
+; pixel |= maskSingle;
+       move.b    -6(A6),D0
+       or.b      D0,D3
+fillRect_13:
+; setWriteAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1194,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; *vvdgBASd = pixel;
+       move.l    (A2),A0
+       move.b    D3,(A0)
+; setWriteAddress(paintColorTable + offset);
+       move.l    @basic_paintColorTable.L,D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1194,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; *vvdgBASd = colorByte;
+       move.l    (A2),A0
+       move.b    -5(A6),(A0)
+       bra       fillRect_11
+fillRect_10:
+; }
+; else
+; {
+; /* byte inicial */
+; offset = rowBase + startByte;
+       move.l    D4,D0
+       add.l     D6,D0
+       move.l    D0,D2
+; setReadAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1198,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; setReadAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1198,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; pixel = *vvdgBASd;
+       move.l    (A2),A0
+       move.b    (A0),D3
+; if (fillIsBackground)
+       tst.b     D7
+       beq.s     fillRect_14
+; pixel &= (unsigned char)(~maskLeft);
+       move.b    -8(A6),D0
+       not.b     D0
+       and.b     D0,D3
+       bra.s     fillRect_15
+fillRect_14:
+; else
+; pixel |= maskLeft;
+       move.b    -8(A6),D0
+       or.b      D0,D3
+fillRect_15:
+; setWriteAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1194,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; *vvdgBASd = pixel;
+       move.l    (A2),A0
+       move.b    D3,(A0)
+; setWriteAddress(paintColorTable + offset);
+       move.l    @basic_paintColorTable.L,D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1194,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; *vvdgBASd = colorByte;
+       move.l    (A2),A0
+       move.b    -5(A6),(A0)
+; /* bytes centrais */
+; for (bx = startByte + 8; bx < endByte; bx += 8)
+       move.l    D6,D0
+       addq.l    #8,D0
+       move.l    D0,A5
+fillRect_16:
+       move.l    A5,D0
+       cmp.l     -4(A6),D0
+       bhs       fillRect_18
+; {
+; offset = rowBase + bx;
+       move.l    D4,D0
+       add.l     A5,D0
+       move.l    D0,D2
+; setWriteAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1194,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; *vvdgBASd = fillIsBackground ? 0x00 : 0xFF;
+       tst.b     D7
+       beq.s     fillRect_19
+       clr.b     D0
+       ext.w     D0
+       bra.s     fillRect_20
+fillRect_19:
+       move.w    #255,D0
+fillRect_20:
+       move.l    (A2),A0
+       move.b    D0,(A0)
+; setWriteAddress(paintColorTable + offset);
+       move.l    @basic_paintColorTable.L,D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1194,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; *vvdgBASd = colorByte;
+       move.l    (A2),A0
+       move.b    -5(A6),(A0)
+       addq.w    #8,A5
+       bra       fillRect_16
+fillRect_18:
+; }
+; /* byte final */
+; offset = rowBase + endByte;
+       move.l    D4,D0
+       add.l     -4(A6),D0
+       move.l    D0,D2
+; setReadAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1198,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; setReadAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1198,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; pixel = *vvdgBASd;
+       move.l    (A2),A0
+       move.b    (A0),D3
+; if (fillIsBackground)
+       tst.b     D7
+       beq.s     fillRect_21
+; pixel &= (unsigned char)(~maskRight);
+       move.b    -7(A6),D0
+       not.b     D0
+       and.b     D0,D3
+       bra.s     fillRect_22
+fillRect_21:
+; else
+; pixel |= maskRight;
+       move.b    -7(A6),D0
+       or.b      D0,D3
+fillRect_22:
+; setWriteAddress(paintPatternTable + offset);
+       move.l    (A3),D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1194,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; *vvdgBASd = pixel;
+       move.l    (A2),A0
+       move.b    D3,(A0)
+; setWriteAddress(paintColorTable + offset);
+       move.l    @basic_paintColorTable.L,D1
+       add.l     D2,D1
+       move.l    D1,-(A7)
+       move.l    1194,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; *vvdgBASd = colorByte;
+       move.l    (A2),A0
+       move.b    -5(A6),(A0)
+fillRect_11:
+       addq.l    #1,D5
+       bra       fillRect_7
+fillRect_9:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
+       unlk      A6
+       rts
+; }
+; }
+; }
+; int basFill (void)
+; {
+       xdef      _basFill
+_basFill:
+       link      A6,#-20
+       movem.l   A2/A3/A4/A5,-(A7)
+       lea       _vErroProc.L,A2
+       lea       _nextToken.L,A3
+       lea       @basic_basReadNumericArg.L,A4
+       lea       _token.L,A5
+; int x1 = 0, y1 = 0;
+       clr.l     -20(A6)
+       clr.l     -16(A6)
+; int x2 = 0, y2 = 0;
+       clr.l     -12(A6)
+       clr.l     -8(A6)
+; int fillColor = 0;
+       clr.l     -4(A6)
 ; if (vdpModeBas != VDP_MODE_G2)
        move.b    _vdpModeBas.L,D0
        cmp.b     #1,D0
@@ -23104,7 +23468,7 @@ _basFill:
 basFill_1:
 ; }
 ; nextToken();
-       jsr       (A5)
+       jsr       (A3)
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -23113,8 +23477,8 @@ basFill_1:
        bra       basFill_3
 basFill_4:
 ; basReadNumericArg(&x1);
-       pea       -56(A6)
-       jsr       @basic_basReadNumericArg
+       pea       -20(A6)
+       jsr       (A4)
        addq.w    #4,A7
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
@@ -23124,7 +23488,7 @@ basFill_4:
        bra       basFill_3
 basFill_6:
 ; nextToken();
-       jsr       (A5)
+       jsr       (A3)
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -23133,7 +23497,7 @@ basFill_6:
        bra       basFill_3
 basFill_8:
 ; if (*token != ',')
-       move.l    _token.L,A0
+       move.l    (A5),A0
        move.b    (A0),D0
        cmp.b     #44,D0
        beq.s     basFill_10
@@ -23147,7 +23511,7 @@ basFill_8:
 basFill_10:
 ; }
 ; nextToken();
-       jsr       (A5)
+       jsr       (A3)
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -23156,8 +23520,8 @@ basFill_10:
        bra       basFill_3
 basFill_12:
 ; basReadNumericArg(&y1);
-       pea       -52(A6)
-       jsr       @basic_basReadNumericArg
+       pea       -16(A6)
+       jsr       (A4)
        addq.w    #4,A7
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
@@ -23167,7 +23531,7 @@ basFill_12:
        bra       basFill_3
 basFill_14:
 ; nextToken();
-       jsr       (A5)
+       jsr       (A3)
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -23176,7 +23540,7 @@ basFill_14:
        bra       basFill_3
 basFill_16:
 ; if (*token != ',')
-       move.l    _token.L,A0
+       move.l    (A5),A0
        move.b    (A0),D0
        cmp.b     #44,D0
        beq.s     basFill_18
@@ -23190,7 +23554,7 @@ basFill_16:
 basFill_18:
 ; }
 ; nextToken();
-       jsr       (A5)
+       jsr       (A3)
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -23199,8 +23563,8 @@ basFill_18:
        bra       basFill_3
 basFill_20:
 ; basReadNumericArg(&x2);
-       pea       -48(A6)
-       jsr       @basic_basReadNumericArg
+       pea       -12(A6)
+       jsr       (A4)
        addq.w    #4,A7
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
@@ -23210,7 +23574,7 @@ basFill_20:
        bra       basFill_3
 basFill_22:
 ; nextToken();
-       jsr       (A5)
+       jsr       (A3)
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -23219,7 +23583,7 @@ basFill_22:
        bra       basFill_3
 basFill_24:
 ; if (*token != ',')
-       move.l    _token.L,A0
+       move.l    (A5),A0
        move.b    (A0),D0
        cmp.b     #44,D0
        beq.s     basFill_26
@@ -23233,7 +23597,7 @@ basFill_24:
 basFill_26:
 ; }
 ; nextToken();
-       jsr       (A5)
+       jsr       (A3)
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -23242,8 +23606,8 @@ basFill_26:
        bra       basFill_3
 basFill_28:
 ; basReadNumericArg(&y2);
-       pea       -44(A6)
-       jsr       @basic_basReadNumericArg
+       pea       -8(A6)
+       jsr       (A4)
        addq.w    #4,A7
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
@@ -23253,7 +23617,7 @@ basFill_28:
        bra       basFill_3
 basFill_30:
 ; nextToken();
-       jsr       (A5)
+       jsr       (A3)
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -23262,13 +23626,13 @@ basFill_30:
        bra       basFill_3
 basFill_32:
 ; if (*token == ',')
-       move.l    _token.L,A0
+       move.l    (A5),A0
        move.b    (A0),D0
        cmp.b     #44,D0
        bne.s     basFill_34
 ; {
 ; nextToken();
-       jsr       (A5)
+       jsr       (A3)
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
@@ -23277,15 +23641,15 @@ basFill_32:
        bra       basFill_3
 basFill_36:
 ; basReadNumericArg(&fillColor);
-       pea       -40(A6)
-       jsr       @basic_basReadNumericArg
+       pea       -4(A6)
+       jsr       (A4)
        addq.w    #4,A7
 ; if (*vErroProc) return 0;
        move.l    (A2),A0
        tst.w     (A0)
        beq.s     basFill_38
        clr.l     D0
-       bra       basFill_3
+       bra.s     basFill_3
 basFill_38:
        bra.s     basFill_35
 basFill_34:
@@ -23296,340 +23660,18 @@ basFill_34:
        jsr       _putback
 basFill_35:
 ; }
-; /* Ajusta coordenadas */
-; if (x1 > x2)
-       move.l    -56(A6),D0
-       cmp.l     -48(A6),D0
-       ble.s     basFill_40
-; {
-; t = x1;
-       move.l    -56(A6),D0
-       move.b    D0,-35(A6)
-; x1 = x2;
-       move.l    -48(A6),-56(A6)
-; x2 = t;
-       move.b    -35(A6),D0
-       and.l     #255,D0
-       move.l    D0,-48(A6)
-basFill_40:
-; }
-; if (y1 > y2)
-       move.l    -52(A6),D0
-       cmp.l     -44(A6),D0
-       ble.s     basFill_42
-; {
-; t = y1;
-       move.l    -52(A6),D0
-       move.b    D0,-35(A6)
-; y1 = y2;
-       move.l    -44(A6),-52(A6)
-; y2 = t;
-       move.b    -35(A6),D0
-       and.l     #255,D0
-       move.l    D0,-44(A6)
-basFill_42:
-; }
-; fillColor &= 0x0F;
-       and.l     #15,-40(A6)
-; colorByte = (fillColor << 4) | bgcolorBas;
-       move.l    -40(A6),D0
-       asl.l     #4,D0
-       move.b    _bgcolorBas.L,D1
-       and.l     #255,D1
-       or.l      D1,D0
-       move.b    D0,-29(A6)
-; fillIsBackground = (fillColor == bgcolorBas) ? 1 : 0;
-       move.b    _bgcolorBas.L,D0
-       and.l     #255,D0
-       cmp.l     -40(A6),D0
-       bne.s     basFill_44
-       moveq     #1,D0
-       bra.s     basFill_45
-basFill_44:
-       clr.b     D0
-basFill_45:
-       move.b    D0,D7
-; startByte = ((unsigned int)(x1 >> 3)) << 3;
-       move.l    -56(A6),D0
-       asr.l     #3,D0
-       lsl.l     #3,D0
-       move.l    D0,D6
-; endByte   = ((unsigned int)(x2 >> 3)) << 3;
-       move.l    -48(A6),D0
-       asr.l     #3,D0
-       lsl.l     #3,D0
-       move.l    D0,-28(A6)
-; startBit = x1 & 0x07;
-       move.l    -56(A6),D0
-       and.l     #7,D0
-       move.b    D0,-34(A6)
-; endBit   = x2 & 0x07;
-       move.l    -48(A6),D0
-       and.l     #7,D0
-       move.b    D0,-33(A6)
-; maskLeft   = (unsigned char)(0xFF >> startBit);
-       move.w    #255,D0
-       move.b    -34(A6),D1
-       and.w     #255,D1
-       asr.w     D1,D0
-       move.b    D0,-32(A6)
-; maskRight  = (unsigned char)(0xFF << (7 - endBit));
-       move.w    #255,D0
-       moveq     #7,D1
-       sub.b     -33(A6),D1
-       and.w     #255,D1
-       asl.w     D1,D0
-       move.b    D0,-31(A6)
-; maskSingle = (unsigned char)(maskLeft & maskRight);
-       move.b    -32(A6),D0
-       and.b     -31(A6),D0
-       move.b    D0,-30(A6)
-; for (y = y1; y <= y2; y++)
-       move.l    -52(A6),D5
-basFill_46:
-       cmp.l     -44(A6),D5
-       bhi       basFill_48
-; {
-; rowBase = (((unsigned int)(y >> 3)) << 8) + (y & 0x07);
-       move.l    D5,D0
-       lsr.l     #3,D0
-       lsl.l     #8,D0
-       move.l    D5,D1
-       and.l     #7,D1
-       add.l     D1,D0
-       move.l    D0,D4
-; if (startByte == endByte)
-       cmp.l     -28(A6),D6
-       bne       basFill_49
-; {
-; offset = rowBase + startByte;
-       move.l    D4,D0
-       add.l     D6,D0
-       move.l    D0,D2
-; setReadAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1198,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; setReadAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1198,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; pixel = *vvdgBASd;
-       move.l    (A3),A0
-       move.b    (A0),D3
-; if (fillIsBackground)
-       tst.b     D7
-       beq.s     basFill_51
-; pixel &= (unsigned char)(~maskSingle);
-       move.b    -30(A6),D0
-       not.b     D0
-       and.b     D0,D3
-       bra.s     basFill_52
-basFill_51:
-; else
-; pixel |= maskSingle;
-       move.b    -30(A6),D0
-       or.b      D0,D3
-basFill_52:
-; setWriteAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1194,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; *vvdgBASd = pixel;
-       move.l    (A3),A0
-       move.b    D3,(A0)
-; setWriteAddress(paintColorTable + offset);
-       move.l    @basic_paintColorTable.L,D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1194,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; *vvdgBASd = colorByte;
-       move.l    (A3),A0
-       move.b    -29(A6),(A0)
-       bra       basFill_50
-basFill_49:
-; }
-; else
-; {
-; /* byte inicial */
-; offset = rowBase + startByte;
-       move.l    D4,D0
-       add.l     D6,D0
-       move.l    D0,D2
-; setReadAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1198,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; setReadAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1198,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; pixel = *vvdgBASd;
-       move.l    (A3),A0
-       move.b    (A0),D3
-; if (fillIsBackground)
-       tst.b     D7
-       beq.s     basFill_53
-; pixel &= (unsigned char)(~maskLeft);
-       move.b    -32(A6),D0
-       not.b     D0
-       and.b     D0,D3
-       bra.s     basFill_54
-basFill_53:
-; else
-; pixel |= maskLeft;
-       move.b    -32(A6),D0
-       or.b      D0,D3
-basFill_54:
-; setWriteAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1194,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; *vvdgBASd = pixel;
-       move.l    (A3),A0
-       move.b    D3,(A0)
-; setWriteAddress(paintColorTable + offset);
-       move.l    @basic_paintColorTable.L,D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1194,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; *vvdgBASd = colorByte;
-       move.l    (A3),A0
-       move.b    -29(A6),(A0)
-; /* bytes centrais */
-; for (bx = startByte + 8; bx < endByte; bx += 8)
-       move.l    D6,D0
-       addq.l    #8,D0
-       move.l    D0,-24(A6)
-basFill_55:
-       move.l    -24(A6),D0
-       cmp.l     -28(A6),D0
-       bhs       basFill_57
-; {
-; offset = rowBase + bx;
-       move.l    D4,D0
-       add.l     -24(A6),D0
-       move.l    D0,D2
-; setWriteAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1194,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; *vvdgBASd = fillIsBackground ? 0x00 : 0xFF;
-       tst.b     D7
-       beq.s     basFill_58
-       clr.b     D0
-       ext.w     D0
-       bra.s     basFill_59
-basFill_58:
-       move.w    #255,D0
-basFill_59:
-       move.l    (A3),A0
-       move.b    D0,(A0)
-; setWriteAddress(paintColorTable + offset);
-       move.l    @basic_paintColorTable.L,D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1194,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; *vvdgBASd = colorByte;
-       move.l    (A3),A0
-       move.b    -29(A6),(A0)
-       addq.l    #8,-24(A6)
-       bra       basFill_55
-basFill_57:
-; }
-; /* byte final */
-; offset = rowBase + endByte;
-       move.l    D4,D0
-       add.l     -28(A6),D0
-       move.l    D0,D2
-; setReadAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1198,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; setReadAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1198,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; pixel = *vvdgBASd;
-       move.l    (A3),A0
-       move.b    (A0),D3
-; if (fillIsBackground)
-       tst.b     D7
-       beq.s     basFill_60
-; pixel &= (unsigned char)(~maskRight);
-       move.b    -31(A6),D0
-       not.b     D0
-       and.b     D0,D3
-       bra.s     basFill_61
-basFill_60:
-; else
-; pixel |= maskRight;
-       move.b    -31(A6),D0
-       or.b      D0,D3
-basFill_61:
-; setWriteAddress(paintPatternTable + offset);
-       move.l    (A4),D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1194,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; *vvdgBASd = pixel;
-       move.l    (A3),A0
-       move.b    D3,(A0)
-; setWriteAddress(paintColorTable + offset);
-       move.l    @basic_paintColorTable.L,D1
-       add.l     D2,D1
-       move.l    D1,-(A7)
-       move.l    1194,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; *vvdgBASd = colorByte;
-       move.l    (A3),A0
-       move.b    -29(A6),(A0)
-basFill_50:
-       addq.l    #1,D5
-       bra       basFill_46
-basFill_48:
-; }
-; }
+; fillRect(x1, y1, x2, y2, fillColor);
+       move.l    -4(A6),-(A7)
+       move.l    -8(A6),-(A7)
+       move.l    -12(A6),-(A7)
+       move.l    -16(A6),-(A7)
+       move.l    -20(A6),-(A7)
+       jsr       _fillRect
+       add.w     #20,A7
 ; return 0;
        clr.l     D0
 basFill_3:
-       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
+       movem.l   (A7)+,A2/A3/A4/A5
        unlk      A6
        rts
 ; }

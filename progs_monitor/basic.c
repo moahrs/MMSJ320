@@ -1868,7 +1868,11 @@ int executeToken(unsigned char pToken)
             vReta = basLocate();
             break;
         case 0x96:  // CLS
-            clearScr();
+            // Limpa dependendo do modo de video, se for texto limpa a tela, se for grafico limpa o grafico
+            if (vdpModeBas == VDP_MODE_TEXT)
+                clearScr();
+            else if (vdpModeBas == VDP_MODE_G2)
+                fillRect(0, 0, 255, 191, bgcolorBas);
             break;
         case 0x97:  // CLEAR - Clear all variables
             clearRuntimeData(pForStack);
@@ -8321,11 +8325,8 @@ int basPaint(void)
 // Syntaxe:
 //          FILL <x1>,<y1>,<x2>,<y2>,<color>
 //--------------------------------------------------------------------------------------
-int basFill (void)
+void fillRect(int x1, int y1, int x2, int y2, int fillColor)
 {
-    int x1 = 0, y1 = 0;
-    int x2 = 0, y2 = 0;
-    int fillColor = 0;
     unsigned char t, fillIsBackground;
     unsigned char startBit, endBit;
     unsigned char maskLeft, maskRight, maskSingle;
@@ -8336,80 +8337,6 @@ int basFill (void)
     unsigned int rowBase;
     unsigned int offset;
     unsigned int bx;
-    unsigned char sqtdtam[20];
-
-    if (vdpModeBas != VDP_MODE_G2)
-    {
-        *vErroProc = 24;
-        return 0;
-    }
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    basReadNumericArg(&x1);
-    if (*vErroProc) return 0;
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    if (*token != ',')
-    {
-        *vErroProc = 18;
-        return 0;
-    }
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    basReadNumericArg(&y1);
-    if (*vErroProc) return 0;
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    if (*token != ',')
-    {
-        *vErroProc = 18;
-        return 0;
-    }
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    basReadNumericArg(&x2);
-    if (*vErroProc) return 0;
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    if (*token != ',')
-    {
-        *vErroProc = 18;
-        return 0;
-    }
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    basReadNumericArg(&y2);
-    if (*vErroProc) return 0;
-
-    nextToken();
-    if (*vErroProc) return 0;
-
-    if (*token == ',')
-    {
-        nextToken();
-        if (*vErroProc) return 0;
-
-        basReadNumericArg(&fillColor);
-        if (*vErroProc) return 0;
-    }
-    else
-    {
-        putback();
-    }
 
     /* Ajusta coordenadas */
     if (x1 > x2)
@@ -8515,6 +8442,88 @@ int basFill (void)
             *vvdgBASd = colorByte;
         }
     }
+}
+
+int basFill (void)
+{
+    int x1 = 0, y1 = 0;
+    int x2 = 0, y2 = 0;
+    int fillColor = 0;
+
+    if (vdpModeBas != VDP_MODE_G2)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&x1);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&y1);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&x2);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&y2);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token == ',')
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        basReadNumericArg(&fillColor);
+        if (*vErroProc) return 0;
+    }
+    else
+    {
+        putback();
+    }
+
+    fillRect(x1, y1, x2, y2, fillColor);
 
     return 0;
 }
