@@ -134,7 +134,8 @@ static unsigned char *listError[]= {
     /* 23 */ "?Variable name already exist",
     /* 24 */ "?Wrong mode resolution",
     /* 25 */ "?Illegal position",
-    /* 26 */ "?Out of data"
+    /* 26 */ "?Out of data",
+    /* 27 */ "?Illegal Operation"
 };
 
 // -------------------------------------------------------------------------------

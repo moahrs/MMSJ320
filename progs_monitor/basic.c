@@ -2720,8 +2720,17 @@ writeLongSerial("]\r\n\0");
                 } else {
                     if (typeA == '#')
                         arithReal(op, a, b);
-                    else
+                    else if (typeA == '%')
                         arithInt(op, a, b);
+                    else if (typeA == '$')
+                    {
+                        if (op == '+')
+                            strcat(a,b);
+                        else  {
+                            *vErroProc = 27;
+                            return;
+                        }
+                    }
 
                     valTypeStack[valTop] = typeA;
                 }
@@ -2827,8 +2836,17 @@ writeLongSerial("]\r\n\0");
                 } else {
                     if (typeA == '#')
                         arithReal(op, a, b);
-                    else
+                    else if (typeA == '%')
                         arithInt(op, a, b);
+                    else if (typeA == '$')
+                    {
+                        if (op == '+')
+                            strcat(a,b);
+                        else  {
+                            *vErroProc = 27;
+                            return;
+                        }
+                    }
 
                     valTypeStack[valTop] = typeA;
                 }
@@ -2914,8 +2932,17 @@ writeLongSerial("]\r\n\0");
         } else {
             if (typeA == '#')
                 arithReal(op, a, b);
-            else
+            else if (typeA == '%')
                 arithInt(op, a, b);
+            else if (typeA == '$')
+            {
+                if (op == '+')
+                    strcat(a,b);
+                else  {
+                    *vErroProc = 27;
+                    return;
+                }
+            }
 
             valTypeStack[valTop] = typeA;
         }
@@ -4428,6 +4455,7 @@ writeLongSerial("]\r\n");
                 *vErroProc = 16;
                 return 0;
             }
+            
             else { // is expression
 
                 putback();
@@ -4513,7 +4541,7 @@ writeLongSerial(sqtdtam);
     else
         vLista = pStartSimpVar;
 
-    if (1) // (!vArray)
+    if (!vArray) // sem array por enquanto, para ajustar tamanho variavel no cache
     {
         for (vCacheIx = 0; vCacheIx < SIMPLE_VAR_CACHE_SLOTS; vCacheIx++)
         {

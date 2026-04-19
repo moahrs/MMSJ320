@@ -242,22 +242,22 @@ _main:
        move.l    1054,A0
        jsr       (A0)
 ; printText("MMSJ-BASIC v"versionBasic);
-       pea       @basic_96.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; printText("\r\n\0");
        pea       @basic_97.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-; printText("Utility (c) 2022-2026\r\n\0");
+; printText("\r\n\0");
        pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-; printText("OK\r\n\0");
+; printText("Utility (c) 2022-2026\r\n\0");
        pea       @basic_99.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("OK\r\n\0");
+       pea       @basic_100.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -337,7 +337,7 @@ main_1:
 main_6:
 ; {
 ; printText("\r\n\0");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -351,7 +351,7 @@ main_6:
        tst.b     (A0)
        beq.s     main_7
 ; printText("\r\nOK\0");
-       pea       @basic_100.L
+       pea       @basic_101.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -364,7 +364,7 @@ main_7:
        tst.b     (A0)
        beq.s     main_9
 ; printText("\r\n\0");   // printText("\r\n>\0");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -377,7 +377,7 @@ main_4:
        beq.s     main_11
 ; {
 ; printText("\r\n\0");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -387,7 +387,7 @@ main_3:
 ; }
 ; }
 ; printText("\r\n\0");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1368,7 +1368,7 @@ processLine_18:
 processLine_20:
 ; // Comando Direto
 ; if (!strcmp(linhacomando,"CLS") && iy == 3)
-       pea       @basic_48.L
+       pea       @basic_49.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1384,7 +1384,7 @@ processLine_20:
 processLine_21:
 ; }
 ; else if (!strcmp(linhacomando,"NEW") && iy == 3)
-       pea       @basic_101.L
+       pea       @basic_102.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1428,7 +1428,7 @@ processLine_21:
 processLine_23:
 ; }
 ; else if (!strcmp(linhacomando,"EDIT") && iy == 4)
-       pea       @basic_102.L
+       pea       @basic_103.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1445,7 +1445,7 @@ processLine_23:
 processLine_25:
 ; }
 ; else if (!strcmp(linhacomando,"LIST") && iy == 4)
-       pea       @basic_103.L
+       pea       @basic_104.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1463,7 +1463,7 @@ processLine_25:
 processLine_27:
 ; }
 ; else if (!strcmp(linhacomando,"LISTP") && iy == 5)
-       pea       @basic_104.L
+       pea       @basic_105.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1481,7 +1481,7 @@ processLine_27:
 processLine_29:
 ; }
 ; else if (!strcmp(linhacomando,"RUN") && iy == 3)
-       pea       @basic_105.L
+       pea       @basic_106.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1498,7 +1498,7 @@ processLine_29:
 processLine_31:
 ; }
 ; else if (!strcmp(linhacomando,"DEL") && iy == 3)
-       pea       @basic_106.L
+       pea       @basic_107.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1515,7 +1515,7 @@ processLine_31:
 processLine_33:
 ; }
 ; else if (!strcmp(linhacomando,"XLOAD") && iy == 5)
-       pea       @basic_107.L
+       pea       @basic_108.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1530,7 +1530,7 @@ processLine_33:
 processLine_35:
 ; }
 ; else if (!strcmp(linhacomando,"XLOAD1K") && iy == 7)
-       pea       @basic_108.L
+       pea       @basic_109.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1545,7 +1545,7 @@ processLine_35:
 processLine_37:
 ; }
 ; else if (!strcmp(linhacomando,"TIMER") && iy == 5)
-       pea       @basic_109.L
+       pea       @basic_110.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1570,7 +1570,7 @@ processLine_37:
        jsr       _itoa
        add.w     #12,A7
 ; printText("Timer: ");
-       pea       @basic_110.L
+       pea       @basic_111.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1580,7 +1580,7 @@ processLine_37:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("ms\r\n\0");
-       pea       @basic_111.L
+       pea       @basic_112.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1588,7 +1588,7 @@ processLine_37:
 processLine_39:
 ; }
 ; else if (!strcmp(linhacomando,"TRACE") && iy == 5)
-       pea       @basic_112.L
+       pea       @basic_113.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1604,7 +1604,7 @@ processLine_39:
 processLine_41:
 ; }
 ; else if (!strcmp(linhacomando,"NOTRACE") && iy == 7)
-       pea       @basic_113.L
+       pea       @basic_114.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1620,7 +1620,7 @@ processLine_41:
 processLine_43:
 ; }
 ; else if (!strcmp(linhacomando,"DEBUG") && iy == 5)
-       pea       @basic_114.L
+       pea       @basic_115.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1636,7 +1636,7 @@ processLine_43:
 processLine_45:
 ; }
 ; else if (!strcmp(linhacomando,"NODEBUG") && iy == 7)
-       pea       @basic_115.L
+       pea       @basic_116.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1655,7 +1655,7 @@ processLine_47:
 ; // ESSE COMANDO NAO VAI EXISTIR QUANDO FOR PRA BIOS
 ; // *************************************************
 ; else if (!strcmp(linhacomando,"QUIT") && iy == 4)
-       pea       @basic_116.L
+       pea       @basic_117.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1686,7 +1686,7 @@ processLine_49:
        tst.b     -317(A6)
        beq.s     processLine_51
 ; strcat(vRetInf.tString, " ");
-       pea       @basic_117.L
+       pea       @basic_118.L
        lea       -312(A6),A0
        move.l    A0,-(A7)
        jsr       _strcat
@@ -1971,7 +1971,7 @@ tokenizeLine_13:
        move.b    (A0),D1
        and.l     #255,D1
        move.l    D1,-(A7)
-       pea       @basic_118.L
+       pea       @basic_119.L
        jsr       _strchr
        addq.w    #8,A7
        tst.l     D0
@@ -2499,7 +2499,7 @@ saveLine_1:
        bne.s     saveLine_5
 ; {
 ; printText("Line number already exists\r\n\0");
-       pea       @basic_119.L
+       pea       @basic_120.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2837,7 +2837,7 @@ listProg_11:
        bne.s     listProg_13
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_120.L
+       pea       @basic_121.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3132,12 +3132,12 @@ listProg_28:
        blo       listProg_46
 ; {
 ; printText("press any key to continue\0");
-       pea       @basic_121.L
+       pea       @basic_122.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; vtec = inputLineBasic(1,"@");
-       pea       @basic_122.L
+       pea       @basic_123.L
        pea       1
        jsr       _inputLineBasic
        addq.w    #8,A7
@@ -3145,7 +3145,7 @@ listProg_28:
 ; vPauseRowCounter = 0;
        move.w    #0,A4
 ; printText("\r\n\0");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3291,7 +3291,7 @@ delLine_11:
 ; else
 ; {
 ; printText("Syntax Error !");
-       pea       @basic_123.L
+       pea       @basic_124.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3311,7 +3311,7 @@ delLine_12:
        bne.s     delLine_14
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_120.L
+       pea       @basic_121.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3531,7 +3531,7 @@ editLine_1:
 ; else
 ; {
 ; printText("Syntax Error !");
-       pea       @basic_123.L
+       pea       @basic_124.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3554,7 +3554,7 @@ editLine_2:
        bne.s     editLine_4
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_120.L
+       pea       @basic_121.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3841,7 +3841,7 @@ editLine_35:
        bra       editLine_35
 editLine_37:
 ; printText("\r\n\0");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3854,12 +3854,12 @@ editLine_37:
 ; processLine();
        jsr       _processLine
 ; printText("\r\nOK\0");
-       pea       @basic_100.L
+       pea       @basic_101.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("\r\n\0");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3871,7 +3871,7 @@ editLine_29:
        beq.s     editLine_38
 ; {
 ; printText("\r\nAborted !!!\r\n\0");
-       pea       @basic_124.L
+       pea       @basic_125.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3956,7 +3956,7 @@ runProg_1:
        bne.s     runProg_3
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_120.L
+       pea       @basic_121.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4092,7 +4092,7 @@ runProg_17:
 ; #endif
 ; // mostra mensagem de para subita
 ; printText("\r\nStopped at ");
-       pea       @basic_125.L
+       pea       @basic_126.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4109,7 +4109,7 @@ runProg_17:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("\r\n");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4136,7 +4136,7 @@ runProg_15:
        beq       runProg_19
 ; {
 ; printText("\r\nExecuting at ");
-       pea       @basic_126.L
+       pea       @basic_127.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4153,7 +4153,7 @@ runProg_15:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("\r\n");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4348,7 +4348,7 @@ _showErrorMessage:
        link      A6,#-20
 ; char sNumLin [sizeof(short)*8+1];
 ; printText("\r\n");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4372,7 +4372,7 @@ _showErrorMessage:
        jsr       _itoa
        add.w     #12,A7
 ; printText(" at ");
-       pea       @basic_127.L
+       pea       @basic_128.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4384,7 +4384,7 @@ _showErrorMessage:
 showErrorMessage_1:
 ; }
 ; printText(" !\r\n\0");
-       pea       @basic_128.L
+       pea       @basic_129.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4414,7 +4414,7 @@ _basXBasLoad:
        lea       _vbufInput.L,A0
        move.l    A0,D3
 ; printText("Loading Basic Program...\r\n");
-       pea       @basic_129.L
+       pea       @basic_130.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4432,12 +4432,12 @@ _basXBasLoad:
        bne       basXBasLoad_1
 ; {
 ; printText("Done.\r\n");
-       pea       @basic_130.L
+       pea       @basic_131.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Processing...\r\n");
-       pea       @basic_131.L
+       pea       @basic_132.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4488,7 +4488,7 @@ basXBasLoad_7:
 basXBasLoad_5:
 ; }
 ; printText("Done.\r\n");
-       pea       @basic_130.L
+       pea       @basic_131.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4537,7 +4537,7 @@ _basXBasLoad1k:
        lea       _vbufInput.L,A0
        move.l    A0,D3
 ; printText("Loading Basic Program 1k...\r\n");
-       pea       @basic_132.L
+       pea       @basic_133.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4555,12 +4555,12 @@ _basXBasLoad1k:
        bne       basXBasLoad1k_1
 ; {
 ; printText("Done.\r\n");
-       pea       @basic_130.L
+       pea       @basic_131.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Processing...\r\n");
-       pea       @basic_131.L
+       pea       @basic_132.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4611,7 +4611,7 @@ basXBasLoad1k_7:
 basXBasLoad1k_5:
 ; }
 ; printText("Done.\r\n");
-       pea       @basic_130.L
+       pea       @basic_131.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5653,7 +5653,7 @@ nextToken_15:
        move.l    D2,A0
        move.b    (A0),D0
        and.l     #255,D0
-       lea       @basic_133.L,A0
+       lea       @basic_134.L,A0
        cmp.l     A0,D0
        bne.s     nextToken_20
 ; {
@@ -6541,7 +6541,7 @@ parseExpressionIterative_18:
        beq       parseExpressionIterative_19
 ; {
 ; writeLongSerial("Aqui 888.666.5 - [\0");
-       pea       @basic_134.L
+       pea       @basic_135.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6559,7 +6559,7 @@ parseExpressionIterative_18:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6577,7 +6577,7 @@ parseExpressionIterative_18:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n\0");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6635,7 +6635,7 @@ parseExpressionIterative_27:
        beq       parseExpressionIterative_30
 ; {
 ; writeLongSerial("Aqui 888.666.0 - [\0");
-       pea       @basic_137.L
+       pea       @basic_138.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6656,7 +6656,7 @@ parseExpressionIterative_27:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6678,7 +6678,7 @@ parseExpressionIterative_27:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n\0");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6762,7 +6762,7 @@ parseExpressionIterative_39:
        beq       parseExpressionIterative_40
 ; {
 ; writeLongSerial("Aqui 888.666.1 - [\0");
-       pea       @basic_138.L
+       pea       @basic_139.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6780,7 +6780,7 @@ parseExpressionIterative_39:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6796,7 +6796,7 @@ parseExpressionIterative_39:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6814,7 +6814,7 @@ parseExpressionIterative_39:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6826,7 +6826,7 @@ parseExpressionIterative_39:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n\0");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7090,7 +7090,7 @@ parseExpressionIterative_71:
        beq       parseExpressionIterative_72
 ; {
 ; writeLongSerial("Aqui 888.666.3 - [\0");
-       pea       @basic_139.L
+       pea       @basic_140.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7106,7 +7106,7 @@ parseExpressionIterative_71:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7122,7 +7122,7 @@ parseExpressionIterative_71:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7142,7 +7142,7 @@ parseExpressionIterative_71:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n\0");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7306,7 +7306,7 @@ parseExpressionIterative_95:
        beq       parseExpressionIterative_97
 ; {
 ; writeLongSerial("Aqui 888.666.4 - [\0");
-       pea       @basic_140.L
+       pea       @basic_141.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7323,7 +7323,7 @@ parseExpressionIterative_95:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7334,7 +7334,7 @@ parseExpressionIterative_95:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7351,7 +7351,7 @@ parseExpressionIterative_95:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7363,7 +7363,7 @@ parseExpressionIterative_95:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7374,7 +7374,7 @@ parseExpressionIterative_95:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n\0");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7554,9 +7554,11 @@ parseExpressionIterative_119:
        move.l    D2,-(A7)
        jsr       _arithReal
        add.w     #12,A7
-       bra.s     parseExpressionIterative_127
+       bra       parseExpressionIterative_133
 parseExpressionIterative_126:
-; else
+; else if (typeA == '%')
+       cmp.b     #37,D5
+       bne.s     parseExpressionIterative_128
 ; arithInt(op, a, b);
        move.l    D6,-(A7)
        move.l    D4,-(A7)
@@ -7565,7 +7567,31 @@ parseExpressionIterative_126:
        move.l    D2,-(A7)
        jsr       _arithInt
        add.w     #12,A7
-parseExpressionIterative_127:
+       bra.s     parseExpressionIterative_133
+parseExpressionIterative_128:
+; else if (typeA == '$')
+       cmp.b     #36,D5
+       bne.s     parseExpressionIterative_133
+; {
+; if (op == '+')
+       cmp.b     #43,D2
+       bne.s     parseExpressionIterative_132
+; strcat(a,b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       jsr       _strcat
+       addq.w    #8,A7
+       bra.s     parseExpressionIterative_133
+parseExpressionIterative_132:
+; else  {
+; *vErroProc = 27;
+       move.l    (A2),A0
+       move.w    #27,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_133:
+; }
+; }
 ; valTypeStack[valTop] = typeA;
        move.b    D5,-86(A6,D3.L)
 parseExpressionIterative_120:
@@ -7575,7 +7601,7 @@ parseExpressionIterative_92:
 ; }
 ; if (foundOpenParen) {
        tst.b     -1808(A6)
-       beq.s     parseExpressionIterative_128
+       beq.s     parseExpressionIterative_134
 ; opTop--;
        subq.l    #1,D7
 ; nextToken();
@@ -7583,14 +7609,14 @@ parseExpressionIterative_92:
 ; if (*vErroProc) return;
        move.l    (A2),A0
        tst.w     (A0)
-       beq.s     parseExpressionIterative_130
+       beq.s     parseExpressionIterative_136
        bra       parseExpressionIterative_3
-parseExpressionIterative_130:
+parseExpressionIterative_136:
 ; expectValue = 0;
        clr.l     -1784(A6)
 ; continue;
        bra       parseExpressionIterative_7
-parseExpressionIterative_128:
+parseExpressionIterative_134:
 ; }
 ; break;
        bra       parseExpressionIterative_8
@@ -7599,49 +7625,49 @@ parseExpressionIterative_88:
 ; if (tokenChar == '+' || tokenChar == '-' || tokenChar == '*' || tokenChar == '/' || tokenChar == '^' ||
        move.b    -1804(A6),D0
        cmp.b     #43,D0
-       beq       parseExpressionIterative_134
+       beq       parseExpressionIterative_140
        move.b    -1804(A6),D0
        cmp.b     #45,D0
-       beq       parseExpressionIterative_134
+       beq       parseExpressionIterative_140
        move.b    -1804(A6),D0
        cmp.b     #42,D0
-       beq       parseExpressionIterative_134
+       beq       parseExpressionIterative_140
        move.b    -1804(A6),D0
        cmp.b     #47,D0
-       beq       parseExpressionIterative_134
+       beq       parseExpressionIterative_140
        move.b    -1804(A6),D0
        cmp.b     #94,D0
-       beq       parseExpressionIterative_134
+       beq       parseExpressionIterative_140
        move.b    -1804(A6),D0
        cmp.b     #61,D0
-       beq       parseExpressionIterative_134
+       beq       parseExpressionIterative_140
        move.b    -1804(A6),D0
        cmp.b     #60,D0
-       beq       parseExpressionIterative_134
+       beq       parseExpressionIterative_140
        move.b    -1804(A6),D0
        cmp.b     #62,D0
-       beq       parseExpressionIterative_134
+       beq       parseExpressionIterative_140
        move.b    -1804(A6),D0
        and.w     #255,D0
        cmp.w     #245,D0
-       beq       parseExpressionIterative_134
+       beq       parseExpressionIterative_140
        move.b    -1804(A6),D0
        and.w     #255,D0
        cmp.w     #246,D0
-       beq.s     parseExpressionIterative_134
+       beq.s     parseExpressionIterative_140
        move.b    -1804(A6),D0
        and.w     #255,D0
        cmp.w     #247,D0
-       beq.s     parseExpressionIterative_134
+       beq.s     parseExpressionIterative_140
        move.b    -1804(A6),D0
        and.w     #255,D0
        cmp.w     #243,D0
-       beq.s     parseExpressionIterative_134
+       beq.s     parseExpressionIterative_140
        move.b    -1804(A6),D0
        and.w     #255,D0
        cmp.w     #244,D0
-       bne       parseExpressionIterative_132
-parseExpressionIterative_134:
+       bne       parseExpressionIterative_138
+parseExpressionIterative_140:
 ; tokenChar == '=' || tokenChar == '<' || tokenChar == '>' || tokenChar == 0xF5 || tokenChar == 0xF6 || tokenChar == 0xF7 ||
 ; tokenChar == 0xF3 || tokenChar == 0xF4) {
 ; currentOp = tokenChar;
@@ -7654,9 +7680,9 @@ parseExpressionIterative_134:
        addq.w    #4,A7
        move.l    D0,-1778(A6)
 ; while (opTop >= 0) {
-parseExpressionIterative_135:
+parseExpressionIterative_141:
        cmp.l     #0,D7
-       blt       parseExpressionIterative_137
+       blt       parseExpressionIterative_143
 ; topPrec = opPrecStack[opTop];
        move.b    -118(A6,D7.L),D0
        and.l     #255,D0
@@ -7664,20 +7690,20 @@ parseExpressionIterative_135:
 ; if (topPrec < currentPrec)
        move.l    -1774(A6),D0
        cmp.l     -1778(A6),D0
-       bge.s     parseExpressionIterative_138
+       bge.s     parseExpressionIterative_144
 ; break;
-       bra       parseExpressionIterative_137
-parseExpressionIterative_138:
+       bra       parseExpressionIterative_143
+parseExpressionIterative_144:
 ; if (currentOp == '^' && topPrec == currentPrec)
        move.b    -1807(A6),D0
        cmp.b     #94,D0
-       bne.s     parseExpressionIterative_140
+       bne.s     parseExpressionIterative_146
        move.l    -1774(A6),D0
        cmp.l     -1778(A6),D0
-       bne.s     parseExpressionIterative_140
+       bne.s     parseExpressionIterative_146
 ; break;
-       bra       parseExpressionIterative_137
-parseExpressionIterative_140:
+       bra       parseExpressionIterative_143
+parseExpressionIterative_146:
 ; op = opStack[opTop--];
        move.l    D7,D0
        subq.l    #1,D7
@@ -7685,13 +7711,13 @@ parseExpressionIterative_140:
        move.b    0(A0,D0.L),D2
 ; if (valTop < 1) {
        cmp.l     #1,D3
-       bge.s     parseExpressionIterative_142
+       bge.s     parseExpressionIterative_148
 ; *vErroProc = 14;
        move.l    (A2),A0
        move.w    #14,(A0)
 ; return;
        bra       parseExpressionIterative_3
-parseExpressionIterative_142:
+parseExpressionIterative_148:
 ; }
 ; b = valStack[valTop];
        lea       -1750(A6),A0
@@ -7714,10 +7740,10 @@ parseExpressionIterative_142:
 ; if (*debugOn)
        move.l    _debugOn.L,A0
        tst.b     (A0)
-       beq       parseExpressionIterative_144
+       beq       parseExpressionIterative_150
 ; {
 ; writeLongSerial("Aqui 888.666.2 - [\0");
-       pea       @basic_141.L
+       pea       @basic_142.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7734,7 +7760,7 @@ parseExpressionIterative_142:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7745,7 +7771,7 @@ parseExpressionIterative_142:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7762,7 +7788,7 @@ parseExpressionIterative_142:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7774,7 +7800,7 @@ parseExpressionIterative_142:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -7785,32 +7811,32 @@ parseExpressionIterative_142:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n\0");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
-parseExpressionIterative_144:
+parseExpressionIterative_150:
 ; }
 ; if (typeA != typeB) {
        cmp.b     -1806(A6),D5
-       beq       parseExpressionIterative_152
+       beq       parseExpressionIterative_158
 ; if (typeA == '$' || typeB == '$') {
        cmp.b     #36,D5
-       beq.s     parseExpressionIterative_150
+       beq.s     parseExpressionIterative_156
        move.b    -1806(A6),D0
        cmp.b     #36,D0
-       bne.s     parseExpressionIterative_148
-parseExpressionIterative_150:
+       bne.s     parseExpressionIterative_154
+parseExpressionIterative_156:
 ; *vErroProc = 16;
        move.l    (A2),A0
        move.w    #16,(A0)
 ; return;
        bra       parseExpressionIterative_3
-parseExpressionIterative_148:
+parseExpressionIterative_154:
 ; }
 ; if (typeA == '#')
        cmp.b     #35,D5
-       bne.s     parseExpressionIterative_151
+       bne.s     parseExpressionIterative_157
 ; {
 ; *(unsigned int*)b = fppReal(*(unsigned int*)b);
        move.l    D6,A0
@@ -7821,8 +7847,8 @@ parseExpressionIterative_148:
        move.l    D0,(A0)
 ; typeB = '#';
        move.b    #35,-1806(A6)
-       bra.s     parseExpressionIterative_152
-parseExpressionIterative_151:
+       bra.s     parseExpressionIterative_158
+parseExpressionIterative_157:
 ; }
 ; else {
 ; *(unsigned int*)a = fppReal(*(unsigned int*)a);
@@ -7834,92 +7860,92 @@ parseExpressionIterative_151:
        move.l    D0,(A0)
 ; typeA = '#';
        moveq     #35,D5
-parseExpressionIterative_152:
+parseExpressionIterative_158:
 ; }
 ; }
 ; if (op == 0xF3 || op == 0xF4) {
        and.w     #255,D2
        cmp.w     #243,D2
-       beq.s     parseExpressionIterative_155
+       beq.s     parseExpressionIterative_161
        and.w     #255,D2
        cmp.w     #244,D2
-       bne       parseExpressionIterative_153
-parseExpressionIterative_155:
+       bne       parseExpressionIterative_159
+parseExpressionIterative_161:
 ; if (typeA == '$' || typeB == '$') {
        cmp.b     #36,D5
-       beq.s     parseExpressionIterative_158
+       beq.s     parseExpressionIterative_164
        move.b    -1806(A6),D0
        cmp.b     #36,D0
-       bne.s     parseExpressionIterative_156
-parseExpressionIterative_158:
+       bne.s     parseExpressionIterative_162
+parseExpressionIterative_164:
 ; *vErroProc = 16;
        move.l    (A2),A0
        move.w    #16,(A0)
 ; return;
        bra       parseExpressionIterative_3
-parseExpressionIterative_156:
+parseExpressionIterative_162:
 ; }
 ; if (op == 0xF3)
        and.w     #255,D2
        cmp.w     #243,D2
-       bne.s     parseExpressionIterative_159
+       bne.s     parseExpressionIterative_165
 ; *(int*)a = (*(int*)a && *(int*)b);
        move.l    D4,A0
        tst.l     (A0)
-       beq.s     parseExpressionIterative_161
+       beq.s     parseExpressionIterative_167
        move.l    D6,A0
        tst.l     (A0)
-       beq.s     parseExpressionIterative_161
+       beq.s     parseExpressionIterative_167
        moveq     #1,D0
-       bra.s     parseExpressionIterative_162
-parseExpressionIterative_161:
+       bra.s     parseExpressionIterative_168
+parseExpressionIterative_167:
        clr.l     D0
-parseExpressionIterative_162:
+parseExpressionIterative_168:
        move.l    D4,A0
        move.l    D0,(A0)
-       bra.s     parseExpressionIterative_160
-parseExpressionIterative_159:
+       bra.s     parseExpressionIterative_166
+parseExpressionIterative_165:
 ; else
 ; *(int*)a = (*(int*)a || *(int*)b);
        move.l    D4,A0
        tst.l     (A0)
-       bne.s     parseExpressionIterative_165
+       bne.s     parseExpressionIterative_171
        move.l    D6,A0
        tst.l     (A0)
-       beq.s     parseExpressionIterative_163
-parseExpressionIterative_165:
+       beq.s     parseExpressionIterative_169
+parseExpressionIterative_171:
        moveq     #1,D0
-       bra.s     parseExpressionIterative_164
-parseExpressionIterative_163:
+       bra.s     parseExpressionIterative_170
+parseExpressionIterative_169:
        clr.l     D0
-parseExpressionIterative_164:
+parseExpressionIterative_170:
        move.l    D4,A0
        move.l    D0,(A0)
-parseExpressionIterative_160:
+parseExpressionIterative_166:
 ; valTypeStack[valTop] = '%';
        move.b    #37,-86(A6,D3.L)
-       bra       parseExpressionIterative_167
-parseExpressionIterative_153:
+       bra       parseExpressionIterative_173
+parseExpressionIterative_159:
 ; } else if (op == '=' || op == '<' || op == '>' || op == 0xF5 || op == 0xF6 || op == 0xF7) {
        cmp.b     #61,D2
-       beq.s     parseExpressionIterative_168
+       beq.s     parseExpressionIterative_174
        cmp.b     #60,D2
-       beq.s     parseExpressionIterative_168
+       beq.s     parseExpressionIterative_174
        cmp.b     #62,D2
-       beq.s     parseExpressionIterative_168
+       beq.s     parseExpressionIterative_174
        and.w     #255,D2
        cmp.w     #245,D2
-       beq.s     parseExpressionIterative_168
+       beq.s     parseExpressionIterative_174
        and.w     #255,D2
        cmp.w     #246,D2
-       beq.s     parseExpressionIterative_168
+       beq.s     parseExpressionIterative_174
        and.w     #255,D2
        cmp.w     #247,D2
-       bne       parseExpressionIterative_166
-parseExpressionIterative_168:
+       bne       parseExpressionIterative_172
+parseExpressionIterative_174:
 ; if (typeA == '$')
        cmp.b     #36,D5
-       bne.s     parseExpressionIterative_169
+       bne.s     parseExpressionIterative_175
 ; logicalString(op, a, b);
        move.l    D6,-(A7)
        move.l    D4,-(A7)
@@ -7927,11 +7953,11 @@ parseExpressionIterative_168:
        move.l    D2,-(A7)
        jsr       _logicalString
        add.w     #12,A7
-       bra.s     parseExpressionIterative_172
-parseExpressionIterative_169:
+       bra.s     parseExpressionIterative_178
+parseExpressionIterative_175:
 ; else if (typeA == '#')
        cmp.b     #35,D5
-       bne.s     parseExpressionIterative_171
+       bne.s     parseExpressionIterative_177
 ; logicalNumericFloat(op, a, b);
        move.l    D6,-(A7)
        move.l    D4,-(A7)
@@ -7939,8 +7965,8 @@ parseExpressionIterative_169:
        move.l    D2,-(A7)
        jsr       _logicalNumericFloat
        add.w     #12,A7
-       bra.s     parseExpressionIterative_172
-parseExpressionIterative_171:
+       bra.s     parseExpressionIterative_178
+parseExpressionIterative_177:
 ; else
 ; logicalNumericInt(op, a, b);
        move.l    D6,-(A7)
@@ -7949,15 +7975,15 @@ parseExpressionIterative_171:
        move.l    D2,-(A7)
        jsr       _logicalNumericInt
        add.w     #12,A7
-parseExpressionIterative_172:
+parseExpressionIterative_178:
 ; valTypeStack[valTop] = '%';
        move.b    #37,-86(A6,D3.L)
-       bra       parseExpressionIterative_167
-parseExpressionIterative_166:
+       bra       parseExpressionIterative_173
+parseExpressionIterative_172:
 ; } else {
 ; if (typeA == '#')
        cmp.b     #35,D5
-       bne.s     parseExpressionIterative_173
+       bne.s     parseExpressionIterative_179
 ; arithReal(op, a, b);
        move.l    D6,-(A7)
        move.l    D4,-(A7)
@@ -7966,9 +7992,11 @@ parseExpressionIterative_166:
        move.l    D2,-(A7)
        jsr       _arithReal
        add.w     #12,A7
-       bra.s     parseExpressionIterative_174
-parseExpressionIterative_173:
-; else
+       bra       parseExpressionIterative_186
+parseExpressionIterative_179:
+; else if (typeA == '%')
+       cmp.b     #37,D5
+       bne.s     parseExpressionIterative_181
 ; arithInt(op, a, b);
        move.l    D6,-(A7)
        move.l    D4,-(A7)
@@ -7977,25 +8005,49 @@ parseExpressionIterative_173:
        move.l    D2,-(A7)
        jsr       _arithInt
        add.w     #12,A7
-parseExpressionIterative_174:
+       bra.s     parseExpressionIterative_186
+parseExpressionIterative_181:
+; else if (typeA == '$')
+       cmp.b     #36,D5
+       bne.s     parseExpressionIterative_186
+; {
+; if (op == '+')
+       cmp.b     #43,D2
+       bne.s     parseExpressionIterative_185
+; strcat(a,b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       jsr       _strcat
+       addq.w    #8,A7
+       bra.s     parseExpressionIterative_186
+parseExpressionIterative_185:
+; else  {
+; *vErroProc = 27;
+       move.l    (A2),A0
+       move.w    #27,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_186:
+; }
+; }
 ; valTypeStack[valTop] = typeA;
        move.b    D5,-86(A6,D3.L)
-parseExpressionIterative_167:
-       bra       parseExpressionIterative_135
-parseExpressionIterative_137:
+parseExpressionIterative_173:
+       bra       parseExpressionIterative_141
+parseExpressionIterative_143:
 ; }
 ; }
 ; if (opTop + 1 >= PARSER_STACK_SIZE) {
        move.l    D7,D0
        addq.l    #1,D0
        cmp.l     #32,D0
-       blt.s     parseExpressionIterative_175
+       blt.s     parseExpressionIterative_187
 ; *vErroProc = 14;
        move.l    (A2),A0
        move.w    #14,(A0)
 ; return;
        bra       parseExpressionIterative_3
-parseExpressionIterative_175:
+parseExpressionIterative_187:
 ; }
 ; opTop++;
        addq.l    #1,D7
@@ -8010,14 +8062,14 @@ parseExpressionIterative_175:
 ; if (*vErroProc) return;
        move.l    (A2),A0
        tst.w     (A0)
-       beq.s     parseExpressionIterative_177
+       beq.s     parseExpressionIterative_189
        bra       parseExpressionIterative_3
-parseExpressionIterative_177:
+parseExpressionIterative_189:
 ; expectValue = 1;
        move.l    #1,-1784(A6)
 ; continue;
        bra.s     parseExpressionIterative_7
-parseExpressionIterative_132:
+parseExpressionIterative_138:
 ; }
 ; break;
        bra.s     parseExpressionIterative_8
@@ -8026,9 +8078,9 @@ parseExpressionIterative_7:
 parseExpressionIterative_8:
 ; }
 ; while (opTop >= 0) {
-parseExpressionIterative_179:
+parseExpressionIterative_191:
        cmp.l     #0,D7
-       blt       parseExpressionIterative_181
+       blt       parseExpressionIterative_193
 ; op = opStack[opTop--];
        move.l    D7,D0
        subq.l    #1,D7
@@ -8036,23 +8088,23 @@ parseExpressionIterative_179:
        move.b    0(A0,D0.L),D2
 ; if (op == '(') {
        cmp.b     #40,D2
-       bne.s     parseExpressionIterative_182
+       bne.s     parseExpressionIterative_194
 ; *vErroProc = 15;
        move.l    (A2),A0
        move.w    #15,(A0)
 ; return;
        bra       parseExpressionIterative_3
-parseExpressionIterative_182:
+parseExpressionIterative_194:
 ; }
 ; if (valTop < 1) {
        cmp.l     #1,D3
-       bge.s     parseExpressionIterative_184
+       bge.s     parseExpressionIterative_196
 ; *vErroProc = 14;
        move.l    (A2),A0
        move.w    #14,(A0)
 ; return;
        bra       parseExpressionIterative_3
-parseExpressionIterative_184:
+parseExpressionIterative_196:
 ; }
 ; b = valStack[valTop];
        lea       -1750(A6),A0
@@ -8074,24 +8126,24 @@ parseExpressionIterative_184:
        move.b    -86(A6,D3.L),D5
 ; if (typeA != typeB) {
        cmp.b     -1806(A6),D5
-       beq       parseExpressionIterative_192
+       beq       parseExpressionIterative_204
 ; if (typeA == '$' || typeB == '$') {
        cmp.b     #36,D5
-       beq.s     parseExpressionIterative_190
+       beq.s     parseExpressionIterative_202
        move.b    -1806(A6),D0
        cmp.b     #36,D0
-       bne.s     parseExpressionIterative_188
-parseExpressionIterative_190:
+       bne.s     parseExpressionIterative_200
+parseExpressionIterative_202:
 ; *vErroProc = 16;
        move.l    (A2),A0
        move.w    #16,(A0)
 ; return;
        bra       parseExpressionIterative_3
-parseExpressionIterative_188:
+parseExpressionIterative_200:
 ; }
 ; if (typeA == '#') {
        cmp.b     #35,D5
-       bne.s     parseExpressionIterative_191
+       bne.s     parseExpressionIterative_203
 ; *(unsigned int*)b = fppReal(*(unsigned int*)b);
        move.l    D6,A0
        move.l    (A0),-(A7)
@@ -8101,8 +8153,8 @@ parseExpressionIterative_188:
        move.l    D0,(A0)
 ; typeB = '#';
        move.b    #35,-1806(A6)
-       bra.s     parseExpressionIterative_192
-parseExpressionIterative_191:
+       bra.s     parseExpressionIterative_204
+parseExpressionIterative_203:
 ; }
 ; else {
 ; *(unsigned int*)a = fppReal(*(unsigned int*)a);
@@ -8114,92 +8166,92 @@ parseExpressionIterative_191:
        move.l    D0,(A0)
 ; typeA = '#';
        moveq     #35,D5
-parseExpressionIterative_192:
+parseExpressionIterative_204:
 ; }
 ; }
 ; if (op == 0xF3 || op == 0xF4) {
        and.w     #255,D2
        cmp.w     #243,D2
-       beq.s     parseExpressionIterative_195
+       beq.s     parseExpressionIterative_207
        and.w     #255,D2
        cmp.w     #244,D2
-       bne       parseExpressionIterative_193
-parseExpressionIterative_195:
+       bne       parseExpressionIterative_205
+parseExpressionIterative_207:
 ; if (typeA == '$' || typeB == '$') {
        cmp.b     #36,D5
-       beq.s     parseExpressionIterative_198
+       beq.s     parseExpressionIterative_210
        move.b    -1806(A6),D0
        cmp.b     #36,D0
-       bne.s     parseExpressionIterative_196
-parseExpressionIterative_198:
+       bne.s     parseExpressionIterative_208
+parseExpressionIterative_210:
 ; *vErroProc = 16;
        move.l    (A2),A0
        move.w    #16,(A0)
 ; return;
        bra       parseExpressionIterative_3
-parseExpressionIterative_196:
+parseExpressionIterative_208:
 ; }
 ; if (op == 0xF3)
        and.w     #255,D2
        cmp.w     #243,D2
-       bne.s     parseExpressionIterative_199
+       bne.s     parseExpressionIterative_211
 ; *(int*)a = (*(int*)a && *(int*)b);
        move.l    D4,A0
        tst.l     (A0)
-       beq.s     parseExpressionIterative_201
+       beq.s     parseExpressionIterative_213
        move.l    D6,A0
        tst.l     (A0)
-       beq.s     parseExpressionIterative_201
+       beq.s     parseExpressionIterative_213
        moveq     #1,D0
-       bra.s     parseExpressionIterative_202
-parseExpressionIterative_201:
+       bra.s     parseExpressionIterative_214
+parseExpressionIterative_213:
        clr.l     D0
-parseExpressionIterative_202:
+parseExpressionIterative_214:
        move.l    D4,A0
        move.l    D0,(A0)
-       bra.s     parseExpressionIterative_200
-parseExpressionIterative_199:
+       bra.s     parseExpressionIterative_212
+parseExpressionIterative_211:
 ; else
 ; *(int*)a = (*(int*)a || *(int*)b);
        move.l    D4,A0
        tst.l     (A0)
-       bne.s     parseExpressionIterative_205
+       bne.s     parseExpressionIterative_217
        move.l    D6,A0
        tst.l     (A0)
-       beq.s     parseExpressionIterative_203
-parseExpressionIterative_205:
+       beq.s     parseExpressionIterative_215
+parseExpressionIterative_217:
        moveq     #1,D0
-       bra.s     parseExpressionIterative_204
-parseExpressionIterative_203:
+       bra.s     parseExpressionIterative_216
+parseExpressionIterative_215:
        clr.l     D0
-parseExpressionIterative_204:
+parseExpressionIterative_216:
        move.l    D4,A0
        move.l    D0,(A0)
-parseExpressionIterative_200:
+parseExpressionIterative_212:
 ; valTypeStack[valTop] = '%';
        move.b    #37,-86(A6,D3.L)
-       bra       parseExpressionIterative_207
-parseExpressionIterative_193:
+       bra       parseExpressionIterative_219
+parseExpressionIterative_205:
 ; } else if (op == '=' || op == '<' || op == '>' || op == 0xF5 || op == 0xF6 || op == 0xF7) {
        cmp.b     #61,D2
-       beq.s     parseExpressionIterative_208
+       beq.s     parseExpressionIterative_220
        cmp.b     #60,D2
-       beq.s     parseExpressionIterative_208
+       beq.s     parseExpressionIterative_220
        cmp.b     #62,D2
-       beq.s     parseExpressionIterative_208
+       beq.s     parseExpressionIterative_220
        and.w     #255,D2
        cmp.w     #245,D2
-       beq.s     parseExpressionIterative_208
+       beq.s     parseExpressionIterative_220
        and.w     #255,D2
        cmp.w     #246,D2
-       beq.s     parseExpressionIterative_208
+       beq.s     parseExpressionIterative_220
        and.w     #255,D2
        cmp.w     #247,D2
-       bne       parseExpressionIterative_206
-parseExpressionIterative_208:
+       bne       parseExpressionIterative_218
+parseExpressionIterative_220:
 ; if (typeA == '$')
        cmp.b     #36,D5
-       bne.s     parseExpressionIterative_209
+       bne.s     parseExpressionIterative_221
 ; logicalString(op, a, b);
        move.l    D6,-(A7)
        move.l    D4,-(A7)
@@ -8207,11 +8259,11 @@ parseExpressionIterative_208:
        move.l    D2,-(A7)
        jsr       _logicalString
        add.w     #12,A7
-       bra.s     parseExpressionIterative_212
-parseExpressionIterative_209:
+       bra.s     parseExpressionIterative_224
+parseExpressionIterative_221:
 ; else if (typeA == '#')
        cmp.b     #35,D5
-       bne.s     parseExpressionIterative_211
+       bne.s     parseExpressionIterative_223
 ; logicalNumericFloat(op, a, b);
        move.l    D6,-(A7)
        move.l    D4,-(A7)
@@ -8219,8 +8271,8 @@ parseExpressionIterative_209:
        move.l    D2,-(A7)
        jsr       _logicalNumericFloat
        add.w     #12,A7
-       bra.s     parseExpressionIterative_212
-parseExpressionIterative_211:
+       bra.s     parseExpressionIterative_224
+parseExpressionIterative_223:
 ; else
 ; logicalNumericInt(op, a, b);
        move.l    D6,-(A7)
@@ -8229,15 +8281,15 @@ parseExpressionIterative_211:
        move.l    D2,-(A7)
        jsr       _logicalNumericInt
        add.w     #12,A7
-parseExpressionIterative_212:
+parseExpressionIterative_224:
 ; valTypeStack[valTop] = '%';
        move.b    #37,-86(A6,D3.L)
-       bra       parseExpressionIterative_207
-parseExpressionIterative_206:
+       bra       parseExpressionIterative_219
+parseExpressionIterative_218:
 ; } else {
 ; if (typeA == '#')
        cmp.b     #35,D5
-       bne.s     parseExpressionIterative_213
+       bne.s     parseExpressionIterative_225
 ; arithReal(op, a, b);
        move.l    D6,-(A7)
        move.l    D4,-(A7)
@@ -8246,9 +8298,11 @@ parseExpressionIterative_206:
        move.l    D2,-(A7)
        jsr       _arithReal
        add.w     #12,A7
-       bra.s     parseExpressionIterative_214
-parseExpressionIterative_213:
-; else
+       bra       parseExpressionIterative_232
+parseExpressionIterative_225:
+; else if (typeA == '%')
+       cmp.b     #37,D5
+       bne.s     parseExpressionIterative_227
 ; arithInt(op, a, b);
        move.l    D6,-(A7)
        move.l    D4,-(A7)
@@ -8257,21 +8311,45 @@ parseExpressionIterative_213:
        move.l    D2,-(A7)
        jsr       _arithInt
        add.w     #12,A7
-parseExpressionIterative_214:
+       bra.s     parseExpressionIterative_232
+parseExpressionIterative_227:
+; else if (typeA == '$')
+       cmp.b     #36,D5
+       bne.s     parseExpressionIterative_232
+; {
+; if (op == '+')
+       cmp.b     #43,D2
+       bne.s     parseExpressionIterative_231
+; strcat(a,b);
+       move.l    D6,-(A7)
+       move.l    D4,-(A7)
+       jsr       _strcat
+       addq.w    #8,A7
+       bra.s     parseExpressionIterative_232
+parseExpressionIterative_231:
+; else  {
+; *vErroProc = 27;
+       move.l    (A2),A0
+       move.w    #27,(A0)
+; return;
+       bra       parseExpressionIterative_3
+parseExpressionIterative_232:
+; }
+; }
 ; valTypeStack[valTop] = typeA;
        move.b    D5,-86(A6,D3.L)
-parseExpressionIterative_207:
-       bra       parseExpressionIterative_179
-parseExpressionIterative_181:
+parseExpressionIterative_219:
+       bra       parseExpressionIterative_191
+parseExpressionIterative_193:
 ; }
 ; }
 ; if (*debugOn)
        move.l    _debugOn.L,A0
        tst.b     (A0)
-       beq       parseExpressionIterative_215
+       beq       parseExpressionIterative_233
 ; {
 ; writeLongSerial("Aqui 888.666.78 - [\0");
-       pea       @basic_142.L
+       pea       @basic_143.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -8287,33 +8365,33 @@ parseExpressionIterative_181:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n\0");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
-parseExpressionIterative_215:
+parseExpressionIterative_233:
 ; }
 ; if (valTop < 0) {
        cmp.l     #0,D3
-       bge.s     parseExpressionIterative_217
+       bge.s     parseExpressionIterative_235
 ; *vErroProc = 14;
        move.l    (A2),A0
        move.w    #14,(A0)
 ; return;
        bra       parseExpressionIterative_3
-parseExpressionIterative_217:
+parseExpressionIterative_235:
 ; }
 ; if (*debugOn)
        move.l    _debugOn.L,A0
        tst.b     (A0)
-       beq.s     parseExpressionIterative_219
+       beq.s     parseExpressionIterative_237
 ; {
 ; writeLongSerial("Aqui 888.666.79\r\n\0");
-       pea       @basic_143.L
+       pea       @basic_144.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
-parseExpressionIterative_219:
+parseExpressionIterative_237:
 ; }
 ; *value_type = valTypeStack[valTop];
        move.l    _value_type.L,A0
@@ -8322,7 +8400,7 @@ parseExpressionIterative_219:
        move.l    _value_type.L,A0
        move.b    (A0),D0
        cmp.b     #36,D0
-       bne.s     parseExpressionIterative_221
+       bne.s     parseExpressionIterative_239
 ; strcpy((char*)result, (char*)valStack[valTop]);
        lea       -1750(A6),A0
        move.l    D3,D1
@@ -8332,8 +8410,8 @@ parseExpressionIterative_219:
        move.l    8(A6),-(A7)
        jsr       _strcpy
        addq.w    #8,A7
-       bra.s     parseExpressionIterative_222
-parseExpressionIterative_221:
+       bra.s     parseExpressionIterative_240
+parseExpressionIterative_239:
 ; else
 ; *(unsigned int*)result = *(unsigned int*)valStack[valTop];
        lea       -1750(A6),A0
@@ -8343,7 +8421,7 @@ parseExpressionIterative_221:
        move.l    8(A6),D0
        move.l    D0,A1
        move.l    (A0),(A1)
-parseExpressionIterative_222:
+parseExpressionIterative_240:
 ; return;
 parseExpressionIterative_3:
        movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
@@ -12148,7 +12226,7 @@ _findVariable:
 ; unsigned char ixDim = 0;
        clr.b     -43(A6)
 ; unsigned char vArray = 0;
-       moveq     #0,D7
+       clr.b     D6
 ; unsigned long vPosNextVar = 0;
        clr.l     -42(A6)
 ; unsigned char* vPosValueVar = 0;
@@ -12167,7 +12245,7 @@ _findVariable:
        beq       findVariable_1
 ; {
 ; writeLongSerial("Aqui 333.666.0 varName-[");
-       pea       @basic_144.L
+       pea       @basic_145.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12186,7 +12264,7 @@ _findVariable:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12205,7 +12283,7 @@ _findVariable:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12222,7 +12300,7 @@ findVariable_1:
 ; {
 ; // Define que eh array
 ; vArray = 1;
-       moveq     #1,D7
+       moveq     #1,D6
 ; // Procura as dimensoes
 ; nextToken();
        jsr       _nextToken
@@ -12297,7 +12375,7 @@ findVariable_15:
        beq       findVariable_17
 ; {
 ; writeLongSerial("Aqui 333.666.99 varName-[");
-       pea       @basic_145.L
+       pea       @basic_146.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12313,7 +12391,7 @@ findVariable_15:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12332,7 +12410,7 @@ findVariable_15:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12351,7 +12429,7 @@ findVariable_15:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12416,7 +12494,7 @@ findVariable_23:
        beq.s     findVariable_27
 ; {
 ; writeLongSerial("Aqui 333.666.98 varName-\r\n\0");
-       pea       @basic_146.L
+       pea       @basic_147.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12434,7 +12512,7 @@ findVariable_27:
        beq.s     findVariable_29
 ; {
 ; writeLongSerial("Aqui 333.666.97 varName-\r\n\0");
-       pea       @basic_147.L
+       pea       @basic_148.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12503,7 +12581,7 @@ findVariable_35:
 ; }
 ; // Procura na lista geral de variaveis simples / array
 ; if (vArray)
-       tst.b     D7
+       tst.b     D6
        beq.s     findVariable_37
 ; vLista = pStartArrayVar;
        move.l    _pStartArrayVar.L,D2
@@ -12513,7 +12591,9 @@ findVariable_37:
 ; vLista = pStartSimpVar;
        move.l    _pStartSimpVar.L,D2
 findVariable_38:
-; if (1) // (!vArray)
+; if (!vArray) // sem array por enquanto, para ajustar tamanho variavel no cache
+       tst.b     D6
+       bne       findVariable_43
 ; {
 ; for (vCacheIx = 0; vCacheIx < SIMPLE_VAR_CACHE_SLOTS; vCacheIx++)
        clr.l     -4(A6)
@@ -12565,7 +12645,7 @@ findVariable_49:
        move.l    _value_type.L,A1
        move.b    (A0),(A1)
 ; if (vArray)
-       tst.b     D7
+       tst.b     D6
        beq       findVariable_50
 ; {
 ; if (*vLista == '$')
@@ -12636,7 +12716,7 @@ findVariable_51:
        lsl.l     #8,D0
        lsl.l     #8,D0
        and.l     #-16777216,D0
-       move.l    D0,D6
+       move.l    D0,D7
 ; vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
        move.l    D3,A0
        move.b    2(A0),D0
@@ -12644,22 +12724,22 @@ findVariable_51:
        lsl.l     #8,D0
        lsl.l     #8,D0
        and.l     #16711680,D0
-       or.l      D0,D6
+       or.l      D0,D7
 ; vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
        move.l    D3,A0
        move.b    3(A0),D0
        and.l     #255,D0
        lsl.l     #8,D0
        and.l     #65280,D0
-       or.l      D0,D6
+       or.l      D0,D7
 ; vOffSet |= ((unsigned long)*(vPosValueVar + 4) & 0x000000FF);
        move.l    D3,A0
        move.b    4(A0),D0
        and.l     #255,D0
        and.l     #255,D0
-       or.l      D0,D6
+       or.l      D0,D7
 ; vTempPointer = vOffSet;
-       move.l    D6,-36(A6)
+       move.l    D7,-36(A6)
 ; iy = *vPosValueVar;
        move.l    D3,A0
        move.b    (A0),D0
@@ -12694,7 +12774,7 @@ findVariable_58:
 ; else
 ; {
 ; if (!vArray)
-       tst.b     D7
+       tst.b     D6
        bne.s     findVariable_63
 ; vPosValueVar++;
        addq.l    #1,D3
@@ -12781,7 +12861,7 @@ findVariable_65:
 ; {
 ; // Pega endereco da variavel pra delvover
 ; if (vArray)
-       tst.b     D7
+       tst.b     D6
        beq       findVariable_70
 ; {
 ; if (*vLista == '$')
@@ -12855,7 +12935,7 @@ findVariable_71:
        beq       findVariable_80
 ; {
 ; writeLongSerial("Aqui 333.666.0-[");
-       pea       @basic_148.L
+       pea       @basic_149.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12868,7 +12948,7 @@ findVariable_71:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12884,7 +12964,7 @@ findVariable_71:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12898,7 +12978,7 @@ findVariable_80:
        lsl.l     #8,D0
        lsl.l     #8,D0
        and.l     #-16777216,D0
-       move.l    D0,D6
+       move.l    D0,D7
 ; vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
        move.l    D3,A0
        move.b    2(A0),D0
@@ -12906,22 +12986,22 @@ findVariable_80:
        lsl.l     #8,D0
        lsl.l     #8,D0
        and.l     #16711680,D0
-       or.l      D0,D6
+       or.l      D0,D7
 ; vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
        move.l    D3,A0
        move.b    3(A0),D0
        and.l     #255,D0
        lsl.l     #8,D0
        and.l     #65280,D0
-       or.l      D0,D6
+       or.l      D0,D7
 ; vOffSet |= ((unsigned long)*(vPosValueVar + 4) & 0x000000FF);
        move.l    D3,A0
        move.b    4(A0),D0
        and.l     #255,D0
        and.l     #255,D0
-       or.l      D0,D6
+       or.l      D0,D7
 ; vTemp = vOffSet;
-       move.l    D6,-154(A6)
+       move.l    D7,-154(A6)
 ; iy = *vPosValueVar;
        move.l    D3,A0
        move.b    (A0),D0
@@ -12937,7 +13017,7 @@ findVariable_80:
        beq       findVariable_82
 ; {
 ; writeLongSerial("Aqui 333.666.1-[");
-       pea       @basic_149.L
+       pea       @basic_150.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12953,7 +13033,7 @@ findVariable_80:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -12982,7 +13062,7 @@ findVariable_84:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13000,7 +13080,7 @@ findVariable_84:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13019,7 +13099,7 @@ findVariable_84:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13049,7 +13129,7 @@ findVariable_87:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13069,7 +13149,7 @@ findVariable_86:
        beq.s     findVariable_91
 ; {
 ; writeLongSerial("]\r\n");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13084,14 +13164,14 @@ findVariable_91:
        beq       findVariable_93
 ; {
 ; writeLongSerial("Aqui 333.666.2-[");
-       pea       @basic_150.L
+       pea       @basic_151.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
 ; itoa(vOffSet,sqtdtam,16);
        pea       16
        move.l    A2,-(A7)
-       move.l    D6,-(A7)
+       move.l    D7,-(A7)
        jsr       (A3)
        add.w     #12,A7
 ; writeLongSerial(sqtdtam);
@@ -13100,7 +13180,7 @@ findVariable_91:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13119,7 +13199,7 @@ findVariable_91:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13138,7 +13218,7 @@ findVariable_91:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13157,7 +13237,7 @@ findVariable_91:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_135.L
+       pea       @basic_136.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13176,7 +13256,7 @@ findVariable_91:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -13188,7 +13268,7 @@ findVariable_78:
 ; else
 ; {
 ; if (!vArray)
-       tst.b     D7
+       tst.b     D6
        bne.s     findVariable_95
 ; vPosValueVar++;
        addq.l    #1,D3
@@ -13215,7 +13295,7 @@ findVariable_95:
 findVariable_79:
 ; }
 ; if (!vArray)
-       tst.b     D7
+       tst.b     D6
        bne       findVariable_97
 ; {
 ; for (ix = (SIMPLE_VAR_CACHE_SLOTS - 1); ix > 0; ix--)
@@ -13263,7 +13343,7 @@ findVariable_97:
 findVariable_68:
 ; }
 ; if (vArray)
-       tst.b     D7
+       tst.b     D6
        beq.s     findVariable_102
 ; vLista = vPosNextVar;
        move.l    -42(A6),D2
@@ -13274,7 +13354,7 @@ findVariable_102:
        addq.l    #8,D2
 findVariable_103:
 ; if ((!vArray && vLista >= pStartArrayVar) || (vArray && vLista >= pStartProg) || *vLista == 0x00)
-       tst.b     D7
+       tst.b     D6
        bne.s     findVariable_108
        moveq     #1,D0
        bra.s     findVariable_109
@@ -13286,7 +13366,7 @@ findVariable_109:
        cmp.l     _pStartArrayVar.L,D2
        bhs.s     findVariable_106
 findVariable_107:
-       and.l     #255,D7
+       and.l     #255,D6
        beq.s     findVariable_110
        cmp.l     _pStartProg.L,D2
        bhs.s     findVariable_106
@@ -14212,7 +14292,7 @@ basPrint_39:
        cmp.b     #44,D3
        beq.s     basPrint_40
 ; printText("\r\n");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -17412,7 +17492,7 @@ basInputGet_39:
 ; }
 ; }
 ; printText("\r\n");
-       pea       @basic_97.L
+       pea       @basic_98.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -17774,7 +17854,7 @@ _basFor:
        beq.s     basFor_1
 ; {
 ; writeLongSerial("Aqui 444.666.0\r\n");
-       pea       @basic_151.L
+       pea       @basic_152.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -17795,7 +17875,7 @@ basFor_3:
        beq.s     basFor_6
 ; {
 ; writeLongSerial("Aqui 444.666.1]\r\n");
-       pea       @basic_152.L
+       pea       @basic_153.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -17896,7 +17976,7 @@ basFor_14:
        beq       basFor_16
 ; {
 ; writeLongSerial("Aqui 444.666.2 varName-[");
-       pea       @basic_153.L
+       pea       @basic_154.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -17913,7 +17993,7 @@ basFor_14:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_136.L
+       pea       @basic_137.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -26032,319 +26112,322 @@ _basRestore:
 @basic_27:
        dc.b      63,79,117,116,32,111,102,32,100,97,116,97,0
 @basic_28:
-       dc.b      76,69,84,0
+       dc.b      63,73,108,108,101,103,97,108,32,79,112,101,114
+       dc.b      97,116,105,111,110,0
 @basic_29:
-       dc.b      80,82,73,78,84,0
+       dc.b      76,69,84,0
 @basic_30:
-       dc.b      73,70,0
+       dc.b      80,82,73,78,84,0
 @basic_31:
-       dc.b      84,72,69,78,0
+       dc.b      73,70,0
 @basic_32:
-       dc.b      70,79,82,0
+       dc.b      84,72,69,78,0
 @basic_33:
-       dc.b      84,79,0
+       dc.b      70,79,82,0
 @basic_34:
-       dc.b      78,69,88,84,0
+       dc.b      84,79,0
 @basic_35:
-       dc.b      83,84,69,80,0
+       dc.b      78,69,88,84,0
 @basic_36:
-       dc.b      71,79,84,79,0
+       dc.b      83,84,69,80,0
 @basic_37:
-       dc.b      71,79,83,85,66,0
+       dc.b      71,79,84,79,0
 @basic_38:
-       dc.b      82,69,84,85,82,78,0
+       dc.b      71,79,83,85,66,0
 @basic_39:
-       dc.b      82,69,77,0
+       dc.b      82,69,84,85,82,78,0
 @basic_40:
-       dc.b      83,80,82,73,84,69,83,69,84,0
+       dc.b      82,69,77,0
 @basic_41:
-       dc.b      83,80,82,73,84,69,80,85,84,0
+       dc.b      83,80,82,73,84,69,83,69,84,0
 @basic_42:
-       dc.b      68,73,77,0
+       dc.b      83,80,82,73,84,69,80,85,84,0
 @basic_43:
-       dc.b      79,78,0
+       dc.b      68,73,77,0
 @basic_44:
-       dc.b      73,78,80,85,84,0
+       dc.b      79,78,0
 @basic_45:
-       dc.b      71,69,84,0
+       dc.b      73,78,80,85,84,0
 @basic_46:
-       dc.b      83,80,82,73,84,69,67,79,76,79,82,0
+       dc.b      71,69,84,0
 @basic_47:
-       dc.b      76,79,67,65,84,69,0
+       dc.b      83,80,82,73,84,69,67,79,76,79,82,0
 @basic_48:
-       dc.b      67,76,83,0
+       dc.b      76,79,67,65,84,69,0
 @basic_49:
-       dc.b      67,76,69,65,82,0
+       dc.b      67,76,83,0
 @basic_50:
-       dc.b      68,65,84,65,0
+       dc.b      67,76,69,65,82,0
 @basic_51:
-       dc.b      82,69,65,68,0
+       dc.b      68,65,84,65,0
 @basic_52:
-       dc.b      82,69,83,84,79,82,69,0
+       dc.b      82,69,65,68,0
 @basic_53:
-       dc.b      69,78,68,0
+       dc.b      82,69,83,84,79,82,69,0
 @basic_54:
-       dc.b      83,84,79,80,0
+       dc.b      69,78,68,0
 @basic_55:
-       dc.b      83,67,82,69,69,78,0
+       dc.b      83,84,79,80,0
 @basic_56:
-       dc.b      67,73,82,67,76,69,0
+       dc.b      83,67,82,69,69,78,0
 @basic_57:
-       dc.b      82,69,67,84,0
+       dc.b      67,73,82,67,76,69,0
 @basic_58:
-       dc.b      67,79,76,79,82,0
+       dc.b      82,69,67,84,0
 @basic_59:
-       dc.b      80,76,79,84,0
+       dc.b      67,79,76,79,82,0
 @basic_60:
-       dc.b      72,76,73,78,0
+       dc.b      80,76,79,84,0
 @basic_61:
-       dc.b      86,76,73,78,0
+       dc.b      72,76,73,78,0
 @basic_62:
-       dc.b      83,80,82,73,84,69,80,79,83,0
+       dc.b      86,76,73,78,0
 @basic_63:
-       dc.b      80,65,73,78,84,0
+       dc.b      83,80,82,73,84,69,80,79,83,0
 @basic_64:
-       dc.b      76,73,78,69,0
+       dc.b      80,65,73,78,84,0
 @basic_65:
-       dc.b      65,84,0
+       dc.b      76,73,78,69,0
 @basic_66:
-       dc.b      79,78,69,82,82,0
+       dc.b      65,84,0
 @basic_67:
-       dc.b      65,83,67,0
+       dc.b      79,78,69,82,82,0
 @basic_68:
-       dc.b      80,69,69,75,0
+       dc.b      65,83,67,0
 @basic_69:
-       dc.b      80,79,75,69,0
+       dc.b      80,69,69,75,0
 @basic_70:
-       dc.b      82,78,68,0
+       dc.b      80,79,75,69,0
 @basic_71:
-       dc.b      76,69,78,0
+       dc.b      82,78,68,0
 @basic_72:
-       dc.b      86,65,76,0
+       dc.b      76,69,78,0
 @basic_73:
-       dc.b      83,84,82,36,0
+       dc.b      86,65,76,0
 @basic_74:
-       dc.b      80,79,73,78,84,0
+       dc.b      83,84,82,36,0
 @basic_75:
-       dc.b      67,72,82,36,0
+       dc.b      80,79,73,78,84,0
 @basic_76:
-       dc.b      70,82,69,0
+       dc.b      67,72,82,36,0
 @basic_77:
-       dc.b      83,81,82,84,0
+       dc.b      70,82,69,0
 @basic_78:
-       dc.b      83,73,78,0
+       dc.b      83,81,82,84,0
 @basic_79:
-       dc.b      67,79,83,0
+       dc.b      83,73,78,0
 @basic_80:
-       dc.b      84,65,78,0
+       dc.b      67,79,83,0
 @basic_81:
-       dc.b      76,79,71,0
+       dc.b      84,65,78,0
 @basic_82:
-       dc.b      69,88,80,0
+       dc.b      76,79,71,0
 @basic_83:
-       dc.b      83,80,67,0
+       dc.b      69,88,80,0
 @basic_84:
-       dc.b      84,65,66,0
+       dc.b      83,80,67,0
 @basic_85:
-       dc.b      77,73,68,36,0
+       dc.b      84,65,66,0
 @basic_86:
-       dc.b      82,73,71,72,84,36,0
+       dc.b      77,73,68,36,0
 @basic_87:
-       dc.b      76,69,70,84,36,0
+       dc.b      82,73,71,72,84,36,0
 @basic_88:
-       dc.b      73,78,84,0
+       dc.b      76,69,70,84,36,0
 @basic_89:
-       dc.b      65,66,83,0
+       dc.b      73,78,84,0
 @basic_90:
-       dc.b      65,78,68,0
+       dc.b      65,66,83,0
 @basic_91:
-       dc.b      79,82,0
+       dc.b      65,78,68,0
 @basic_92:
-       dc.b      62,61,0
+       dc.b      79,82,0
 @basic_93:
-       dc.b      60,61,0
+       dc.b      62,61,0
 @basic_94:
-       dc.b      60,62,0
+       dc.b      60,61,0
 @basic_95:
-       dc.b      78,79,84,0
+       dc.b      60,62,0
 @basic_96:
+       dc.b      78,79,84,0
+@basic_97:
        dc.b      77,77,83,74,45,66,65,83,73,67,32,118,49,46,49
        dc.b      97,48,51,0
-@basic_97:
-       dc.b      13,10,0
 @basic_98:
+       dc.b      13,10,0
+@basic_99:
        dc.b      85,116,105,108,105,116,121,32,40,99,41,32,50
        dc.b      48,50,50,45,50,48,50,54,13,10,0
-@basic_99:
-       dc.b      79,75,13,10,0
 @basic_100:
-       dc.b      13,10,79,75,0
+       dc.b      79,75,13,10,0
 @basic_101:
-       dc.b      78,69,87,0
+       dc.b      13,10,79,75,0
 @basic_102:
-       dc.b      69,68,73,84,0
+       dc.b      78,69,87,0
 @basic_103:
-       dc.b      76,73,83,84,0
+       dc.b      69,68,73,84,0
 @basic_104:
-       dc.b      76,73,83,84,80,0
+       dc.b      76,73,83,84,0
 @basic_105:
-       dc.b      82,85,78,0
+       dc.b      76,73,83,84,80,0
 @basic_106:
-       dc.b      68,69,76,0
+       dc.b      82,85,78,0
 @basic_107:
-       dc.b      88,76,79,65,68,0
+       dc.b      68,69,76,0
 @basic_108:
-       dc.b      88,76,79,65,68,49,75,0
+       dc.b      88,76,79,65,68,0
 @basic_109:
-       dc.b      84,73,77,69,82,0
+       dc.b      88,76,79,65,68,49,75,0
 @basic_110:
-       dc.b      84,105,109,101,114,58,32,0
+       dc.b      84,73,77,69,82,0
 @basic_111:
-       dc.b      109,115,13,10,0
+       dc.b      84,105,109,101,114,58,32,0
 @basic_112:
-       dc.b      84,82,65,67,69,0
+       dc.b      109,115,13,10,0
 @basic_113:
-       dc.b      78,79,84,82,65,67,69,0
+       dc.b      84,82,65,67,69,0
 @basic_114:
-       dc.b      68,69,66,85,71,0
+       dc.b      78,79,84,82,65,67,69,0
 @basic_115:
-       dc.b      78,79,68,69,66,85,71,0
+       dc.b      68,69,66,85,71,0
 @basic_116:
-       dc.b      81,85,73,84,0
+       dc.b      78,79,68,69,66,85,71,0
 @basic_117:
-       dc.b      32,0
+       dc.b      81,85,73,84,0
 @basic_118:
-       dc.b      32,59,44,43,45,60,62,40,41,47,42,94,61,58,0
+       dc.b      32,0
 @basic_119:
+       dc.b      32,59,44,43,45,60,62,40,41,47,42,94,61,58,0
+@basic_120:
        dc.b      76,105,110,101,32,110,117,109,98,101,114,32
        dc.b      97,108,114,101,97,100,121,32,101,120,105,115
        dc.b      116,115,13,10,0
-@basic_120:
+@basic_121:
        dc.b      78,111,110,45,101,120,105,115,116,101,110,116
        dc.b      32,108,105,110,101,32,110,117,109,98,101,114
        dc.b      13,10,0
-@basic_121:
+@basic_122:
        dc.b      112,114,101,115,115,32,97,110,121,32,107,101
        dc.b      121,32,116,111,32,99,111,110,116,105,110,117
        dc.b      101,0
-@basic_122:
-       dc.b      64,0
 @basic_123:
+       dc.b      64,0
+@basic_124:
        dc.b      83,121,110,116,97,120,32,69,114,114,111,114
        dc.b      32,33,0
-@basic_124:
+@basic_125:
        dc.b      13,10,65,98,111,114,116,101,100,32,33,33,33
        dc.b      13,10,0
-@basic_125:
+@basic_126:
        dc.b      13,10,83,116,111,112,112,101,100,32,97,116,32
        dc.b      0
-@basic_126:
+@basic_127:
        dc.b      13,10,69,120,101,99,117,116,105,110,103,32,97
        dc.b      116,32,0
-@basic_127:
-       dc.b      32,97,116,32,0
 @basic_128:
-       dc.b      32,33,13,10,0
+       dc.b      32,97,116,32,0
 @basic_129:
+       dc.b      32,33,13,10,0
+@basic_130:
        dc.b      76,111,97,100,105,110,103,32,66,97,115,105,99
        dc.b      32,80,114,111,103,114,97,109,46,46,46,13,10
        dc.b      0
-@basic_130:
-       dc.b      68,111,110,101,46,13,10,0
 @basic_131:
+       dc.b      68,111,110,101,46,13,10,0
+@basic_132:
        dc.b      80,114,111,99,101,115,115,105,110,103,46,46
        dc.b      46,13,10,0
-@basic_132:
+@basic_133:
        dc.b      76,111,97,100,105,110,103,32,66,97,115,105,99
        dc.b      32,80,114,111,103,114,97,109,32,49,107,46,46
        dc.b      46,13,10,0
-@basic_133:
-       dc.b      58,0
 @basic_134:
+       dc.b      58,0
+@basic_135:
        dc.b      65,113,117,105,32,56,56,56,46,54,54,54,46,53
        dc.b      32,45,32,91,0
-@basic_135:
-       dc.b      93,45,91,0
 @basic_136:
-       dc.b      93,13,10,0
+       dc.b      93,45,91,0
 @basic_137:
+       dc.b      93,13,10,0
+@basic_138:
        dc.b      65,113,117,105,32,56,56,56,46,54,54,54,46,48
        dc.b      32,45,32,91,0
-@basic_138:
+@basic_139:
        dc.b      65,113,117,105,32,56,56,56,46,54,54,54,46,49
        dc.b      32,45,32,91,0
-@basic_139:
+@basic_140:
        dc.b      65,113,117,105,32,56,56,56,46,54,54,54,46,51
        dc.b      32,45,32,91,0
-@basic_140:
+@basic_141:
        dc.b      65,113,117,105,32,56,56,56,46,54,54,54,46,52
        dc.b      32,45,32,91,0
-@basic_141:
+@basic_142:
        dc.b      65,113,117,105,32,56,56,56,46,54,54,54,46,50
        dc.b      32,45,32,91,0
-@basic_142:
-       dc.b      65,113,117,105,32,56,56,56,46,54,54,54,46,55
-       dc.b      56,32,45,32,91,0
 @basic_143:
        dc.b      65,113,117,105,32,56,56,56,46,54,54,54,46,55
-       dc.b      57,13,10,0
+       dc.b      56,32,45,32,91,0
 @basic_144:
+       dc.b      65,113,117,105,32,56,56,56,46,54,54,54,46,55
+       dc.b      57,13,10,0
+@basic_145:
        dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,48
        dc.b      32,118,97,114,78,97,109,101,45,91,0
-@basic_145:
-       dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,57
-       dc.b      57,32,118,97,114,78,97,109,101,45,91,0
 @basic_146:
        dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,57
-       dc.b      56,32,118,97,114,78,97,109,101,45,13,10,0
+       dc.b      57,32,118,97,114,78,97,109,101,45,91,0
 @basic_147:
        dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,57
-       dc.b      55,32,118,97,114,78,97,109,101,45,13,10,0
+       dc.b      56,32,118,97,114,78,97,109,101,45,13,10,0
 @basic_148:
+       dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,57
+       dc.b      55,32,118,97,114,78,97,109,101,45,13,10,0
+@basic_149:
        dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,48
        dc.b      45,91,0
-@basic_149:
+@basic_150:
        dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,49
        dc.b      45,91,0
-@basic_150:
+@basic_151:
        dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,50
        dc.b      45,91,0
-@basic_151:
+@basic_152:
        dc.b      65,113,117,105,32,52,52,52,46,54,54,54,46,48
        dc.b      13,10,0
-@basic_152:
+@basic_153:
        dc.b      65,113,117,105,32,52,52,52,46,54,54,54,46,49
        dc.b      93,13,10,0
-@basic_153:
+@basic_154:
        dc.b      65,113,117,105,32,52,52,52,46,54,54,54,46,50
        dc.b      32,118,97,114,78,97,109,101,45,91,0
        xdef      _keywords_count
 _keywords_count:
        dc.l      68
 @basic_keywords:
-       dc.l      @basic_28,128,@basic_29,129,@basic_30,130
-       dc.l      @basic_31,131,@basic_32,133,@basic_33,134
-       dc.l      @basic_34,135,@basic_35,136,@basic_36,137
-       dc.l      @basic_37,138,@basic_38,139,@basic_39,140
-       dc.l      @basic_40,141,@basic_41,142,@basic_42,143
-       dc.l      @basic_43,145,@basic_44,146,@basic_45,147
-       dc.l      @basic_46,148,@basic_47,149,@basic_48,150
-       dc.l      @basic_49,151,@basic_50,152,@basic_51,153
-       dc.l      @basic_52,154,@basic_53,158,@basic_54,159
-       dc.l      @basic_55,176,@basic_56,177,@basic_57,178
-       dc.l      @basic_58,179,@basic_59,180,@basic_60,181
-       dc.l      @basic_61,182,@basic_62,183,@basic_63,184
-       dc.l      @basic_64,185,@basic_65,186,@basic_66,187
-       dc.l      @basic_67,196,@basic_68,205,@basic_69,206
-       dc.l      @basic_70,209,@basic_71,219,@basic_72,220
-       dc.l      @basic_73,221,@basic_74,224,@basic_75,225
-       dc.l      @basic_76,226,@basic_77,227,@basic_78,228
-       dc.l      @basic_79,229,@basic_80,230,@basic_81,231
-       dc.l      @basic_82,232,@basic_83,233,@basic_84,234
-       dc.l      @basic_85,235,@basic_86,236,@basic_87,237
-       dc.l      @basic_88,238,@basic_89,239,@basic_90,243
-       dc.l      @basic_91,244,@basic_92,245,@basic_93,246
-       dc.l      @basic_94,247,@basic_95,248
+       dc.l      @basic_29,128,@basic_30,129,@basic_31,130
+       dc.l      @basic_32,131,@basic_33,133,@basic_34,134
+       dc.l      @basic_35,135,@basic_36,136,@basic_37,137
+       dc.l      @basic_38,138,@basic_39,139,@basic_40,140
+       dc.l      @basic_41,141,@basic_42,142,@basic_43,143
+       dc.l      @basic_44,145,@basic_45,146,@basic_46,147
+       dc.l      @basic_47,148,@basic_48,149,@basic_49,150
+       dc.l      @basic_50,151,@basic_51,152,@basic_52,153
+       dc.l      @basic_53,154,@basic_54,158,@basic_55,159
+       dc.l      @basic_56,176,@basic_57,177,@basic_58,178
+       dc.l      @basic_59,179,@basic_60,180,@basic_61,181
+       dc.l      @basic_62,182,@basic_63,183,@basic_64,184
+       dc.l      @basic_65,185,@basic_66,186,@basic_67,187
+       dc.l      @basic_68,196,@basic_69,205,@basic_70,206
+       dc.l      @basic_71,209,@basic_72,219,@basic_73,220
+       dc.l      @basic_74,221,@basic_75,224,@basic_76,225
+       dc.l      @basic_77,226,@basic_78,227,@basic_79,228
+       dc.l      @basic_80,229,@basic_81,230,@basic_82,231
+       dc.l      @basic_83,232,@basic_84,233,@basic_85,234
+       dc.l      @basic_86,235,@basic_87,236,@basic_88,237
+       dc.l      @basic_89,238,@basic_90,239,@basic_91,243
+       dc.l      @basic_92,244,@basic_93,245,@basic_94,246
+       dc.l      @basic_95,247,@basic_96,248
        xdef      _operandsWithTokens
 _operandsWithTokens:
        dc.b      43,45,42,47,94,62,61,60,0
@@ -26544,7 +26627,7 @@ _atuVarAddr:
        dc.l      @basic_11,@basic_12,@basic_13,@basic_14,@basic_15
        dc.l      @basic_16,@basic_17,@basic_18,@basic_19,@basic_20
        dc.l      @basic_21,@basic_22,@basic_23,@basic_24,@basic_25
-       dc.l      @basic_26,@basic_27
+       dc.l      @basic_26,@basic_27,@basic_28
 @basic_lastVarCacheName0:
        dc.b      0,0,0,0,0,0,0,0
 @basic_lastVarCacheName1:
