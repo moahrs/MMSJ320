@@ -20,7 +20,8 @@
 ; * 25/07/2023  1.0d    Moacir Jr.   Ajuste no basInputGet, quando Get, mandar 1 pro inputLine e sem manipulacoa cursor
 ; * 20/01/2024  1.0e    Moacir Jr.   Colocar para iniciar direto no Basic
 ; * 14/04/2026  1.1a03  Moacir Jr.   Ajustes para por cache variaveis e simplificar parse, retirando recursividade
-; * 18/04/2026  1.2a02  Moacir Jr.   Novas funcoes. Basic Proprio. Ajustes gerais.
+; * 18/04/2026  2.0a02  Moacir Jr.   Novas funcoes. Basic Proprio. Ajustes gerais.
+; * 19/04/2026  2.0a03  Moacir Jr.   While e WEND. Ajustes gerais.
 ; *--------------------------------------------------------------------------------
 ; * Variables Simples: start at 00800000
 ; *   --------------------------------------------------------
@@ -53,7 +54,7 @@
 ; #include "../monitor.h"
 ; #include "../monitorapi.h"
 ; #include "basic.h"
-; #define versionBasic "1.2a02"
+; #define versionBasic "2.0a03"
 ; //#define __TESTE_TOKENIZE__ 1
 ; //#define __DEBUG_ARRAYS__ 1
 ; #define SIMPLE_VAR_CACHE_SLOTS 8
@@ -6592,8 +6593,8 @@ parseExpressionIterative_13:
        cmp.b     #4,D0
        bne       parseExpressionIterative_18
 parseExpressionIterative_20:
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq       parseExpressionIterative_21
 ; {
@@ -6686,8 +6687,8 @@ parseExpressionIterative_28:
        move.b    2(A0),-1803(A6)
 parseExpressionIterative_29:
 ; }
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq       parseExpressionIterative_32
 ; {
@@ -6813,8 +6814,8 @@ parseExpressionIterative_40:
        clr.b     4(A4)
 parseExpressionIterative_41:
 ; }
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq       parseExpressionIterative_42
 ; {
@@ -7141,8 +7142,8 @@ parseExpressionIterative_72:
        clr.b     4(A0)
 parseExpressionIterative_73:
 ; }
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq       parseExpressionIterative_74
 ; {
@@ -7357,8 +7358,8 @@ parseExpressionIterative_97:
        move.l    A0,D4
 ; typeA = valTypeStack[valTop];
        move.b    -86(A6,D3.L),D5
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq       parseExpressionIterative_99
 ; {
@@ -7794,8 +7795,8 @@ parseExpressionIterative_150:
        move.l    A0,D4
 ; typeA = valTypeStack[valTop];
        move.b    -86(A6,D3.L),D5
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq       parseExpressionIterative_152
 ; {
@@ -8400,8 +8401,8 @@ parseExpressionIterative_221:
 parseExpressionIterative_195:
 ; }
 ; }
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq       parseExpressionIterative_235
 ; {
@@ -8438,8 +8439,8 @@ parseExpressionIterative_235:
        bra       parseExpressionIterative_3
 parseExpressionIterative_237:
 ; }
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq.s     parseExpressionIterative_239
 ; {
@@ -12259,7 +12260,7 @@ _findVariable:
        move.l    8(A6),D4
        lea       _itoa.L,A3
        lea       _vErroProc.L,A4
-       lea       _debug2on.L,A5
+       lea       _debugOn.L,A5
 ; unsigned char* vLista = pStartSimpVar;
        move.l    _pStartSimpVar.L,D2
 ; unsigned char* vTemp = pStartSimpVar;
@@ -12296,7 +12297,7 @@ _findVariable:
 ; unsigned char sqtdtam[20];
 ; int vCacheIx;
 ; // Verifica se eh array (tem parenteses logo depois do nome da variavel)
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq       findVariable_1
@@ -12426,7 +12427,7 @@ findVariable_15:
        pea       -48(A6)
        jsr       _getExp
        addq.w    #4,A7
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq       findVariable_17
@@ -12545,7 +12546,7 @@ findVariable_23:
        cmp.b     #44,D0
        bne       findVariable_25
 ; {
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq.s     findVariable_27
@@ -12563,7 +12564,7 @@ findVariable_27:
 ; vTempPointer = *pointerRunProg;
        move.l    _pointerRunProg.L,A0
        move.l    (A0),-36(A6)
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq.s     findVariable_29
@@ -12984,7 +12985,7 @@ findVariable_71:
        cmp.b     #36,D0
        bne       findVariable_78
 ; {
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq       findVariable_80
@@ -13066,7 +13067,7 @@ findVariable_80:
        move.l    D4,-32(A6)
 ; pSrc = vTemp;
        move.l    -154(A6),-28(A6)
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq       findVariable_82
@@ -13100,7 +13101,7 @@ findVariable_84:
        cmp.l     -144(A6),D5
        bge       findVariable_86
 ; {
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq       findVariable_87
@@ -13164,7 +13165,7 @@ findVariable_87:
        move.l    -28(A6),A0
        move.l    -32(A6),A1
        move.b    (A0),(A1)
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq       findVariable_89
@@ -13198,7 +13199,7 @@ findVariable_89:
        bra       findVariable_84
 findVariable_86:
 ; }
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq.s     findVariable_91
@@ -13213,7 +13214,7 @@ findVariable_91:
 ; *pDst = 0x00;
        move.l    -32(A6),A0
        clr.b     (A0)
-; if (*debug2on)
+; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
        beq       findVariable_93
@@ -17000,73 +17001,28 @@ topWhile_3:
        xdef      _pushWhile
 _pushWhile:
        link      A6,#-20
-       movem.l   A2/A3,-(A7)
-       lea       -20(A6),A2
-       lea       @basic_while_sp.L,A3
+       move.l    A2,-(A7)
+       lea       @basic_while_sp.L,A2
 ; unsigned char sqtdtam[20];
 ; if (while_sp >= MAX_WHILE_STACK)
-       move.l    (A3),D0
+       move.l    (A2),D0
        cmp.l     #16,D0
        blt.s     pushWhile_1
 ; return 0;
        clr.l     D0
-       bra       pushWhile_3
+       bra.s     pushWhile_3
 pushWhile_1:
 ; while_ptr_stack[while_sp] = ptr;
-       move.l    (A3),D0
+       move.l    (A2),D0
        lsl.l     #2,D0
        lea       @basic_while_ptr_stack.L,A0
        move.l    8(A6),0(A0,D0.L)
 ; while_sp++;
-       addq.l    #1,(A3)
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq       pushWhile_4
-; {
-; writeLongSerial("Aqui 331.666.0 - [\0");
-       pea       @basic_156.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(while_sp,sqtdtam,10);
-       pea       10
-       move.l    A2,-(A7)
-       move.l    (A3),-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_140.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(ptr,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    8(A6),-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n\0");
-       pea       @basic_141.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-pushWhile_4:
-; }     
+       addq.l    #1,(A2)
 ; return 1;
        moveq     #1,D0
 pushWhile_3:
-       movem.l   (A7)+,A2/A3
+       move.l    (A7)+,A2
        unlk      A6
        rts
 ; }
@@ -17105,51 +17061,20 @@ verifyWhile_3:
        xdef      _popWhile
 _popWhile:
        link      A6,#-20
-       move.l    A2,-(A7)
-       lea       @basic_while_sp.L,A2
 ; unsigned char sqtdtam[20];
 ; if (while_sp <= 0)
-       move.l    (A2),D0
+       move.l    @basic_while_sp.L,D0
        cmp.l     #0,D0
        bgt.s     popWhile_1
 ; return 0;
        clr.l     D0
-       bra       popWhile_3
+       bra.s     popWhile_3
 popWhile_1:
 ; while_sp--;
-       subq.l    #1,(A2)
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq       popWhile_4
-; {
-; writeLongSerial("Aqui 330.666.0 - [\0");
-       pea       @basic_157.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(while_sp,sqtdtam,10);
-       pea       10
-       pea       -20(A6)
-       move.l    (A2),-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       pea       -20(A6)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n\0");
-       pea       @basic_141.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-popWhile_4:
-; }    
+       subq.l    #1,@basic_while_sp.L
 ; return 1;
        moveq     #1,D0
 popWhile_3:
-       move.l    (A7)+,A2
        unlk      A6
        rts
 ; }
@@ -17158,11 +17083,9 @@ popWhile_3:
        xdef      _basWhile
 _basWhile:
        link      A6,#-24
-       movem.l   D2/D3/D4/A2/A3/A4/A5,-(A7)
-       lea       -20(A6),A2
-       lea       _pointerRunProg.L,A3
-       lea       _itoa.L,A4
-       lea       _debugOn.L,A5
+       movem.l   D2/D3/D4/A2/A3,-(A7)
+       lea       _pointerRunProg.L,A2
+       lea       _vErroProc.L,A3
 ; unsigned char *pWhile;
 ; unsigned int vCond = 0;
        clr.l     -24(A6)
@@ -17171,7 +17094,7 @@ _basWhile:
 ; unsigned char vPosWend = 0;
        clr.b     D4
 ; pWhile = *pointerRunProg;
-       move.l    (A3),A0
+       move.l    (A2),A0
        move.l    (A0),D3
 ; pWhile -= 6;
        subq.l    #6,D3
@@ -17190,7 +17113,7 @@ _basWhile:
        bne.s     basWhile_1
 basWhile_3:
 ; *vErroProc = 16;
-       move.l    _vErroProc.L,A0
+       move.l    (A3),A0
        move.w    #16,(A0)
 ; return 0;
        clr.l     D0
@@ -17200,7 +17123,7 @@ basWhile_1:
 ; nextToken();
        jsr       _nextToken
 ; if (*vErroProc) return 0;
-       move.l    _vErroProc.L,A0
+       move.l    (A3),A0
        tst.w     (A0)
        beq.s     basWhile_5
        clr.l     D0
@@ -17208,41 +17131,29 @@ basWhile_1:
 basWhile_5:
 ; if (vCond)
        tst.l     -24(A6)
-       beq       basWhile_7
+       beq.s     basWhile_7
 ; {
-; if (*debugOn)
-       move.l    (A5),A0
-       tst.b     (A0)
-       beq.s     basWhile_9
-; {
-; writeLongSerial("Aqui 334.666.0\r\n\0");
-       pea       @basic_158.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-basWhile_9:
-; }
 ; if (!verifyWhile(pWhile))
        move.l    D3,-(A7)
        jsr       _verifyWhile
        addq.w    #4,A7
        tst.l     D0
-       bne.s     basWhile_13
+       bne.s     basWhile_11
 ; {
 ; if (!pushWhile(pWhile))
        move.l    D3,-(A7)
        jsr       _pushWhile
        addq.w    #4,A7
        tst.l     D0
-       bne.s     basWhile_13
+       bne.s     basWhile_11
 ; {
 ; *vErroProc = 29;
-       move.l    _vErroProc.L,A0
+       move.l    (A3),A0
        move.w    #29,(A0)
 ; return 0;
        clr.l     D0
        bra       basWhile_4
-basWhile_13:
+basWhile_11:
        bra       basWhile_8
 basWhile_7:
 ; }
@@ -17253,149 +17164,53 @@ basWhile_7:
 ; popWhile();
        jsr       _popWhile
 ; vTempPointer = *pointerRunProg;
-       move.l    (A3),A0
+       move.l    (A2),A0
        move.l    (A0),D2
-; if (*debugOn)
-       move.l    (A5),A0
-       tst.b     (A0)
-       beq       basWhile_15
-; {
-; writeLongSerial("Aqui 334.666.1 - [\0");
-       pea       @basic_159.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(*vTempPointer,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D2,A0
-       move.b    (A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_140.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(*pointerRunProg,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    (A3),A0
-       move.l    (A0),-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n\0");
-       pea       @basic_141.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-basWhile_15:
-; }
 ; while(1) // Search WEND
-basWhile_17:
+basWhile_13:
 ; {
 ; *pointerRunProg = *pointerRunProg + 1;
-       move.l    (A3),A0
+       move.l    (A2),A0
        addq.l    #1,(A0)
 ; vTempPointer = *pointerRunProg;
-       move.l    (A3),A0
+       move.l    (A2),A0
        move.l    (A0),D2
 ; if (*vTempPointer == 0xBC) // WHILE
        move.l    D2,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #188,D0
-       bne.s     basWhile_20
+       bne.s     basWhile_16
 ; vPosWend++;
        addq.b    #1,D4
-basWhile_20:
+basWhile_16:
 ; if (*vTempPointer == 0xBD)
        move.l    D2,A0
        move.b    (A0),D0
        and.w     #255,D0
        cmp.w     #189,D0
-       bne.s     basWhile_25
+       bne.s     basWhile_21
 ; {
 ; if (vPosWend)
        tst.b     D4
-       beq.s     basWhile_24
+       beq.s     basWhile_20
 ; vPosWend--;
        subq.b    #1,D4
-       bra.s     basWhile_25
-basWhile_24:
+       bra.s     basWhile_21
+basWhile_20:
 ; else
 ; break;
-       bra.s     basWhile_19
-basWhile_25:
-       bra       basWhile_17
-basWhile_19:
+       bra.s     basWhile_15
+basWhile_21:
+       bra       basWhile_13
+basWhile_15:
 ; }
 ; }        
-; if (*debugOn)
-       move.l    (A5),A0
-       tst.b     (A0)
-       beq       basWhile_26
-; {
-; writeLongSerial("Aqui 334.666.2 - [\0");
-       pea       @basic_160.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(*vTempPointer,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D2,A0
-       move.b    (A0),D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]-[");
-       pea       @basic_140.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(*pointerRunProg,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    (A3),A0
-       move.l    (A0),-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n\0");
-       pea       @basic_141.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-basWhile_26:
-; }
 ; *pointerRunProg = *pointerRunProg + 2;
-       move.l    (A3),A0
+       move.l    (A2),A0
        addq.l    #2,(A0)
 ; *changedPointer = *pointerRunProg;
-       move.l    (A3),A0
+       move.l    (A2),A0
        move.l    _changedPointer.L,A1
        move.l    (A0),(A1)
 basWhile_8:
@@ -17403,7 +17218,7 @@ basWhile_8:
 ; return 0;
        clr.l     D0
 basWhile_4:
-       movem.l   (A7)+,D2/D3/D4/A2/A3/A4/A5
+       movem.l   (A7)+,D2/D3/D4/A2/A3
        unlk      A6
        rts
 ; }
@@ -17412,89 +17227,31 @@ basWhile_4:
        xdef      _basWend
 _basWend:
        link      A6,#-24
-       movem.l   D2/A2,-(A7)
-       lea       -20(A6),A2
+       move.l    D2,-(A7)
 ; unsigned char *pWhile;
 ; int retCond;
 ; unsigned char sqtdtam[20];
 ; pWhile = topWhile();
        jsr       _topWhile
        move.l    D0,D2
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq       basWend_1
-; {
-; writeLongSerial("Aqui 335.666.0 - [\0");
-       pea       @basic_161.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(pWhile,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    D2,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n\0");
-       pea       @basic_141.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-basWend_1:
-; }
 ; if (pWhile == (unsigned char *)0){
        tst.l     D2
-       bne.s     basWend_3
+       bne.s     basWend_1
 ; *vErroProc = 28;
        move.l    _vErroProc.L,A0
        move.w    #28,(A0)
 ; return 0;
        clr.l     D0
-       bra       basWend_5
-basWend_3:
+       bra.s     basWend_3
+basWend_1:
 ; }
 ; *changedPointer = pWhile;
        move.l    _changedPointer.L,A0
        move.l    D2,(A0)
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq       basWend_6
-; {
-; writeLongSerial("Aqui 335.666.1 - [\0");
-       pea       @basic_162.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(*changedPointer,sqtdtam,16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    _changedPointer.L,A0
-       move.l    (A0),-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n\0");
-       pea       @basic_141.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-basWend_6:
-; }
 ; return 0;
        clr.l     D0
-basWend_5:
-       movem.l   (A7)+,D2/A2
+basWend_3:
+       move.l    (A7)+,D2
        unlk      A6
        rts
 ; }
@@ -18436,13 +18193,13 @@ _basFor:
 ; char vResLog3 = 0, vResLog4 = 0;
        clr.b     -1(A6)
        moveq     #0,D7
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq.s     basFor_1
 ; {
 ; writeLongSerial("Aqui 444.666.0\r\n");
-       pea       @basic_163.L
+       pea       @basic_156.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -18457,13 +18214,13 @@ basFor_1:
        clr.l     D0
        bra       basFor_5
 basFor_3:
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq.s     basFor_6
 ; {
 ; writeLongSerial("Aqui 444.666.1]\r\n");
-       pea       @basic_164.L
+       pea       @basic_157.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -18558,13 +18315,13 @@ basFor_14:
 ; *pointerRunProg = *pointerRunProg + 1;
        move.l    (A3),A0
        addq.l    #1,(A0)
-; if (*debug2on)
-       move.l    _debug2on.L,A0
+; if (*debugOn)
+       move.l    _debugOn.L,A0
        tst.b     (A0)
        beq       basFor_16
 ; {
 ; writeLongSerial("Aqui 444.666.2 varName-[");
-       pea       @basic_165.L
+       pea       @basic_158.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -27079,8 +26836,8 @@ _basRestore:
 @basic_100:
        dc.b      78,79,84,0
 @basic_101:
-       dc.b      77,77,83,74,45,66,65,83,73,67,32,118,49,46,50
-       dc.b      97,48,50,0
+       dc.b      77,77,83,74,45,66,65,83,73,67,32,118,50,46,48
+       dc.b      97,48,51,0
 @basic_102:
        dc.b      13,10,0
 @basic_103:
@@ -27221,33 +26978,12 @@ _basRestore:
        dc.b      65,113,117,105,32,51,51,51,46,54,54,54,46,50
        dc.b      45,91,0
 @basic_156:
-       dc.b      65,113,117,105,32,51,51,49,46,54,54,54,46,48
-       dc.b      32,45,32,91,0
-@basic_157:
-       dc.b      65,113,117,105,32,51,51,48,46,54,54,54,46,48
-       dc.b      32,45,32,91,0
-@basic_158:
-       dc.b      65,113,117,105,32,51,51,52,46,54,54,54,46,48
-       dc.b      13,10,0
-@basic_159:
-       dc.b      65,113,117,105,32,51,51,52,46,54,54,54,46,49
-       dc.b      32,45,32,91,0
-@basic_160:
-       dc.b      65,113,117,105,32,51,51,52,46,54,54,54,46,50
-       dc.b      32,45,32,91,0
-@basic_161:
-       dc.b      65,113,117,105,32,51,51,53,46,54,54,54,46,48
-       dc.b      32,45,32,91,0
-@basic_162:
-       dc.b      65,113,117,105,32,51,51,53,46,54,54,54,46,49
-       dc.b      32,45,32,91,0
-@basic_163:
        dc.b      65,113,117,105,32,52,52,52,46,54,54,54,46,48
        dc.b      13,10,0
-@basic_164:
+@basic_157:
        dc.b      65,113,117,105,32,52,52,52,46,54,54,54,46,49
        dc.b      93,13,10,0
-@basic_165:
+@basic_158:
        dc.b      65,113,117,105,32,52,52,52,46,54,54,54,46,50
        dc.b      32,118,97,114,78,97,109,101,45,91,0
        xdef      _keywords_count

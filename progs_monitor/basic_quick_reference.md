@@ -10,6 +10,7 @@ Rotinas internas sem token continuam fora.
 | `LET` | `LET <var> = <expr>` | Atribui valor a uma variável. O `LET` é opcional; `A$="OI"` funciona do mesmo jeito. | `LET A = 10` |
 | `PRINT` | `PRINT <valor>[;|, <valor> ...]` | Mostra texto ou valores na tela. `;` e `,` são aceitos como separadores. | `PRINT "X=";X` |
 | `IF` | `IF <expr> THEN <comando>` | Executa algo somente quando a expressão for verdadeira. | `IF A>10 THEN PRINT "OK"` |
+| `WHILE` | `WHILE <expr> ... <comando> .... WEND` | Executa loop enquanto a expressão for verdadeira. | `5 A=15 10 WHILE A>10 20 PRINT "OK" 30 A=A-1 40 WEND` |
 | `FOR` | `FOR <var> = <inicio> TO <final> [STEP <passo>]` | Inicia laço contado. A variável pode ser criada automaticamente. | `FOR I = 1 TO 10 STEP 2` |
 | `NEXT` | `NEXT [<var>]` | Fecha o laço `FOR` e avança para a próxima iteração. | `NEXT I` |
 | `GOTO` | `GOTO <linha>` | Salta para uma linha do programa sem retorno. | `GOTO 100` |

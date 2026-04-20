@@ -19,7 +19,8 @@
 * 25/07/2023  1.0d    Moacir Jr.   Ajuste no basInputGet, quando Get, mandar 1 pro inputLine e sem manipulacoa cursor
 * 20/01/2024  1.0e    Moacir Jr.   Colocar para iniciar direto no Basic
 * 14/04/2026  1.1a03  Moacir Jr.   Ajustes para por cache variaveis e simplificar parse, retirando recursividade
-* 18/04/2026  1.2a02  Moacir Jr.   Novas funcoes. Basic Proprio. Ajustes gerais.
+* 18/04/2026  2.0a02  Moacir Jr.   Novas funcoes. Basic Proprio. Ajustes gerais.
+* 19/04/2026  2.0a03  Moacir Jr.   While e WEND. Ajustes gerais.
 *--------------------------------------------------------------------------------
 * Variables Simples: start at 00800000
 *   --------------------------------------------------------
@@ -53,7 +54,7 @@
 #include "../monitorapi.h"
 #include "basic.h"
 
-#define versionBasic "1.2a02"
+#define versionBasic "2.0a03"
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
@@ -2433,7 +2434,7 @@ void parseExpressionIterative(unsigned char *result) {
             }
 
             if (tokenType == NUMBER || tokenType == VARIABLE || tokenType == QUOTE || tokenType == COMMAND) {
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.5 - [\0");
 itoa(tokenType,sqtdtam,16);
@@ -2460,7 +2461,7 @@ writeLongSerial("]\r\n\0");
                         valueType = token[2];
                     }
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.0 - [\0");
 itoa(*(char*)token,sqtdtam,16);
@@ -2498,7 +2499,7 @@ writeLongSerial("]\r\n\0");
                         temp[4] = 0x00;
                     }
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.1 - [\0");
 itoa(*(unsigned int*)vRet,sqtdtam,16);
@@ -2598,7 +2599,7 @@ writeLongSerial("]\r\n\0");
                     valStack[valTop][4] = 0x00;
                 }
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.3 - [\0");
 itoa(*(unsigned int*)temp,sqtdtam,16);
@@ -2682,7 +2683,7 @@ writeLongSerial("]\r\n\0");
                 a = valStack[valTop];
                 typeA = valTypeStack[valTop];
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.4 - [\0");
 itoa(*(unsigned int*)a,sqtdtam,10);
@@ -2797,7 +2798,7 @@ writeLongSerial("]\r\n\0");
                 a = valStack[valTop];
                 typeA = valTypeStack[valTop];
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.2 - [\0");
 itoa(*(unsigned int*)a,sqtdtam,10);
@@ -2966,7 +2967,7 @@ writeLongSerial("]\r\n\0");
             valTypeStack[valTop] = typeA;
         }
     }
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.78 - [\0");
 itoa(valTop,sqtdtam,10);
@@ -2978,7 +2979,7 @@ writeLongSerial("]\r\n\0");
         *vErroProc = 14;
         return;
     }
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.79\r\n\0");
 }
@@ -4437,7 +4438,7 @@ long findVariable(unsigned char* pVariable)
 
     // Verifica se eh array (tem parenteses logo depois do nome da variavel)
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.0 varName-[");
 itoa(pVariable[0],sqtdtam,16);
@@ -4481,7 +4482,7 @@ writeLongSerial("]\r\n");
 
                 getExp(&vTempDim);
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.99 varName-[");
 itoa(vTempDim,sqtdtam,16);
@@ -4516,7 +4517,7 @@ writeLongSerial("]\r\n");
 
             if (*token == ',')
             {
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.98 varName-\r\n\0");
 }
@@ -4524,7 +4525,7 @@ writeLongSerial("Aqui 333.666.98 varName-\r\n\0");
                 *pointerRunProg = *pointerRunProg + 1;
 
                 vTempPointer = *pointerRunProg;
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.97 varName-\r\n\0");
 itoa(*pointerRunProg,sqtdtam,16);
@@ -4664,7 +4665,7 @@ writeLongSerial(sqtdtam);
             // Pelo tipo da variavel, ja retorna na variavel de nome o conteudo da variavel
             if (*vLista == '$')
             {
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.0-[");
 writeSerial(*vLista);
@@ -4683,7 +4684,7 @@ writeLongSerial("]\r\n");
                 pDst = pVariable;
                 pSrc = vTemp;
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.1-[");
 itoa(vTemp,sqtdtam,16);
@@ -4692,7 +4693,7 @@ writeLongSerial("]-[");
 }
                 for (ix = 0; ix < iy; ix++)
                 {
-if (*debug2on)
+if (*debugOn)
 {
 itoa(ix,sqtdtam,16);
 writeLongSerial(sqtdtam);
@@ -4705,7 +4706,7 @@ writeLongSerial(sqtdtam);
 writeLongSerial("]-[");
 }
                       *pDst = *pSrc;
-if (*debug2on)
+if (*debugOn)
 {
         itoa(*pDst,sqtdtam,16);
 writeLongSerial(sqtdtam);
@@ -4714,14 +4715,14 @@ writeLongSerial("]-[");
                       pDst++;
                       pSrc++;
                 }
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("]\r\n");
 }
 
                   *pDst = 0x00;
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.2-[");
 itoa(vOffSet,sqtdtam,16);
@@ -6176,16 +6177,7 @@ int pushWhile(unsigned char *ptr)
 
     while_ptr_stack[while_sp] = ptr;
     while_sp++;
-if (*debugOn)
-{
-writeLongSerial("Aqui 331.666.0 - [\0");
-itoa(while_sp,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(ptr,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");
-}     
+
     return 1;
 }
 
@@ -6207,13 +6199,7 @@ int popWhile(void)
         return 0;
 
     while_sp--;
-if (*debugOn)
-{
-writeLongSerial("Aqui 330.666.0 - [\0");
-itoa(while_sp,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");
-}    
+
     return 1;
 }
 
@@ -6240,10 +6226,6 @@ int basWhile(void)
 
     if (vCond)
     {
-if (*debugOn)
-{
-writeLongSerial("Aqui 334.666.0\r\n\0");
-}
         if (!verifyWhile(pWhile))
         {
             if (!pushWhile(pWhile))
@@ -6258,16 +6240,7 @@ writeLongSerial("Aqui 334.666.0\r\n\0");
         popWhile();
 
         vTempPointer = *pointerRunProg;
-if (*debugOn)
-{
-writeLongSerial("Aqui 334.666.1 - [\0");
-itoa(*vTempPointer,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(*pointerRunProg,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");
-}
+
         while(1) // Search WEND
         {
             *pointerRunProg = *pointerRunProg + 1;
@@ -6284,16 +6257,6 @@ writeLongSerial("]\r\n\0");
                     break;
             }
         }        
-if (*debugOn)
-{
-writeLongSerial("Aqui 334.666.2 - [\0");
-itoa(*vTempPointer,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(*pointerRunProg,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");
-}
 
         *pointerRunProg = *pointerRunProg + 2;
 
@@ -6311,27 +6274,12 @@ int basWend(void)
 
     pWhile = topWhile();
 
-if (*debugOn)
-{
-writeLongSerial("Aqui 335.666.0 - [\0");
-itoa(pWhile,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");
-}
-
     if (pWhile == (unsigned char *)0){
         *vErroProc = 28;
         return 0;
     }
 
     *changedPointer = pWhile;
-if (*debugOn)
-{
-writeLongSerial("Aqui 335.666.1 - [\0");
-itoa(*changedPointer,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");
-}
 
     return 0;
 }
@@ -6675,7 +6623,7 @@ int basFor(void)
     char vResLog1 = 0, vResLog2 = 0;
     char vResLog3 = 0, vResLog4 = 0;
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 444.666.0\r\n");
 }
@@ -6683,7 +6631,7 @@ writeLongSerial("Aqui 444.666.0\r\n");
     basLet();
     if (*vErroProc) return 0;
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 444.666.1]\r\n");
 }
@@ -6718,7 +6666,7 @@ writeLongSerial("Aqui 444.666.1]\r\n");
 
     *pointerRunProg = *pointerRunProg + 1;
 
-if (*debug2on)
+if (*debugOn)
 {
 writeLongSerial("Aqui 444.666.2 varName-[");
 itoa(*pointerRunProg,sqtdtam,16);
