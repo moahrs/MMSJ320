@@ -60,6 +60,7 @@
 #define SIMPLE_VAR_CACHE_SLOTS 8
 #define PARSER_STACK_SIZE 32
 #define PAINT_STACK_SIZE 4096
+#define MAX_WHILE_STACK   16
 
 unsigned char *vvdgBASd = 0x00400041; // VDP TMS9118 Data Mode
 unsigned char *vvdgBASc = 0x00400043; // VDP TMS9118 Registers/Address Mode
@@ -72,6 +73,9 @@ static unsigned char paintStackY[PAINT_STACK_SIZE];
 static unsigned int paintPatternTable = 0x0000;
 static unsigned int paintColorTable = 0x2000;
 static unsigned char *paintVdpData = (unsigned char *)0x00400041;
+static unsigned char *while_ptr_stack[MAX_WHILE_STACK];
+static int while_sp = 0;
+
 /*static unsigned char valStack[32][50];
 static unsigned char opStack[PARSER_STACK_SIZE];
 static unsigned char opPrecStack[PARSER_STACK_SIZE];
@@ -169,6 +173,7 @@ void main(void)
     *addrFirstLineNumber = 0;
     *traceOn = 0;
     *debugOn = 0;
+    *debug2on = 0;
     *lastHgrX = 0;
     *lastHgrY = 0;
     spriteSizeSelBas = 0;
@@ -1930,6 +1935,12 @@ int executeToken(unsigned char pToken)
         case 0xBB:  // ONERR
             vReta = basOnErr();
             break;
+        case 0xBC:  // WHILE
+            vReta = basWhile();
+            break;
+        case 0xBD:  // WEND
+            vReta = basWend();
+            break;
         case 0xC4:  // ASC
             vReta = basAsc();
             break;
@@ -2422,7 +2433,7 @@ void parseExpressionIterative(unsigned char *result) {
             }
 
             if (tokenType == NUMBER || tokenType == VARIABLE || tokenType == QUOTE || tokenType == COMMAND) {
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 888.666.5 - [\0");
 itoa(tokenType,sqtdtam,16);
@@ -2449,7 +2460,7 @@ writeLongSerial("]\r\n\0");
                         valueType = token[2];
                     }
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 888.666.0 - [\0");
 itoa(*(char*)token,sqtdtam,16);
@@ -2487,7 +2498,7 @@ writeLongSerial("]\r\n\0");
                         temp[4] = 0x00;
                     }
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 888.666.1 - [\0");
 itoa(*(unsigned int*)vRet,sqtdtam,16);
@@ -2587,7 +2598,7 @@ writeLongSerial("]\r\n\0");
                     valStack[valTop][4] = 0x00;
                 }
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 888.666.3 - [\0");
 itoa(*(unsigned int*)temp,sqtdtam,16);
@@ -2671,7 +2682,7 @@ writeLongSerial("]\r\n\0");
                 a = valStack[valTop];
                 typeA = valTypeStack[valTop];
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 888.666.4 - [\0");
 itoa(*(unsigned int*)a,sqtdtam,10);
@@ -2786,7 +2797,7 @@ writeLongSerial("]\r\n\0");
                 a = valStack[valTop];
                 typeA = valTypeStack[valTop];
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 888.666.2 - [\0");
 itoa(*(unsigned int*)a,sqtdtam,10);
@@ -2955,7 +2966,7 @@ writeLongSerial("]\r\n\0");
             valTypeStack[valTop] = typeA;
         }
     }
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 888.666.78 - [\0");
 itoa(valTop,sqtdtam,10);
@@ -2967,7 +2978,7 @@ writeLongSerial("]\r\n\0");
         *vErroProc = 14;
         return;
     }
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 888.666.79\r\n\0");
 }
@@ -4426,7 +4437,7 @@ long findVariable(unsigned char* pVariable)
 
     // Verifica se eh array (tem parenteses logo depois do nome da variavel)
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 333.666.0 varName-[");
 itoa(pVariable[0],sqtdtam,16);
@@ -4470,7 +4481,7 @@ writeLongSerial("]\r\n");
 
                 getExp(&vTempDim);
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 333.666.99 varName-[");
 itoa(vTempDim,sqtdtam,16);
@@ -4505,7 +4516,7 @@ writeLongSerial("]\r\n");
 
             if (*token == ',')
             {
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 333.666.98 varName-\r\n\0");
 }
@@ -4513,7 +4524,7 @@ writeLongSerial("Aqui 333.666.98 varName-\r\n\0");
                 *pointerRunProg = *pointerRunProg + 1;
 
                 vTempPointer = *pointerRunProg;
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 333.666.97 varName-\r\n\0");
 itoa(*pointerRunProg,sqtdtam,16);
@@ -4653,7 +4664,7 @@ writeLongSerial(sqtdtam);
             // Pelo tipo da variavel, ja retorna na variavel de nome o conteudo da variavel
             if (*vLista == '$')
             {
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 333.666.0-[");
 writeSerial(*vLista);
@@ -4672,7 +4683,7 @@ writeLongSerial("]\r\n");
                 pDst = pVariable;
                 pSrc = vTemp;
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 333.666.1-[");
 itoa(vTemp,sqtdtam,16);
@@ -4681,7 +4692,7 @@ writeLongSerial("]-[");
 }
                 for (ix = 0; ix < iy; ix++)
                 {
-if (*debugOn)
+if (*debug2on)
 {
 itoa(ix,sqtdtam,16);
 writeLongSerial(sqtdtam);
@@ -4694,7 +4705,7 @@ writeLongSerial(sqtdtam);
 writeLongSerial("]-[");
 }
                       *pDst = *pSrc;
-if (*debugOn)
+if (*debug2on)
 {
         itoa(*pDst,sqtdtam,16);
 writeLongSerial(sqtdtam);
@@ -4703,14 +4714,14 @@ writeLongSerial("]-[");
                       pDst++;
                       pSrc++;
                 }
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("]\r\n");
 }
 
                   *pDst = 0x00;
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 333.666.2-[");
 itoa(vOffSet,sqtdtam,16);
@@ -6095,7 +6106,9 @@ int basDim(void)
 }
 
 //--------------------------------------------------------------------------------------
-//
+// Processar condição
+// Syntaxe:
+//          if <condition> then <command>
 //--------------------------------------------------------------------------------------
 int basIf(void)
 {
@@ -6136,6 +6149,189 @@ int basIf(void)
             vTempPointer = *pointerRunProg;
         }
     }
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Laço se condicao True, processa o que tem dentro, até o wend
+// Syntaxe:
+//          while <condition>
+//          <commands>
+//          wend
+//--------------------------------------------------------------------------------------
+unsigned char *topWhile(void)
+{
+    if (while_sp <= 0)
+        return (unsigned char *)0;
+
+    return while_ptr_stack[while_sp - 1];
+}
+
+int pushWhile(unsigned char *ptr)
+{
+    unsigned char sqtdtam[20];
+    if (while_sp >= MAX_WHILE_STACK)
+        return 0;
+
+    while_ptr_stack[while_sp] = ptr;
+    while_sp++;
+if (*debugOn)
+{
+writeLongSerial("Aqui 331.666.0 - [\0");
+itoa(while_sp,sqtdtam,10);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(ptr,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}     
+    return 1;
+}
+
+int verifyWhile(unsigned char *ptr)
+{
+    if (while_sp == 0)
+        return 0;
+
+    if (while_ptr_stack[while_sp - 1] == ptr)
+        return 1;
+
+    return 0;
+}
+
+int popWhile(void)
+{
+    unsigned char sqtdtam[20];
+    if (while_sp <= 0)
+        return 0;
+
+    while_sp--;
+if (*debugOn)
+{
+writeLongSerial("Aqui 330.666.0 - [\0");
+itoa(while_sp,sqtdtam,10);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}    
+    return 1;
+}
+
+int basWhile(void)
+{
+    unsigned char *pWhile;
+    unsigned int vCond = 0;
+    unsigned char *vTempPointer;
+    unsigned char sqtdtam[20];
+    unsigned char vPosWend = 0;
+
+    pWhile = *pointerRunProg;
+    pWhile -= 6;
+
+    getExp(&vCond); // get target value
+
+    if (*value_type == '$' || *value_type == '#') {
+        *vErroProc = 16;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (vCond)
+    {
+if (*debugOn)
+{
+writeLongSerial("Aqui 334.666.0\r\n\0");
+}
+        if (!verifyWhile(pWhile))
+        {
+            if (!pushWhile(pWhile))
+            {
+                *vErroProc = 29;
+                return 0;
+            }
+        }
+    }
+    else
+    {
+        popWhile();
+
+        vTempPointer = *pointerRunProg;
+if (*debugOn)
+{
+writeLongSerial("Aqui 334.666.1 - [\0");
+itoa(*vTempPointer,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*pointerRunProg,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+        while(1) // Search WEND
+        {
+            *pointerRunProg = *pointerRunProg + 1;
+            vTempPointer = *pointerRunProg;
+
+            if (*vTempPointer == 0xBC) // WHILE
+                vPosWend++;
+
+            if (*vTempPointer == 0xBD)
+            {
+                if (vPosWend)
+                    vPosWend--;
+                else
+                    break;
+            }
+        }        
+if (*debugOn)
+{
+writeLongSerial("Aqui 334.666.2 - [\0");
+itoa(*vTempPointer,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*pointerRunProg,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+
+        *pointerRunProg = *pointerRunProg + 2;
+
+        *changedPointer = *pointerRunProg;
+    }
+
+    return 0;
+}
+
+int basWend(void)
+{
+    unsigned char *pWhile;
+    int retCond;
+    unsigned char sqtdtam[20];
+
+    pWhile = topWhile();
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 335.666.0 - [\0");
+itoa(pWhile,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+
+    if (pWhile == (unsigned char *)0){
+        *vErroProc = 28;
+        return 0;
+    }
+
+    *changedPointer = pWhile;
+if (*debugOn)
+{
+writeLongSerial("Aqui 335.666.1 - [\0");
+itoa(*changedPointer,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
 
     return 0;
 }
@@ -6479,7 +6675,7 @@ int basFor(void)
     char vResLog1 = 0, vResLog2 = 0;
     char vResLog3 = 0, vResLog4 = 0;
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 444.666.0\r\n");
 }
@@ -6487,7 +6683,7 @@ writeLongSerial("Aqui 444.666.0\r\n");
     basLet();
     if (*vErroProc) return 0;
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 444.666.1]\r\n");
 }
@@ -6522,7 +6718,7 @@ writeLongSerial("Aqui 444.666.1]\r\n");
 
     *pointerRunProg = *pointerRunProg + 1;
 
-if (*debugOn)
+if (*debug2on)
 {
 writeLongSerial("Aqui 444.666.2 varName-[");
 itoa(*pointerRunProg,sqtdtam,16);
@@ -6619,6 +6815,8 @@ writeLongSerial("]\r\n");
                 }
             }
         }
+
+        *changedPointer = *pointerRunProg;
     }
 
     return 0;

@@ -96,6 +96,7 @@ unsigned char *token                = 0x008FED6E; //
 unsigned char *varName              = 0x008FEC6E; // ja esta ok
 unsigned char *traceOn              = 0x008FEC66; // Mostra numero linhas durante execucao, para debug
 unsigned char *debugOn              = 0x008FEC64; // Mostra debug, para debug
+unsigned char *debug2on             = 0x008FEC65; // Mostra debug, para debug
 unsigned long *gosubStack           = 0x008FE966; // ja esta ok stack for gosub/return
 unsigned long *vDataFirst           = 0x008FE962; // 
 unsigned long *vDataLineAtu         = 0x008FE95E; // 
@@ -126,7 +127,7 @@ static unsigned char *listError[]= {
     /* 15 */ "?Unbalanced parentheses",
     /* 16 */ "?Incompatible types",
     /* 17 */ "?Line number expected",
-    /* 18 */ "?Comma Espected",
+    /* 18 */ "?Comma Expected",
     /* 19 */ "?Timeout",
     /* 20 */ "?Load with Errors",
     /* 21 */ "?Size error",
@@ -135,7 +136,9 @@ static unsigned char *listError[]= {
     /* 24 */ "?Wrong mode resolution",
     /* 25 */ "?Illegal position",
     /* 26 */ "?Out of data",
-    /* 27 */ "?Illegal Operation"
+    /* 27 */ "?Illegal Operation",
+    /* 28 */ "?WEND without WHILE",
+    /* 29 */ "?Too many nested WHILE"
 };
 
 // -------------------------------------------------------------------------------
@@ -185,6 +188,8 @@ static const struct keyword_token keywords[] =
   {"LINE",    0xB9},   // .. .. ok
   {"AT",      0xBA},   // .. .. ok
   {"ONERR",   0xBB},   // .. .. ok
+  {"WHILE",   0xBC},   // .. .. ok
+  {"WEND",    0xBD},   // .. .. ok
   {"ASC",     0xC4},   // .. .. ok
   {"PEEK",    0xCD},   // .. .. ok
   {"POKE",    0xCE},   // .. .. ok
@@ -304,6 +309,9 @@ void gosubPush(unsigned long i);
 unsigned long gosubPop(void);
 int procParam(unsigned char tipoRetorno, unsigned char temParenteses, unsigned char tipoSeparador, unsigned char qtdParam, unsigned char *tipoParams,  unsigned char *retParams);
 void fillRect(int x1, int y1, int x2, int y2, int fillColor);
+unsigned char *topWhile(void);
+int pushWhile(unsigned char *ptr);
+int popWhile(void);
 
 // -------------------------------------------------------------------------------
 // Funcoes dos Comandos Basic
@@ -357,6 +365,8 @@ int basLine(void);
 int basRead(void);
 int basRestore(void);
 int basTrig(unsigned char pFunc);
+int basWhile(void);
+int basWend(void);
 
 // -------------------------------------------------------------------------------
 
