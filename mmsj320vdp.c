@@ -31,6 +31,13 @@ unsigned int color_table_size;
 //-----------------------------------------------------------------------------
 // VDP Functions
 //-----------------------------------------------------------------------------
+void vdp_delay(void)
+{
+    volatile int i;
+    for (i = 0; i < 10; i++);
+}
+
+//-----------------------------------------------------------------------------
 void setRegister(unsigned char registerIndex, unsigned char value)
 {
     *vvdgc = value;
@@ -272,6 +279,7 @@ void vdp_set_sprite_pattern(unsigned char number, const unsigned char *sprite)
         for (i = 0; i<32; i++)
         {
             *vvdgd = (sprite[i]);
+            vdp_delay();
         }
     }
     else
@@ -280,6 +288,7 @@ void vdp_set_sprite_pattern(unsigned char number, const unsigned char *sprite)
         for (i = 0; i<8; i++)
         {
             *vvdgd = (sprite[i]);
+            vdp_delay();
         }
     }
 }
@@ -288,18 +297,23 @@ void vdp_set_sprite_pattern(unsigned char number, const unsigned char *sprite)
 void vdp_sprite_color(unsigned int addr, unsigned char color)
 {
     unsigned char ecclr;
+    unsigned char dummy;
 
     setReadAddress(addr + 3);
+    dummy = *vvdgd;  // joga fora
     ecclr = *vvdgd & 0x80 | (color & 0x0F);
     setWriteAddress(addr + 3);
     *vvdgd = (ecclr);
+    vdp_delay();
 }
 
 //-----------------------------------------------------------------------------
 Sprite_attributes vdp_sprite_get_attributes(unsigned int addr)
 {
+    unsigned char dummy;
     Sprite_attributes attrs;
     setReadAddress(addr);
+    dummy = *vvdgd;  // joga fora
     attrs.y = *vvdgd;
     attrs.x = *vvdgd;
     attrs.name_ptr = *vvdgd;
@@ -313,18 +327,17 @@ Sprite_attributes vdp_sprite_get_position(unsigned int addr)
     unsigned char x;
     unsigned char eccr;
     unsigned char vdumbread;
+    unsigned char dummy;
     Sprite_attributes attrs;
     setReadAddress(addr);
-
+    dummy = *vvdgd;  // joga fora
     attrs.y = *vvdgd;
-
     x = *vvdgd;
-
     vdumbread = *vvdgd;
-
     eccr = *vvdgd;
 
     attrs.x = eccr & 0x80 ? x : x+32;
+    
     return attrs;
 }
 
@@ -334,7 +347,17 @@ unsigned int vdp_sprite_init(unsigned char name, unsigned char priority, unsigne
     unsigned int addr = sprite_attribute_table + 4*priority;
     unsigned char byteVdp;
 
-    while (1)
+    setWriteAddress(addr);
+    *vvdgd = 0;
+    vdp_delay();
+    *vvdgd = 0;
+    vdp_delay();
+    *vvdgd = (4*name);
+    vdp_delay();
+    *vvdgd = (0x80 | (color & 0xF));
+    vdp_delay();
+
+/*    while (1)
     {
         setWriteAddress(addr);
 
@@ -345,6 +368,7 @@ unsigned int vdp_sprite_init(unsigned char name, unsigned char priority, unsigne
             *vvdgd = (4*name);
         else
             *vvdgd = (4*name);
+
         *vvdgd = (0x80 | (color & 0xF));
 
         setReadAddress(addr);
@@ -367,7 +391,7 @@ unsigned int vdp_sprite_init(unsigned char name, unsigned char priority, unsigne
             continue;
 
         break;
-    }
+    }*/
 
     return addr;
 }
@@ -387,11 +411,14 @@ unsigned char vdp_sprite_set_position(unsigned int addr, unsigned int x, unsigne
 
     setWriteAddress(addr);
     *vvdgd = y;
-    setWriteAddress(addr + 1);
+    vdp_delay();
     *vvdgd = xpos;
+    vdp_delay();
 
     setWriteAddress(addr + 3);
     *vvdgd = ((ec << 7) | color);
+    vdp_delay();
+
     return read_status_reg();
 }
 

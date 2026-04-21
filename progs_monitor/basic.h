@@ -37,19 +37,19 @@ unsigned short videoCursorPosRowY;  // Posical atual do cursor na linha (0 a 191
 #define USE_ITERATIVE_PARSER // Comente para usar o parser antigo
 
 #ifdef RUN_ON_FLASH
-  unsigned char *pStartSimpVar        = 0x00800000;   // Area Variaveis Simples
-  unsigned char *pStartArrayVar       = 0x00803000;   // Area Arrays
-  unsigned char *pStartString         = 0x00810000;   // Area Strings
-  unsigned char *pStartProg           = 0x00830000;   // Area Programa  deve ser 0x00810000
-  unsigned char *pStartXBasLoad       = 0x00890000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
-  unsigned char *pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
+  volatile unsigned char *pStartSimpVar        ; //= 0x00800000;   // Area Variaveis Simples
+  volatile unsigned char *pStartArrayVar       ; //= 0x00803000;   // Area Arrays
+  volatile unsigned char *pStartString         ; //= 0x00810000;   // Area Strings
+  volatile unsigned char *pStartProg           ; //= 0x00830000;   // Area Programa  deve ser 0x00810000
+  volatile unsigned char *pStartXBasLoad       ; //= 0x00890000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+  volatile unsigned char *pStartStack          ; //= 0x008FE000;   // Area variaveis sistema e stack pointer
 #else
-  unsigned char *pStartSimpVar        = 0x00800000;   // Area Variaveis Simples
-  unsigned char *pStartArrayVar       = 0x00803000;   // Area Arrays
-  unsigned char *pStartString         = 0x00830000;   // Area Strings
-  unsigned char *pStartProg           = 0x00850000;   // Area Programa  deve ser 0x00810000
-  unsigned char *pStartXBasLoad       = 0x008B0000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
-  unsigned char *pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
+  volatile unsigned char *pStartSimpVar        ; // = 0x00800000;   // Area Variaveis Simples
+  volatile unsigned char *pStartArrayVar       ; // = 0x00803000;   // Area Arrays
+  volatile unsigned char *pStartString         ; // = 0x00830000;   // Area Strings
+  volatile unsigned char *pStartProg           ; // = 0x00850000;   // Area Programa  deve ser 0x00810000
+  volatile unsigned char *pStartXBasLoad       ; // = 0x008B0000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+  volatile unsigned char *pStartStack          ; // = 0x008FE000;   // Area variaveis sistema e stack pointer
 #endif
 
 unsigned char *pProcess             = 0x008FFFFE;
@@ -103,7 +103,7 @@ unsigned long *vDataLineAtu         = 0x008FE95E; //
 for_stack *forStack                 = 0x008FF6BE; // stack for FOR/NEXT loop
 unsigned long *atuVarAddr           = 0x008FF6B0; // Endereco da variavel atualmente usada pelo basLet
 
-const keywords_count = 68; // Quantidade de palavras reservadas
+const keywords_count = 69; // Quantidade de palavras reservadas
 
 // -------------------------------------------------------------------------------
 // Mensagens de Erro
@@ -197,6 +197,7 @@ static const struct keyword_token keywords[] =
   {"LEN",     0xDB},   // ok ok ok
   {"VAL",     0xDC},   // ok ok ok
   {"STR$",    0xDD},   // ok ok ok
+  {"SPRITEOVER", 0xDE},   // .. .. ok
   {"POINT",   0xE0},   // .. .. ok
   {"CHR$",    0xE1},   // ok ok ok
   {"FRE",     0xE2},   // ok ok ok
@@ -358,6 +359,7 @@ int basSpriteSet(void);
 int basSpritePut(void);
 int basSpriteColor(void);
 int basSpritePos(void);
+int basSpriteOver(void);
 int basPlot(void);
 int basHVlin(unsigned char vTipo);   // 1 - HLIN, 2 - VLIN
 int basPoint(void);

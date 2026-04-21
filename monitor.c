@@ -31,6 +31,7 @@
 * 16/01/2025  1.3     Moacir Jr.   Voltar para teclado e mouse com arduino nano
 * 28/01/2025  1.3a    Moacir Jr.   Ajustes na leitura dos dados recebidos do Mouse
 * 12/04/2026  1.4a02  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
+* 20/04/2026  1.4a03  Moacir Jr.   Alterar loadso e runso to loados e runos
 *--------------------------------------------------------------------------------
 *
 * Mapa de Memoria
@@ -105,7 +106,7 @@
 #include "mmsj320mfp.h"
 #include "monitor.h"
 
-#define versionBios "1.4a02"
+#define versionBios "1.4a03"
 
 HEADER *_allocp;
 
@@ -130,7 +131,6 @@ unsigned long vSizeTotalRec;
 unsigned char vBufXmitEmpty;
 unsigned char vtotmem;
 unsigned long SysClockms;
-unsigned short startBasic;
 unsigned char debugMessages;
 
 void delayms(int pTimeMS);
@@ -145,6 +145,7 @@ unsigned char loadSerialToMem(unsigned char *pEnder, unsigned char ptipo);
 unsigned char loadSerialToMem2(unsigned char *pEnder, unsigned char ptipo);
 void runMem(unsigned long pEnder);
 void runBasic(unsigned long pEnder);
+void runBasicAp2(unsigned long pEnder);
 void pokeMem(unsigned char *pEnder, unsigned char *pByte);
 void dumpMem (unsigned char *pEnder, unsigned char *pqtd, unsigned char *pCols);
 void dumpMem2 (unsigned char *pEnder, unsigned char *pqtd);
@@ -157,6 +158,7 @@ int hex2int(char ch);
 void asctohex(unsigned char a, unsigned char *s);
 void runCmd(void);
 void runBas(void);
+void runBasAp2(void);
 void runOSCmd(void);
 
 void runSO(void);
@@ -203,7 +205,6 @@ void main(void)
     unsigned char vRamSyst1st = 1, vRamUser1st = 1;
 
     // Inicia com Basic
-    startBasic = 0;
     debugMessages = 0;
 
     // Tempo para Inicializar a Memoria DRAM (se tiver), Perifericos e etc...
@@ -358,6 +359,9 @@ void main(void)
     }
 
     vtotmem = xcounter;
+    *startBasic = 0;
+    *hasMmsjosLoaded = 0;
+    *paramBasic = 0;
 
     clearScr();
     printText("MMSJ-320 BIOS v"versionBios);
@@ -373,11 +377,8 @@ void main(void)
     printText(sqtdtam);
     printText("K Bytes Free.\r\n\0");
 
-    if (!startBasic)
-    {
-        printText("OK\r\n\0");
-        printText(">");
-    }
+    printText("OK\r\n\0");
+    printText(">");
 
     showCursor();
 
@@ -994,7 +995,14 @@ int processCmd(void)
         }
         else if (!strcmp(linhacomando,"BASIC") && iy == 5)
         {
-            runBasic(linhaarg);
+            if (*hasMmsjosLoaded)
+                runBasic(linhaarg);
+            else 
+                printText("OS loaded. Run Basic from OS !!!\r\n\0");
+        }
+        else if (!strcmp(linhacomando,"BASICAP2") && iy == 8)
+        {
+            runBasicAp2(linhaarg);
         }
         else if (!strcmp(linhacomando,"MODE") && iy == 4)
         {
@@ -1004,11 +1012,11 @@ int processCmd(void)
         {
             pokeMem(vparam, vparam2);
         }
-        else if (!strcmp(linhacomando,"LOADSO") && iy == 6)
+        else if (!strcmp(linhacomando,"LOADOS") && iy == 6)
         {
             carregaOSDisk();
         }
-        else if (!strcmp(linhacomando,"RUNSO") && iy == 5)
+        else if (!strcmp(linhacomando,"RUNOS") && iy == 5)
         {
             runSystemOper();
         }
@@ -1723,7 +1731,7 @@ static void serialDrainRx(unsigned long pIdleSpin)
 
 //-----------------------------------------------------------------------------
 // load2 <ender initial to save>
-//----------------------------------------------------------------------------- 
+//-----------------------------------------------------------------------------
 // Uses XMODEM-CRC / XMODEM-1K (SOH=128 bytes, STX=1024 bytes)
 // Faster and safer than checksum-only receiver.
 //-----------------------------------------------------------------------------
@@ -2257,6 +2265,12 @@ void runBasic(unsigned long pEnder)
 }
 
 //-----------------------------------------------------------------------------
+void runBasicAp2(unsigned long pEnder)
+{
+    runBasAp2();
+}
+
+//-----------------------------------------------------------------------------
 void runSystemOper(void)
 {
     runSO();
@@ -2343,7 +2357,7 @@ unsigned int carregaSO(void)
 
         if (vStep % 13 == 0)
         {
-            if (vPosAnim == 3) 
+            if (vPosAnim == 3)
             {
                 vPosAnim = 0;
                 videoCursorPosColX = vAntX;
@@ -2406,6 +2420,7 @@ void carregaOSDisk(void)
         printText("IO Error....\r\n\0");
     else {
         printText("Ok\r\n\0");
+        *hasMmsjosLoaded = 1;
     }
 }
 
@@ -2851,7 +2866,7 @@ void funcIntMfpGpi6(void)
         if (debugMessages)
             writeLongSerial("Aqui 1\r\n\0");
     #endif
-    
+
     #ifdef __KEYPS2__
         unsigned int vTimeout;
 
@@ -2923,7 +2938,7 @@ void funcIntMfpGpi7(void)
     #ifdef __MOUSEPS2__EXT__
         unsigned char decoded = 0xFF;
         int vTimeout;
-        
+
         if (debugMessages)
             writeLongSerial("Aqui 2\r\n\0");
 

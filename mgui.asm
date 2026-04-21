@@ -10,7 +10,7 @@
 ; *    ...       ...       ...            ...
 ; * 03/01/2025  0.5a    Moacir Jr.   Troca de cores e ajustes de tela
 ; * 19/01/2025  0.6     Moacir Jr.   Adaptar para rodar junto com o MMSJOS
-; * 13/04/2026  0.7a02  Moacir Jr.   Ajustes para o mouse e o sprite do ponteiro
+; * 13/04/2026  0.7a03  Moacir Jr.   Ajustes para o mouse e o sprite do ponteiro
 ; *--------------------------------------------------------------------------------
 ; *
 ; *--------------------------------------------------------------------------------
@@ -30,7 +30,7 @@
 ; #include "monitor.h"
 ; #include "monitorapi.h"
 ; #include "mgui.h"
-; #define versionMgui "0.7a02"
+; #define versionMgui "0.7a03"
 ; #define __EM_OBRAS__ 1
 ; unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
 ; unsigned char *vvdgc = 0x00400043; // VDP TMS9118 Registers/Address Mode
@@ -8374,7 +8374,7 @@ putImagePbmP4_19:
 @mgui_4:
        dc.b      73,110,116,101,114,102,97,99,101,0
 @mgui_5:
-       dc.b      118,48,46,55,97,48,50,0
+       dc.b      118,48,46,55,97,48,51,0
 @mgui_6:
        dc.b      76,111,97,100,105,110,103,32,67,111,110,102
        dc.b      105,103,0

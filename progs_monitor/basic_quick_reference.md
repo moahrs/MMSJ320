@@ -80,6 +80,7 @@ Rotinas internas sem token continuam fora.
 | `MID$` | `MID$(<string>,<inicio>[,<qtd>])` | Retorna uma parte da string a partir da posição informada. | `PRINT MID$(A$,2,4)` |
 | `PEEK` | `PEEK(<endereco>)` | Lê um byte da memória. | `PRINT PEEK(4096)` |
 | `POINT` | `POINT(<x>,<y>)` | Retorna a cor do pixel na posição informada. | `C = POINT(10,20)` |
+| `SPRITEOVER` | `SPRITEOVER(<numsprite1>,<numsprite2>)` | Retorna 1 quando os dois sprites informados estão em colisão. | `PRINT SPRITEOVER(0,1)` |
 | `POKE` | `POKE(<endereco>,<byte>)` | Grava um byte na memória. | `POKE 4096,255` |
 | `RND` | `RND(<number>)` | Retorna um número pseudoaleatório. | `PRINT RND(1)` |
 | `RIGHT$` | `RIGHT$(<string>,<qtd>)` | Retorna os últimos caracteres da string. | `PRINT RIGHT$(A$,2)` |

@@ -13,6 +13,7 @@
 * 18/01/2025  0.5     Moacir Jr.   Adaptar uC/OS-II - RTOS
 * 13/04/2026  1.0a03  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
 *                                  Ajustes no cat, fat, rd, rm e prompt
+* 20/04/2026  1.0a04  Moacir Jr.   Ajustes chamar basic com malloc e passagem de parametros
 ********************************************************************************/
 
 #include <ucos_ii.h>
@@ -29,6 +30,8 @@
 #include "monitorapi.h"
 
 unsigned long runOSMemory;
+
+#define MMSJ_HEAP_LIMIT 0x00900000UL
 
 FAT32_DIR vdir;
 DISK  vdisk;
@@ -124,7 +127,7 @@ void memInit(void);
 
 HEADER *_allocp;
 
-#define versionMMSJOS "1.0a03"
+#define versionMMSJOS "1.0a04"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 
 #define STACKSIZE  1024
@@ -1156,6 +1159,75 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
             {
                 catFile(linhaarg);
                 ix = 255;
+            }
+            else if (!strcmp(linhacomando,"BASIC") && iy == 5)
+            {
+                // Aloca espaços para o interpretador BASIC e executa ele
+                *startBasic0 = fsMalloc(0x02000);  // 8KB  - Variaveis Simples
+                *startBasic1 = fsMalloc(0x06000);  // 24KB - Arrays
+                *startBasic2 = fsMalloc(0x08000);  // 32KB - Strings
+                *startBasic3 = fsMalloc(0x10000);  // 64KB - Area do Programa Basic
+                *startBasic4 = fsMalloc(0x10000);  // 64KB - Area Carregar .BAS para processar depois
+                *startBasic5 = fsMalloc(0x02000);  // 8KB  - Variaveis sistema e stack pointer
+
+                itoa(*startBasic0,sqtdtam,16);
+                printText("pStartSimpVar  \0"); printText(sqtdtam); printText("h\r\n\0");                
+                itoa(*startBasic1,sqtdtam,16);
+                printText("pStartArray    \0"); printText(sqtdtam); printText("h\r\n\0");                
+                itoa(*startBasic2,sqtdtam,16);
+                printText("pStartString   \0"); printText(sqtdtam); printText("h\r\n\0");                
+                itoa(*startBasic3,sqtdtam,16);
+                printText("pStartProg     \0"); printText(sqtdtam); printText("h\r\n\0");                
+                itoa(*startBasic4,sqtdtam,16);
+                printText("pStartXBasLoad \0"); printText(sqtdtam); printText("h\r\n\0");                
+                itoa(*startBasic5,sqtdtam,16);
+                printText("pStartStack    \0"); printText(sqtdtam); printText("h\r\n\r\n\0");    
+                            
+                if (!*startBasic0 || !*startBasic1 || !*startBasic2 || !*startBasic3 || !*startBasic4 || !*startBasic5)
+                {
+                    if (*startBasic0) fsFree(*startBasic0);
+                    if (*startBasic1) fsFree(*startBasic1);
+                    if (*startBasic2) fsFree(*startBasic2);
+                    if (*startBasic3) fsFree(*startBasic3);
+                    if (*startBasic4) fsFree(*startBasic4);
+                    if (*startBasic5) fsFree(*startBasic5);
+
+                    *startBasic0 = 0;
+                    *startBasic1 = 0;
+                    *startBasic2 = 0;
+                    *startBasic3 = 0;
+                    *startBasic4 = 0;
+                    *startBasic5 = 0;
+
+                    // Erro
+                    printText("No memory to load file...\r\n\0");
+                }
+                else
+                {
+                    // Run Basic
+                    if (*linhaarg)
+                        memcpy(paramBasic, linhaarg, 255);
+
+                    *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
+                    vEnderExec = 0x00870000;  // Endereço provisorio. Sera 0x00020000
+                    runOSMemory = vEnderExec;
+                    runFromOsCmd();
+
+                    free(*startBasic5);
+                    free(*startBasic4);
+                    free(*startBasic3);
+                    free(*startBasic2);
+                    free(*startBasic1);
+                    free(*startBasic0);
+
+                    *startBasic0 = 0;
+                    *startBasic1 = 0;
+                    *startBasic2 = 0;
+                    *startBasic3 = 0;
+                    *startBasic4 = 0;
+                    *startBasic5 = 0;
+                    *startBasic = 0;
+                }
             }
             else
             {
@@ -3745,9 +3817,18 @@ unsigned char contains_wildcards(const char *pattern)
 //-----------------------------------------------------------------------------
 unsigned long fsMalloc(unsigned long vMemSize)
 {
-    unsigned char * mMemDef;
+    unsigned long mMemDef;
 
-    mMemDef = malloc(vMemSize);
+    mMemDef = (unsigned long)malloc(vMemSize);
+
+    if (!mMemDef)
+        return 0;
+
+    if ((mMemDef + vMemSize) > MMSJ_HEAP_LIMIT)
+    {
+        free((void *)mMemDef);
+        return 0;
+    }
 
     return mMemDef;
 }

@@ -29,9 +29,28 @@
 ; //-----------------------------------------------------------------------------
 ; // VDP Functions
 ; //-----------------------------------------------------------------------------
-; void setRegister(unsigned char registerIndex, unsigned char value)
+; void vdp_delay(void)
 ; {
        section   code
+       xdef      _vdp_delay
+_vdp_delay:
+       link      A6,#-4
+; volatile int i;
+; for (i = 0; i < 10; i++);
+       clr.l     -4(A6)
+vdp_delay_1:
+       move.l    -4(A6),D0
+       cmp.l     #10,D0
+       bge.s     vdp_delay_3
+       addq.l    #1,-4(A6)
+       bra       vdp_delay_1
+vdp_delay_3:
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void setRegister(unsigned char registerIndex, unsigned char value)
+; {
        xdef      _setRegister
 _setRegister:
        link      A6,#0
@@ -896,6 +915,8 @@ vdp_set_sprite_pattern_3:
        and.l     #255,D2
        move.l    _vvdgd.L,A1
        move.b    0(A0,D2.L),(A1)
+; vdp_delay();
+       jsr       _vdp_delay
        addq.b    #1,D2
        bra       vdp_set_sprite_pattern_3
 vdp_set_sprite_pattern_5:
@@ -928,6 +949,8 @@ vdp_set_sprite_pattern_6:
        and.l     #255,D2
        move.l    _vvdgd.L,A1
        move.b    0(A0,D2.L),(A1)
+; vdp_delay();
+       jsr       _vdp_delay
        addq.b    #1,D2
        bra       vdp_set_sprite_pattern_6
 vdp_set_sprite_pattern_8:
@@ -943,15 +966,21 @@ vdp_set_sprite_pattern_8:
        xdef      _vdp_sprite_color
 _vdp_sprite_color:
        link      A6,#-4
+       move.l    A2,-(A7)
+       lea       _vvdgd.L,A2
 ; unsigned char ecclr;
+; unsigned char dummy;
 ; setReadAddress(addr + 3);
        move.l    8(A6),D1
        addq.l    #3,D1
        move.l    D1,-(A7)
        jsr       _setReadAddress
        addq.w    #4,A7
+; dummy = *vvdgd;  // joga fora
+       move.l    (A2),A0
+       move.b    (A0),-1(A6)
 ; ecclr = *vvdgd & 0x80 | (color & 0x0F);
-       move.l    _vvdgd.L,A0
+       move.l    (A2),A0
        move.b    (A0),D0
        and.w     #255,D0
        and.w     #128,D0
@@ -959,7 +988,7 @@ _vdp_sprite_color:
        and.b     #15,D1
        and.w     #255,D1
        or.w      D1,D0
-       move.b    D0,-1(A6)
+       move.b    D0,-2(A6)
 ; setWriteAddress(addr + 3);
        move.l    8(A6),D1
        addq.l    #3,D1
@@ -967,8 +996,11 @@ _vdp_sprite_color:
        jsr       _setWriteAddress
        addq.w    #4,A7
 ; *vvdgd = (ecclr);
-       move.l    _vvdgd.L,A0
-       move.b    -1(A6),(A0)
+       move.l    (A2),A0
+       move.b    -2(A6),(A0)
+; vdp_delay();
+       jsr       _vdp_delay
+       move.l    (A7)+,A2
        unlk      A6
        rts
 ; }
@@ -977,15 +1009,19 @@ _vdp_sprite_color:
 ; {
        xdef      _vdp_sprite_get_attributes
 _vdp_sprite_get_attributes:
-       link      A6,#-4
+       link      A6,#-8
        movem.l   A2/A3,-(A7)
        lea       -4(A6),A2
        lea       _vvdgd.L,A3
+; unsigned char dummy;
 ; Sprite_attributes attrs;
 ; setReadAddress(addr);
        move.l    12(A6),-(A7)
        jsr       _setReadAddress
        addq.w    #4,A7
+; dummy = *vvdgd;  // joga fora
+       move.l    (A3),A0
+       move.b    (A0),-5(A6)
 ; attrs.y = *vvdgd;
        move.l    (A3),A0
        move.l    A2,D0
@@ -1027,11 +1063,15 @@ _vdp_sprite_get_position:
 ; unsigned char x;
 ; unsigned char eccr;
 ; unsigned char vdumbread;
+; unsigned char dummy;
 ; Sprite_attributes attrs;
 ; setReadAddress(addr);
        move.l    12(A6),-(A7)
        jsr       _setReadAddress
        addq.w    #4,A7
+; dummy = *vvdgd;  // joga fora
+       move.l    (A2),A0
+       move.b    (A0),-5(A6)
 ; attrs.y = *vvdgd;
        move.l    (A2),A0
        move.l    A3,D0
@@ -1042,12 +1082,12 @@ _vdp_sprite_get_position:
        move.b    (A0),D2
 ; vdumbread = *vvdgd;
        move.l    (A2),A0
-       move.b    (A0),-5(A6)
+       move.b    (A0),-6(A6)
 ; eccr = *vvdgd;
        move.l    (A2),A0
-       move.b    (A0),-6(A6)
+       move.b    (A0),-7(A6)
 ; attrs.x = eccr & 0x80 ? x : x+32;
-       move.b    -6(A6),D0
+       move.b    -7(A6),D0
        and.w     #255,D0
        and.w     #128,D0
        beq.s     vdp_sprite_get_position_1
@@ -1074,11 +1114,10 @@ vdp_sprite_get_position_2:
 ; {
        xdef      _vdp_sprite_init
 _vdp_sprite_init:
-       link      A6,#0
-       movem.l   D2/D3/D4/A2,-(A7)
-       lea       _vvdgd.L,A2
-       move.b    11(A6),D4
-       and.l     #255,D4
+       link      A6,#-4
+       movem.l   D2/A2/A3,-(A7)
+       lea       _vdp_delay.L,A2
+       lea       _vvdgd.L,A3
 ; unsigned int addr = sprite_attribute_table + 4*priority;
        move.l    _sprite_attribute_table.L,D0
        move.b    15(A6),D1
@@ -1086,110 +1125,69 @@ _vdp_sprite_init:
        mulu.w    #4,D1
        and.l     #255,D1
        add.l     D1,D0
-       move.l    D0,D3
+       move.l    D0,D2
 ; unsigned char byteVdp;
-; while (1)
-vdp_sprite_init_1:
-; {
 ; setWriteAddress(addr);
-       move.l    D3,-(A7)
+       move.l    D2,-(A7)
        jsr       _setWriteAddress
        addq.w    #4,A7
-; *vvdgd = (0);
-       move.l    (A2),A0
+; *vvdgd = 0;
+       move.l    (A3),A0
        clr.b     (A0)
-; *vvdgd = (0);
-       move.l    (A2),A0
+; vdp_delay();
+       jsr       (A2)
+; *vvdgd = 0;
+       move.l    (A3),A0
        clr.b     (A0)
-; if(sprite_size_sel)
-       tst.b     _sprite_size_sel.L
-       beq.s     vdp_sprite_init_4
+; vdp_delay();
+       jsr       (A2)
 ; *vvdgd = (4*name);
-       move.b    D4,D0
+       move.b    11(A6),D0
        and.w     #255,D0
        mulu.w    #4,D0
-       move.l    (A2),A0
+       move.l    (A3),A0
        move.b    D0,(A0)
-       bra.s     vdp_sprite_init_5
-vdp_sprite_init_4:
-; else
-; *vvdgd = (4*name);
-       move.b    D4,D0
-       and.w     #255,D0
-       mulu.w    #4,D0
-       move.l    (A2),A0
-       move.b    D0,(A0)
-vdp_sprite_init_5:
+; vdp_delay();
+       jsr       (A2)
 ; *vvdgd = (0x80 | (color & 0xF));
        move.w    #128,D0
        move.b    19(A6),D1
        and.b     #15,D1
        and.w     #255,D1
        or.w      D1,D0
-       move.l    (A2),A0
+       move.l    (A3),A0
        move.b    D0,(A0)
+; vdp_delay();
+       jsr       (A2)
+; /*    while (1)
+; {
+; setWriteAddress(addr);
+; *vvdgd = (0);
+; *vvdgd = (0);
+; if(sprite_size_sel)
+; *vvdgd = (4*name);
+; else
+; *vvdgd = (4*name);
+; *vvdgd = (0x80 | (color & 0xF));
 ; setReadAddress(addr);
-       move.l    D3,-(A7)
-       jsr       _setReadAddress
-       addq.w    #4,A7
 ; setReadAddress(addr);
-       move.l    D3,-(A7)
-       jsr       _setReadAddress
-       addq.w    #4,A7
 ; byteVdp = *vvdgd;
-       move.l    (A2),A0
-       move.b    (A0),D2
 ; if (byteVdp != 0)
-       tst.b     D2
-       beq.s     vdp_sprite_init_6
 ; continue;
-       bra       vdp_sprite_init_2
-vdp_sprite_init_6:
 ; byteVdp = *vvdgd;
-       move.l    (A2),A0
-       move.b    (A0),D2
 ; if (byteVdp != 0)
-       tst.b     D2
-       beq.s     vdp_sprite_init_8
 ; continue;
-       bra       vdp_sprite_init_2
-vdp_sprite_init_8:
 ; byteVdp = *vvdgd;
-       move.l    (A2),A0
-       move.b    (A0),D2
 ; if (byteVdp != (4*name))
-       move.b    D4,D0
-       and.w     #255,D0
-       mulu.w    #4,D0
-       cmp.b     D0,D2
-       beq.s     vdp_sprite_init_10
 ; continue;
-       bra.s     vdp_sprite_init_2
-vdp_sprite_init_10:
 ; byteVdp = *vvdgd;
-       move.l    (A2),A0
-       move.b    (A0),D2
 ; if (byteVdp != (0x80 | (color & 0xF)))
-       and.w     #255,D2
-       move.w    #128,D0
-       move.b    19(A6),D1
-       and.b     #15,D1
-       and.w     #255,D1
-       or.w      D1,D0
-       cmp.w     D0,D2
-       beq.s     vdp_sprite_init_12
 ; continue;
-       bra.s     vdp_sprite_init_2
-vdp_sprite_init_12:
 ; break;
-       bra.s     vdp_sprite_init_3
-vdp_sprite_init_2:
-       bra       vdp_sprite_init_1
-vdp_sprite_init_3:
-; }
+; }*/
 ; return addr;
-       move.l    D3,D0
-       movem.l   (A7)+,D2/D3/D4/A2
+       move.l    D2,D0
+       movem.l   (A7)+,D2/A2/A3
        unlk      A6
        rts
 ; }
@@ -1200,9 +1198,9 @@ vdp_sprite_init_3:
 _vdp_sprite_set_position:
        link      A6,#-4
        movem.l   D2/A2/A3,-(A7)
-       move.l    8(A6),D2
        lea       _vvdgd.L,A2
-       lea       _setWriteAddress.L,A3
+       move.l    8(A6),D2
+       lea       _vdp_delay.L,A3
 ; unsigned char ec, xpos;
 ; unsigned char color;
 ; xpos = (unsigned char)(x & 0xFF);
@@ -1230,25 +1228,23 @@ _vdp_sprite_set_position:
        move.b    D0,-1(A6)
 ; setWriteAddress(addr);
        move.l    D2,-(A7)
-       jsr       (A3)
+       jsr       _setWriteAddress
        addq.w    #4,A7
 ; *vvdgd = y;
        move.l    (A2),A0
        move.b    19(A6),(A0)
-; setWriteAddress(addr + 1);
-       move.l    D2,D1
-       addq.l    #1,D1
-       move.l    D1,-(A7)
+; vdp_delay();
        jsr       (A3)
-       addq.w    #4,A7
 ; *vvdgd = xpos;
        move.l    (A2),A0
        move.b    -2(A6),(A0)
+; vdp_delay();
+       jsr       (A3)
 ; setWriteAddress(addr + 3);
        move.l    D2,D1
        addq.l    #3,D1
        move.l    D1,-(A7)
-       jsr       (A3)
+       jsr       _setWriteAddress
        addq.w    #4,A7
 ; *vvdgd = ((ec << 7) | color);
        move.b    -3(A6),D0
@@ -1256,6 +1252,8 @@ _vdp_sprite_set_position:
        or.b      -1(A6),D0
        move.l    (A2),A0
        move.b    D0,(A0)
+; vdp_delay();
+       jsr       (A3)
 ; return read_status_reg();
        jsr       _read_status_reg
        movem.l   (A7)+,D2/A2/A3
@@ -1899,33 +1897,42 @@ _vdp_init_multicolor:
 ; {
        xdef      _vdp_read_color_pixel
 _vdp_read_color_pixel:
-       link      A6,#0
-       movem.l   D2/D3,-(A7)
+       link      A6,#-4
+       movem.l   D2/D3/D4/D5/D6/A2/A3/A4,-(A7)
+       lea       _setReadAddress.L,A2
+       lea       _vvdgd.L,A3
+       move.b    15(A6),D4
+       and.l     #255,D4
+       move.b    11(A6),D5
+       and.l     #255,D5
+       lea       _pattern_table.L,A4
 ; char vRetColor = -1;
        moveq     #-1,D3
 ; unsigned int addr = 0;
        clr.l     D2
+; unsigned char pixel;
+; unsigned char color;
 ; if (vdp_mode == VDP_MODE_MULTICOLOR)
        move.b    _vdp_mode.L,D0
        cmp.b     #2,D0
-       bne       vdp_read_color_pixel_4
+       bne       vdp_read_color_pixel_1
 ; {
 ; addr = pattern_table + 8 * (x / 2) + y % 8 + 256 * (y / 8);
-       move.l    _pattern_table.L,D0
-       move.b    11(A6),D1
+       move.l    (A4),D0
+       move.b    D5,D1
        and.l     #65535,D1
        divu.w    #2,D1
        and.w     #255,D1
        mulu.w    #8,D1
        and.l     #255,D1
        add.l     D1,D0
-       move.b    15(A6),D1
+       move.b    D4,D1
        and.l     #65535,D1
        divu.w    #8,D1
        swap      D1
        and.l     #255,D1
        add.l     D1,D0
-       move.b    15(A6),D1
+       move.b    D4,D1
        and.l     #65535,D1
        divu.w    #8,D1
        and.w     #255,D1
@@ -1935,18 +1942,18 @@ _vdp_read_color_pixel:
        move.l    D0,D2
 ; setReadAddress(addr);
        move.l    D2,-(A7)
-       jsr       _setReadAddress
+       jsr       (A2)
        addq.w    #4,A7
 ; setReadAddress(addr);
        move.l    D2,-(A7)
-       jsr       _setReadAddress
+       jsr       (A2)
        addq.w    #4,A7
 ; if (x & 1) // Odd columns
-       move.b    11(A6),D0
+       move.b    D5,D0
        and.b     #1,D0
        beq.s     vdp_read_color_pixel_3
 ; vRetColor = (*vvdgd & 0x0f);
-       move.l    _vvdgd.L,A0
+       move.l    (A3),A0
        move.b    (A0),D0
        and.b     #15,D0
        move.b    D0,D3
@@ -1954,15 +1961,107 @@ _vdp_read_color_pixel:
 vdp_read_color_pixel_3:
 ; else
 ; vRetColor = (*vvdgd >> 4);
-       move.l    _vvdgd.L,A0
+       move.l    (A3),A0
        move.b    (A0),D0
        lsr.b     #4,D0
        move.b    D0,D3
 vdp_read_color_pixel_4:
+       bra       vdp_read_color_pixel_8
+vdp_read_color_pixel_1:
+; }
+; else if (vdp_mode == VDP_MODE_G2)
+       move.b    _vdp_mode.L,D0
+       cmp.b     #1,D0
+       bne       vdp_read_color_pixel_8
+; {
+; addr = pattern_table + (8 * (x / 8)) + (y % 8) + (256 * (y / 8));
+       move.l    (A4),D0
+       move.b    D5,D1
+       and.l     #65535,D1
+       divu.w    #8,D1
+       and.w     #255,D1
+       mulu.w    #8,D1
+       and.l     #255,D1
+       add.l     D1,D0
+       move.b    D4,D1
+       and.l     #65535,D1
+       divu.w    #8,D1
+       swap      D1
+       and.l     #255,D1
+       add.l     D1,D0
+       move.b    D4,D1
+       and.l     #65535,D1
+       divu.w    #8,D1
+       and.w     #255,D1
+       lsl.w     #8,D1
+       ext.l     D1
+       add.l     D1,D0
+       move.l    D0,D2
+; setReadAddress(addr);
+       move.l    D2,-(A7)
+       jsr       (A2)
+       addq.w    #4,A7
+; setReadAddress(addr);
+       move.l    D2,-(A7)
+       jsr       (A2)
+       addq.w    #4,A7
+; pixel = *vvdgd;
+       move.l    (A3),A0
+       move.b    (A0),-1(A6)
+; setReadAddress(color_table + (addr - pattern_table));
+       move.l    _color_table.L,D1
+       move.l    D0,-(A7)
+       move.l    D2,D0
+       sub.l     (A4),D0
+       add.l     D0,D1
+       move.l    (A7)+,D0
+       move.l    D1,-(A7)
+       jsr       (A2)
+       addq.w    #4,A7
+; setReadAddress(color_table + (addr - pattern_table));
+       move.l    _color_table.L,D1
+       move.l    D0,-(A7)
+       move.l    D2,D0
+       sub.l     (A4),D0
+       add.l     D0,D1
+       move.l    (A7)+,D0
+       move.l    D1,-(A7)
+       jsr       (A2)
+       addq.w    #4,A7
+; color = *vvdgd;
+       move.l    (A3),A0
+       move.b    (A0),D6
+; if (pixel & (0x80 >> (x % 8)))
+       move.b    -1(A6),D0
+       and.w     #255,D0
+       move.w    #128,D1
+       move.l    D0,-(A7)
+       move.b    D5,D0
+       and.l     #65535,D0
+       divu.w    #8,D0
+       swap      D0
+       and.w     #255,D0
+       asr.w     D0,D1
+       move.l    (A7)+,D0
+       and.w     D1,D0
+       beq.s     vdp_read_color_pixel_7
+; vRetColor = (color >> 4) & 0x0f;
+       move.b    D6,D0
+       lsr.b     #4,D0
+       and.b     #15,D0
+       move.b    D0,D3
+       bra.s     vdp_read_color_pixel_8
+vdp_read_color_pixel_7:
+; else
+; vRetColor = color & 0x0f;
+       move.b    D6,D0
+       and.b     #15,D0
+       move.b    D0,D3
+vdp_read_color_pixel_8:
 ; }
 ; return vRetColor;
        move.b    D3,D0
-       movem.l   (A7)+,D2/D3
+       movem.l   (A7)+,D2/D3/D4/D5/D6/A2/A3/A4
        unlk      A6
        rts
 ; }

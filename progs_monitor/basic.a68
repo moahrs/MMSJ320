@@ -1,5 +1,5 @@
-;             org     $00008000           ; Endereço Inicial do Programa
-            org     $00810000           ; Endere�o Inicial do Programa
+;             org     $00020000           ; Endereço Inicial do Programa
+             org     $00870000           ; Endere�o Inicial do Programa
 ;            move.l    A7,($00FFEF00)
 ;            lea       $00FFDFFE,A7
            section     code

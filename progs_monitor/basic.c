@@ -21,6 +21,7 @@
 * 14/04/2026  1.1a03  Moacir Jr.   Ajustes para por cache variaveis e simplificar parse, retirando recursividade
 * 18/04/2026  2.0a02  Moacir Jr.   Novas funcoes. Basic Proprio. Ajustes gerais.
 * 19/04/2026  2.0a03  Moacir Jr.   While e WEND. Ajustes gerais.
+* 20/04/2026  2.0a04  Moacir Jr.   Dual chamada, pelo monitor, e pelo mmsjos.
 *--------------------------------------------------------------------------------
 * Variables Simples: start at 00800000
 *   --------------------------------------------------------
@@ -51,10 +52,13 @@
 #include "../mmsj320vdp.h"
 #include "../mmsj320mfp.h"
 #include "../monitor.h"
+#include "../mmsjos.h"
+#include "../mgui.h"
 #include "../monitorapi.h"
+#include "../mmsjosapi.h"
 #include "basic.h"
 
-#define versionBasic "2.0a03"
+#define versionBasic "2.0a04"
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
@@ -76,6 +80,7 @@ static unsigned int paintColorTable = 0x2000;
 static unsigned char *paintVdpData = (unsigned char *)0x00400041;
 static unsigned char *while_ptr_stack[MAX_WHILE_STACK];
 static int while_sp = 0;
+unsigned char verro;
 
 /*static unsigned char valStack[32][50];
 static unsigned char opStack[PARSER_STACK_SIZE];
@@ -151,20 +156,55 @@ void main(void)
 {
     unsigned char vRetInput;
     VDP_COLOR vdpcolor;
-    unsigned char countTec = 0;
+    unsigned char countTec = 0, vByte;
+    unsigned char *vTemp;
+    unsigned char *vBufptr = &vbufInput;
 
     // Timer para o Random
     *(vmfp + Reg_TADR) = 0xF5;  // 245
     *(vmfp + Reg_TACR) = 0x02;  // prescaler de 10. total 2,4576Mhz/10*245 = 1003KHz
 
-    clearScr();
+    // Se veio do mmsjos, 1, então usa os que o mmsjos passou usando malloc
+    if (*startBasic)
+    {
+        pStartSimpVar  = *startBasic0;   // Area Variaveis Simples
+        pStartArrayVar = *startBasic1;   // Area Arrays
+        pStartString   = *startBasic2;   // Area Strings
+        pStartProg     = *startBasic3;   // Area Programa  deve ser 0x00810000
+        pStartXBasLoad = *startBasic4;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+        pStartStack    = *startBasic5;   // Area variaveis sistema e stack pointer
+    }
+    else
+    {
+        #ifdef RUN_ON_FLASH
+            pStartSimpVar        = 0x00800000;   // Area Variaveis Simples
+            pStartArrayVar       = 0x00803000;   // Area Arrays
+            pStartString         = 0x00810000;   // Area Strings
+            pStartProg           = 0x00830000;   // Area Programa  deve ser 0x00810000
+            pStartXBasLoad       = 0x00890000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+            pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
+        #else
+            pStartSimpVar        = 0x00800000;   // Area Variaveis Simples
+            pStartArrayVar       = 0x00810000;   // Area Arrays
+            pStartString         = 0x00820000;   // Area Strings
+            pStartProg           = 0x00840000;   // Area Programa  deve ser 0x00810000
+            pStartXBasLoad       = 0x00850000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+            pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
+        #endif
+    }
 
-    printText("MMSJ-BASIC v"versionBasic);
-    printText("\r\n\0");
+    if (!*startBasic || *startBasic == 1)
+    {
+        if (!*startBasic)
+            clearScr();
 
-    printText("Utility (c) 2022-2026\r\n\0");
+        printText("MMSJ-BASIC v"versionBasic);
+        printText("\r\n\0");
 
-    printText("OK\r\n\0");
+        printText("Utility (c) 2022-2026\r\n\0");
+
+        printText("OK\r\n\0");
+    }
 
     vbufInput[0] = '\0';
     *pProcess = 0x01;
@@ -187,25 +227,84 @@ void main(void)
     vdpMaxCols = 39;
     vdpMaxRows = 23;
 
-    while (*pProcess)
+    if (*paramBasic == 0x00)
     {
-        vRetInput = inputLineBasic(128,'$');
-
-        if (vbufInput[0] != 0x00 && (vRetInput == 0x0D || vRetInput == 0x0A))
+        // Prompt de comandos
+        while (*pProcess)
         {
-            printText("\r\n\0");
+            vRetInput = inputLineBasic(128,'$');
 
-            processLine();
+            if (vbufInput[0] != 0x00 && (vRetInput == 0x0D || vRetInput == 0x0A))
+            {
+                printText("\r\n\0");
 
-            if (!*pTypeLine && *pProcess)
-                printText("\r\nOK\0");
+                processLine();
 
-            if (!*pTypeLine && *pProcess)
-                printText("\r\n\0");   // printText("\r\n>\0");
+                if (!*pTypeLine && *pProcess)
+                    printText("\r\nOK\0");
+
+                if (!*pTypeLine && *pProcess)
+                    printText("\r\n\0");   // printText("\r\n>\0");
+            }
+            else if (vRetInput != 0x1B)
+            {
+                printText("\r\n\0");
+            }
         }
-        else if (vRetInput != 0x1B)
+    }
+    else
+    {
+        // Carregar Arquivo do disco na memoria
+        if (*startBasic != 2)
         {
-            printText("\r\n\0");
+            printText("Loading...\r\n");
+        }
+
+        verro = 0x00;
+        loadFile(paramBasic, (unsigned long*)pStartXBasLoad);
+        if (!verro)
+        {
+            // Processar
+            if (*startBasic != 2)
+            {
+                printText("Done.\r\n");
+                printText("Processing...\r\n");
+            }
+
+            vTemp = pStartXBasLoad;
+
+            while (1)
+            {
+                vByte = *vTemp++;
+
+                if (vByte != 0x1A)
+                {
+                    if (vByte != 0xD && vByte != 0x0A)
+                        *vBufptr++ = vByte;
+                    else
+                    {
+                        vTemp++;
+                        *vBufptr = 0x00;
+                        vBufptr = &vbufInput;
+                        processLine();
+                    }
+                }
+                else
+                    break;
+            }
+
+            // Executar, se nao houve erros
+            if (*startBasic != 2)
+            {
+                printText("Running...\r\n");
+            }
+
+            *vTemp = 0x00;
+            runProg(vTemp);
+        }
+        else
+        {
+            printText("Loading File Error...\r\n\0");
         }
     }
 
@@ -1962,6 +2061,9 @@ int executeToken(unsigned char pToken)
             break;
         case 0xDD:  // Str$
             vReta = basStr();
+            break;
+        case 0xDE:  // SPRITEOVER
+            vReta = basSpriteOver();
             break;
         case 0xE0:  // POINT
             vReta = basPoint();
@@ -6256,7 +6358,7 @@ int basWhile(void)
                 else
                     break;
             }
-        }        
+        }
 
         *pointerRunProg = *pointerRunProg + 2;
 
@@ -9023,6 +9125,119 @@ int basSpritePos(void)
 
     vdp_sprite_set_position(spriteHandle, (unsigned int)xValue, (unsigned char)yValue);
     *value_type = '%';
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Verifica colisao entre dois sprites.
+// Syntaxe:
+//          SPRITEOVER(<numsprite1>,<numsprite2>)
+//--------------------------------------------------------------------------------------
+int basSpriteOver(void)
+{
+    int spriteNumber1 = 0;
+    int spriteNumber2 = 0;
+    unsigned int spriteLimit;
+    unsigned int spriteHandle1;
+    unsigned int spriteHandle2;
+    Sprite_attributes spritePos1;
+    Sprite_attributes spritePos2;
+    unsigned char collision1;
+    unsigned char collision2;
+    unsigned int result = 0;
+
+    if (vdpModeBas == VDP_MODE_TEXT)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&spriteNumber1);
+    if (*vErroProc) return 0;
+
+    spriteLimit = basSpritePatternLimit();
+    if (spriteNumber1 < 0 || spriteNumber1 > (int)spriteLimit)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&spriteNumber2);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    // Ultimo caracter deve ser fecha parenteses
+    if (*token_type!=CLOSEPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    if (spriteNumber2 < 0 || spriteNumber2 > (int)spriteLimit)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    spriteHandle1 = basSpriteResolveHandle((unsigned char)spriteNumber1);
+    if (spriteHandle1 == 0)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    spriteHandle2 = basSpriteResolveHandle((unsigned char)spriteNumber2);
+    if (spriteHandle2 == 0)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    if (spriteHandle1 != spriteHandle2)
+    {
+        spritePos1 = vdp_sprite_get_position(spriteHandle1);
+        spritePos2 = vdp_sprite_get_position(spriteHandle2);
+
+        collision1 = (vdp_sprite_set_position(spriteHandle1, (unsigned int)spritePos1.x, (unsigned char)spritePos1.y) & VDP_FLAG_COIN) ? 1 : 0;
+        collision2 = (vdp_sprite_set_position(spriteHandle2, (unsigned int)spritePos2.x, (unsigned char)spritePos2.y) & VDP_FLAG_COIN) ? 1 : 0;
+
+
+        result = (collision1 && collision2) ? 1 : 0;
+    }
+
+    *value_type = '%';
+
+    *token = ((int)(result & 0xFF000000) >> 24);
+    *(token + 1) = ((int)(result & 0x00FF0000) >> 16);
+    *(token + 2) = ((int)(result & 0x0000FF00) >> 8);
+    *(token + 3) = (result & 0x000000FF);
 
     return 0;
 }

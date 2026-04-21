@@ -28,6 +28,16 @@ unsigned long *tracePointer          = 0x0060F68C;
 unsigned long *traceA7               = 0x0060F692;
 unsigned short *regA7                = 0x0060F696;
 
+unsigned char *hasMmsjosLoaded      = 0x006FFED9; // Flag para verificar se o MMSJOS foi carregado
+unsigned char *paramBasic           = 0x006FFEDB; // 255 bytes para passagem de parametros do monitor/mmsjos para o basic
+unsigned long *startBasic0          = 0x006FFFDA;
+unsigned long *startBasic1          = 0x006FFFE0;
+unsigned long *startBasic2          = 0x006FFFE6;
+unsigned long *startBasic3          = 0x006FFFEC;
+unsigned long *startBasic4          = 0x006FFFF2;
+unsigned long *startBasic5          = 0x006FFFF8;
+unsigned char *startBasic           = 0x0063FFFE;
+
 /*unsigned char *kbdvprim = 0x00609B3C;
 unsigned char *kbdvmove = 0x00609B3E;
 unsigned char *kbdvshift = 0x00609B40;

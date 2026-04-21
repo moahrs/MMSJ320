@@ -16,7 +16,13 @@ _runCmd:
 
 _runBas:
        movem.l   D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5,-(A7)
-       jsr       $00008000       ; Jump to position Basic ram memory
+       jsr       $00020000       ; Jump to position Basic ram memory
+       movem.l   (A7)+,D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5
+       rts
+
+_runBasAp2:
+       movem.l   D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5,-(A7)
+       jsr       $00008000       ; Jump to position Basic Apple 2 ram memory
        movem.l   (A7)+,D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5
        rts
 
