@@ -34,7 +34,7 @@ __heap:
 
            section     bss
            align
-           org         $610000
+           org         $620000
 bss        equ         *               ; un-initialized data
            ds.w        512             ; stack for main() function
 __stack    equ         *

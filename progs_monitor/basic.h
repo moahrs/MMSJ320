@@ -33,8 +33,12 @@ unsigned short videoCursorPosRow;  // Posical atual caracter do cursor na linha 
 unsigned short videoCursorPosColX;  // Posicao atual do cursor na coluna (0 a 255)
 unsigned short videoCursorPosRowY;  // Posical atual do cursor na linha (0 a 191)
 
-//#define RUN_ON_FLASH 0
-#define USE_ITERATIVE_PARSER // Comente para usar o parser antigo
+unsigned int vMemTotalSimpVar; // Total de memoria alocada para variaveis simples
+unsigned int vMemTotalArrayVar; // Total de memoria alocada para variaveis de array
+unsigned int vMemTotalString; // Total de memoria alocada para strings 
+unsigned int vMemTotalProg; // Total de memoria alocada para programa
+unsigned int vMemTotalXBasLoad; // Total de memoria alocada para carregar basic
+unsigned int vMemTotalStack; // Total de memoria alocada para stack
 
 #ifdef RUN_ON_FLASH
   volatile unsigned char *pStartSimpVar        ; //= 0x00800000;   // Area Variaveis Simples
@@ -283,7 +287,7 @@ int isalphas(unsigned char c);
 int isdigitus(unsigned char c);
 int iswhite(unsigned char c);
 int isdelim(unsigned char c);
-void parseExpressionIterative(unsigned char *result);
+void parseExpr(unsigned char *result);
 void getExp(unsigned char *result);
 void level2(unsigned char *result);
 void level3(unsigned char *result);

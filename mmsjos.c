@@ -1163,41 +1163,29 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
             else if (!strcmp(linhacomando,"BASIC") && iy == 5)
             {
                 // Aloca espaços para o interpretador BASIC e executa ele
-                *startBasic0 = fsMalloc(0x02000);  // 8KB  - Variaveis Simples
+                *startBasic0 = fsMalloc(204800);
+                /**startBasic0 = fsMalloc(0x02000);  // 8KB  - Variaveis Simples
                 *startBasic1 = fsMalloc(0x06000);  // 24KB - Arrays
                 *startBasic2 = fsMalloc(0x08000);  // 32KB - Strings
                 *startBasic3 = fsMalloc(0x10000);  // 64KB - Area do Programa Basic
                 *startBasic4 = fsMalloc(0x10000);  // 64KB - Area Carregar .BAS para processar depois
-                *startBasic5 = fsMalloc(0x02000);  // 8KB  - Variaveis sistema e stack pointer
-
-                itoa(*startBasic0,sqtdtam,16);
-                printText("pStartSimpVar  \0"); printText(sqtdtam); printText("h\r\n\0");                
-                itoa(*startBasic1,sqtdtam,16);
-                printText("pStartArray    \0"); printText(sqtdtam); printText("h\r\n\0");                
-                itoa(*startBasic2,sqtdtam,16);
-                printText("pStartString   \0"); printText(sqtdtam); printText("h\r\n\0");                
-                itoa(*startBasic3,sqtdtam,16);
-                printText("pStartProg     \0"); printText(sqtdtam); printText("h\r\n\0");                
-                itoa(*startBasic4,sqtdtam,16);
-                printText("pStartXBasLoad \0"); printText(sqtdtam); printText("h\r\n\0");                
-                itoa(*startBasic5,sqtdtam,16);
-                printText("pStartStack    \0"); printText(sqtdtam); printText("h\r\n\r\n\0");    
+                *startBasic5 = fsMalloc(0x02000);  // 8KB  - Variaveis sistema e stack pointer*/
                             
-                if (!*startBasic0 || !*startBasic1 || !*startBasic2 || !*startBasic3 || !*startBasic4 || !*startBasic5)
+                if (!*startBasic0 /*|| !*startBasic1 || !*startBasic2 || !*startBasic3 || !*startBasic4 || !*startBasic5*/ )
                 {
                     if (*startBasic0) fsFree(*startBasic0);
-                    if (*startBasic1) fsFree(*startBasic1);
+                    /*if (*startBasic1) fsFree(*startBasic1);
                     if (*startBasic2) fsFree(*startBasic2);
                     if (*startBasic3) fsFree(*startBasic3);
                     if (*startBasic4) fsFree(*startBasic4);
-                    if (*startBasic5) fsFree(*startBasic5);
+                    if (*startBasic5) fsFree(*startBasic5);*/
 
                     *startBasic0 = 0;
-                    *startBasic1 = 0;
+                    /**startBasic1 = 0;
                     *startBasic2 = 0;
                     *startBasic3 = 0;
                     *startBasic4 = 0;
-                    *startBasic5 = 0;
+                    *startBasic5 = 0;*/
 
                     // Erro
                     printText("No memory to load file...\r\n\0");
@@ -1207,26 +1195,29 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
                     // Run Basic
                     if (*linhaarg)
                         memcpy(paramBasic, linhaarg, 255);
+                    else
+                        *paramBasic = 0x00;
 
                     *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
                     vEnderExec = 0x00870000;  // Endereço provisorio. Sera 0x00020000
                     runOSMemory = vEnderExec;
                     runFromOsCmd();
 
-                    free(*startBasic5);
-                    free(*startBasic4);
-                    free(*startBasic3);
-                    free(*startBasic2);
-                    free(*startBasic1);
-                    free(*startBasic0);
+                    /*fsFree(*startBasic5);
+                    fsFree(*startBasic4);
+                    fsFree(*startBasic3);
+                    fsFree(*startBasic2);
+                    fsFree(*startBasic1);*/
+                    fsFree(*startBasic0);
 
                     *startBasic0 = 0;
-                    *startBasic1 = 0;
+                    /**startBasic1 = 0;
                     *startBasic2 = 0;
                     *startBasic3 = 0;
                     *startBasic4 = 0;
-                    *startBasic5 = 0;
+                    *startBasic5 = 0;*/
                     *startBasic = 0;
+                    *paramBasic = 0;
                 }
             }
             else

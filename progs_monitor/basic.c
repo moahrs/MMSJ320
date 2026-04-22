@@ -62,10 +62,15 @@
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
+//#define RUN_ON_FLASH 0
+#define USE_ITERATIVE_PARSER // Comente para usar o parser antigo
+
 #define SIMPLE_VAR_CACHE_SLOTS 8
 #define PARSER_STACK_SIZE 32
 #define PAINT_STACK_SIZE 4096
 #define MAX_WHILE_STACK   16
+
+//#define BASIC_DEBUG_ON 0
 
 unsigned char *vvdgBASd = 0x00400041; // VDP TMS9118 Data Mode
 unsigned char *vvdgBASc = 0x00400043; // VDP TMS9118 Registers/Address Mode
@@ -104,8 +109,8 @@ static void invalidateFindVariableCache(void)
 static void clearRuntimeData(unsigned char *pForStack)
 {
     invalidateFindVariableCache();
-    memset(pStartSimpVar, 0x00, 0x2000);
-    memset(pStartArrayVar, 0x00, 0x6000);
+    memset(pStartSimpVar, 0x00, vMemTotalSimpVar);
+    memset(pStartArrayVar, 0x00, vMemTotalArrayVar);
     memset(pForStack, 0x00, 0x800);
 }
 
@@ -159,6 +164,7 @@ void main(void)
     unsigned char countTec = 0, vByte;
     unsigned char *vTemp;
     unsigned char *vBufptr = &vbufInput;
+    unsigned char sqtdtam[20];
 
     // Timer para o Random
     *(vmfp + Reg_TADR) = 0xF5;  // 245
@@ -168,11 +174,18 @@ void main(void)
     if (*startBasic)
     {
         pStartSimpVar  = *startBasic0;   // Area Variaveis Simples
-        pStartArrayVar = *startBasic1;   // Area Arrays
-        pStartString   = *startBasic2;   // Area Strings
-        pStartProg     = *startBasic3;   // Area Programa  deve ser 0x00810000
-        pStartXBasLoad = *startBasic4;   // Area onde será importado o programa em basic texto a ser tokenizado depois
-        pStartStack    = *startBasic5;   // Area variaveis sistema e stack pointer
+        pStartArrayVar = *startBasic0 + 0x02000;   // Area Arrays
+        pStartString   = *startBasic0 + 0x08000;   // Area Strings
+        pStartProg     = *startBasic0 + 0x10000;   // Area Programa  deve ser 0x00810000
+        pStartXBasLoad = *startBasic0 + 0x20000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+        pStartStack    = *startBasic0 + 0x30000;   // Area variaveis sistema e stack pointer
+
+        vMemTotalSimpVar = 8192;
+        vMemTotalArrayVar = 24576;
+        vMemTotalString = 32768;
+        vMemTotalProg = 65536;
+        vMemTotalXBasLoad = 65536;
+        vMemTotalStack = 8192;
     }
     else
     {
@@ -183,13 +196,27 @@ void main(void)
             pStartProg           = 0x00830000;   // Area Programa  deve ser 0x00810000
             pStartXBasLoad       = 0x00890000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
             pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
+
+            vMemTotalSimpVar = 12288;
+            vMemTotalArrayVar = 53248;
+            vMemTotalString = 131072;
+            vMemTotalProg = 393216;
+            vMemTotalXBasLoad = 450560;
+            vMemTotalStack = 8192;
         #else
             pStartSimpVar        = 0x00800000;   // Area Variaveis Simples
-            pStartArrayVar       = 0x00810000;   // Area Arrays
-            pStartString         = 0x00820000;   // Area Strings
-            pStartProg           = 0x00840000;   // Area Programa  deve ser 0x00810000
+            pStartArrayVar       = 0x00803000;   // Area Arrays
+            pStartString         = 0x00810000;   // Area Strings
+            pStartProg           = 0x00830000;   // Area Programa  deve ser 0x00810000
             pStartXBasLoad       = 0x00850000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
             pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
+
+            vMemTotalSimpVar = 12288;
+            vMemTotalArrayVar = 53248;
+            vMemTotalString = 131072;
+            vMemTotalProg = 393216;
+            vMemTotalXBasLoad = 131072;
+            vMemTotalStack = 8192;
         #endif
     }
 
@@ -239,6 +266,13 @@ void main(void)
                 printText("\r\n\0");
 
                 processLine();
+if (*debugOn)
+{
+writeLongSerial("pStartSimpVar: [");
+itoa(pStartSimpVar, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
 
                 if (!*pTypeLine && *pProcess)
                     printText("\r\nOK\0");
@@ -260,6 +294,9 @@ void main(void)
             printText("Loading...\r\n");
         }
 
+        // Limpando memoria
+        memset(pStartXBasLoad,0x1A,vMemTotalXBasLoad);
+        // Carrega do disco
         verro = 0x00;
         loadFile(paramBasic, (unsigned long*)pStartXBasLoad);
         if (!verro)
@@ -286,6 +323,8 @@ void main(void)
                         vTemp++;
                         *vBufptr = 0x00;
                         vBufptr = &vbufInput;
+                        if (*vbufInput == 0x00)
+                            break;
                         processLine();
                     }
                 }
@@ -733,6 +772,14 @@ void processLine(void)
             else if (!strcmp(linhacomando,"XLOAD1K") && iy == 7)
             {
                 basXBasLoad1k();
+if (*debugOn)
+{
+writeLongSerial("pStartSimpVar3: [");
+itoa(pStartSimpVar, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
+
             }
             else if (!strcmp(linhacomando,"TIMER") && iy == 5)
             {
@@ -745,21 +792,36 @@ void processLine(void)
                 printText(vBuffer);
                 printText("ms\r\n\0");
             }
-            else if (!strcmp(linhacomando,"TRACE") && iy == 5)
+            else if (!strcmp(linhacomando,"TRACEON") && iy == 7)
             {
                 *traceOn = 1;
             }
-            else if (!strcmp(linhacomando,"NOTRACE") && iy == 7)
+            else if (!strcmp(linhacomando,"TRACEOFF") && iy == 8)
             {
                 *traceOn = 0;
             }
-            else if (!strcmp(linhacomando,"DEBUG") && iy == 5)
+            else if (!strcmp(linhacomando,"DEBUGON") && iy == 7)
             {
                 *debugOn = 1;
             }
-            else if (!strcmp(linhacomando,"NODEBUG") && iy == 7)
+            else if (!strcmp(linhacomando,"DEBUGOFF") && iy == 8)
             {
                 *debugOn = 0;
+            }
+            else if (!strcmp(linhacomando,"LISTMEM") && iy == 7)
+            {
+                itoa(pStartSimpVar,sqtdtam,16);
+                printText("pStartSimpVar  \0"); printText(sqtdtam); printText("h\r\n\0");
+                itoa(pStartArrayVar,sqtdtam,16);
+                printText("pStartArrayVar \0"); printText(sqtdtam); printText("h\r\n\0");
+                itoa(pStartString,sqtdtam,16);
+                printText("pStartString   \0"); printText(sqtdtam); printText("h\r\n\0");
+                itoa(pStartProg,sqtdtam,16);
+                printText("pStartProg     \0"); printText(sqtdtam); printText("h\r\n\0");
+                itoa(pStartXBasLoad,sqtdtam,16);
+                printText("pStartXBasLoad \0"); printText(sqtdtam); printText("h\r\n\0");
+                itoa(pStartStack,sqtdtam,16);
+                printText("pStartStack    \0"); printText(sqtdtam); printText("h\r\n\0");
             }
             // *************************************************
             // ESSE COMANDO NAO VAI EXISTIR QUANDO FOR PRA BIOS
@@ -1790,6 +1852,8 @@ int basXBasLoad(void)
 
     printText("Loading Basic Program...\r\n");
 
+    // Limpando memoria
+    memset(pStartXBasLoad,0x1A,vMemTotalXBasLoad);
     // Carrega programa em outro ponto da memoria
     vRet = loadSerialToMem(pStartXBasLoad,0);
 
@@ -1812,6 +1876,8 @@ int basXBasLoad(void)
                     vTemp++;
                     *vBufptr = 0x00;
                     vBufptr = &vbufInput;
+                    if (*vbufInput == 0x00)
+                        break;
                     processLine();
                 }
             }
@@ -1843,9 +1909,12 @@ int basXBasLoad1k(void)
     unsigned char vByte = 0;
     unsigned char *vTemp = pStartXBasLoad;
     unsigned char *vBufptr = &vbufInput;
+    unsigned char sqtdtam[20];
 
     printText("Loading Basic Program 1k...\r\n");
 
+    // Limpando memoria
+    memset(pStartXBasLoad,0x1A,vMemTotalXBasLoad);
     // Carrega programa em outro ponto da memoria
     vRet = loadSerialToMem2(pStartXBasLoad,0);
 
@@ -1868,13 +1937,53 @@ int basXBasLoad1k(void)
                     vTemp++;
                     *vBufptr = 0x00;
                     vBufptr = &vbufInput;
+                    if (*vbufInput == 0x00)
+                        break;
                     processLine();
+if (*debugOn)
+{
+writeLongSerial("pStartSimpVar6: [");
+itoa(pStartSimpVar, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
                 }
+if (*debugOn)
+{
+writeLongSerial("pStartSimpVar7: [");
+itoa(pStartSimpVar, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
             }
             else
+            {
+if (*debugOn)
+{
+writeLongSerial("pStartSimpVar8: [");
+itoa(pStartSimpVar, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
+
                 break;
+            }
+if (*debugOn)
+{
+writeLongSerial("pStartSimpVar9: [");
+itoa(pStartSimpVar, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
         }
 
+if (*debugOn)
+{
+writeLongSerial("pStartSimpVar1: [");
+itoa(pStartSimpVar, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
         printText("Done.\r\n");
     }
     else
@@ -1885,6 +1994,13 @@ int basXBasLoad1k(void)
             *vErroProc = 20;
     }
 
+if (*debugOn)
+{
+writeLongSerial("pStartSimpVar2: [");
+itoa(pStartSimpVar, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n");
+}
     return 0;
 }
 
@@ -2425,7 +2541,7 @@ void getExp(unsigned char *result)
     unsigned char sqtdtam[10];
 
     #ifdef USE_ITERATIVE_PARSER
-        parseExpressionIterative(result);
+        parseExpr(result);
 
         if (*vErroProc) return;
 
@@ -2493,7 +2609,7 @@ int isRightAssoc(char op) {
 // -----------------------------------------------------------------------------
 // Parser iterativo (experimental, ativado por USE_ITERATIVE_PARSER)
 // -----------------------------------------------------------------------------
-void parseExpressionIterative(unsigned char *result) {
+void parseExpr(unsigned char *result) {
     unsigned char op, currentOp;
     char typeA, typeB;
     unsigned char tokenType, tokenChar, valueType;
@@ -2536,6 +2652,7 @@ void parseExpressionIterative(unsigned char *result) {
             }
 
             if (tokenType == NUMBER || tokenType == VARIABLE || tokenType == QUOTE || tokenType == COMMAND) {
+#ifdef BASIC_DEBUG_ON
 if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.5 - [\0");
@@ -2546,6 +2663,7 @@ itoa(tokenChar,sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n\0");
 }
+#endif
                 if (tokenType == VARIABLE) {
                     tokenLen = 0;
                     while (token[tokenLen])
@@ -2563,6 +2681,7 @@ writeLongSerial("]\r\n\0");
                         valueType = token[2];
                     }
 
+#ifdef BASIC_DEBUG_ON
 if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.0 - [\0");
@@ -2573,6 +2692,7 @@ itoa(*(char*)(token + 1),sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n\0");
 }
+#endif
                     tokenVarAtuLen = tokenLen;
                     tokenVarAtu[0] = token[0];
                     tokenVarAtu[1] = token[1];
@@ -2601,6 +2721,7 @@ writeLongSerial("]\r\n\0");
                         temp[4] = 0x00;
                     }
 
+#ifdef BASIC_DEBUG_ON
 if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.1 - [\0");
@@ -2616,6 +2737,7 @@ writeLongSerial("]-[");
 writeSerial(valueType);
 writeLongSerial("]\r\n\0");
 }
+#endif
                     nextToken();
                     if (*vErroProc) return;
                 }
@@ -2626,33 +2748,141 @@ writeLongSerial("]\r\n\0");
                     if (*vErroProc) return;
                 }
                 else if (tokenType == NUMBER) {
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.87 - [\0");
+itoa(*token,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+writeLongSerial(valueType);
+writeLongSerial("]\r\n\0");
+}
+#endif
                     if (strchr((char*)token, '.'))
                     {
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.88\r\n\0");
+}
+#endif
                         valueType = '#';
                         numberValue = floatStringToFpp(token);
                         if (*vErroProc) return;
                     }
                     else
                     {
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.89\r\n\0");
+}
+#endif
                         valueType = '%';
                         numberValue = atoi((char*)token);
                     }
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.90\r\n\0");
+}
+#endif
 
                     numberBytes = (unsigned char*)&numberValue;
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.91 - [\0");
+itoa(numberValue,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(numberBytes[0],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(numberBytes[1],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(numberBytes[2],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(numberBytes[3],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+#endif
                     temp[0] = numberBytes[0];
                     temp[1] = numberBytes[1];
                     temp[2] = numberBytes[2];
                     temp[3] = numberBytes[3];
                     temp[4] = 0x00;
 
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.91 - [\0");
+itoa(temp[0],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(temp[1],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(temp[2],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(temp[3],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+#endif
+
                     nextToken();
                     if (*vErroProc) return;
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.92\r\n\0");
+}
+#endif
                 }
                 else {
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.77 - [\0");
+itoa(*pointerRunProg,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+#endif
                     commandPointer = *pointerRunProg;
                     *token = *commandPointer;
                     *pointerRunProg = *pointerRunProg + 1;
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.78 - [\0");
+itoa(commandPointer,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*commandPointer,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*token,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+#endif
                     executeToken(*commandPointer);
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.79 - [\0");
+itoa(*pointerRunProg,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+#endif
                     if (*vErroProc) return;
 
                     valueType = *value_type;
@@ -2671,6 +2901,12 @@ writeLongSerial("]\r\n\0");
                     nextToken();
                     if (*vErroProc) return;
                 }
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.93\r\n\0");
+}
+#endif
 
                 if (pendingUnary) {
                     if (valueType == '$') {
@@ -2685,25 +2921,77 @@ writeLongSerial("]\r\n\0");
 
                     pendingUnary = 0;
                 }
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.94\r\n\0");
+}
+#endif
 
                 if (valTop + 1 >= PARSER_STACK_SIZE) {
                     *vErroProc = 14;
                     return;
                 }
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.95\r\n\0");
+}
+#endif
 
                 valTop++;
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.96\r\n\0");
+}
+#endif
 
                 if (valueType == '$')
                     strcpy((char*)valStack[valTop], (char*)temp);
                 else
                 {
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.97 - [\0");
+itoa(valTop,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(*(unsigned int*)temp,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+#endif
+
                     *(unsigned int*)valStack[valTop] = *(unsigned int*)temp;
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.98 - [\0");
+writeLongSerial("**** DAR TEMPO ****[\0");
+writeLongSerial("]-[");
+itoa(*(unsigned int*)valStack[valTop],sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+#endif
                     valStack[valTop][4] = 0x00;
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 888.666.99\r\n\0");
+}
+#endif
+
                 }
 
+#ifdef BASIC_DEBUG_ON
 if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.3 - [\0");
+writeLongSerial("**** DAR TEMPO ****[\0");
+writeLongSerial("]-[");
 itoa(*(unsigned int*)temp,sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]-[");
@@ -2714,6 +3002,7 @@ itoa(*(unsigned int*)valStack[valTop],sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n\0");
 }
+#endif
 
                 valTypeStack[valTop] = valueType;
                 expectValue = 0;
@@ -2785,6 +3074,7 @@ writeLongSerial("]\r\n\0");
                 a = valStack[valTop];
                 typeA = valTypeStack[valTop];
 
+#ifdef BASIC_DEBUG_ON
 if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.4 - [\0");
@@ -2801,6 +3091,7 @@ writeLongSerial("]-[");
 writeSerial(op);
 writeLongSerial("]\r\n\0");
 }
+#endif
 
                 if (typeA != typeB) {
                     if (typeA == '$' || typeB == '$') {
@@ -2900,6 +3191,7 @@ writeLongSerial("]\r\n\0");
                 a = valStack[valTop];
                 typeA = valTypeStack[valTop];
 
+#ifdef BASIC_DEBUG_ON
 if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.2 - [\0");
@@ -2916,6 +3208,7 @@ writeLongSerial("]-[");
 writeSerial(op);
 writeLongSerial("]\r\n\0");
 }
+#endif
 
                 if (typeA != typeB) {
                     if (typeA == '$' || typeB == '$') {
@@ -3069,6 +3362,7 @@ writeLongSerial("]\r\n\0");
             valTypeStack[valTop] = typeA;
         }
     }
+#ifdef BASIC_DEBUG_ON
 if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.78 - [\0");
@@ -3076,15 +3370,18 @@ itoa(valTop,sqtdtam,10);
 writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n\0");
 }
+#endif
 
     if (valTop < 0) {
         *vErroProc = 14;
         return;
     }
+#ifdef BASIC_DEBUG_ON
 if (*debugOn)
 {
 writeLongSerial("Aqui 888.666.79\r\n\0");
 }
+#endif
 
     *value_type = valTypeStack[valTop];
 
@@ -4537,10 +4834,13 @@ long findVariable(unsigned char* pVariable)
     unsigned char *pSrc;
     unsigned char sqtdtam[20];
     int vCacheIx;
+    unsigned char *cacheName0Ptr;
+    unsigned char *cacheName1Ptr;
+    unsigned char **cacheAddrPtr;
 
     // Verifica se eh array (tem parenteses logo depois do nome da variavel)
 
-if (*debugOn)
+/*if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.0 varName-[");
 itoa(pVariable[0],sqtdtam,16);
@@ -4549,7 +4849,7 @@ writeLongSerial("]-[");
 itoa(pVariable[1],sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n");
-}
+}*/
 
     vTempPointer = *pointerRunProg;
     if (*vTempPointer == 0x28)
@@ -4584,7 +4884,7 @@ writeLongSerial("]\r\n");
 
                 getExp(&vTempDim);
 
-if (*debugOn)
+/*if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.99 varName-[");
 itoa(vTempDim,sqtdtam,16);
@@ -4596,7 +4896,7 @@ writeLongSerial("]-[");
 itoa(*token,sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n");
-}
+}*/
 
                 if (*vErroProc) return 0;
 
@@ -4619,20 +4919,20 @@ writeLongSerial("]\r\n");
 
             if (*token == ',')
             {
-if (*debugOn)
+/*if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.98 varName-\r\n\0");
-}
+}*/
 
                 *pointerRunProg = *pointerRunProg + 1;
 
                 vTempPointer = *pointerRunProg;
-if (*debugOn)
+/*if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.97 varName-\r\n\0");
 itoa(*pointerRunProg,sqtdtam,16);
 writeLongSerial(sqtdtam);
-}
+}*/
             }
             else
                 break;
@@ -4665,13 +4965,17 @@ writeLongSerial(sqtdtam);
 
     if (1)  // (!vArray) // sem array por enquanto, para ajustar tamanho variavel no cache
     {
+        cacheName0Ptr = lastVarCacheName0;
+        cacheName1Ptr = lastVarCacheName1;
+        cacheAddrPtr = lastVarCacheAddr;
+
         for (vCacheIx = 0; vCacheIx < SIMPLE_VAR_CACHE_SLOTS; vCacheIx++)
         {
-            if (lastVarCacheAddr[vCacheIx] &&
-                lastVarCacheName0[vCacheIx] == vVarName0 &&
-                lastVarCacheName1[vCacheIx] == vVarName1)
+            if (*cacheAddrPtr &&
+                *cacheName0Ptr == vVarName0 &&
+                *cacheName1Ptr == vVarName1)
             {
-                vLista = lastVarCacheAddr[vCacheIx];
+                vLista = *cacheAddrPtr;
 
                 *value_type = *vLista;
 
@@ -4726,6 +5030,10 @@ writeLongSerial(sqtdtam);
 
                 return (long)vLista;
             }
+
+            cacheAddrPtr++;
+            cacheName0Ptr++;
+            cacheName1Ptr++;
         }
     }
 
@@ -4767,7 +5075,7 @@ writeLongSerial(sqtdtam);
             // Pelo tipo da variavel, ja retorna na variavel de nome o conteudo da variavel
             if (*vLista == '$')
             {
-if (*debugOn)
+/*if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.0-[");
 writeSerial(*vLista);
@@ -4775,7 +5083,7 @@ writeLongSerial("]-[");
 itoa(vPosValueVar,sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n");
-}
+}*/
                 vOffSet  = (((unsigned long)*(vPosValueVar + 1) << 24) & 0xFF000000);
                 vOffSet |= (((unsigned long)*(vPosValueVar + 2) << 16) & 0x00FF0000);
                 vOffSet |= (((unsigned long)*(vPosValueVar + 3) << 8) & 0x0000FF00);
@@ -4786,16 +5094,16 @@ writeLongSerial("]\r\n");
                 pDst = pVariable;
                 pSrc = vTemp;
 
-if (*debugOn)
+/*if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.1-[");
 itoa(vTemp,sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]-[");
-}
+}*/
                 for (ix = 0; ix < iy; ix++)
                 {
-if (*debugOn)
+/*if (*debugOn)
 {
 itoa(ix,sqtdtam,16);
 writeLongSerial(sqtdtam);
@@ -4806,25 +5114,25 @@ writeLongSerial("]-[");
         itoa(*pSrc,sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]-[");
-}
+}*/
                       *pDst = *pSrc;
-if (*debugOn)
+/*if (*debugOn)
 {
         itoa(*pDst,sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]-[");
-}
+}*/
                       pDst++;
                       pSrc++;
                 }
-if (*debugOn)
+/*if (*debugOn)
 {
 writeLongSerial("]\r\n");
-}
+}*/
 
                   *pDst = 0x00;
 
-if (*debugOn)
+/*if (*debugOn)
 {
 writeLongSerial("Aqui 333.666.2-[");
 itoa(vOffSet,sqtdtam,16);
@@ -4842,7 +5150,7 @@ writeLongSerial("]-[");
 itoa(pVariable[3],sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n");
-}
+}*/
             }
             else
             {
@@ -5059,9 +5367,9 @@ char createVariableArray(unsigned char* pVariable, char pType, unsigned int pNum
     unsigned char* vNextArrayVar;
     char vLenVar = 0;
     int ix, vTam;
-    long vAreaFree = (pStartString - *nextAddrArrayVar);
+    long vAreaFree = vMemTotalArrayVar - (*nextAddrArrayVar - pStartArrayVar);
     long vSizeTotal = 0;
-//    unsigned char sqtdtam[20];
+    unsigned char sqtdtam[20];
 
     vTemp = *nextAddrArrayVar;
     vNextArrayVar = *nextAddrArrayVar;
@@ -5120,8 +5428,11 @@ writeLongSerial("]\r\n");*/
     vSizeTotal = vTam + 8;
     vSizeTotal = vSizeTotal + (pNumDim *2);
 
-/*writeLongSerial("Aqui 333.666.3-[");
-itoa(pStartString,sqtdtam,16);
+#ifdef BASIC_DEBUG_ON
+if (*debugOn)
+{
+writeLongSerial("Aqui 333.666.3-[");
+itoa(pStartArrayVar,sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]-[");
 itoa(*nextAddrArrayVar,sqtdtam,16);
@@ -5130,9 +5441,14 @@ writeLongSerial("]-[");
 itoa(vAreaFree,sqtdtam,16);
 writeLongSerial(sqtdtam);
 writeLongSerial("]-[");
+itoa(vMemTotalArrayVar,sqtdtam,16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
 itoa(vSizeTotal,sqtdtam,16);
 writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
+writeLongSerial("]\r\n");
+}
+#endif
 
     if (vSizeTotal > vAreaFree)
     {
@@ -5675,6 +5991,7 @@ int basFre(void)
 int basTrig(unsigned char pFunc)
 {
     unsigned long vReal = 0, vResult = 0;
+    unsigned char sqtdtam[20];
 
     nextToken();
     if (*vErroProc) return 0;
@@ -6725,18 +7042,8 @@ int basFor(void)
     char vResLog1 = 0, vResLog2 = 0;
     char vResLog3 = 0, vResLog4 = 0;
 
-if (*debugOn)
-{
-writeLongSerial("Aqui 444.666.0\r\n");
-}
-
     basLet();
     if (*vErroProc) return 0;
-
-if (*debugOn)
-{
-writeLongSerial("Aqui 444.666.1]\r\n");
-}
 
     endLastVar = *atuVarAddr - 3;
     endVarCont = *atuVarAddr + 1;
@@ -6767,14 +7074,6 @@ writeLongSerial("Aqui 444.666.1]\r\n");
     }
 
     *pointerRunProg = *pointerRunProg + 1;
-
-if (*debugOn)
-{
-writeLongSerial("Aqui 444.666.2 varName-[");
-itoa(*pointerRunProg,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
 
     getExp(&iTarget); /* get target value */
 
