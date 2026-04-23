@@ -132,9 +132,11 @@ HEADER *_allocp;
 
 #define STACKSIZE  1024
 #define STACKSIZEMGUI  2048
+#define STACKSIZEBASIC  32768
 
 OS_STK StkInput[STACKSIZE];
 OS_STK StkMgui[STACKSIZEMGUI];
+OS_STK StkBasic[STACKSIZEBASIC];
 OS_STK StkTask01[STACKSIZEMGUI];
 OS_STK StkTask02[STACKSIZEMGUI];
 OS_STK StkTask03[STACKSIZEMGUI];
@@ -146,6 +148,7 @@ OS_EVENT *shared_sem;
 
 void inputTask(void *pdata);
 void mguiTask(void *pdata);
+void basicTask(void *pdata);
 void prog01Task(void *pdata);   // Prio: 25
 void prog02Task(void *pdata);   // Prio: 26
 void prog03Task(void *pdata);   // Prio: 27
@@ -336,6 +339,49 @@ void mguiTask(void *pData)
     {
         startMGI();
         break;
+    }
+
+    OSTaskDel(OS_PRIO_SELF);
+}
+
+//-----------------------------------------------------------------------------
+void basicTask(void *pData)
+{
+    unsigned char *linhaarg = (unsigned char*)pData;
+
+    // Aloca espaços para o interpretador BASIC e executa ele
+    *startBasic0 = fsMalloc(204800);
+
+    if (!*startBasic0)
+    {
+        if (*startBasic0) fsFree(*startBasic0);
+
+        *startBasic0 = 0;
+
+        // Erro
+        printText("No memory to run Basic...\r\n\0");
+    }
+    else
+    {
+        // Run Basic
+        if (*linhaarg)
+            memcpy(paramBasic, linhaarg, 255);
+        else
+            *paramBasic = 0x00;
+
+        *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
+
+        while(1)
+        {
+            runOSMemory = 0x00870000; // Endereço provisorio. Sera 0x00020000
+            runFromOsCmd();
+            break;
+        }
+
+        fsFree(*startBasic0);
+        *startBasic0 = 0;
+        *startBasic = 0;
+        *paramBasic = 0;
     }
 
     OSTaskDel(OS_PRIO_SELF);
@@ -1162,63 +1208,7 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
             }
             else if (!strcmp(linhacomando,"BASIC") && iy == 5)
             {
-                // Aloca espaços para o interpretador BASIC e executa ele
-                *startBasic0 = fsMalloc(204800);
-                /**startBasic0 = fsMalloc(0x02000);  // 8KB  - Variaveis Simples
-                *startBasic1 = fsMalloc(0x06000);  // 24KB - Arrays
-                *startBasic2 = fsMalloc(0x08000);  // 32KB - Strings
-                *startBasic3 = fsMalloc(0x10000);  // 64KB - Area do Programa Basic
-                *startBasic4 = fsMalloc(0x10000);  // 64KB - Area Carregar .BAS para processar depois
-                *startBasic5 = fsMalloc(0x02000);  // 8KB  - Variaveis sistema e stack pointer*/
-                            
-                if (!*startBasic0 /*|| !*startBasic1 || !*startBasic2 || !*startBasic3 || !*startBasic4 || !*startBasic5*/ )
-                {
-                    if (*startBasic0) fsFree(*startBasic0);
-                    /*if (*startBasic1) fsFree(*startBasic1);
-                    if (*startBasic2) fsFree(*startBasic2);
-                    if (*startBasic3) fsFree(*startBasic3);
-                    if (*startBasic4) fsFree(*startBasic4);
-                    if (*startBasic5) fsFree(*startBasic5);*/
-
-                    *startBasic0 = 0;
-                    /**startBasic1 = 0;
-                    *startBasic2 = 0;
-                    *startBasic3 = 0;
-                    *startBasic4 = 0;
-                    *startBasic5 = 0;*/
-
-                    // Erro
-                    printText("No memory to load file...\r\n\0");
-                }
-                else
-                {
-                    // Run Basic
-                    if (*linhaarg)
-                        memcpy(paramBasic, linhaarg, 255);
-                    else
-                        *paramBasic = 0x00;
-
-                    *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
-                    vEnderExec = 0x00870000;  // Endereço provisorio. Sera 0x00020000
-                    runOSMemory = vEnderExec;
-                    runFromOsCmd();
-
-                    /*fsFree(*startBasic5);
-                    fsFree(*startBasic4);
-                    fsFree(*startBasic3);
-                    fsFree(*startBasic2);
-                    fsFree(*startBasic1);*/
-                    fsFree(*startBasic0);
-
-                    *startBasic0 = 0;
-                    /**startBasic1 = 0;
-                    *startBasic2 = 0;
-                    *startBasic3 = 0;
-                    *startBasic4 = 0;
-                    *startBasic5 = 0;*/
-                    *startBasic = 0;
-                    *paramBasic = 0;
-                }
+                OSTaskCreate(basicTask, (void *)linhaarg, &StkBasic[STACKSIZEBASIC], 11);
             }
             else
             {

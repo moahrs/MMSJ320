@@ -64,10 +64,12 @@ data       equ         *               ; initialized data
            xdef      __heap
 __heap:
            dc.l      heap              ; begin of free memory
+__heap_end:
+           dc.l      heap_end          ; end of free memory
 
            section     bss
            align
-           org         $602000
+           org         $8C0000
 bss        equ         *               ; un-initialized data
            ds.w        512             ; stack for main() function
 __stack    equ         *
@@ -77,3 +79,4 @@ __ungetbuf:
            align
            org         $820000
 heap       equ         *               ; start of free memory
+heap_end   equ         $8BFFFF         ; end of free memory
