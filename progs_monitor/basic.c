@@ -69,6 +69,9 @@
 #define PARSER_STACK_SIZE 32
 #define PAINT_STACK_SIZE 4096
 #define MAX_WHILE_STACK   16
+#define BASIC_VDP_RAM_SIZE 0x4000
+#define BASIC_VDP_BUFFER_VRAM 0
+#define BASIC_VDP_BUFFER_RAM 1
 
 //#define BASIC_DEBUG_ON 0
 
@@ -83,6 +86,7 @@ static unsigned char paintStackY[PAINT_STACK_SIZE];
 static unsigned int paintPatternTable = 0x0000;
 static unsigned int paintColorTable = 0x2000;
 static unsigned char *paintVdpData = (unsigned char *)0x00400041;
+static unsigned char basicVdpBufferEnabled = 0;
 static unsigned char *while_ptr_stack[MAX_WHILE_STACK];
 static int while_sp = 0;
 unsigned char verro;
@@ -112,6 +116,179 @@ static void clearRuntimeData(unsigned char *pForStack)
     memset(pStartSimpVar, 0x00, vMemTotalSimpVar);
     memset(pStartArrayVar, 0x00, vMemTotalArrayVar);
     memset(pForStack, 0x00, 0x800);
+}
+
+static void basVideoResetBufferState(void)
+{
+    basicVdpBufferEnabled = 0;
+    if (pStartVdpBuffer)
+        memset(pStartVdpBuffer, 0x00, BASIC_VDP_RAM_SIZE);
+}
+
+static unsigned char basVideoActiveBuffer(void)
+{
+    if (basicVdpBufferEnabled)
+        return BASIC_VDP_BUFFER_RAM;
+
+    return BASIC_VDP_BUFFER_VRAM;
+}
+
+static unsigned char basVideoReadByte(unsigned char bufferId, unsigned int address)
+{
+    if (address >= BASIC_VDP_RAM_SIZE)
+        return 0x00;
+
+    if (bufferId == BASIC_VDP_BUFFER_RAM)
+        return pStartVdpBuffer[address];
+
+    setReadAddress(address);
+    setReadAddress(address);
+    return *vvdgBASd;
+}
+
+static void basVideoWriteByte(unsigned char bufferId, unsigned int address, unsigned char value)
+{
+    if (address >= BASIC_VDP_RAM_SIZE)
+        return;
+
+    if (bufferId == BASIC_VDP_BUFFER_RAM)
+    {
+        pStartVdpBuffer[address] = value;
+        return;
+    }
+
+    setWriteAddress(address);
+    *vvdgBASd = value;
+}
+
+static void basVideoPlotHiresToBuffer(unsigned char bufferId, unsigned char x, unsigned char y, unsigned char color1, unsigned char color2)
+{
+    unsigned int offset;
+    unsigned int posX;
+    unsigned int posY;
+    unsigned int modY;
+    unsigned char pixel;
+    unsigned char color;
+
+    posX = (unsigned int)(8 * (x / 8));
+    posY = (unsigned int)(256 * (y / 8));
+    modY = (unsigned int)(y % 8);
+    offset = posX + modY + posY;
+
+    pixel = basVideoReadByte(bufferId, paintPatternTable + offset);
+    color = basVideoReadByte(bufferId, paintColorTable + offset);
+
+    if (color1 != 0x00)
+    {
+        pixel |= 0x80 >> (x % 8);
+        color = (color & 0x0F) | (color1 << 4);
+    }
+    else
+    {
+        pixel &= ~(0x80 >> (x % 8));
+        color = (color & 0xF0) | (color2 & 0x0F);
+    }
+
+    basVideoWriteByte(bufferId, paintPatternTable + offset, pixel);
+    basVideoWriteByte(bufferId, paintColorTable + offset, color);
+}
+
+static void basVideoPlotHires(unsigned char x, unsigned char y, unsigned char color1, unsigned char color2)
+{
+    basVideoPlotHiresToBuffer(basVideoActiveBuffer(), x, y, color1, color2);
+}
+
+static unsigned char basVideoReadPixelFromBuffer(unsigned char bufferId, unsigned char x, unsigned char y)
+{
+    unsigned int offset;
+    unsigned char pixel;
+    unsigned char color;
+
+    offset = (unsigned int)(8 * (x / 8)) + (unsigned int)(y % 8) + (unsigned int)(256 * (y / 8));
+    pixel = basVideoReadByte(bufferId, paintPatternTable + offset);
+    color = basVideoReadByte(bufferId, paintColorTable + offset);
+
+    if (pixel & (0x80 >> (x % 8)))
+        return (color >> 4) & 0x0F;
+
+    return color & 0x0F;
+}
+
+static unsigned char basVideoReadPixel(unsigned char x, unsigned char y)
+{
+    return basVideoReadPixelFromBuffer(basVideoActiveBuffer(), x, y);
+}
+
+static void basVideoCopyRect(unsigned char orig, unsigned char dest, unsigned char x1, unsigned char y1, unsigned char x2, unsigned char y2)
+{
+    unsigned int y;
+    unsigned int byteXStart;
+    unsigned int byteXEnd;
+    unsigned int byteX;
+    unsigned int bitStart;
+    unsigned int bitEnd;
+    unsigned int bit;
+    unsigned int posY;
+    unsigned int modY;
+    unsigned int offset;
+    unsigned int posX;
+    unsigned char mask;
+    unsigned char srcPattern;
+    unsigned char srcColor;
+    unsigned char dstPattern;
+    unsigned char dstColor;
+
+    byteXStart = ((unsigned int)x1) >> 3;
+    byteXEnd = ((unsigned int)x2) >> 3;
+
+    for (y = y1; y <= y2; y++)
+    {
+        posY = (unsigned int)(256 * (y / 8));
+        modY = (unsigned int)(y % 8);
+
+        for (byteX = byteXStart; byteX <= byteXEnd; byteX++)
+        {
+            bitStart = 0;
+            bitEnd = 7;
+
+            if (byteX == byteXStart)
+                bitStart = (unsigned int)(x1 & 0x07);
+
+            if (byteX == byteXEnd)
+                bitEnd = (unsigned int)(x2 & 0x07);
+
+            mask = 0x00;
+            for (bit = bitStart; bit <= bitEnd; bit++)
+                mask |= (unsigned char)(0x80 >> bit);
+
+            posX = byteX << 3;
+            offset = posX + modY + posY;
+
+            srcPattern = basVideoReadByte(orig, paintPatternTable + offset);
+            srcColor = basVideoReadByte(orig, paintColorTable + offset);
+
+            if (mask == 0xFF)
+            {
+                dstPattern = srcPattern;
+                dstColor = srcColor;
+            }
+            else
+            {
+                /* Borda parcial: limpa byte inteiro e copia apenas os bits do recorte. */
+                dstPattern = (unsigned char)(srcPattern & mask);
+                dstColor = (unsigned char)(srcColor & 0xF0);
+            }
+
+            basVideoWriteByte(dest, paintPatternTable + offset, dstPattern);
+            basVideoWriteByte(dest, paintColorTable + offset, dstColor);
+
+            if (byteX == 31)
+                break;
+        }
+
+        if (y == 191)
+            break;
+    }
 }
 
 static void basPaintSyncTables(void)
@@ -194,6 +371,7 @@ void main(void)
             pStartArrayVar       = 0x00803000;   // Area Arrays
             pStartString         = 0x00810000;   // Area Strings
             pStartProg           = 0x00830000;   // Area Programa  deve ser 0x00810000
+            pStartVdpBuffer      = 0x00870000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM
             pStartXBasLoad       = 0x00890000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
             pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
 
@@ -208,7 +386,8 @@ void main(void)
             pStartArrayVar       = 0x00803000;   // Area Arrays
             pStartString         = 0x00810000;   // Area Strings
             pStartProg           = 0x00830000;   // Area Programa  deve ser 0x00810000
-            pStartXBasLoad       = 0x00850000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+            pStartVdpBuffer      = 0x00850000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM
+            pStartXBasLoad       = 0x008B0000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
             pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
 
             vMemTotalSimpVar = 12288;
@@ -245,6 +424,7 @@ void main(void)
     *lastHgrX = 0;
     *lastHgrY = 0;
     spriteSizeSelBas = 0;
+    basVideoResetBufferState();
     //vdpcolor = vdp_get_color();
     vdpcolor.fg = VDP_WHITE;
     vdpcolor.bg = VDP_BLACK;
@@ -2070,10 +2250,10 @@ int executeToken(unsigned char pToken)
         case 0x8F:  // DIM
             vReta = basDim();
             break;
-        case 0x90:  // Nao fax nada, soh teste, pode ser retirado
-            vReta = 0;
+        case 0x90:  // BUFSHOW
+            vReta = basBufShow();
             break;
-        case 0x91:  // DIM
+        case 0x91:  // ON
             vReta = basOnVar();
             break;
         case 0x92:  // Input
@@ -2108,6 +2288,15 @@ int executeToken(unsigned char pToken)
             break;
         case 0x9A:  // Restore
             vReta = basRestore();
+            break;
+        case 0x9B:  // BUFVDGON
+            vReta = basBufVdg(1);
+            break;
+        case 0x9C:  // BUFVDGOFF
+            vReta = basBufVdg(0);
+            break;
+        case 0x9D:  // BUFCOPY
+            vReta = basBufCopy();
             break;
         case 0x9E:  // END
             vReta = basEnd();
@@ -8226,10 +8415,12 @@ int basScreen(void)
     switch (vModeAux)
     {
         case 0:
+            basicVdpBufferEnabled = 0;
             if (vdpModeBas != VDP_MODE_TEXT)
                 basText();
             break;
         case 1:
+            basicVdpBufferEnabled = 0;
             if (vdpModeBas != VDP_MODE_MULTICOLOR)
             {
                 vdp_init(VDP_MODE_MULTICOLOR, 0, vSpriteSize, vSpriteMag);
@@ -8253,6 +8444,10 @@ int basScreen(void)
                 basPaintSyncTables();
                 basSpriteResetCache();
             }
+            else
+            {
+                basPaintSyncTables();
+            }
             break;
     }
 
@@ -8263,6 +8458,7 @@ int basText(void)
 {
     fgcolorBas = VDP_WHITE;
     bgcolorBas = VDP_BLACK;
+    basicVdpBufferEnabled = 0;
     vdp_init(VDP_MODE_TEXT, (fgcolorBas<<4) | (bgcolorBas & 0x0f), 0, 0);
     vdpMaxCols = 39;
     vdpMaxRows = 23;
@@ -8393,10 +8589,10 @@ int basColor(void)
 //--------------------------------------------------------------------------------------
 static void basPlotEllipsePoints(int x0, int y0, int dx, int dy)
 {
-    vdp_plot_hires((unsigned char)(x0 + dx), (unsigned char)(y0 + dy), fgcolorBas, bgcolorBas);
-    vdp_plot_hires((unsigned char)(x0 - dx), (unsigned char)(y0 + dy), fgcolorBas, bgcolorBas);
-    vdp_plot_hires((unsigned char)(x0 + dx), (unsigned char)(y0 - dy), fgcolorBas, bgcolorBas);
-    vdp_plot_hires((unsigned char)(x0 - dx), (unsigned char)(y0 - dy), fgcolorBas, bgcolorBas);
+    basVideoPlotHires((unsigned char)(x0 + dx), (unsigned char)(y0 + dy), fgcolorBas, bgcolorBas);
+    basVideoPlotHires((unsigned char)(x0 - dx), (unsigned char)(y0 + dy), fgcolorBas, bgcolorBas);
+    basVideoPlotHires((unsigned char)(x0 + dx), (unsigned char)(y0 - dy), fgcolorBas, bgcolorBas);
+    basVideoPlotHires((unsigned char)(x0 - dx), (unsigned char)(y0 - dy), fgcolorBas, bgcolorBas);
 }
 
 static void basReadNumericArg(int *pValue)
@@ -8434,6 +8630,158 @@ static void basReadNumericArg(int *pValue)
     }
 
     *pValue = *iVal;
+}
+
+int basBufVdg(unsigned char pEnabled)
+{
+    if (vdpModeBas != VDP_MODE_G2)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    basPaintSyncTables();
+    basicVdpBufferEnabled = pEnabled ? 1 : 0;
+    *value_type = '%';
+
+    return 0;
+}
+
+int basBufCopy(void)
+{
+    int values[6];
+    int ix;
+    int temp;
+    unsigned char origin;
+    unsigned char dest;
+
+    if (vdpModeBas != VDP_MODE_G2)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    basPaintSyncTables();
+
+    for (ix = 0; ix < 6; ix++)
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        basReadNumericArg(&values[ix]);
+        if (*vErroProc) return 0;
+
+        if (ix < 5)
+        {
+            nextToken();
+            if (*vErroProc) return 0;
+
+            if (*token != ',')
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+        }
+    }
+
+    origin = (unsigned char)values[0];
+    dest = (unsigned char)values[1];
+
+    if (origin > 1 || dest > 1)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    if (values[2] < 0 || values[2] > 255 || values[4] < 0 || values[4] > 255 ||
+        values[3] < 0 || values[3] > 191 || values[5] < 0 || values[5] > 191)
+    {
+        *vErroProc = 25;
+        return 0;
+    }
+
+    if (values[4] < values[2])
+    {
+        temp = values[2];
+        values[2] = values[4];
+        values[4] = temp;
+    }
+
+    if (values[5] < values[3])
+    {
+        temp = values[3];
+        values[3] = values[5];
+        values[5] = temp;
+    }
+
+    basVideoCopyRect(origin, dest, (unsigned char)values[2], (unsigned char)values[3], (unsigned char)values[4], (unsigned char)values[5]);
+
+    *value_type = '%';
+
+    return 0;
+}
+
+int basBufShow(void)
+{
+    int values[4];
+    int ix;
+    int temp;
+
+    if (vdpModeBas != VDP_MODE_G2)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    basPaintSyncTables();
+
+    for (ix = 0; ix < 4; ix++)
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        basReadNumericArg(&values[ix]);
+        if (*vErroProc) return 0;
+
+        if (ix < 3)
+        {
+            nextToken();
+            if (*vErroProc) return 0;
+
+            if (*token != ',')
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+        }
+    }
+
+    if (values[0] < 0 || values[0] > 255 || values[2] < 0 || values[2] > 255 ||
+        values[1] < 0 || values[1] > 191 || values[3] < 0 || values[3] > 191)
+    {
+        *vErroProc = 25;
+        return 0;
+    }
+
+    if (values[2] < values[0])
+    {
+        temp = values[0];
+        values[0] = values[2];
+        values[2] = temp;
+    }
+
+    if (values[3] < values[1])
+    {
+        temp = values[1];
+        values[1] = values[3];
+        values[3] = temp;
+    }
+
+    basVideoCopyRect(1, 0, (unsigned char)values[0], (unsigned char)values[1], (unsigned char)values[2], (unsigned char)values[3]);
+
+    *value_type = '%';
+
+    return 0;
 }
 
 int basCircle(void)
@@ -8510,17 +8858,17 @@ int basCircle(void)
 
     if (horizontalRadius == 0 && verticalRadius == 0)
     {
-        vdp_plot_hires((unsigned char)centerX, (unsigned char)centerY, fgcolorBas, bgcolorBas);
+        basVideoPlotHires((unsigned char)centerX, (unsigned char)centerY, fgcolorBas, bgcolorBas);
     }
     else if (horizontalRadius == 0)
     {
         for (y = -verticalRadius; y <= verticalRadius; y++)
-            vdp_plot_hires((unsigned char)centerX, (unsigned char)(centerY + y), fgcolorBas, bgcolorBas);
+            basVideoPlotHires((unsigned char)centerX, (unsigned char)(centerY + y), fgcolorBas, bgcolorBas);
     }
     else if (verticalRadius == 0)
     {
         for (x = -horizontalRadius; x <= horizontalRadius; x++)
-            vdp_plot_hires((unsigned char)(centerX + x), (unsigned char)centerY, fgcolorBas, bgcolorBas);
+            basVideoPlotHires((unsigned char)(centerX + x), (unsigned char)centerY, fgcolorBas, bgcolorBas);
     }
     else
     {
@@ -8670,21 +9018,21 @@ int basRect(void)
     }
 
     for (ix = left; ix <= right; ix++)
-        vdp_plot_hires((unsigned char)ix, (unsigned char)top, fgcolorBas, bgcolorBas);
+        basVideoPlotHires((unsigned char)ix, (unsigned char)top, fgcolorBas, bgcolorBas);
 
     for (iy = top; iy <= bottom; iy++)
-        vdp_plot_hires((unsigned char)left, (unsigned char)iy, fgcolorBas, bgcolorBas);
+        basVideoPlotHires((unsigned char)left, (unsigned char)iy, fgcolorBas, bgcolorBas);
 
     if (bottom != top)
     {
         for (ix = left; ix <= right; ix++)
-            vdp_plot_hires((unsigned char)ix, (unsigned char)bottom, fgcolorBas, bgcolorBas);
+            basVideoPlotHires((unsigned char)ix, (unsigned char)bottom, fgcolorBas, bgcolorBas);
     }
 
     if (right != left)
     {
         for (iy = top; iy <= bottom; iy++)
-            vdp_plot_hires((unsigned char)right, (unsigned char)iy, fgcolorBas, bgcolorBas);
+            basVideoPlotHires((unsigned char)right, (unsigned char)iy, fgcolorBas, bgcolorBas);
     }
 
     *value_type = '%';
@@ -8699,23 +9047,7 @@ int basRect(void)
 //--------------------------------------------------------------------------------------
 static unsigned char basPaintReadPixel(unsigned char x, unsigned char y)
 {
-    unsigned int offset;
-    unsigned char pixel;
-    unsigned char color;
-
-    offset = (unsigned int)(8 * (x / 8)) + (unsigned int)(y % 8) + (unsigned int)(256 * (y / 8));
-
-    setReadAddress(paintPatternTable + offset);
-    setReadAddress(paintPatternTable + offset);
-    pixel = *paintVdpData;
-    setReadAddress(paintColorTable + offset);
-    setReadAddress(paintColorTable + offset);
-    color = *paintVdpData;
-
-    if (pixel & (0x80 >> (x % 8)))
-        return (color >> 4) & 0x0F;
-
-    return color & 0x0F;
+    return basVideoReadPixel(x, y);
 }
 
 static int basPaintPush(unsigned int *stackTop, unsigned char x, unsigned char y)
@@ -8848,7 +9180,7 @@ int basPaint(void)
             right++;
 
         for (x = left; x <= right; x++)
-            vdp_plot_hires((unsigned char)x, (unsigned char)y, fillColor, 0);
+            basVideoPlotHires((unsigned char)x, (unsigned char)y, fillColor, 0);
 
         if (y > 0)
         {
@@ -8884,6 +9216,7 @@ void fillRect(int x1, int y1, int x2, int y2, int fillColor)
     unsigned int rowBase;
     unsigned int offset;
     unsigned int bx;
+    unsigned char bufferId;
 
     /* Ajusta coordenadas */
     if (x1 > x2)
@@ -8901,6 +9234,7 @@ void fillRect(int x1, int y1, int x2, int y2, int fillColor)
     }
 
     fillColor &= 0x0F;
+    bufferId = basVideoActiveBuffer();
 
     colorByte = (fillColor << 4) | bgcolorBas;
     fillIsBackground = (fillColor == bgcolorBas) ? 1 : 0;
@@ -8922,71 +9256,49 @@ void fillRect(int x1, int y1, int x2, int y2, int fillColor)
         if (startByte == endByte)
         {
             offset = rowBase + startByte;
-
-            setReadAddress(paintPatternTable + offset);
-            setReadAddress(paintPatternTable + offset);
-            pixel = *vvdgBASd;
+            pixel = basVideoReadByte(bufferId, paintPatternTable + offset);
 
             if (fillIsBackground)
                 pixel &= (unsigned char)(~maskSingle);
             else
                 pixel |= maskSingle;
 
-            setWriteAddress(paintPatternTable + offset);
-            *vvdgBASd = pixel;
-
-            setWriteAddress(paintColorTable + offset);
-            *vvdgBASd = colorByte;
+            basVideoWriteByte(bufferId, paintPatternTable + offset, pixel);
+            basVideoWriteByte(bufferId, paintColorTable + offset, colorByte);
         }
         else
         {
             /* byte inicial */
             offset = rowBase + startByte;
-
-            setReadAddress(paintPatternTable + offset);
-            setReadAddress(paintPatternTable + offset);
-            pixel = *vvdgBASd;
+            pixel = basVideoReadByte(bufferId, paintPatternTable + offset);
 
             if (fillIsBackground)
                 pixel &= (unsigned char)(~maskLeft);
             else
                 pixel |= maskLeft;
 
-            setWriteAddress(paintPatternTable + offset);
-            *vvdgBASd = pixel;
-
-            setWriteAddress(paintColorTable + offset);
-            *vvdgBASd = colorByte;
+            basVideoWriteByte(bufferId, paintPatternTable + offset, pixel);
+            basVideoWriteByte(bufferId, paintColorTable + offset, colorByte);
 
             /* bytes centrais */
             for (bx = startByte + 8; bx < endByte; bx += 8)
             {
                 offset = rowBase + bx;
-
-                setWriteAddress(paintPatternTable + offset);
-                *vvdgBASd = fillIsBackground ? 0x00 : 0xFF;
-
-                setWriteAddress(paintColorTable + offset);
-                *vvdgBASd = colorByte;
+                basVideoWriteByte(bufferId, paintPatternTable + offset, fillIsBackground ? 0x00 : 0xFF);
+                basVideoWriteByte(bufferId, paintColorTable + offset, colorByte);
             }
 
             /* byte final */
             offset = rowBase + endByte;
-
-            setReadAddress(paintPatternTable + offset);
-            setReadAddress(paintPatternTable + offset);
-            pixel = *vvdgBASd;
+            pixel = basVideoReadByte(bufferId, paintPatternTable + offset);
 
             if (fillIsBackground)
                 pixel &= (unsigned char)(~maskRight);
             else
                 pixel |= maskRight;
 
-            setWriteAddress(paintPatternTable + offset);
-            *vvdgBASd = pixel;
-
-            setWriteAddress(paintColorTable + offset);
-            *vvdgBASd = colorByte;
+            basVideoWriteByte(bufferId, paintPatternTable + offset, pixel);
+            basVideoWriteByte(bufferId, paintColorTable + offset, colorByte);
         }
     }
 }
@@ -9622,7 +9934,10 @@ int basPlot(void)
 
     vy=(char)*iVal;
 
-    vdp_plot_color(vx, vy, fgcolorBas);
+    if (vdpModeBas == VDP_MODE_G2)
+        basVideoPlotHires(vx, vy, fgcolorBas, bgcolorBas);
+    else
+        vdp_plot_color(vx, vy, fgcolorBas);
 
     *value_type='%';
 
@@ -9723,7 +10038,10 @@ int basPoint(void)
     }
 
     // Ler Aqui.. a cor e devolver em *tval
-    *tval = vdp_read_color_pixel(vx,vy);
+    if (vdpModeBas == VDP_MODE_G2)
+        *tval = basVideoReadPixel(vx, vy);
+    else
+        *tval = vdp_read_color_pixel(vx,vy);
 
     *value_type='%';
 
@@ -9840,12 +10158,12 @@ int basLine(void)
                 *lastHgrY = vy;
 
                 if (*token != 0x86)
-                    vdp_plot_hires(vx, vy, fgcolorBas, bgcolorBas);
+                    basVideoPlotHires(vx, vy, fgcolorBas, bgcolorBas);
             }
             else if (vOper == 2)
             {
                 if (vx == *lastHgrX && vy == *lastHgrY)
-                    vdp_plot_hires(vx, vy, fgcolorBas, bgcolorBas);
+                    basVideoPlotHires(vx, vy, fgcolorBas, bgcolorBas);
                 else
                 {
                     dx = (vx - *lastHgrX);
@@ -9876,7 +10194,7 @@ int basLine(void)
 
                         for(ix = 1; ix <= (dx + 1); ix++)
                         {
-                            vdp_plot_hires(x, y, fgcolorBas, 0);
+                            basVideoPlotHires(x, y, fgcolorBas, 0);
 
                             if (P < 0)
                             {
@@ -9897,7 +10215,7 @@ int basLine(void)
 
                         for(ix = 1; ix <= (dy +1); ix++)
                         {
-                            vdp_plot_hires(x, y, fgcolorBas, 0);
+                            basVideoPlotHires(x, y, fgcolorBas, 0);
 
                             if (P < 0)
                             {

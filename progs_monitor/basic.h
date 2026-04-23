@@ -78,6 +78,7 @@ unsigned int vMemTotalStack; // Total de memoria alocada para stack
   volatile unsigned char *pStartArrayVar       ; //= 0x00803000;   // Area Arrays
   volatile unsigned char *pStartString         ; //= 0x00810000;   // Area Strings
   volatile unsigned char *pStartProg           ; //= 0x00830000;   // Area Programa  deve ser 0x00810000
+  volatile unsigned char *pStartVdpBuffer      ; //= 0x00870000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM
   volatile unsigned char *pStartXBasLoad       ; //= 0x00890000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
   volatile unsigned char *pStartStack          ; //= 0x008FE000;   // Area variaveis sistema e stack pointer
 #else
@@ -85,6 +86,7 @@ unsigned int vMemTotalStack; // Total de memoria alocada para stack
   volatile unsigned char *pStartArrayVar       ; // = 0x00803000;   // Area Arrays
   volatile unsigned char *pStartString         ; // = 0x00830000;   // Area Strings
   volatile unsigned char *pStartProg           ; // = 0x00850000;   // Area Programa  deve ser 0x00810000
+  volatile unsigned char *pStartVdpBuffer      ; // = 0x00890000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM
   volatile unsigned char *pStartXBasLoad       ; // = 0x008B0000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
   volatile unsigned char *pStartStack          ; // = 0x008FE000;   // Area variaveis sistema e stack pointer
 #endif
@@ -140,7 +142,7 @@ unsigned long *vDataLineAtu         = 0x008FE95E; //
 for_stack *forStack                 = 0x008FF6BE; // stack for FOR/NEXT loop
 unsigned long *atuVarAddr           = 0x008FF6B0; // Endereco da variavel atualmente usada pelo basLet
 
-const keywords_count = 69; // Quantidade de palavras reservadas
+const keywords_count = 73; // Quantidade de palavras reservadas
 
 // -------------------------------------------------------------------------------
 // Mensagens de Erro
@@ -201,6 +203,7 @@ static const struct keyword_token keywords[] =
   {"SPRITESET", 0x8D},  // .. .. ok
   {"SPRITEPUT", 0x8E},  // .. .. ok
   {"DIM", 		0x8F},   // .. .. ok
+  {"BUFSHOW", 0x90},   // .. .. ok
   {"ON",      0x91},   // .. .. ok
   {"INPUT", 	0x92},   // .. ok ok
   {"GET",     0x93},   // .. ok ok
@@ -211,6 +214,9 @@ static const struct keyword_token keywords[] =
   {"DATA", 		0x98},   // .. .. ok
   {"READ", 		0x99},   // .. .. ok
   {"RESTORE", 0x9A},   // .. .. ok
+  {"BUFDRAWON", 0x9B},   // .. .. ok
+  {"BUFDRAWOFF", 0x9C},   // .. .. ok
+  {"BUFCOPY", 0x9D},   // .. .. ok
   {"END",     0x9E},   // .. .. ok
   {"STOP",    0x9F},   // .. .. ok
   {"SCREEN",  0xB0},   // .. .. ok
@@ -403,6 +409,9 @@ int basPoint(void);
 int basLine(void);
 int basRead(void);
 int basRestore(void);
+int basBufVdg(unsigned char pEnabled);
+int basBufCopy(void);
+int basBufShow(void);
 int basTrig(unsigned char pFunc);
 int basWhile(void);
 int basWend(void);
