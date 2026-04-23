@@ -82,11 +82,13 @@ Rotinas internas sem token continuam fora.
 | `COS` | `COS(<number real>)` | Retorna o cosseno do ângulo. | `PRINT COS(0)` |
 | `EXP` | `EXP(<number real>)` | Retorna $e^x$. | `PRINT EXP(1)` |
 | `FRE` | `FRE(0)` | Retorna a memória livre disponível para o BASIC. | `PRINT FRE(0)` |
+| `HEX$` | `HEX$(<inteiro>)` | Converte inteiro para string hexadecimal com sufixo `h`. | `PRINT HEX$(255)` |
 | `INT` | `INT(<number real>)` | Converte o valor para inteiro. | `PRINT INT(3.9)` |
 | `LEN` | `LEN(<string>)` | Retorna o tamanho da string. | `PRINT LEN(A$)` |
 | `LEFT$` | `LEFT$(<string>,<qtd>)` | Retorna os primeiros caracteres da string. | `PRINT LEFT$(A$,3)` |
 | `LOG` | `LOG(<number real>)` | Retorna o logaritmo natural. | `PRINT LOG(10)` |
 | `MID$` | `MID$(<string>,<inicio>[,<qtd>])` | Retorna uma parte da string a partir da posição informada. | `PRINT MID$(A$,2,4)` |
+| `OCT$` | `OCT$(<inteiro>)` | Converte inteiro para string octal com sufixo `o`. | `PRINT OCT$(64)` |
 | `PEEK` | `PEEK(<endereco>)` | Lê um byte da memória. | `PRINT PEEK(4096)` |
 | `POINT` | `POINT(<x>,<y>)` | Retorna a cor do pixel na posição informada. | `C = POINT(10,20)` |
 | `SPRITEOVER` | `SPRITEOVER(<numsprite1>,<numsprite2>)` | Retorna 1 quando os dois sprites informados estão em colisão. | `PRINT SPRITEOVER(0,1)` |
@@ -97,6 +99,7 @@ Rotinas internas sem token continuam fora.
 | `SPC` | `SPC(<numero>)` | Gera um bloco de espaços para uso em `PRINT`. | `PRINT "A";SPC(5);"B"` |
 | `SQRT` | `SQRT(<number real>)` | Retorna a raiz quadrada. | `PRINT SQRT(9)` |
 | `STR$` | `STR$(<numero>)` | Converte número para string. | `A$ = STR$(123)` |
+| `BIN$` | `BIN$(<inteiro>)` | Converte inteiro para string binária com sufixo `b`. | `PRINT BIN$(10)` |
 | `TAB` | `TAB(<numero>)` | Avança a coluna do `PRINT`. | `PRINT TAB(10);"X"` |
 | `TAN` | `TAN(<number real>)` | Retorna a tangente do ângulo. | `PRINT TAN(0)` |
 | `VAL` | `VAL(<string>)` | Converte string numérica para valor. | `PRINT VAL("123")` |

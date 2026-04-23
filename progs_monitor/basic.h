@@ -142,7 +142,7 @@ unsigned long *vDataLineAtu         = 0x008FE95E; //
 for_stack *forStack                 = 0x008FF6BE; // stack for FOR/NEXT loop
 unsigned long *atuVarAddr           = 0x008FF6B0; // Endereco da variavel atualmente usada pelo basLet
 
-const keywords_count = 73; // Quantidade de palavras reservadas
+const keywords_count = 76; // Quantidade de palavras reservadas
 
 // -------------------------------------------------------------------------------
 // Mensagens de Erro
@@ -234,6 +234,9 @@ static const struct keyword_token keywords[] =
   {"WHILE",   0xBC},   // .. .. ok
   {"WEND",    0xBD},   // .. .. ok
   {"ASC",     0xC4},   // .. .. ok
+  {"HEX$",    0xC5},   // .. .. ok
+  {"BIN$",    0xC6},   // .. .. ok
+  {"OCT$",    0xC7},   // .. .. ok
   {"PEEK",    0xCD},   // .. .. ok
   {"POKE",    0xCE},   // .. .. ok
   {"RND",     0xD1},   // .. .. ok
@@ -367,6 +370,9 @@ int basFre(void);
 int basVal(void);
 int basLen(void);
 int basStr(void);
+int basHex(void);
+int basBin(void);
+int basOct(void);
 int basAsc(void);
 int basLeftRightMid(char pTipo);
 int basIf(void);

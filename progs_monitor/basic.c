@@ -2349,6 +2349,15 @@ int executeToken(unsigned char pToken)
         case 0xC4:  // ASC
             vReta = basAsc();
             break;
+        case 0xC5:  // HEX$
+            vReta = basHex();
+            break;
+        case 0xC6:  // BIN$
+            vReta = basBin();
+            break;
+        case 0xC7:  // OCT$
+            vReta = basOct();
+            break;
         case 0xCD:  // PEEK
             vReta = basPeekPoke('R');
             break;
@@ -6009,6 +6018,75 @@ int basStr(void)
     *value_type='$';
 
     return 0;
+}
+
+static int basBaseString(unsigned char pBase, unsigned char pSuffix)
+{
+    unsigned char answer[20];
+    int *iVal = answer;
+    int len;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type == QUOTE)
+    {
+        *vErroProc = 16;
+        return 0;
+    }
+
+    putback();
+
+    getExp(&answer);
+    if (*vErroProc) return 0;
+
+    if (*value_type != '%')
+    {
+        *vErroProc = 16;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type != CLOSEPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    itoa(*iVal, token, pBase);
+    len = strlen(token);
+    *(token + len) = pSuffix;
+    *(token + len + 1) = 0x00;
+
+    *value_type = '$';
+
+    return 0;
+}
+
+int basHex(void)
+{
+    return basBaseString(16, 'h');
+}
+
+int basBin(void)
+{
+    return basBaseString(2, 'b');
+}
+
+int basOct(void)
+{
+    return basBaseString(8, 'o');
 }
 
 //-----------------------------------------------------------------------------

@@ -1136,22 +1136,22 @@ main_5:
        jsr       (A0)
 main_8:
 ; printText("MMSJ-BASIC v"versionBasic);
-       pea       @basic_106.L
+       pea       @basic_109.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("\r\n\0");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Utility (c) 2022-2026\r\n\0");
-       pea       @basic_108.L
+       pea       @basic_111.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("OK\r\n\0");
-       pea       @basic_109.L
+       pea       @basic_112.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1244,7 +1244,7 @@ main_12:
 main_17:
 ; {
 ; printText("\r\n\0");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1256,7 +1256,7 @@ main_17:
        beq       main_18
 ; {
 ; writeLongSerial("pStartSimpVar: [");
-       pea       @basic_110.L
+       pea       @basic_113.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1272,7 +1272,7 @@ main_17:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_111.L
+       pea       @basic_114.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1286,7 +1286,7 @@ main_18:
        tst.b     (A0)
        beq.s     main_20
 ; printText("\r\nOK\0");
-       pea       @basic_112.L
+       pea       @basic_115.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1299,7 +1299,7 @@ main_20:
        tst.b     (A0)
        beq.s     main_22
 ; printText("\r\n\0");   // printText("\r\n>\0");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1312,7 +1312,7 @@ main_15:
        beq.s     main_24
 ; {
 ; printText("\r\n\0");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1334,7 +1334,7 @@ main_10:
        beq.s     main_26
 ; {
 ; printText("Loading...\r\n");
-       pea       @basic_113.L
+       pea       @basic_116.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1368,12 +1368,12 @@ main_26:
        beq.s     main_30
 ; {
 ; printText("Done.\r\n");
-       pea       @basic_114.L
+       pea       @basic_117.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Processing...\r\n");
-       pea       @basic_115.L
+       pea       @basic_118.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1441,7 +1441,7 @@ main_34:
        beq.s     main_41
 ; {
 ; printText("Running...\r\n");
-       pea       @basic_116.L
+       pea       @basic_119.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1460,7 +1460,7 @@ main_28:
 ; else
 ; {
 ; printText("Loading File Error...\r\n\0");
-       pea       @basic_117.L
+       pea       @basic_120.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -1468,7 +1468,7 @@ main_29:
 ; }
 ; }
 ; printText("\r\n\0");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2468,7 +2468,7 @@ processLine_20:
 processLine_21:
 ; }
 ; else if (!strcmp(linhacomando,"NEW") && iy == 3)
-       pea       @basic_118.L
+       pea       @basic_121.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2512,7 +2512,7 @@ processLine_21:
 processLine_23:
 ; }
 ; else if (!strcmp(linhacomando,"EDIT") && iy == 4)
-       pea       @basic_119.L
+       pea       @basic_122.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2529,7 +2529,7 @@ processLine_23:
 processLine_25:
 ; }
 ; else if (!strcmp(linhacomando,"LIST") && iy == 4)
-       pea       @basic_120.L
+       pea       @basic_123.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2547,7 +2547,7 @@ processLine_25:
 processLine_27:
 ; }
 ; else if (!strcmp(linhacomando,"LISTP") && iy == 5)
-       pea       @basic_121.L
+       pea       @basic_124.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2565,7 +2565,7 @@ processLine_27:
 processLine_29:
 ; }
 ; else if (!strcmp(linhacomando,"RUN") && iy == 3)
-       pea       @basic_122.L
+       pea       @basic_125.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2582,7 +2582,7 @@ processLine_29:
 processLine_31:
 ; }
 ; else if (!strcmp(linhacomando,"DEL") && iy == 3)
-       pea       @basic_123.L
+       pea       @basic_126.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2599,7 +2599,7 @@ processLine_31:
 processLine_33:
 ; }
 ; else if (!strcmp(linhacomando,"XLOAD") && iy == 5)
-       pea       @basic_124.L
+       pea       @basic_127.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2614,7 +2614,7 @@ processLine_33:
 processLine_35:
 ; }
 ; else if (!strcmp(linhacomando,"XLOAD1K") && iy == 7)
-       pea       @basic_125.L
+       pea       @basic_128.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2631,7 +2631,7 @@ processLine_35:
        beq       processLine_39
 ; {
 ; writeLongSerial("pStartSimpVar3: [");
-       pea       @basic_126.L
+       pea       @basic_129.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2647,7 +2647,7 @@ processLine_35:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_111.L
+       pea       @basic_114.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2657,7 +2657,7 @@ processLine_37:
 ; }
 ; }
 ; else if (!strcmp(linhacomando,"TIMER") && iy == 5)
-       pea       @basic_127.L
+       pea       @basic_130.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2682,7 +2682,7 @@ processLine_37:
        jsr       _itoa
        add.w     #12,A7
 ; printText("Timer: ");
-       pea       @basic_128.L
+       pea       @basic_131.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2692,7 +2692,7 @@ processLine_37:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("ms\r\n\0");
-       pea       @basic_129.L
+       pea       @basic_132.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2700,7 +2700,7 @@ processLine_37:
 processLine_41:
 ; }
 ; else if (!strcmp(linhacomando,"TRACEON") && iy == 7)
-       pea       @basic_130.L
+       pea       @basic_133.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2716,7 +2716,7 @@ processLine_41:
 processLine_43:
 ; }
 ; else if (!strcmp(linhacomando,"TRACEOFF") && iy == 8)
-       pea       @basic_131.L
+       pea       @basic_134.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2732,7 +2732,7 @@ processLine_43:
 processLine_45:
 ; }
 ; else if (!strcmp(linhacomando,"DEBUGON") && iy == 7)
-       pea       @basic_132.L
+       pea       @basic_135.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2748,7 +2748,7 @@ processLine_45:
 processLine_47:
 ; }
 ; else if (!strcmp(linhacomando,"DEBUGOFF") && iy == 8)
-       pea       @basic_133.L
+       pea       @basic_136.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2764,7 +2764,7 @@ processLine_47:
 processLine_49:
 ; }
 ; else if (!strcmp(linhacomando,"LISTMEM") && iy == 7)
-       pea       @basic_134.L
+       pea       @basic_137.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2780,7 +2780,7 @@ processLine_49:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartSimpVar  \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_135.L
+       pea       @basic_138.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2788,7 +2788,7 @@ processLine_49:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_136.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2799,7 +2799,7 @@ processLine_49:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartArrayVar \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_137.L
+       pea       @basic_140.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2807,7 +2807,7 @@ processLine_49:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_136.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2818,7 +2818,7 @@ processLine_49:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartString   \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_138.L
+       pea       @basic_141.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2826,7 +2826,7 @@ processLine_49:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_136.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2837,7 +2837,7 @@ processLine_49:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartProg     \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_139.L
+       pea       @basic_142.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2845,7 +2845,7 @@ processLine_49:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_136.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2856,7 +2856,7 @@ processLine_49:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartXBasLoad \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_140.L
+       pea       @basic_143.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2864,7 +2864,7 @@ processLine_49:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_136.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2875,7 +2875,7 @@ processLine_49:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartStack    \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_141.L
+       pea       @basic_144.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2883,7 +2883,7 @@ processLine_49:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_136.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2894,7 +2894,7 @@ processLine_51:
 ; // ESSE COMANDO NAO VAI EXISTIR QUANDO FOR PRA BIOS
 ; // *************************************************
 ; else if (!strcmp(linhacomando,"QUIT") && iy == 4)
-       pea       @basic_142.L
+       pea       @basic_145.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2925,7 +2925,7 @@ processLine_53:
        tst.b     -317(A6)
        beq.s     processLine_55
 ; strcat(vRetInf.tString, " ");
-       pea       @basic_143.L
+       pea       @basic_146.L
        lea       -312(A6),A0
        move.l    A0,-(A7)
        jsr       _strcat
@@ -3210,7 +3210,7 @@ tokenizeLine_13:
        move.b    (A0),D1
        and.l     #255,D1
        move.l    D1,-(A7)
-       pea       @basic_144.L
+       pea       @basic_147.L
        jsr       _strchr
        addq.w    #8,A7
        tst.l     D0
@@ -3738,7 +3738,7 @@ saveLine_1:
        bne.s     saveLine_5
 ; {
 ; printText("Line number already exists\r\n\0");
-       pea       @basic_145.L
+       pea       @basic_148.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4076,7 +4076,7 @@ listProg_11:
        bne.s     listProg_13
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_146.L
+       pea       @basic_149.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4371,12 +4371,12 @@ listProg_28:
        blo       listProg_46
 ; {
 ; printText("press any key to continue\0");
-       pea       @basic_147.L
+       pea       @basic_150.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; vtec = inputLineBasic(1,"@");
-       pea       @basic_148.L
+       pea       @basic_151.L
        pea       1
        jsr       _inputLineBasic
        addq.w    #8,A7
@@ -4384,7 +4384,7 @@ listProg_28:
 ; vPauseRowCounter = 0;
        move.w    #0,A4
 ; printText("\r\n\0");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4530,7 +4530,7 @@ delLine_11:
 ; else
 ; {
 ; printText("Syntax Error !");
-       pea       @basic_149.L
+       pea       @basic_152.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4550,7 +4550,7 @@ delLine_12:
        bne.s     delLine_14
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_146.L
+       pea       @basic_149.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4770,7 +4770,7 @@ editLine_1:
 ; else
 ; {
 ; printText("Syntax Error !");
-       pea       @basic_149.L
+       pea       @basic_152.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4793,7 +4793,7 @@ editLine_2:
        bne.s     editLine_4
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_146.L
+       pea       @basic_149.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5080,7 +5080,7 @@ editLine_35:
        bra       editLine_35
 editLine_37:
 ; printText("\r\n\0");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5093,12 +5093,12 @@ editLine_37:
 ; processLine();
        jsr       _processLine
 ; printText("\r\nOK\0");
-       pea       @basic_112.L
+       pea       @basic_115.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("\r\n\0");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5110,7 +5110,7 @@ editLine_29:
        beq.s     editLine_38
 ; {
 ; printText("\r\nAborted !!!\r\n\0");
-       pea       @basic_150.L
+       pea       @basic_153.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5195,7 +5195,7 @@ runProg_1:
        bne.s     runProg_3
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_146.L
+       pea       @basic_149.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5331,7 +5331,7 @@ runProg_17:
 ; #endif
 ; // mostra mensagem de para subita
 ; printText("\r\nStopped at ");
-       pea       @basic_151.L
+       pea       @basic_154.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5348,7 +5348,7 @@ runProg_17:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("\r\n");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5375,7 +5375,7 @@ runProg_15:
        beq       runProg_19
 ; {
 ; printText("\r\nExecuting at ");
-       pea       @basic_152.L
+       pea       @basic_155.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5392,7 +5392,7 @@ runProg_15:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("\r\n");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5587,7 +5587,7 @@ _showErrorMessage:
        link      A6,#-20
 ; char sNumLin [sizeof(short)*8+1];
 ; printText("\r\n");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5611,7 +5611,7 @@ _showErrorMessage:
        jsr       _itoa
        add.w     #12,A7
 ; printText(" at ");
-       pea       @basic_153.L
+       pea       @basic_156.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5623,7 +5623,7 @@ _showErrorMessage:
 showErrorMessage_1:
 ; }
 ; printText(" !\r\n\0");
-       pea       @basic_154.L
+       pea       @basic_157.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5654,7 +5654,7 @@ _basXBasLoad:
        lea       _vbufInput.L,A0
        move.l    A0,D3
 ; printText("Loading Basic Program...\r\n");
-       pea       @basic_155.L
+       pea       @basic_158.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5679,12 +5679,12 @@ _basXBasLoad:
        bne       basXBasLoad_1
 ; {
 ; printText("Done.\r\n");
-       pea       @basic_114.L
+       pea       @basic_117.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Processing...\r\n");
-       pea       @basic_115.L
+       pea       @basic_118.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5741,7 +5741,7 @@ basXBasLoad_7:
 basXBasLoad_5:
 ; }
 ; printText("Done.\r\n");
-       pea       @basic_114.L
+       pea       @basic_117.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5796,7 +5796,7 @@ _basXBasLoad1k:
        move.l    A0,D3
 ; unsigned char sqtdtam[20];
 ; printText("Loading Basic Program 1k...\r\n");
-       pea       @basic_156.L
+       pea       @basic_159.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5821,12 +5821,12 @@ _basXBasLoad1k:
        bne       basXBasLoad1k_1
 ; {
 ; printText("Done.\r\n");
-       pea       @basic_114.L
+       pea       @basic_117.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Processing...\r\n");
-       pea       @basic_115.L
+       pea       @basic_118.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5876,100 +5876,6 @@ basXBasLoad1k_10:
        beq       basXBasLoad1k_12
 ; {
 ; writeLongSerial("pStartSimpVar6: [");
-       pea       @basic_157.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(pStartSimpVar, sqtdtam, 16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    (A3),-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n");
-       pea       @basic_111.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-basXBasLoad1k_12:
-; }
-; }
-; if (*debugOn)
-       move.l    (A5),A0
-       tst.b     (A0)
-       beq       basXBasLoad1k_14
-; {
-; writeLongSerial("pStartSimpVar7: [");
-       pea       @basic_158.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(pStartSimpVar, sqtdtam, 16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    (A3),-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n");
-       pea       @basic_111.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-basXBasLoad1k_14:
-       bra       basXBasLoad1k_7
-basXBasLoad1k_6:
-; }
-; }
-; else
-; {
-; if (*debugOn)
-       move.l    (A5),A0
-       tst.b     (A0)
-       beq       basXBasLoad1k_16
-; {
-; writeLongSerial("pStartSimpVar8: [");
-       pea       @basic_159.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(pStartSimpVar, sqtdtam, 16);
-       pea       16
-       move.l    A2,-(A7)
-       move.l    (A3),-(A7)
-       jsr       (A4)
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       move.l    A2,-(A7)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n");
-       pea       @basic_111.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-basXBasLoad1k_16:
-; }
-; break;
-       bra       basXBasLoad1k_5
-basXBasLoad1k_7:
-; }
-; if (*debugOn)
-       move.l    (A5),A0
-       tst.b     (A0)
-       beq       basXBasLoad1k_18
-; {
-; writeLongSerial("pStartSimpVar9: [");
        pea       @basic_160.L
        move.l    1158,A0
        jsr       (A0)
@@ -5986,21 +5892,19 @@ basXBasLoad1k_7:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_111.L
+       pea       @basic_114.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
-basXBasLoad1k_18:
-       bra       basXBasLoad1k_3
-basXBasLoad1k_5:
+basXBasLoad1k_12:
 ; }
 ; }
 ; if (*debugOn)
        move.l    (A5),A0
        tst.b     (A0)
-       beq       basXBasLoad1k_20
+       beq       basXBasLoad1k_14
 ; {
-; writeLongSerial("pStartSimpVar1: [");
+; writeLongSerial("pStartSimpVar7: [");
        pea       @basic_161.L
        move.l    1158,A0
        jsr       (A0)
@@ -6017,14 +5921,110 @@ basXBasLoad1k_5:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_111.L
+       pea       @basic_114.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+basXBasLoad1k_14:
+       bra       basXBasLoad1k_7
+basXBasLoad1k_6:
+; }
+; }
+; else
+; {
+; if (*debugOn)
+       move.l    (A5),A0
+       tst.b     (A0)
+       beq       basXBasLoad1k_16
+; {
+; writeLongSerial("pStartSimpVar8: [");
+       pea       @basic_162.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(pStartSimpVar, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    (A3),-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n");
+       pea       @basic_114.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+basXBasLoad1k_16:
+; }
+; break;
+       bra       basXBasLoad1k_5
+basXBasLoad1k_7:
+; }
+; if (*debugOn)
+       move.l    (A5),A0
+       tst.b     (A0)
+       beq       basXBasLoad1k_18
+; {
+; writeLongSerial("pStartSimpVar9: [");
+       pea       @basic_163.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(pStartSimpVar, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    (A3),-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n");
+       pea       @basic_114.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+basXBasLoad1k_18:
+       bra       basXBasLoad1k_3
+basXBasLoad1k_5:
+; }
+; }
+; if (*debugOn)
+       move.l    (A5),A0
+       tst.b     (A0)
+       beq       basXBasLoad1k_20
+; {
+; writeLongSerial("pStartSimpVar1: [");
+       pea       @basic_164.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(pStartSimpVar, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    (A3),-(A7)
+       jsr       (A4)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n");
+       pea       @basic_114.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
 basXBasLoad1k_20:
 ; }
 ; printText("Done.\r\n");
-       pea       @basic_114.L
+       pea       @basic_117.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6054,7 +6054,7 @@ basXBasLoad1k_23:
        beq       basXBasLoad1k_24
 ; {
 ; writeLongSerial("pStartSimpVar2: [");
-       pea       @basic_162.L
+       pea       @basic_165.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6070,7 +6070,7 @@ basXBasLoad1k_23:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n");
-       pea       @basic_111.L
+       pea       @basic_114.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6107,246 +6107,255 @@ _executeToken:
 ; switch (pToken)
        move.b    11(A6),D0
        and.l     #255,D0
-       cmp.l     #179,D0
-       beq       executeToken_38
-       bhi       executeToken_74
-       cmp.l     #145,D0
-       beq       executeToken_20
-       bhi       executeToken_75
-       cmp.l     #136,D0
-       beq       executeToken_11
-       bhi       executeToken_76
+       cmp.l     #180,D0
+       beq       executeToken_39
+       bhi       executeToken_77
+       cmp.l     #146,D0
+       beq       executeToken_21
+       bhi       executeToken_78
+       cmp.l     #137,D0
+       beq       executeToken_12
+       bhi       executeToken_79
        cmp.l     #131,D0
        beq       executeToken_7
-       bhi.s     executeToken_77
+       bhi.s     executeToken_80
        cmp.l     #129,D0
        beq       executeToken_5
-       bhi.s     executeToken_78
+       bhi.s     executeToken_81
        cmp.l     #128,D0
        beq       executeToken_4
        bhi       executeToken_1
        tst.l     D0
        beq       executeToken_3
        bra       executeToken_1
-executeToken_78:
+executeToken_81:
        cmp.l     #130,D0
        beq       executeToken_6
        bra       executeToken_1
-executeToken_77:
+executeToken_80:
+       cmp.l     #135,D0
+       beq       executeToken_10
+       bhi.s     executeToken_82
        cmp.l     #134,D0
        beq       executeToken_9
-       bhi.s     executeToken_79
+       bhi       executeToken_1
        cmp.l     #133,D0
        beq       executeToken_8
        bra       executeToken_1
+executeToken_82:
+       cmp.l     #136,D0
+       beq       executeToken_11
+       bra       executeToken_1
 executeToken_79:
-       cmp.l     #135,D0
-       beq       executeToken_10
-       bra       executeToken_1
-executeToken_76:
-       cmp.l     #141,D0
-       beq       executeToken_16
-       bhi.s     executeToken_80
-       cmp.l     #139,D0
-       beq       executeToken_14
-       bhi.s     executeToken_81
-       cmp.l     #138,D0
-       beq       executeToken_13
-       bhi       executeToken_1
-       cmp.l     #137,D0
-       beq       executeToken_12
-       bra       executeToken_1
-executeToken_81:
-       cmp.l     #140,D0
-       beq       executeToken_15
-       bra       executeToken_1
-executeToken_80:
-       cmp.l     #143,D0
-       beq       executeToken_18
-       bhi.s     executeToken_82
        cmp.l     #142,D0
        beq       executeToken_17
-       bra       executeToken_1
-executeToken_82:
-       cmp.l     #144,D0
-       beq       executeToken_19
-       bra       executeToken_1
-executeToken_75:
-       cmp.l     #154,D0
-       beq       executeToken_29
-       bhi       executeToken_83
-       cmp.l     #150,D0
-       beq       executeToken_25
+       bhi.s     executeToken_83
+       cmp.l     #140,D0
+       beq       executeToken_15
        bhi.s     executeToken_84
-       cmp.l     #148,D0
-       beq       executeToken_23
-       bhi.s     executeToken_85
-       cmp.l     #147,D0
-       beq       executeToken_22
+       cmp.l     #139,D0
+       beq       executeToken_14
        bhi       executeToken_1
-       cmp.l     #146,D0
-       beq       executeToken_21
-       bra       executeToken_1
-executeToken_85:
-       cmp.l     #149,D0
-       beq       executeToken_24
+       cmp.l     #138,D0
+       beq       executeToken_13
        bra       executeToken_1
 executeToken_84:
-       cmp.l     #152,D0
-       beq       executeToken_27
-       bhi.s     executeToken_86
-       cmp.l     #151,D0
-       beq       executeToken_26
-       bra       executeToken_1
-executeToken_86:
-       cmp.l     #153,D0
-       beq       executeToken_28
+       cmp.l     #141,D0
+       beq       executeToken_16
        bra       executeToken_1
 executeToken_83:
-       cmp.l     #159,D0
-       beq       executeToken_34
-       bhi.s     executeToken_87
-       cmp.l     #157,D0
-       beq       executeToken_32
-       bhi.s     executeToken_88
-       cmp.l     #156,D0
-       beq       executeToken_31
-       bhi       executeToken_1
+       cmp.l     #144,D0
+       beq       executeToken_19
+       bhi.s     executeToken_85
+       cmp.l     #143,D0
+       beq       executeToken_18
+       bra       executeToken_1
+executeToken_85:
+       cmp.l     #145,D0
+       beq       executeToken_20
+       bra       executeToken_1
+executeToken_78:
        cmp.l     #155,D0
        beq       executeToken_30
+       bhi       executeToken_86
+       cmp.l     #151,D0
+       beq       executeToken_26
+       bhi.s     executeToken_87
+       cmp.l     #149,D0
+       beq       executeToken_24
+       bhi.s     executeToken_88
+       cmp.l     #148,D0
+       beq       executeToken_23
+       bhi       executeToken_1
+       cmp.l     #147,D0
+       beq       executeToken_22
        bra       executeToken_1
 executeToken_88:
-       cmp.l     #158,D0
-       beq       executeToken_33
+       cmp.l     #150,D0
+       beq       executeToken_25
        bra       executeToken_1
 executeToken_87:
-       cmp.l     #177,D0
-       beq       executeToken_36
+       cmp.l     #153,D0
+       beq       executeToken_28
        bhi.s     executeToken_89
-       cmp.l     #176,D0
-       beq       executeToken_35
+       cmp.l     #152,D0
+       beq       executeToken_27
        bra       executeToken_1
 executeToken_89:
-       cmp.l     #178,D0
-       beq       executeToken_37
+       cmp.l     #154,D0
+       beq       executeToken_29
        bra       executeToken_1
-executeToken_74:
-       cmp.l     #222,D0
-       beq       executeToken_56
-       bhi       executeToken_90
-       cmp.l     #188,D0
-       beq       executeToken_47
-       bhi       executeToken_91
-       cmp.l     #184,D0
-       beq       executeToken_43
-       bhi.s     executeToken_92
-       cmp.l     #182,D0
-       beq       executeToken_41
-       bhi.s     executeToken_93
-       cmp.l     #181,D0
-       beq       executeToken_40
+executeToken_86:
+       cmp.l     #176,D0
+       beq       executeToken_35
+       bhi.s     executeToken_90
+       cmp.l     #158,D0
+       beq       executeToken_33
+       bhi.s     executeToken_91
+       cmp.l     #157,D0
+       beq       executeToken_32
        bhi       executeToken_1
-       cmp.l     #180,D0
-       beq       executeToken_39
-       bra       executeToken_1
-executeToken_93:
-       cmp.l     #183,D0
-       beq       executeToken_42
-       bra       executeToken_1
-executeToken_92:
-       cmp.l     #186,D0
-       beq       executeToken_45
-       bhi.s     executeToken_94
-       cmp.l     #185,D0
-       beq       executeToken_44
-       bra       executeToken_1
-executeToken_94:
-       cmp.l     #187,D0
-       beq       executeToken_46
+       cmp.l     #156,D0
+       beq       executeToken_31
        bra       executeToken_1
 executeToken_91:
-       cmp.l     #209,D0
-       beq       executeToken_52
-       bhi.s     executeToken_95
-       cmp.l     #205,D0
-       beq       executeToken_50
-       bhi.s     executeToken_96
+       cmp.l     #159,D0
+       beq       executeToken_34
+       bra       executeToken_1
+executeToken_90:
+       cmp.l     #178,D0
+       beq       executeToken_37
+       bhi.s     executeToken_92
+       cmp.l     #177,D0
+       beq       executeToken_36
+       bra       executeToken_1
+executeToken_92:
+       cmp.l     #179,D0
+       beq       executeToken_38
+       bra       executeToken_1
+executeToken_77:
+       cmp.l     #221,D0
+       beq       executeToken_58
+       bhi       executeToken_93
        cmp.l     #196,D0
        beq       executeToken_49
+       bhi       executeToken_94
+       cmp.l     #185,D0
+       beq       executeToken_44
+       bhi.s     executeToken_95
+       cmp.l     #183,D0
+       beq       executeToken_42
+       bhi.s     executeToken_96
+       cmp.l     #182,D0
+       beq       executeToken_41
        bhi       executeToken_1
+       cmp.l     #181,D0
+       beq       executeToken_40
+       bra       executeToken_1
+executeToken_96:
+       cmp.l     #184,D0
+       beq       executeToken_43
+       bra       executeToken_1
+executeToken_95:
+       cmp.l     #188,D0
+       beq       executeToken_47
+       bhi.s     executeToken_97
+       cmp.l     #187,D0
+       beq       executeToken_46
+       bhi       executeToken_1
+       cmp.l     #186,D0
+       beq       executeToken_45
+       bra       executeToken_1
+executeToken_97:
        cmp.l     #189,D0
        beq       executeToken_48
        bra       executeToken_1
-executeToken_96:
+executeToken_94:
        cmp.l     #206,D0
-       beq       executeToken_51
-       bra       executeToken_1
-executeToken_95:
-       cmp.l     #220,D0
        beq       executeToken_54
-       bhi.s     executeToken_97
-       cmp.l     #219,D0
-       beq       executeToken_53
-       bra       executeToken_1
-executeToken_97:
-       cmp.l     #221,D0
-       beq       executeToken_55
-       bra       executeToken_1
-executeToken_90:
-       cmp.l     #232,D0
-       beq       executeToken_65
-       bhi       executeToken_98
-       cmp.l     #228,D0
-       beq       executeToken_61
+       bhi.s     executeToken_98
+       cmp.l     #199,D0
+       beq       executeToken_52
        bhi.s     executeToken_99
-       cmp.l     #226,D0
-       beq       executeToken_59
-       bhi.s     executeToken_100
-       cmp.l     #225,D0
-       beq       executeToken_58
+       cmp.l     #198,D0
+       beq       executeToken_51
        bhi       executeToken_1
-       cmp.l     #224,D0
-       beq       executeToken_57
-       bra       executeToken_1
-executeToken_100:
-       cmp.l     #227,D0
-       beq       executeToken_60
+       cmp.l     #197,D0
+       beq       executeToken_50
        bra       executeToken_1
 executeToken_99:
-       cmp.l     #230,D0
-       beq       executeToken_63
-       bhi.s     executeToken_101
-       cmp.l     #229,D0
-       beq       executeToken_62
-       bra       executeToken_1
-executeToken_101:
-       cmp.l     #231,D0
-       beq       executeToken_64
+       cmp.l     #205,D0
+       beq       executeToken_53
        bra       executeToken_1
 executeToken_98:
-       cmp.l     #236,D0
-       beq       executeToken_69
-       bhi.s     executeToken_102
-       cmp.l     #234,D0
+       cmp.l     #219,D0
+       beq       executeToken_56
+       bhi.s     executeToken_100
+       cmp.l     #209,D0
+       beq       executeToken_55
+       bra       executeToken_1
+executeToken_100:
+       cmp.l     #220,D0
+       beq       executeToken_57
+       bra       executeToken_1
+executeToken_93:
+       cmp.l     #231,D0
        beq       executeToken_67
+       bhi       executeToken_101
+       cmp.l     #227,D0
+       beq       executeToken_63
+       bhi.s     executeToken_102
+       cmp.l     #225,D0
+       beq       executeToken_61
        bhi.s     executeToken_103
-       cmp.l     #233,D0
-       beq       executeToken_66
+       cmp.l     #224,D0
+       beq       executeToken_60
+       bhi       executeToken_1
+       cmp.l     #222,D0
+       beq       executeToken_59
        bra       executeToken_1
 executeToken_103:
-       cmp.l     #235,D0
-       beq       executeToken_68
+       cmp.l     #226,D0
+       beq       executeToken_62
        bra       executeToken_1
 executeToken_102:
-       cmp.l     #238,D0
-       beq       executeToken_71
+       cmp.l     #229,D0
+       beq       executeToken_65
        bhi.s     executeToken_104
-       cmp.l     #237,D0
-       beq       executeToken_70
+       cmp.l     #228,D0
+       beq       executeToken_64
        bra       executeToken_1
 executeToken_104:
-       cmp.l     #239,D0
+       cmp.l     #230,D0
+       beq       executeToken_66
+       bra       executeToken_1
+executeToken_101:
+       cmp.l     #236,D0
        beq       executeToken_72
+       bhi.s     executeToken_105
+       cmp.l     #234,D0
+       beq       executeToken_70
+       bhi.s     executeToken_106
+       cmp.l     #233,D0
+       beq       executeToken_69
+       bhi       executeToken_1
+       cmp.l     #232,D0
+       beq       executeToken_68
+       bra       executeToken_1
+executeToken_106:
+       cmp.l     #235,D0
+       beq       executeToken_71
+       bra       executeToken_1
+executeToken_105:
+       cmp.l     #238,D0
+       beq       executeToken_74
+       bhi.s     executeToken_107
+       cmp.l     #237,D0
+       beq       executeToken_73
+       bra       executeToken_1
+executeToken_107:
+       cmp.l     #239,D0
+       beq       executeToken_75
        bra       executeToken_1
 executeToken_3:
 ; {
@@ -6354,122 +6363,122 @@ executeToken_3:
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_4:
 ; case 0x80:  // Let
 ; vReta = basLet();
        jsr       _basLet
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_5:
 ; case 0x81:  // Print
 ; vReta = basPrint();
        jsr       _basPrint
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_6:
 ; case 0x82:  // IF
 ; vReta = basIf();
        jsr       _basIf
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_7:
 ; case 0x83:  // THEN - nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_8:
 ; case 0x85:  // FOR
 ; vReta = basFor();
        jsr       _basFor
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_9:
 ; case 0x86:  // TO - nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_10:
 ; case 0x87:  // NEXT
 ; vReta = basNext();
        jsr       _basNext
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_11:
 ; case 0x88:  // STEP - nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_12:
 ; case 0x89:  // GOTO
 ; vReta = basGoto();
        jsr       _basGoto
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_13:
 ; case 0x8A:  // GOSUB
 ; vReta = basGosub();
        jsr       _basGosub
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_14:
 ; case 0x8B:  // RETURN
 ; vReta = basReturn();
        jsr       _basReturn
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_15:
 ; case 0x8C:  // REM - Ignora todas a linha depois dele
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_16:
 ; case 0x8D:  // SPRITESET
 ; vReta = basSpriteSet();
        jsr       _basSpriteSet
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_17:
 ; case 0x8E:  // SPRITEPUT
 ; vReta = basSpritePut();
        jsr       _basSpritePut
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_18:
 ; case 0x8F:  // DIM
 ; vReta = basDim();
        jsr       _basDim
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_19:
 ; case 0x90:  // BUFSHOW
 ; vReta = basBufShow();
        jsr       _basBufShow
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_20:
 ; case 0x91:  // ON
 ; vReta = basOnVar();
        jsr       _basOnVar
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_21:
 ; case 0x92:  // Input
 ; vReta = basInputGet(250);
@@ -6478,7 +6487,7 @@ executeToken_21:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_22:
 ; case 0x93:  // Get
 ; vReta = basInputGet(1);
@@ -6487,37 +6496,37 @@ executeToken_22:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_23:
 ; case 0x94:  // SPRITECOLOR
 ; vReta = basSpriteColor();
        jsr       _basSpriteColor
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_24:
 ; case 0x95:  // LOCATE
 ; vReta = basLocate();
        jsr       _basLocate
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_25:
 ; case 0x96:  // CLS
 ; // Limpa dependendo do modo de video, se for texto limpa a tela, se for grafico limpa o grafico
 ; if (vdpModeBas == VDP_MODE_TEXT)
        move.b    _vdpModeBas.L,D0
        cmp.b     #3,D0
-       bne.s     executeToken_105
+       bne.s     executeToken_108
 ; clearScr();
        move.l    1054,A0
        jsr       (A0)
-       bra.s     executeToken_107
-executeToken_105:
+       bra.s     executeToken_110
+executeToken_108:
 ; else if (vdpModeBas == VDP_MODE_G2)
        move.b    _vdpModeBas.L,D0
        cmp.b     #1,D0
-       bne.s     executeToken_107
+       bne.s     executeToken_110
 ; fillRect(0, 0, 255, 191, bgcolorBas);
        move.b    _bgcolorBas.L,D1
        and.l     #255,D1
@@ -6528,9 +6537,9 @@ executeToken_105:
        clr.l     -(A7)
        jsr       _fillRect
        add.w     #20,A7
-executeToken_107:
+executeToken_110:
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_26:
 ; case 0x97:  // CLEAR - Clear all variables
 ; clearRuntimeData(pForStack);
@@ -6540,27 +6549,27 @@ executeToken_26:
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_27:
 ; case 0x98:  // DATA - Ignora toda a linha depois dele, READ vai ler essa linha
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_28:
 ; case 0x99:  // Read
 ; vReta = basRead();
        jsr       _basRead
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_29:
 ; case 0x9A:  // Restore
 ; vReta = basRestore();
        jsr       _basRestore
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_30:
 ; case 0x9B:  // BUFVDGON
 ; vReta = basBufVdg(1);
@@ -6569,7 +6578,7 @@ executeToken_30:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_31:
 ; case 0x9C:  // BUFVDGOFF
 ; vReta = basBufVdg(0);
@@ -6578,132 +6587,153 @@ executeToken_31:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_32:
 ; case 0x9D:  // BUFCOPY
 ; vReta = basBufCopy();
        jsr       _basBufCopy
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_33:
 ; case 0x9E:  // END
 ; vReta = basEnd();
        jsr       _basEnd
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_34:
 ; case 0x9F:  // STOP
 ; vReta = basStop();
        jsr       _basStop
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_35:
 ; case 0xB0:  // SCREEN
 ; vReta = basScreen();
        jsr       _basScreen
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_36:
 ; case 0xB1:  // CIRCLE
 ; vReta = basCircle();
        jsr       _basCircle
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_37:
 ; case 0xB2:  // RECT
 ; vReta = basRect();
        jsr       _basRect
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_38:
 ; case 0xB3:  // COLOR
 ; vReta = basColor();
        jsr       _basColor
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_39:
 ; case 0xB4:  // PLOT
 ; vReta = basPlot();
        jsr       _basPlot
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_40:
 ; case 0xB5:  // FILL
 ; vReta = basFill();
        jsr       _basFill
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_41:
 ; case 0xB6:  // RESERVED
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_42:
 ; case 0xB7:  // SPRITEPOS
 ; vReta = basSpritePos();
        jsr       _basSpritePos
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_43:
 ; case 0xB8:  // PAINT
 ; vReta = basPaint();
        jsr       _basPaint
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_44:
 ; case 0xB9:  // LINE
 ; vReta = basLine();
        jsr       _basLine
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_45:
 ; case 0xBA:  // AT - Nao faz nada
 ; vReta = 0;
        clr.b     D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_46:
 ; case 0xBB:  // ONERR
 ; vReta = basOnErr();
        jsr       _basOnErr
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_47:
 ; case 0xBC:  // WHILE
 ; vReta = basWhile();
        jsr       _basWhile
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_48:
 ; case 0xBD:  // WEND
 ; vReta = basWend();
        jsr       _basWend
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_49:
 ; case 0xC4:  // ASC
 ; vReta = basAsc();
        jsr       _basAsc
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
+       bra       executeToken_113
 executeToken_50:
+; case 0xC5:  // HEX$
+; vReta = basHex();
+       jsr       _basHex
+       move.b    D0,D2
+; break;
+       bra       executeToken_113
+executeToken_51:
+; case 0xC6:  // BIN$
+; vReta = basBin();
+       jsr       _basBin
+       move.b    D0,D2
+; break;
+       bra       executeToken_113
+executeToken_52:
+; case 0xC7:  // OCT$
+; vReta = basOct();
+       jsr       _basOct
+       move.b    D0,D2
+; break;
+       bra       executeToken_113
+executeToken_53:
 ; case 0xCD:  // PEEK
 ; vReta = basPeekPoke('R');
        pea       82
@@ -6711,8 +6741,8 @@ executeToken_50:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_51:
+       bra       executeToken_113
+executeToken_54:
 ; case 0xCE:  // POKE
 ; vReta = basPeekPoke('W');
        pea       87
@@ -6720,64 +6750,64 @@ executeToken_51:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_52:
+       bra       executeToken_113
+executeToken_55:
 ; case 0xD1:  // RND
 ; vReta = basRnd();
        jsr       _basRnd
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_53:
+       bra       executeToken_113
+executeToken_56:
 ; case 0xDB:  // Len
 ; vReta = basLen();
        jsr       _basLen
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_54:
+       bra       executeToken_113
+executeToken_57:
 ; case 0xDC:  // Val
 ; vReta = basVal();
        jsr       _basVal
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_55:
+       bra       executeToken_113
+executeToken_58:
 ; case 0xDD:  // Str$
 ; vReta = basStr();
        jsr       _basStr
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_56:
+       bra       executeToken_113
+executeToken_59:
 ; case 0xDE:  // SPRITEOVER
 ; vReta = basSpriteOver();
        jsr       _basSpriteOver
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_57:
+       bra       executeToken_113
+executeToken_60:
 ; case 0xE0:  // POINT
 ; vReta = basPoint();
        jsr       _basPoint
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_58:
+       bra       executeToken_113
+executeToken_61:
 ; case 0xE1:  // Chr$
 ; vReta = basChr();
        jsr       _basChr
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_59:
+       bra       executeToken_113
+executeToken_62:
 ; case 0xE2:  // Fre(0)
 ; vReta = basFre();
        jsr       _basFre
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_60:
+       bra       executeToken_113
+executeToken_63:
 ; case 0xE3:  // Sqrt
 ; vReta = basTrig(6);
        pea       6
@@ -6785,8 +6815,8 @@ executeToken_60:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_61:
+       bra       executeToken_113
+executeToken_64:
 ; case 0xE4:  // Sin
 ; vReta = basTrig(1);
        pea       1
@@ -6794,8 +6824,8 @@ executeToken_61:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_62:
+       bra       executeToken_113
+executeToken_65:
 ; case 0xE5:  // Cos
 ; vReta = basTrig(2);
        pea       2
@@ -6803,8 +6833,8 @@ executeToken_62:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_63:
+       bra       executeToken_113
+executeToken_66:
 ; case 0xE6:  // Tan
 ; vReta = basTrig(3);
        pea       3
@@ -6812,8 +6842,8 @@ executeToken_63:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_64:
+       bra       executeToken_113
+executeToken_67:
 ; case 0xE7:  // Log
 ; vReta = basTrig(4);
        pea       4
@@ -6821,8 +6851,8 @@ executeToken_64:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_65:
+       bra       executeToken_113
+executeToken_68:
 ; case 0xE8:  // Exp
 ; vReta = basTrig(5);
        pea       5
@@ -6830,22 +6860,22 @@ executeToken_65:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_66:
+       bra       executeToken_113
+executeToken_69:
 ; case 0xE9:  // SPC
 ; vReta = basSpc();
        jsr       _basSpc
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_67:
+       bra       executeToken_113
+executeToken_70:
 ; case 0xEA:  // Tab
 ; vReta = basTab();
        jsr       _basTab
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_68:
+       bra       executeToken_113
+executeToken_71:
 ; case 0xEB:  // Mid$
 ; vReta = basLeftRightMid('M');
        pea       77
@@ -6853,8 +6883,8 @@ executeToken_68:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_69:
+       bra       executeToken_113
+executeToken_72:
 ; case 0xEC:  // Right$
 ; vReta = basLeftRightMid('R');
        pea       82
@@ -6862,8 +6892,8 @@ executeToken_69:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_70:
+       bra       executeToken_113
+executeToken_73:
 ; case 0xED:  // Left$
 ; vReta = basLeftRightMid('L');
        pea       76
@@ -6871,28 +6901,28 @@ executeToken_70:
        addq.w    #4,A7
        move.b    D0,D2
 ; break;
-       bra       executeToken_110
-executeToken_71:
+       bra       executeToken_113
+executeToken_74:
 ; case 0xEE:  // INT
 ; vReta = basInt();
        jsr       _basInt
        move.b    D0,D2
 ; break;
-       bra.s     executeToken_110
-executeToken_72:
+       bra.s     executeToken_113
+executeToken_75:
 ; case 0xEF:  // ABS
 ; vReta = basAbs();
        jsr       _basAbs
        move.b    D0,D2
 ; break;
-       bra.s     executeToken_110
+       bra.s     executeToken_113
 executeToken_1:
 ; default:
 ; if (pToken < 0x80)  // variavel sem LET
        move.b    11(A6),D0
        and.w     #255,D0
        cmp.w     #128,D0
-       bhs.s     executeToken_109
+       bhs.s     executeToken_112
 ; {
 ; *pointerRunProg = *pointerRunProg - 1;
        move.l    _pointerRunProg.L,A0
@@ -6900,8 +6930,8 @@ executeToken_1:
 ; vReta = basLet();
        jsr       _basLet
        move.b    D0,D2
-       bra.s     executeToken_110
-executeToken_109:
+       bra.s     executeToken_113
+executeToken_112:
 ; }
 ; else // Nao forem operadores logicos
 ; {
@@ -6910,7 +6940,7 @@ executeToken_109:
        move.w    #14,(A0)
 ; vReta = 14;
        moveq     #14,D2
-executeToken_110:
+executeToken_113:
 ; }
 ; }
 ; #endif
@@ -7177,7 +7207,7 @@ nextToken_15:
        move.l    D2,A0
        move.b    (A0),D0
        and.l     #255,D0
-       lea       @basic_163.L,A0
+       lea       @basic_166.L,A0
        cmp.l     A0,D0
        bne.s     nextToken_20
 ; {
@@ -15335,7 +15365,7 @@ basPrint_39:
        cmp.b     #44,D3
        beq.s     basPrint_40
 ; printText("\r\n");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -16003,6 +16033,191 @@ basStr_20:
 basStr_3:
        movem.l   (A7)+,D2/A2/A3/A4/A5
        unlk      A6
+       rts
+; }
+; static int basBaseString(unsigned char pBase, unsigned char pSuffix)
+; {
+@basic_basBaseString:
+       link      A6,#-24
+       movem.l   D2/A2/A3/A4/A5,-(A7)
+       lea       _vErroProc.L,A2
+       lea       _token.L,A3
+       lea       _token_type.L,A4
+       lea       _nextToken.L,A5
+; unsigned char answer[20];
+; int *iVal = answer;
+       lea       -24(A6),A0
+       move.l    A0,-4(A6)
+; int len;
+; nextToken();
+       jsr       (A5)
+; if (*vErroProc) return 0;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     @basic_basBaseString_1
+       clr.l     D0
+       bra       @basic_basBaseString_3
+@basic_basBaseString_1:
+; if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
+       move.l    _tok.L,A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #226,D0
+       beq.s     @basic_basBaseString_6
+       move.l    _tok.L,A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #224,D0
+       beq.s     @basic_basBaseString_6
+       move.l    (A4),A0
+       move.b    (A0),D0
+       cmp.b     #8,D0
+       beq.s     @basic_basBaseString_4
+@basic_basBaseString_6:
+; {
+; *vErroProc = 15;
+       move.l    (A2),A0
+       move.w    #15,(A0)
+; return 0;
+       clr.l     D0
+       bra       @basic_basBaseString_3
+@basic_basBaseString_4:
+; }
+; nextToken();
+       jsr       (A5)
+; if (*vErroProc) return 0;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     @basic_basBaseString_7
+       clr.l     D0
+       bra       @basic_basBaseString_3
+@basic_basBaseString_7:
+; if (*token_type == QUOTE)
+       move.l    (A4),A0
+       move.b    (A0),D0
+       cmp.b     #6,D0
+       bne.s     @basic_basBaseString_9
+; {
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return 0;
+       clr.l     D0
+       bra       @basic_basBaseString_3
+@basic_basBaseString_9:
+; }
+; putback();
+       jsr       _putback
+; getExp(&answer);
+       pea       -24(A6)
+       jsr       _getExp
+       addq.w    #4,A7
+; if (*vErroProc) return 0;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     @basic_basBaseString_11
+       clr.l     D0
+       bra       @basic_basBaseString_3
+@basic_basBaseString_11:
+; if (*value_type != '%')
+       move.l    _value_type.L,A0
+       move.b    (A0),D0
+       cmp.b     #37,D0
+       beq.s     @basic_basBaseString_13
+; {
+; *vErroProc = 16;
+       move.l    (A2),A0
+       move.w    #16,(A0)
+; return 0;
+       clr.l     D0
+       bra       @basic_basBaseString_3
+@basic_basBaseString_13:
+; }
+; nextToken();
+       jsr       (A5)
+; if (*vErroProc) return 0;
+       move.l    (A2),A0
+       tst.w     (A0)
+       beq.s     @basic_basBaseString_15
+       clr.l     D0
+       bra       @basic_basBaseString_3
+@basic_basBaseString_15:
+; if (*token_type != CLOSEPARENT)
+       move.l    (A4),A0
+       move.b    (A0),D0
+       cmp.b     #9,D0
+       beq.s     @basic_basBaseString_17
+; {
+; *vErroProc = 15;
+       move.l    (A2),A0
+       move.w    #15,(A0)
+; return 0;
+       clr.l     D0
+       bra       @basic_basBaseString_3
+@basic_basBaseString_17:
+; }
+; itoa(*iVal, token, pBase);
+       move.b    11(A6),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    (A3),-(A7)
+       move.l    -4(A6),A0
+       move.l    (A0),-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; len = strlen(token);
+       move.l    (A3),-(A7)
+       jsr       _strlen
+       addq.w    #4,A7
+       move.l    D0,D2
+; *(token + len) = pSuffix;
+       move.l    (A3),A0
+       move.b    15(A6),0(A0,D2.L)
+; *(token + len + 1) = 0x00;
+       move.l    (A3),A0
+       add.l     D2,A0
+       clr.b     1(A0)
+; *value_type = '$';
+       move.l    _value_type.L,A0
+       move.b    #36,(A0)
+; return 0;
+       clr.l     D0
+@basic_basBaseString_3:
+       movem.l   (A7)+,D2/A2/A3/A4/A5
+       unlk      A6
+       rts
+; }
+; int basHex(void)
+; {
+       xdef      _basHex
+_basHex:
+; return basBaseString(16, 'h');
+       pea       104
+       pea       16
+       jsr       @basic_basBaseString
+       addq.w    #8,A7
+       rts
+; }
+; int basBin(void)
+; {
+       xdef      _basBin
+_basBin:
+; return basBaseString(2, 'b');
+       pea       98
+       pea       2
+       jsr       @basic_basBaseString
+       addq.w    #8,A7
+       rts
+; }
+; int basOct(void)
+; {
+       xdef      _basOct
+_basOct:
+; return basBaseString(8, 'o');
+       pea       111
+       pea       8
+       jsr       @basic_basBaseString
+       addq.w    #8,A7
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -18825,7 +19040,7 @@ basInputGet_39:
 ; }
 ; }
 ; printText("\r\n");
-       pea       @basic_107.L
+       pea       @basic_110.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -28439,210 +28654,216 @@ _basRestore:
 @basic_76:
        dc.b      65,83,67,0
 @basic_77:
-       dc.b      80,69,69,75,0
+       dc.b      72,69,88,36,0
 @basic_78:
-       dc.b      80,79,75,69,0
+       dc.b      66,73,78,36,0
 @basic_79:
-       dc.b      82,78,68,0
+       dc.b      79,67,84,36,0
 @basic_80:
-       dc.b      76,69,78,0
+       dc.b      80,69,69,75,0
 @basic_81:
-       dc.b      86,65,76,0
+       dc.b      80,79,75,69,0
 @basic_82:
-       dc.b      83,84,82,36,0
+       dc.b      82,78,68,0
 @basic_83:
-       dc.b      83,80,82,73,84,69,79,86,69,82,0
+       dc.b      76,69,78,0
 @basic_84:
-       dc.b      80,79,73,78,84,0
+       dc.b      86,65,76,0
 @basic_85:
-       dc.b      67,72,82,36,0
+       dc.b      83,84,82,36,0
 @basic_86:
-       dc.b      70,82,69,0
+       dc.b      83,80,82,73,84,69,79,86,69,82,0
 @basic_87:
-       dc.b      83,81,82,84,0
+       dc.b      80,79,73,78,84,0
 @basic_88:
-       dc.b      83,73,78,0
+       dc.b      67,72,82,36,0
 @basic_89:
-       dc.b      67,79,83,0
+       dc.b      70,82,69,0
 @basic_90:
-       dc.b      84,65,78,0
+       dc.b      83,81,82,84,0
 @basic_91:
-       dc.b      76,79,71,0
+       dc.b      83,73,78,0
 @basic_92:
-       dc.b      69,88,80,0
+       dc.b      67,79,83,0
 @basic_93:
-       dc.b      83,80,67,0
+       dc.b      84,65,78,0
 @basic_94:
-       dc.b      84,65,66,0
+       dc.b      76,79,71,0
 @basic_95:
-       dc.b      77,73,68,36,0
+       dc.b      69,88,80,0
 @basic_96:
-       dc.b      82,73,71,72,84,36,0
+       dc.b      83,80,67,0
 @basic_97:
-       dc.b      76,69,70,84,36,0
+       dc.b      84,65,66,0
 @basic_98:
-       dc.b      73,78,84,0
+       dc.b      77,73,68,36,0
 @basic_99:
-       dc.b      65,66,83,0
+       dc.b      82,73,71,72,84,36,0
 @basic_100:
-       dc.b      65,78,68,0
+       dc.b      76,69,70,84,36,0
 @basic_101:
-       dc.b      79,82,0
+       dc.b      73,78,84,0
 @basic_102:
-       dc.b      62,61,0
+       dc.b      65,66,83,0
 @basic_103:
-       dc.b      60,61,0
+       dc.b      65,78,68,0
 @basic_104:
-       dc.b      60,62,0
+       dc.b      79,82,0
 @basic_105:
-       dc.b      78,79,84,0
+       dc.b      62,61,0
 @basic_106:
+       dc.b      60,61,0
+@basic_107:
+       dc.b      60,62,0
+@basic_108:
+       dc.b      78,79,84,0
+@basic_109:
        dc.b      77,77,83,74,45,66,65,83,73,67,32,118,50,46,48
        dc.b      97,48,52,0
-@basic_107:
+@basic_110:
        dc.b      13,10,0
-@basic_108:
+@basic_111:
        dc.b      85,116,105,108,105,116,121,32,40,99,41,32,50
        dc.b      48,50,50,45,50,48,50,54,13,10,0
-@basic_109:
+@basic_112:
        dc.b      79,75,13,10,0
-@basic_110:
+@basic_113:
        dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
        dc.b      58,32,91,0
-@basic_111:
-       dc.b      93,13,10,0
-@basic_112:
-       dc.b      13,10,79,75,0
-@basic_113:
-       dc.b      76,111,97,100,105,110,103,46,46,46,13,10,0
 @basic_114:
-       dc.b      68,111,110,101,46,13,10,0
+       dc.b      93,13,10,0
 @basic_115:
+       dc.b      13,10,79,75,0
+@basic_116:
+       dc.b      76,111,97,100,105,110,103,46,46,46,13,10,0
+@basic_117:
+       dc.b      68,111,110,101,46,13,10,0
+@basic_118:
        dc.b      80,114,111,99,101,115,115,105,110,103,46,46
        dc.b      46,13,10,0
-@basic_116:
+@basic_119:
        dc.b      82,117,110,110,105,110,103,46,46,46,13,10,0
-@basic_117:
+@basic_120:
        dc.b      76,111,97,100,105,110,103,32,70,105,108,101
        dc.b      32,69,114,114,111,114,46,46,46,13,10,0
-@basic_118:
-       dc.b      78,69,87,0
-@basic_119:
-       dc.b      69,68,73,84,0
-@basic_120:
-       dc.b      76,73,83,84,0
 @basic_121:
-       dc.b      76,73,83,84,80,0
+       dc.b      78,69,87,0
 @basic_122:
-       dc.b      82,85,78,0
+       dc.b      69,68,73,84,0
 @basic_123:
-       dc.b      68,69,76,0
+       dc.b      76,73,83,84,0
 @basic_124:
-       dc.b      88,76,79,65,68,0
+       dc.b      76,73,83,84,80,0
 @basic_125:
-       dc.b      88,76,79,65,68,49,75,0
+       dc.b      82,85,78,0
 @basic_126:
+       dc.b      68,69,76,0
+@basic_127:
+       dc.b      88,76,79,65,68,0
+@basic_128:
+       dc.b      88,76,79,65,68,49,75,0
+@basic_129:
        dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
        dc.b      51,58,32,91,0
-@basic_127:
-       dc.b      84,73,77,69,82,0
-@basic_128:
-       dc.b      84,105,109,101,114,58,32,0
-@basic_129:
-       dc.b      109,115,13,10,0
 @basic_130:
-       dc.b      84,82,65,67,69,79,78,0
+       dc.b      84,73,77,69,82,0
 @basic_131:
-       dc.b      84,82,65,67,69,79,70,70,0
+       dc.b      84,105,109,101,114,58,32,0
 @basic_132:
-       dc.b      68,69,66,85,71,79,78,0
+       dc.b      109,115,13,10,0
 @basic_133:
-       dc.b      68,69,66,85,71,79,70,70,0
+       dc.b      84,82,65,67,69,79,78,0
 @basic_134:
-       dc.b      76,73,83,84,77,69,77,0
+       dc.b      84,82,65,67,69,79,70,70,0
 @basic_135:
+       dc.b      68,69,66,85,71,79,78,0
+@basic_136:
+       dc.b      68,69,66,85,71,79,70,70,0
+@basic_137:
+       dc.b      76,73,83,84,77,69,77,0
+@basic_138:
        dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
        dc.b      32,32,0
-@basic_136:
+@basic_139:
        dc.b      104,13,10,0
-@basic_137:
+@basic_140:
        dc.b      112,83,116,97,114,116,65,114,114,97,121,86,97
        dc.b      114,32,0
-@basic_138:
+@basic_141:
        dc.b      112,83,116,97,114,116,83,116,114,105,110,103
        dc.b      32,32,32,0
-@basic_139:
+@basic_142:
        dc.b      112,83,116,97,114,116,80,114,111,103,32,32,32
        dc.b      32,32,0
-@basic_140:
+@basic_143:
        dc.b      112,83,116,97,114,116,88,66,97,115,76,111,97
        dc.b      100,32,0
-@basic_141:
+@basic_144:
        dc.b      112,83,116,97,114,116,83,116,97,99,107,32,32
        dc.b      32,32,0
-@basic_142:
-       dc.b      81,85,73,84,0
-@basic_143:
-       dc.b      32,0
-@basic_144:
-       dc.b      32,59,44,43,45,60,62,40,41,47,42,94,61,58,0
 @basic_145:
+       dc.b      81,85,73,84,0
+@basic_146:
+       dc.b      32,0
+@basic_147:
+       dc.b      32,59,44,43,45,60,62,40,41,47,42,94,61,58,0
+@basic_148:
        dc.b      76,105,110,101,32,110,117,109,98,101,114,32
        dc.b      97,108,114,101,97,100,121,32,101,120,105,115
        dc.b      116,115,13,10,0
-@basic_146:
+@basic_149:
        dc.b      78,111,110,45,101,120,105,115,116,101,110,116
        dc.b      32,108,105,110,101,32,110,117,109,98,101,114
        dc.b      13,10,0
-@basic_147:
+@basic_150:
        dc.b      112,114,101,115,115,32,97,110,121,32,107,101
        dc.b      121,32,116,111,32,99,111,110,116,105,110,117
        dc.b      101,0
-@basic_148:
+@basic_151:
        dc.b      64,0
-@basic_149:
+@basic_152:
        dc.b      83,121,110,116,97,120,32,69,114,114,111,114
        dc.b      32,33,0
-@basic_150:
+@basic_153:
        dc.b      13,10,65,98,111,114,116,101,100,32,33,33,33
        dc.b      13,10,0
-@basic_151:
+@basic_154:
        dc.b      13,10,83,116,111,112,112,101,100,32,97,116,32
        dc.b      0
-@basic_152:
+@basic_155:
        dc.b      13,10,69,120,101,99,117,116,105,110,103,32,97
        dc.b      116,32,0
-@basic_153:
+@basic_156:
        dc.b      32,97,116,32,0
-@basic_154:
+@basic_157:
        dc.b      32,33,13,10,0
-@basic_155:
+@basic_158:
        dc.b      76,111,97,100,105,110,103,32,66,97,115,105,99
        dc.b      32,80,114,111,103,114,97,109,46,46,46,13,10
        dc.b      0
-@basic_156:
+@basic_159:
        dc.b      76,111,97,100,105,110,103,32,66,97,115,105,99
        dc.b      32,80,114,111,103,114,97,109,32,49,107,46,46
        dc.b      46,13,10,0
-@basic_157:
-       dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
-       dc.b      54,58,32,91,0
-@basic_158:
-       dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
-       dc.b      55,58,32,91,0
-@basic_159:
-       dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
-       dc.b      56,58,32,91,0
 @basic_160:
        dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
-       dc.b      57,58,32,91,0
+       dc.b      54,58,32,91,0
 @basic_161:
        dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
-       dc.b      49,58,32,91,0
+       dc.b      55,58,32,91,0
 @basic_162:
        dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
-       dc.b      50,58,32,91,0
+       dc.b      56,58,32,91,0
 @basic_163:
+       dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
+       dc.b      57,58,32,91,0
+@basic_164:
+       dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
+       dc.b      49,58,32,91,0
+@basic_165:
+       dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
+       dc.b      50,58,32,91,0
+@basic_166:
        dc.b      58,0
        xdef      _strValidChars
 _strValidChars:
@@ -28652,7 +28873,7 @@ _strValidChars:
        dc.b      44,36,61,33,45,35,40,41,37,46,43,126,95,0
        xdef      _keywords_count
 _keywords_count:
-       dc.l      73
+       dc.l      76
 @basic_keywords:
        dc.l      @basic_31,128,@basic_32,129,@basic_33,130
        dc.l      @basic_34,131,@basic_35,133,@basic_36,134
@@ -28669,16 +28890,17 @@ _keywords_count:
        dc.l      @basic_67,181,@basic_68,182,@basic_69,183
        dc.l      @basic_70,184,@basic_71,185,@basic_72,186
        dc.l      @basic_73,187,@basic_74,188,@basic_75,189
-       dc.l      @basic_76,196,@basic_77,205,@basic_78,206
-       dc.l      @basic_79,209,@basic_80,219,@basic_81,220
-       dc.l      @basic_82,221,@basic_83,222,@basic_84,224
-       dc.l      @basic_85,225,@basic_86,226,@basic_87,227
-       dc.l      @basic_88,228,@basic_89,229,@basic_90,230
-       dc.l      @basic_91,231,@basic_92,232,@basic_93,233
-       dc.l      @basic_94,234,@basic_95,235,@basic_96,236
-       dc.l      @basic_97,237,@basic_98,238,@basic_99,239
-       dc.l      @basic_100,243,@basic_101,244,@basic_102
-       dc.l      245,@basic_103,246,@basic_104,247,@basic_105
+       dc.l      @basic_76,196,@basic_77,197,@basic_78,198
+       dc.l      @basic_79,199,@basic_80,205,@basic_81,206
+       dc.l      @basic_82,209,@basic_83,219,@basic_84,220
+       dc.l      @basic_85,221,@basic_86,222,@basic_87,224
+       dc.l      @basic_88,225,@basic_89,226,@basic_90,227
+       dc.l      @basic_91,228,@basic_92,229,@basic_93,230
+       dc.l      @basic_94,231,@basic_95,232,@basic_96,233
+       dc.l      @basic_97,234,@basic_98,235,@basic_99,236
+       dc.l      @basic_100,237,@basic_101,238,@basic_102
+       dc.l      239,@basic_103,243,@basic_104,244,@basic_105
+       dc.l      245,@basic_106,246,@basic_107,247,@basic_108
        dc.l      248
        xdef      _operandsWithTokens
 _operandsWithTokens:
