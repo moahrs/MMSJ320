@@ -1,3 +1,36 @@
+//#define USE_VARIBALES_NEW
+
+#ifdef USE_VARIBALES_NEW
+typedef struct _BasicVarEntry
+{
+    unsigned char  type;      /* '%', '#', '$' */
+    unsigned char  name1;     /* primeira letra */
+    unsigned char  name2;     /* segunda letra ou 0 */
+    unsigned char  extra;     /* tamanho da string; 0 para % e # */
+    unsigned char  flags;     /* 0 = Array / 1 = Simples */
+    unsigned char  reserved1;
+    unsigned short reserved2;    
+    unsigned long  addr;      /* endereco do valor ou da string ou do array */
+} BasicVarEntry;
+
+typedef struct _BasicString
+{
+    BYTE len;
+    BYTE maxlen;
+    char text[1];
+} BasicString;
+
+typedef struct _BasicArray
+{
+    unsigned char  dimensions;
+    unsigned char  reserved1;
+    unsigned short reserved2;
+    unsigned long  totalElements;
+    unsigned long  dataAddr;
+    unsigned char  dimSize[1];
+} BasicArray;
+#endif
+
 typedef struct  {
   unsigned char nameVar[3];  // variable name
   long endVar; // address off the counter variable
