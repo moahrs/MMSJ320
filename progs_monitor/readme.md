@@ -50,6 +50,7 @@ Rotinas internas sem token continuam fora.
 | Comando | Sintaxe | O que faz | Exemplo |
 |---|---|---|---|
 | `CIRCLE` | `CIRCLE x,y,rh[,rv]` | Desenha um círculo ou ovoide. `rv` é opcional. | `CIRCLE 120,80,20` |
+| `DRAW` | `DRAW "<comandos>"` | Desenha/move com comandos encadeados no estilo MSX (`BM`, `M`, `R/L/U/D/E/F/G/H`, `C`). | `DRAW "BM100,100R20D20L20U20"` |
 | `FILL` | `FILL <x1>,<y1>,<x2>,<y2>,<cor>` | Preenche um retângulo definido, direto na VDP, com a cor informada. | `FILL 10,10,60,40,3` |
 | `LINE` | `LINE x,y TO x,y [TO x,y...]` | Desenha uma linha ou sequência de segmentos. | `LINE 10,10 TO 100,10 TO 100,50` |
 | `PAINT` | `PAINT x,y,c` | Flood fill a partir de um ponto, preenchendo a área conectada com a cor `c`. | `PAINT 30,20,4` |
