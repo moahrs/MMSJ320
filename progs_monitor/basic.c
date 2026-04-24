@@ -2389,8 +2389,8 @@ int executeToken(unsigned char pToken)
         case 0xB5:  // FILL
             vReta = basFill();
             break;
-        case 0xB6:  // RESERVED
-            vReta = 0;
+        case 0xB6:  // DRAW
+            vReta = basDraw();
             break;
         case 0xB7:  // SPRITEPOS
             vReta = basSpritePos();
@@ -10585,6 +10585,290 @@ int basLine(void)
    } while (*token == 0x86); // TO Token
 
     *value_type='%';
+
+    return 0;
+}
+
+static unsigned char basDrawClampX(int x)
+{
+    if (x < 0)
+        return 0;
+
+    if (x > 255)
+        return 255;
+
+    return (unsigned char)x;
+}
+
+static unsigned char basDrawClampY(int y)
+{
+    if (y < 0)
+        return 0;
+
+    if (y > 191)
+        return 191;
+
+    return (unsigned char)y;
+}
+
+static void basDrawLineSegment(unsigned char x0, unsigned char y0, unsigned char x1, unsigned char y1, unsigned char color)
+{
+    int x;
+    int y;
+    int dx;
+    int dy;
+    int addx;
+    int addy;
+    int ix;
+    long p;
+
+    if (x0 == x1 && y0 == y1)
+    {
+        basVideoPlotHires(x0, y0, color, 0);
+        return;
+    }
+
+    x = x0;
+    y = y0;
+    dx = x1 - x0;
+    dy = y1 - y0;
+
+    if (dx < 0)
+        dx = -dx;
+
+    if (dy < 0)
+        dy = -dy;
+
+    addx = (x0 > x1) ? -1 : 1;
+    addy = (y0 > y1) ? -1 : 1;
+
+    if (dx >= dy)
+    {
+        p = (2 * dy) - dx;
+
+        for (ix = 1; ix <= (dx + 1); ix++)
+        {
+            basVideoPlotHires((unsigned char)x, (unsigned char)y, color, 0);
+
+            if (p < 0)
+            {
+                p = p + (2 * dy);
+                x = x + addx;
+            }
+            else
+            {
+                p = p + (2 * dy) - (2 * dx);
+                x = x + addx;
+                y = y + addy;
+            }
+        }
+    }
+    else
+    {
+        p = (2 * dx) - dy;
+
+        for (ix = 1; ix <= (dy + 1); ix++)
+        {
+            basVideoPlotHires((unsigned char)x, (unsigned char)y, color, 0);
+
+            if (p < 0)
+            {
+                p = p + (2 * dx);
+                y = y + addy;
+            }
+            else
+            {
+                p = p + (2 * dx) - (2 * dy);
+                x = x + addx;
+                y = y + addy;
+            }
+        }
+    }
+}
+
+static int basDrawReadNumber(unsigned char *pCmd, int *pPos, int *pValue)
+{
+    int pos;
+    int val;
+    int found;
+
+    pos = *pPos;
+    val = 0;
+    found = 0;
+
+    while (pCmd[pos] == ' ')
+        pos++;
+
+    while (pCmd[pos] >= '0' && pCmd[pos] <= '9')
+    {
+        found = 1;
+        val = (val * 10) + (pCmd[pos] - '0');
+        pos++;
+    }
+
+    if (!found)
+        return 0;
+
+    *pPos = pos;
+    *pValue = val;
+
+    return 1;
+}
+
+//--------------------------------------------------------------------------------------
+//
+// Syntaxe:
+//     DRAW "BM100,100R20D20L20U20"
+//--------------------------------------------------------------------------------------
+int basDraw(void)
+{
+    unsigned char answer[260];
+    int *iVal = (int *)answer;
+    unsigned char cmd[260];
+    int pos = 0;
+    int moveOnly = 0;
+    int step = 0;
+    int nx = 0;
+    int ny = 0;
+    int px = 0;
+    int py = 0;
+    int hasNum;
+    int c;
+
+    if (vdpModeBas != VDP_MODE_G2)
+    {
+        *vErroProc = 24;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type == QUOTE)
+    {
+        strcpy((char *)cmd, (char *)token);
+        nextToken();
+        if (*vErroProc) return 0;
+    }
+    else
+    {
+        putback();
+
+        getExp(answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type != '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        strcpy((char *)cmd, (char *)answer);
+    }
+
+    while (cmd[pos])
+    {
+        while (cmd[pos] == ' ' || cmd[pos] == ';')
+            pos++;
+
+        if (!cmd[pos])
+            break;
+
+        c = toupper(cmd[pos]);
+
+        if (c == 'B')
+        {
+            moveOnly = 1;
+            pos++;
+            continue;
+        }
+
+        pos++;
+
+        if (c == 'C')
+        {
+            if (!basDrawReadNumber(cmd, &pos, &step))
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+
+            fgcolorBas = (unsigned char)(step & 0x0F);
+            moveOnly = 0;
+            continue;
+        }
+
+        if (c == 'M')
+        {
+            if (!basDrawReadNumber(cmd, &pos, &nx))
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+
+            while (cmd[pos] == ' ')
+                pos++;
+
+            if (cmd[pos] != ',')
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+
+            pos++;
+
+            if (!basDrawReadNumber(cmd, &pos, &ny))
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+
+            px = *lastHgrX;
+            py = *lastHgrY;
+            *lastHgrX = basDrawClampX(nx);
+            *lastHgrY = basDrawClampY(ny);
+
+            if (!moveOnly)
+                basDrawLineSegment((unsigned char)px, (unsigned char)py, *lastHgrX, *lastHgrY, fgcolorBas);
+
+            moveOnly = 0;
+            continue;
+        }
+
+        hasNum = basDrawReadNumber(cmd, &pos, &step);
+        if (!hasNum)
+            step = 1;
+
+        nx = *lastHgrX;
+        ny = *lastHgrY;
+
+        switch (c)
+        {
+            case 'R': nx += step; break;
+            case 'L': nx -= step; break;
+            case 'U': ny -= step; break;
+            case 'D': ny += step; break;
+            case 'E': nx += step; ny -= step; break;
+            case 'F': nx += step; ny += step; break;
+            case 'G': nx -= step; ny += step; break;
+            case 'H': nx -= step; ny -= step; break;
+            default:
+                *vErroProc = 14;
+                return 0;
+        }
+
+        px = *lastHgrX;
+        py = *lastHgrY;
+        *lastHgrX = basDrawClampX(nx);
+        *lastHgrY = basDrawClampY(ny);
+
+        if (!moveOnly)
+            basDrawLineSegment((unsigned char)px, (unsigned char)py, *lastHgrX, *lastHgrY, fgcolorBas);
+
+        moveOnly = 0;
+    }
+
+    *value_type = '%';
 
     return 0;
 }

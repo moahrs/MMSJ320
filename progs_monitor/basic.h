@@ -226,7 +226,7 @@ static const struct keyword_token keywords[] =
   {"COLOR",   0xB3},   // .. .. ok
   {"PLOT",    0xB4},   // .. .. ok
   {"FILL",    0xB5},   // .. .. ok
-  {"RESERVED",    0xB6},   // .. .. ok
+  {"DRAW",    0xB6},   // .. .. ok
   {"SPRITEPOS", 0xB7}, // .. .. ok
   {"PAINT",   0xB8},   // .. .. ok
   {"LINE",    0xB9},   // .. .. ok
@@ -414,6 +414,7 @@ int basSpriteColor(void);
 int basSpritePos(void);
 int basSpriteOver(void);
 int basPlot(void);
+int basDraw(void);
 int basHVlin(unsigned char vTipo);   // 1 - HLIN, 2 - VLIN
 int basPoint(void);
 int basLine(void);
