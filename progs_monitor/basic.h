@@ -480,3 +480,29 @@ void FPP_NEG(void);
 
 void TRACE_ON(void);
 void TRACE_OFF(void);
+
+// =========================================================
+// EDICAO DE TELA
+// =========================================================
+unsigned int vdpXYAddr(int x, int y);
+unsigned char vdpReadCharAt(int x, int y);
+void vdpWriteCharAt(int x, int y, unsigned char ch);
+void vdpEditMoveCursor(int x, int y);
+void vdpEditScrollUp(void);
+void vdpEditPutChar(unsigned char ch);
+void vdpEditBackspace(void);
+void vdpEditDelete(void);
+void vdpEditCursorLeft(void);
+void vdpEditCursorRight(void);
+void vdpEditCursorUp(void);
+void vdpEditCursorDown(void);
+int vdpReadPhysicalLine(int y, char *dest, int maxLen);
+void vdpTrimRight(char *s);
+int vdpLineStartsWithNumber(char *s);
+int vdpReadLogicalBasicLine(int y, char *dest, int maxLen);
+void vdpEditEnter(void);
+void vdpEditProcessKey(int key);
+void vdpEditReadEnterLine(char *dest, int maxLen);
+static int vdpReadTrimmedPhysicalLine(int y, char *dest, int maxLen);
+static void vdpEditLoadLineFromCursor(void);
+

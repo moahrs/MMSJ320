@@ -259,6 +259,43 @@ _vRetAlloc:
 ; //#define BASIC_DEBUG_ON 0
 ; unsigned char *vvdgBASd = 0x00400041; // VDP TMS9118 Data Mode
 ; unsigned char *vvdgBASc = 0x00400043; // VDP TMS9118 Registers/Address Mode
+; //--------------------------------------------------------------------------------------
+; // Editor em modo de tela cheia
+; //--------------------------------------------------------------------------------------
+; #define INPUT_BASIC_TELA 1
+; #define VDP_COLS        40
+; #define VDP_ROWS        24
+; #define VDP_MAX_LINE    256
+; #define KEY_ENTER       13
+; #define KEY_BACKSPACE   8
+; #define KEY_DELETE      127
+; #define KEY_LEFT        18
+; #define KEY_RIGHT       20
+; #define KEY_UP          17
+; #define KEY_DOWN        19
+; #define VDP_EDIT_CURSOR_CHAR   0xFE
+; #define VDP_EDIT_BLINK_TICKS   3500
+; int vdpEditCurX;
+; int vdpEditCurY;
+; char vdpEditLine[VDP_MAX_LINE];
+; static unsigned char vdpEditCursorBackup = 0x00;
+; static unsigned char vdpEditCursorVisible = 0;
+; static unsigned short vdpEditBlinkCount = 0;
+; static int vdpEditLineLen = 0;
+; static int vdpEditCursorPos = 0;
+; static int vdpEditLineStartX = 0;
+; static int vdpEditLineStartY = 0;
+; static int vdpEditLineEndY = 0;
+; static int vdpEditFindNextInputRow(void);
+; static void vdpEditCursorOff(void);
+; static void vdpEditCursorOn(void);
+; static void vdpEditCursorToggle(void);
+; static int vdpEditReadLogicalLineAt(int x, int y, char *dest, int maxLen, int *pStartX, int *pStartY, int *pEndY);
+; static unsigned int textPatternTable = 0x0000;
+; static unsigned int textNameTable = 0x0800;
+; //--------------------------------------------------------------------------------------
+; //--------------------------------------------------------------------------------------
+; //--------------------------------------------------------------------------------------
 ; static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 ; static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 ; static unsigned char *lastVarCacheAddr[SIMPLE_VAR_CACHE_SLOTS] = {0,0,0,0,0,0,0,0};
@@ -998,8 +1035,8 @@ _main:
        movem.l   D2/D3/D4/D5/A2/A3/A4/A5,-(A7)
        lea       _startBasic.L,A2
        lea       _startBasic0.L,A3
-       lea       _pStartXBasLoad.L,A4
-       lea       -24(A6),A5
+       lea       @basic_vdpEditBlinkCount.L,A4
+       lea       _pStartXBasLoad.L,A5
 ; unsigned char vRetInput;
 ; VDP_COLOR vdpcolor;
 ; unsigned char countTec = 0, vByte;
@@ -1007,7 +1044,7 @@ _main:
 ; unsigned char *vTemp;
 ; unsigned char *vBufptr = &vbufInput;
        lea       _vbufInput.L,A0
-       move.l    A0,D2
+       move.l    A0,D4
 ; unsigned char sqtdtam[20];
 ; // Timer para o Random
 ; *(vmfp + Reg_TADR) = 0xF5;  // 245
@@ -1044,7 +1081,7 @@ _main:
        move.l    (A0),D0
        add.l     #32768,D0
        move.l    D0,_pStartProg.L
-; pStartVdpBuffer = *startBasic0 + 0x10000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM 
+; pStartVdpBuffer = *startBasic0 + 0x10000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM
        move.l    (A3),A0
        move.l    (A0),D0
        add.l     #65536,D0
@@ -1053,7 +1090,7 @@ _main:
        move.l    (A3),A0
        move.l    (A0),D0
        add.l     #16384,D0
-       move.l    D0,(A4)
+       move.l    D0,(A5)
 ; pStartStack     = *startBasic0 + 0x10000;   // Area variaveis sistema e stack pointer
        move.l    (A3),A0
        move.l    (A0),D0
@@ -1113,7 +1150,7 @@ main_1:
 ; pStartVdpBuffer      = 0x00850000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM
        move.l    #8716288,_pStartVdpBuffer.L
 ; pStartXBasLoad       = 0x008B0000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
-       move.l    #9109504,(A4)
+       move.l    #9109504,(A5)
 ; pStartStack          = 0x008FE000;   // Area variaveis sistema e stack pointer
        move.l    #9428992,_pStartStack.L
 ; vMemTotalSimpVar = 12288;
@@ -1226,22 +1263,18 @@ main_5:
        jsr       @basic_basVideoResetBufferState
 ; //vdpcolor = vdp_get_color();
 ; vdpcolor.fg = VDP_WHITE;
-       move.l    A5,D0
-       move.l    D0,A0
+       lea       -24(A6),A0
        move.b    #15,(A0)
 ; vdpcolor.bg = VDP_BLACK;
-       move.l    A5,D0
-       move.l    D0,A0
+       lea       -24(A6),A0
        move.b    #1,1(A0)
 ; vdpModeBas = VDP_MODE_TEXT; // Text
        move.b    #3,_vdpModeBas.L
 ; fgcolorBasAnt = vdpcolor.fg;
-       move.l    A5,D0
-       move.l    D0,A0
+       lea       -24(A6),A0
        move.b    (A0),_fgcolorBasAnt.L
 ; bgcolorBasAnt = vdpcolor.bg;
-       move.l    A5,D0
-       move.l    D0,A0
+       lea       -24(A6),A0
        move.b    1(A0),_bgcolorBasAnt.L
 ; vdpMaxCols = 39;
        move.b    #39,_vdpMaxCols.L
@@ -1252,85 +1285,122 @@ main_5:
        move.b    (A0),D0
        bne       main_12
 ; {
-; // Prompt de comandos
+; #ifdef INPUT_BASIC_TELA
+; vdpEditLine[0] = 0x00;
+       clr.b     _vdpEditLine.L
+; vdpEditLineLen = 0;
+       clr.l     @basic_vdpEditLineLen.L
+; vdpEditCursorPos = 0;
+       clr.l     @basic_vdpEditCursorPos.L
+; vdpEditLineStartX = 0;
+       clr.l     @basic_vdpEditLineStartX.L
+; vdpEditLineStartY = vdpEditFindNextInputRow();
+       jsr       @basic_vdpEditFindNextInputRow
+       move.l    D0,@basic_vdpEditLineStartY.L
+; vdpEditLineEndY = vdpEditLineStartY;
+       move.l    @basic_vdpEditLineStartY.L,@basic_vdpEditLineEndY.L
+; vdpEditCurX = vdpEditLineStartX;
+       move.l    @basic_vdpEditLineStartX.L,_vdpEditCurX.L
+; vdpEditCurY = vdpEditLineStartY;
+       move.l    @basic_vdpEditLineStartY.L,_vdpEditCurY.L
+; vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1118,A0
+       jsr       (A0)
+       addq.w    #8,A7
+; vdpEditCursorVisible = 0;
+       clr.b     @basic_vdpEditCursorVisible.L
+; vdpEditBlinkCount = 0;
+       clr.w     (A4)
+; vdpEditCursorOn();
+       jsr       @basic_vdpEditCursorOn
 ; while (*pProcess)
 main_14:
        move.l    _pProcess.L,A0
        tst.b     (A0)
        beq       main_16
 ; {
-; vRetInput = inputLineBasic(128,'$');
-       pea       36
-       pea       128
-       jsr       _inputLineBasic
-       addq.w    #8,A7
+; vRetInput = readChar();   // tua rotina que lê uma tecla
+       move.l    1074,A0
+       jsr       (A0)
        move.b    D0,D5
-; if (vbufInput[0] != 0x00 && (vRetInput == 0x0D || vRetInput == 0x0A))
-       move.b    _vbufInput.L,D0
-       beq       main_17
-       cmp.b     #13,D5
-       beq.s     main_19
-       cmp.b     #10,D5
-       bne       main_17
-main_19:
+; if (vRetInput == 0x00)
+       tst.b     D5
+       bne.s     main_17
 ; {
-; printText("\r\n\0");
-       pea       @basic_109.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; processLine();
-       jsr       _processLine
-; vbufInput[0] = 0x00;
-       clr.b     _vbufInput.L
-; vBufptr = &vbufInput;
-       lea       _vbufInput.L,A0
-       move.l    A0,D2
-; if (!*pTypeLine && *pProcess)
-       move.l    _pTypeLine.L,A0
-       tst.b     (A0)
-       bne.s     main_20
-       move.l    _pProcess.L,A0
-       tst.b     (A0)
-       beq.s     main_20
-; printText("\r\nOK\0");
-       pea       @basic_113.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-main_20:
-; if (!*pTypeLine && *pProcess)
-       move.l    _pTypeLine.L,A0
-       tst.b     (A0)
-       bne.s     main_22
-       move.l    _pProcess.L,A0
-       tst.b     (A0)
-       beq.s     main_22
-; printText("\r\n\0");   // printText("\r\n>\0");
-       pea       @basic_109.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-main_22:
-       bra.s     main_24
+; vdpEditBlinkCount++;
+       addq.w    #1,(A4)
+; if (vdpEditBlinkCount >= VDP_EDIT_BLINK_TICKS)
+       move.w    (A4),D0
+       cmp.w     #3500,D0
+       blo.s     main_19
+; {
+; vdpEditBlinkCount = 0;
+       clr.w     (A4)
+; vdpEditCursorToggle();
+       jsr       @basic_vdpEditCursorToggle
+main_19:
+; }
+; continue;
+       bra.s     main_15
 main_17:
 ; }
-; else if (vRetInput != 0x1B)
+; vdpEditBlinkCount = 0;
+       clr.w     (A4)
+; vdpEditCursorOff();
+       jsr       @basic_vdpEditCursorOff
+; if (vRetInput == 0x1B)
        cmp.b     #27,D5
-       beq.s     main_24
+       bne.s     main_21
 ; {
-; printText("\r\n\0");
-       pea       @basic_109.L
-       move.l    1058,A0
-       jsr       (A0)
+; // ESC
+; vdpEditCursorOn();
+       jsr       @basic_vdpEditCursorOn
+; break;
+       bra.s     main_16
+main_21:
+; }
+; // Aqui não chama inputLineBasic. Aqui você processa tecla por tecla direto na tela.
+; vdpEditProcessKey(vRetInput);
+       and.l     #255,D5
+       move.l    D5,-(A7)
+       jsr       _vdpEditProcessKey
        addq.w    #4,A7
-main_24:
+; vdpEditCursorOn();
+       jsr       @basic_vdpEditCursorOn
+main_15:
        bra       main_14
 main_16:
-       bra       main_29
+       bra       main_26
 main_12:
 ; }
+; #else
+; // Prompt de comandos
+; while (*pProcess)
+; {
+; vRetInput = inputLineBasic(128,'$');
+; if (vbufInput[0] != 0x00 && (vRetInput == 0x0D || vRetInput == 0x0A))
+; {
+; printText("\r\n\0");
+; processLine();
+; vbufInput[0] = 0x00;
+; vBufptr = &vbufInput;
+; if (!*pTypeLine && *pProcess)
+; printText("\r\nOK\0");
+; if (!*pTypeLine && *pProcess)
+; printText("\r\n\0");   // printText("\r\n>\0");
 ; }
+; else if (vRetInput != 0x1B)
+; {
+; printText("\r\n\0");
+; }
+; }
+; #endif
 ; }
 ; else
 ; {
@@ -1339,145 +1409,145 @@ main_12:
        move.l    (A2),A0
        move.b    (A0),D0
        cmp.b     #2,D0
-       beq.s     main_26
+       beq.s     main_23
 ; {
 ; printText("Loading...\r\n");
-       pea       @basic_114.L
+       pea       @basic_113.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-main_26:
+main_23:
 ; }
 ; // Limpando memoria
 ; memset(pStartXBasLoad,0x1A,vMemTotalXBasLoad);
        move.l    _vMemTotalXBasLoad.L,-(A7)
        pea       26
-       move.l    (A4),-(A7)
+       move.l    (A5),-(A7)
        jsr       _memset
        add.w     #12,A7
 ; // Carrega do disco
 ; verro = 0x00;
        clr.b     _verro.L
 ; loadFile(paramBasic, (unsigned long*)pStartXBasLoad);
-       move.l    (A4),-(A7)
+       move.l    (A5),-(A7)
        move.l    _paramBasic.L,-(A7)
        move.l    8388722,A0
        jsr       (A0)
        addq.w    #8,A7
 ; if (!verro)
        tst.b     _verro.L
-       bne       main_28
+       bne       main_25
 ; {
 ; // Processar
 ; if (*startBasic != 2)
        move.l    (A2),A0
        move.b    (A0),D0
        cmp.b     #2,D0
-       beq.s     main_30
+       beq.s     main_27
 ; {
 ; printText("Done.\r\n");
-       pea       @basic_115.L
+       pea       @basic_114.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Processing...\r\n");
-       pea       @basic_116.L
+       pea       @basic_115.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-main_30:
+main_27:
 ; }
 ; vTemp = pStartXBasLoad;
-       move.l    (A4),D4
+       move.l    (A5),D3
 ; while (1)
-main_32:
+main_29:
 ; {
 ; vByte = *vTemp++;
-       move.l    D4,A0
-       addq.l    #1,D4
-       move.b    (A0),D3
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.b    (A0),D2
 ; if (vByte != 0x1A)
-       cmp.b     #26,D3
-       beq       main_35
+       cmp.b     #26,D2
+       beq       main_32
 ; {
 ; if (vByte != 0xD && vByte != 0x0A)
-       cmp.b     #13,D3
-       beq.s     main_37
-       cmp.b     #10,D3
-       beq.s     main_37
+       cmp.b     #13,D2
+       beq.s     main_34
+       cmp.b     #10,D2
+       beq.s     main_34
 ; *vBufptr++ = vByte;
-       move.l    D2,A0
-       addq.l    #1,D2
-       move.b    D3,(A0)
-       bra.s     main_38
-main_37:
+       move.l    D4,A0
+       addq.l    #1,D4
+       move.b    D2,(A0)
+       bra.s     main_35
+main_34:
 ; else
 ; {
 ; vTemp++;
-       addq.l    #1,D4
+       addq.l    #1,D3
 ; *vBufptr = 0x00;
-       move.l    D2,A0
+       move.l    D4,A0
        clr.b     (A0)
 ; vBufptr = &vbufInput;
        lea       _vbufInput.L,A0
-       move.l    A0,D2
+       move.l    A0,D4
 ; if (*vbufInput == 0x00)
        move.b    _vbufInput.L,D0
-       bne.s     main_39
+       bne.s     main_36
 ; break;
-       bra.s     main_34
-main_39:
+       bra.s     main_31
+main_36:
 ; processLine();
        jsr       _processLine
-main_38:
-       bra.s     main_36
 main_35:
+       bra.s     main_33
+main_32:
 ; }
 ; }
 ; else
 ; break;
-       bra.s     main_34
-main_36:
-       bra       main_32
-main_34:
+       bra.s     main_31
+main_33:
+       bra       main_29
+main_31:
 ; }
 ; vbufInput[0] = 0x00;
        clr.b     _vbufInput.L
 ; vBufptr = &vbufInput;
        lea       _vbufInput.L,A0
-       move.l    A0,D2
+       move.l    A0,D4
 ; // Executar, se nao houve erros
 ; if (*startBasic != 2)
        move.l    (A2),A0
        move.b    (A0),D0
        cmp.b     #2,D0
-       beq.s     main_41
+       beq.s     main_38
 ; {
 ; printText("Running...\r\n");
-       pea       @basic_117.L
+       pea       @basic_116.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-main_41:
+main_38:
 ; }
 ; *vTemp = 0x00;
-       move.l    D4,A0
+       move.l    D3,A0
        clr.b     (A0)
 ; runProg(vTemp);
-       move.l    D4,-(A7)
+       move.l    D3,-(A7)
        jsr       _runProg
        addq.w    #4,A7
-       bra.s     main_29
-main_28:
+       bra.s     main_26
+main_25:
 ; }
 ; else
 ; {
 ; printText("Loading File Error...\r\n\0");
-       pea       @basic_118.L
+       pea       @basic_117.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-main_29:
+main_26:
 ; }
 ; }
 ; printText("\r\n\0");
@@ -1485,30 +1555,32 @@ main_29:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-; printText("Ok\r\n\0");
-       pea       @basic_119.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; printText("#>");
-       pea       @basic_120.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
 ; if (*startBasic == 1)
        move.l    (A2),A0
        move.b    (A0),D0
        cmp.b     #1,D0
-       bne.s     main_43
+       bne.s     main_40
+; {
+; printText("Ok\r\n\0");
+       pea       @basic_118.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("#>");
+       pea       @basic_119.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; OSTaskResume(TASK_MMSJOS_MAIN);
        pea       10
        move.l    8388762,A0
        jsr       (A0)
        addq.w    #4,A7
-main_43:
+main_40:
        movem.l   (A7)+,D2/D3/D4/D5/A2/A3/A4/A5
        unlk      A6
        rts
+; }
 ; }
 ; /******************************************************************************************/
 ; /* Secao de Processamento da linha, tokenização e execução                                */
@@ -1560,7 +1632,7 @@ inputLineBasic_1:
        beq.s     inputLineBasic_3
        cmp.b     #82,D3
        beq.s     inputLineBasic_3
-; memset(vbufInput, 0x00, sizeof(vbufInput)); 
+; memset(vbufInput, 0x00, sizeof(vbufInput));
        pea       256
        clr.l     -(A7)
        move.l    A2,-(A7)
@@ -2516,7 +2588,7 @@ processLine_20:
 processLine_21:
 ; }
 ; else if (!strcmp(linhacomando,"NEW") && iy == 3)
-       pea       @basic_121.L
+       pea       @basic_120.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2560,7 +2632,7 @@ processLine_21:
 processLine_23:
 ; }
 ; else if (!strcmp(linhacomando,"EDIT") && iy == 4)
-       pea       @basic_122.L
+       pea       @basic_121.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2577,7 +2649,7 @@ processLine_23:
 processLine_25:
 ; }
 ; else if (!strcmp(linhacomando,"LIST") && iy == 4)
-       pea       @basic_123.L
+       pea       @basic_122.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2595,7 +2667,7 @@ processLine_25:
 processLine_27:
 ; }
 ; else if (!strcmp(linhacomando,"LISTP") && iy == 5)
-       pea       @basic_124.L
+       pea       @basic_123.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2613,7 +2685,7 @@ processLine_27:
 processLine_29:
 ; }
 ; else if (!strcmp(linhacomando,"RUN") && iy == 3)
-       pea       @basic_125.L
+       pea       @basic_124.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2630,7 +2702,7 @@ processLine_29:
 processLine_31:
 ; }
 ; else if (!strcmp(linhacomando,"DEL") && iy == 3)
-       pea       @basic_126.L
+       pea       @basic_125.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2647,7 +2719,7 @@ processLine_31:
 processLine_33:
 ; }
 ; else if (!strcmp(linhacomando,"LOAD") && iy == 4 && *startBasic == 1)
-       pea       @basic_127.L
+       pea       @basic_126.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2668,7 +2740,7 @@ processLine_33:
 processLine_35:
 ; }
 ; else if (!strcmp(linhacomando,"SAVE") && iy == 4 && *startBasic == 1)
-       pea       @basic_128.L
+       pea       @basic_127.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2689,7 +2761,7 @@ processLine_35:
 processLine_37:
 ; }
 ; else if (!strcmp(linhacomando,"XLOAD") && iy == 5)
-       pea       @basic_129.L
+       pea       @basic_128.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2704,7 +2776,7 @@ processLine_37:
 processLine_39:
 ; }
 ; else if (!strcmp(linhacomando,"XLOAD1K") && iy == 7)
-       pea       @basic_130.L
+       pea       @basic_129.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2719,7 +2791,7 @@ processLine_39:
 processLine_41:
 ; }
 ; else if (!strcmp(linhacomando,"TIMER") && iy == 5)
-       pea       @basic_131.L
+       pea       @basic_130.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2744,7 +2816,7 @@ processLine_41:
        jsr       _itoa
        add.w     #12,A7
 ; printText("Timer: ");
-       pea       @basic_132.L
+       pea       @basic_131.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2754,7 +2826,7 @@ processLine_41:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("ms\r\n\0");
-       pea       @basic_133.L
+       pea       @basic_132.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2762,7 +2834,7 @@ processLine_41:
 processLine_43:
 ; }
 ; else if (!strcmp(linhacomando,"TRACEON") && iy == 7)
-       pea       @basic_134.L
+       pea       @basic_133.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2778,7 +2850,7 @@ processLine_43:
 processLine_45:
 ; }
 ; else if (!strcmp(linhacomando,"TRACEOFF") && iy == 8)
-       pea       @basic_135.L
+       pea       @basic_134.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2794,7 +2866,7 @@ processLine_45:
 processLine_47:
 ; }
 ; else if (!strcmp(linhacomando,"DEBUGON") && iy == 7)
-       pea       @basic_136.L
+       pea       @basic_135.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2810,7 +2882,7 @@ processLine_47:
 processLine_49:
 ; }
 ; else if (!strcmp(linhacomando,"DEBUGOFF") && iy == 8)
-       pea       @basic_137.L
+       pea       @basic_136.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2826,7 +2898,7 @@ processLine_49:
 processLine_51:
 ; }
 ; else if (!strcmp(linhacomando,"LISTMEM") && iy == 7)
-       pea       @basic_138.L
+       pea       @basic_137.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2842,7 +2914,7 @@ processLine_51:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartSimpVar  \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_139.L
+       pea       @basic_138.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2850,7 +2922,7 @@ processLine_51:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_140.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2861,7 +2933,7 @@ processLine_51:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartArrayVar \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_141.L
+       pea       @basic_140.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2869,7 +2941,7 @@ processLine_51:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_140.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2880,7 +2952,7 @@ processLine_51:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartString   \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_142.L
+       pea       @basic_141.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2888,7 +2960,7 @@ processLine_51:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_140.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2899,7 +2971,7 @@ processLine_51:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartProg     \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_143.L
+       pea       @basic_142.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2907,7 +2979,7 @@ processLine_51:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_140.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2918,7 +2990,7 @@ processLine_51:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartXBasLoad \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_144.L
+       pea       @basic_143.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2926,7 +2998,7 @@ processLine_51:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_140.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2937,7 +3009,7 @@ processLine_51:
        jsr       _itoa
        add.w     #12,A7
 ; printText("pStartStack    \0"); printText(sqtdtam); printText("h\r\n\0");
-       pea       @basic_145.L
+       pea       @basic_144.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2945,7 +3017,7 @@ processLine_51:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       pea       @basic_140.L
+       pea       @basic_139.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -2956,7 +3028,7 @@ processLine_53:
 ; // ESSE COMANDO NAO VAI EXISTIR QUANDO FOR PRA BIOS
 ; // *************************************************
 ; else if (!strcmp(linhacomando,"QUIT") && iy == 4)
-       pea       @basic_146.L
+       pea       @basic_145.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2987,7 +3059,7 @@ processLine_55:
        tst.b     -317(A6)
        beq.s     processLine_57
 ; strcat(vRetInf.tString, " ");
-       pea       @basic_147.L
+       pea       @basic_146.L
        lea       -312(A6),A0
        move.l    A0,-(A7)
        jsr       _strcat
@@ -2999,13 +3071,13 @@ processLine_57:
        move.l    A0,-(A7)
        jsr       _strcat
        addq.w    #8,A7
-; if (*debugOn)  
+; if (*debugOn)
        move.l    _debugOn.L,A0
        tst.b     (A0)
        beq       processLine_59
 ; {
 ; writeLongSerial("Aqui 434.666.0 [\0");
-       pea       @basic_148.L
+       pea       @basic_147.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3016,7 +3088,7 @@ processLine_57:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]-[");
-       pea       @basic_149.L
+       pea       @basic_148.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3026,7 +3098,7 @@ processLine_57:
        jsr       (A0)
        addq.w    #4,A7
 ; writeLongSerial("]\r\n\0");
-       pea       @basic_150.L
+       pea       @basic_149.L
        move.l    1158,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3305,7 +3377,7 @@ tokenizeLine_13:
        move.b    (A0),D1
        and.l     #255,D1
        move.l    D1,-(A7)
-       pea       @basic_151.L
+       pea       @basic_150.L
        jsr       _strchr
        addq.w    #8,A7
        tst.l     D0
@@ -3833,7 +3905,7 @@ saveLine_1:
        bne.s     saveLine_5
 ; {
 ; printText("Line number already exists\r\n\0");
-       pea       @basic_152.L
+       pea       @basic_151.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4449,7 +4521,7 @@ listProg_11:
        bne.s     listProg_13
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_153.L
+       pea       @basic_152.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4531,12 +4603,12 @@ listProg_21:
        blo       listProg_25
 ; {
 ; printText("press any key to continue\0");
-       pea       @basic_154.L
+       pea       @basic_153.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; vtec = inputLineBasic(1,"@");
-       pea       @basic_155.L
+       pea       @basic_154.L
        pea       1
        jsr       _inputLineBasic
        addq.w    #8,A7
@@ -4690,7 +4762,7 @@ delLine_11:
 ; else
 ; {
 ; printText("Syntax Error !");
-       pea       @basic_156.L
+       pea       @basic_155.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4710,7 +4782,7 @@ delLine_12:
        bne.s     delLine_14
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_153.L
+       pea       @basic_152.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4930,7 +5002,7 @@ editLine_1:
 ; else
 ; {
 ; printText("Syntax Error !");
-       pea       @basic_156.L
+       pea       @basic_155.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4953,7 +5025,7 @@ editLine_2:
        bne.s     editLine_4
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_153.L
+       pea       @basic_152.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5253,7 +5325,7 @@ editLine_37:
 ; processLine();
        jsr       _processLine
 ; printText("\r\nOK\0");
-       pea       @basic_113.L
+       pea       @basic_156.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5355,7 +5427,7 @@ runProg_1:
        bne.s     runProg_3
 ; {
 ; printText("Non-existent line number\r\n\0");
-       pea       @basic_153.L
+       pea       @basic_152.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5839,12 +5911,12 @@ _basXBasLoad:
        bne       basXBasLoad_1
 ; {
 ; printText("Done.\r\n");
-       pea       @basic_115.L
+       pea       @basic_114.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Processing...\r\n");
-       pea       @basic_116.L
+       pea       @basic_115.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5901,7 +5973,7 @@ basXBasLoad_7:
 basXBasLoad_5:
 ; }
 ; printText("Done.\r\n");
-       pea       @basic_115.L
+       pea       @basic_114.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5983,12 +6055,12 @@ _basXBasLoad1k:
        bne       basXBasLoad1k_1
 ; {
 ; printText("Done.\r\n");
-       pea       @basic_115.L
+       pea       @basic_114.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("Processing...\r\n");
-       pea       @basic_116.L
+       pea       @basic_115.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6047,7 +6119,7 @@ basXBasLoad1k_5:
 ; }
 ; }
 ; printText("Done.\r\n");
-       pea       @basic_115.L
+       pea       @basic_114.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -6093,269 +6165,267 @@ basXBasLoad1k_13:
 ; {
        xdef      _executeToken
 _executeToken:
-       link      A6,#-28
-       movem.l   D2/D3/A2/A3,-(A7)
+       link      A6,#-8
+       movem.l   D2/A2/A3,-(A7)
        lea       _basTrig.L,A2
        lea       _basLeftRightMid.L,A3
-       move.b    11(A6),D3
-       and.l     #255,D3
 ; char vReta = 0;
        clr.b     D2
 ; #ifndef __TESTE_TOKENIZE__
 ; unsigned char *pForStack = forStack;
-       move.l    _forStack.L,-28(A6)
+       move.l    _forStack.L,-8(A6)
 ; int ix;
-; unsigned char sqtdtam[20];
 ; switch (pToken)
-       and.l     #255,D3
-       cmp.l     #180,D3
+       move.b    11(A6),D0
+       and.l     #255,D0
+       cmp.l     #180,D0
        beq       executeToken_39
        bhi       executeToken_77
-       cmp.l     #146,D3
+       cmp.l     #146,D0
        beq       executeToken_21
        bhi       executeToken_78
-       cmp.l     #137,D3
+       cmp.l     #137,D0
        beq       executeToken_12
        bhi       executeToken_79
-       cmp.l     #131,D3
+       cmp.l     #131,D0
        beq       executeToken_7
        bhi.s     executeToken_80
-       cmp.l     #129,D3
+       cmp.l     #129,D0
        beq       executeToken_5
        bhi.s     executeToken_81
-       cmp.l     #128,D3
+       cmp.l     #128,D0
        beq       executeToken_4
        bhi       executeToken_1
-       tst.l     D3
+       tst.l     D0
        beq       executeToken_3
        bra       executeToken_1
 executeToken_81:
-       cmp.l     #130,D3
+       cmp.l     #130,D0
        beq       executeToken_6
        bra       executeToken_1
 executeToken_80:
-       cmp.l     #135,D3
+       cmp.l     #135,D0
        beq       executeToken_10
        bhi.s     executeToken_82
-       cmp.l     #134,D3
+       cmp.l     #134,D0
        beq       executeToken_9
        bhi       executeToken_1
-       cmp.l     #133,D3
+       cmp.l     #133,D0
        beq       executeToken_8
        bra       executeToken_1
 executeToken_82:
-       cmp.l     #136,D3
+       cmp.l     #136,D0
        beq       executeToken_11
        bra       executeToken_1
 executeToken_79:
-       cmp.l     #142,D3
+       cmp.l     #142,D0
        beq       executeToken_17
        bhi.s     executeToken_83
-       cmp.l     #140,D3
+       cmp.l     #140,D0
        beq       executeToken_15
        bhi.s     executeToken_84
-       cmp.l     #139,D3
+       cmp.l     #139,D0
        beq       executeToken_14
        bhi       executeToken_1
-       cmp.l     #138,D3
+       cmp.l     #138,D0
        beq       executeToken_13
        bra       executeToken_1
 executeToken_84:
-       cmp.l     #141,D3
+       cmp.l     #141,D0
        beq       executeToken_16
        bra       executeToken_1
 executeToken_83:
-       cmp.l     #144,D3
+       cmp.l     #144,D0
        beq       executeToken_19
        bhi.s     executeToken_85
-       cmp.l     #143,D3
+       cmp.l     #143,D0
        beq       executeToken_18
        bra       executeToken_1
 executeToken_85:
-       cmp.l     #145,D3
+       cmp.l     #145,D0
        beq       executeToken_20
        bra       executeToken_1
 executeToken_78:
-       cmp.l     #155,D3
+       cmp.l     #155,D0
        beq       executeToken_30
        bhi       executeToken_86
-       cmp.l     #151,D3
+       cmp.l     #151,D0
        beq       executeToken_26
        bhi.s     executeToken_87
-       cmp.l     #149,D3
+       cmp.l     #149,D0
        beq       executeToken_24
        bhi.s     executeToken_88
-       cmp.l     #148,D3
+       cmp.l     #148,D0
        beq       executeToken_23
        bhi       executeToken_1
-       cmp.l     #147,D3
+       cmp.l     #147,D0
        beq       executeToken_22
        bra       executeToken_1
 executeToken_88:
-       cmp.l     #150,D3
+       cmp.l     #150,D0
        beq       executeToken_25
        bra       executeToken_1
 executeToken_87:
-       cmp.l     #153,D3
+       cmp.l     #153,D0
        beq       executeToken_28
        bhi.s     executeToken_89
-       cmp.l     #152,D3
+       cmp.l     #152,D0
        beq       executeToken_27
        bra       executeToken_1
 executeToken_89:
-       cmp.l     #154,D3
+       cmp.l     #154,D0
        beq       executeToken_29
        bra       executeToken_1
 executeToken_86:
-       cmp.l     #176,D3
+       cmp.l     #176,D0
        beq       executeToken_35
        bhi.s     executeToken_90
-       cmp.l     #158,D3
+       cmp.l     #158,D0
        beq       executeToken_33
        bhi.s     executeToken_91
-       cmp.l     #157,D3
+       cmp.l     #157,D0
        beq       executeToken_32
        bhi       executeToken_1
-       cmp.l     #156,D3
+       cmp.l     #156,D0
        beq       executeToken_31
        bra       executeToken_1
 executeToken_91:
-       cmp.l     #159,D3
+       cmp.l     #159,D0
        beq       executeToken_34
        bra       executeToken_1
 executeToken_90:
-       cmp.l     #178,D3
+       cmp.l     #178,D0
        beq       executeToken_37
        bhi.s     executeToken_92
-       cmp.l     #177,D3
+       cmp.l     #177,D0
        beq       executeToken_36
        bra       executeToken_1
 executeToken_92:
-       cmp.l     #179,D3
+       cmp.l     #179,D0
        beq       executeToken_38
        bra       executeToken_1
 executeToken_77:
-       cmp.l     #221,D3
+       cmp.l     #221,D0
        beq       executeToken_58
        bhi       executeToken_93
-       cmp.l     #196,D3
+       cmp.l     #196,D0
        beq       executeToken_49
        bhi       executeToken_94
-       cmp.l     #185,D3
+       cmp.l     #185,D0
        beq       executeToken_44
        bhi.s     executeToken_95
-       cmp.l     #183,D3
+       cmp.l     #183,D0
        beq       executeToken_42
        bhi.s     executeToken_96
-       cmp.l     #182,D3
+       cmp.l     #182,D0
        beq       executeToken_41
        bhi       executeToken_1
-       cmp.l     #181,D3
+       cmp.l     #181,D0
        beq       executeToken_40
        bra       executeToken_1
 executeToken_96:
-       cmp.l     #184,D3
+       cmp.l     #184,D0
        beq       executeToken_43
        bra       executeToken_1
 executeToken_95:
-       cmp.l     #188,D3
+       cmp.l     #188,D0
        beq       executeToken_47
        bhi.s     executeToken_97
-       cmp.l     #187,D3
+       cmp.l     #187,D0
        beq       executeToken_46
        bhi       executeToken_1
-       cmp.l     #186,D3
+       cmp.l     #186,D0
        beq       executeToken_45
        bra       executeToken_1
 executeToken_97:
-       cmp.l     #189,D3
+       cmp.l     #189,D0
        beq       executeToken_48
        bra       executeToken_1
 executeToken_94:
-       cmp.l     #206,D3
+       cmp.l     #206,D0
        beq       executeToken_54
        bhi.s     executeToken_98
-       cmp.l     #199,D3
+       cmp.l     #199,D0
        beq       executeToken_52
        bhi.s     executeToken_99
-       cmp.l     #198,D3
+       cmp.l     #198,D0
        beq       executeToken_51
        bhi       executeToken_1
-       cmp.l     #197,D3
+       cmp.l     #197,D0
        beq       executeToken_50
        bra       executeToken_1
 executeToken_99:
-       cmp.l     #205,D3
+       cmp.l     #205,D0
        beq       executeToken_53
        bra       executeToken_1
 executeToken_98:
-       cmp.l     #219,D3
+       cmp.l     #219,D0
        beq       executeToken_56
        bhi.s     executeToken_100
-       cmp.l     #209,D3
+       cmp.l     #209,D0
        beq       executeToken_55
        bra       executeToken_1
 executeToken_100:
-       cmp.l     #220,D3
+       cmp.l     #220,D0
        beq       executeToken_57
        bra       executeToken_1
 executeToken_93:
-       cmp.l     #231,D3
+       cmp.l     #231,D0
        beq       executeToken_67
        bhi       executeToken_101
-       cmp.l     #227,D3
+       cmp.l     #227,D0
        beq       executeToken_63
        bhi.s     executeToken_102
-       cmp.l     #225,D3
+       cmp.l     #225,D0
        beq       executeToken_61
        bhi.s     executeToken_103
-       cmp.l     #224,D3
+       cmp.l     #224,D0
        beq       executeToken_60
        bhi       executeToken_1
-       cmp.l     #222,D3
+       cmp.l     #222,D0
        beq       executeToken_59
        bra       executeToken_1
 executeToken_103:
-       cmp.l     #226,D3
+       cmp.l     #226,D0
        beq       executeToken_62
        bra       executeToken_1
 executeToken_102:
-       cmp.l     #229,D3
+       cmp.l     #229,D0
        beq       executeToken_65
        bhi.s     executeToken_104
-       cmp.l     #228,D3
+       cmp.l     #228,D0
        beq       executeToken_64
        bra       executeToken_1
 executeToken_104:
-       cmp.l     #230,D3
+       cmp.l     #230,D0
        beq       executeToken_66
        bra       executeToken_1
 executeToken_101:
-       cmp.l     #236,D3
+       cmp.l     #236,D0
        beq       executeToken_72
        bhi.s     executeToken_105
-       cmp.l     #234,D3
+       cmp.l     #234,D0
        beq       executeToken_70
        bhi.s     executeToken_106
-       cmp.l     #233,D3
+       cmp.l     #233,D0
        beq       executeToken_69
        bhi       executeToken_1
-       cmp.l     #232,D3
+       cmp.l     #232,D0
        beq       executeToken_68
        bra       executeToken_1
 executeToken_106:
-       cmp.l     #235,D3
+       cmp.l     #235,D0
        beq       executeToken_71
        bra       executeToken_1
 executeToken_105:
-       cmp.l     #238,D3
+       cmp.l     #238,D0
        beq       executeToken_74
        bhi.s     executeToken_107
-       cmp.l     #237,D3
+       cmp.l     #237,D0
        beq       executeToken_73
        bra       executeToken_1
 executeToken_107:
-       cmp.l     #239,D3
+       cmp.l     #239,D0
        beq       executeToken_75
        bra       executeToken_1
 executeToken_3:
@@ -6544,7 +6614,7 @@ executeToken_110:
 executeToken_26:
 ; case 0x97:  // CLEAR - Clear all variables
 ; clearRuntimeData(pForStack);
-       move.l    -28(A6),-(A7)
+       move.l    -8(A6),-(A7)
        jsr       @basic_clearRuntimeData
        addq.w    #4,A7
 ; vReta = 0;
@@ -6909,53 +6979,25 @@ executeToken_74:
        jsr       _basInt
        move.b    D0,D2
 ; break;
-       bra       executeToken_113
+       bra.s     executeToken_113
 executeToken_75:
 ; case 0xEF:  // ABS
 ; vReta = basAbs();
        jsr       _basAbs
        move.b    D0,D2
 ; break;
-       bra       executeToken_113
+       bra.s     executeToken_113
 executeToken_1:
 ; default:
 ; if (pToken < 0x80)  // variavel sem LET
-       and.w     #255,D3
-       cmp.w     #128,D3
-       bhs       executeToken_112
+       move.b    11(A6),D0
+       and.w     #255,D0
+       cmp.w     #128,D0
+       bhs.s     executeToken_112
 ; {
 ; *pointerRunProg = *pointerRunProg - 1;
        move.l    _pointerRunProg.L,A0
        subq.l    #1,(A0)
-; if (*debugOn)
-       move.l    _debugOn.L,A0
-       tst.b     (A0)
-       beq       executeToken_114
-; {
-; writeLongSerial("Aqui 565.666.0 [\0");
-       pea       @basic_164.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; itoa(pToken, sqtdtam, 16);
-       pea       16
-       pea       -20(A6)
-       and.l     #255,D3
-       move.l    D3,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; writeLongSerial(sqtdtam);
-       pea       -20(A6)
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-; writeLongSerial("]\r\n\0");
-       pea       @basic_150.L
-       move.l    1158,A0
-       jsr       (A0)
-       addq.w    #4,A7
-executeToken_114:
-; }                
 ; vReta = basLet();
        jsr       _basLet
        move.b    D0,D2
@@ -6977,7 +7019,7 @@ executeToken_113:
        ext.w     D2
        ext.l     D2
        move.l    D2,D0
-       movem.l   (A7)+,D2/D3/A2/A3
+       movem.l   (A7)+,D2/A2/A3
        unlk      A6
        rts
 ; }
@@ -7236,7 +7278,7 @@ nextToken_15:
        move.l    D2,A0
        move.b    (A0),D0
        and.l     #255,D0
-       lea       @basic_165.L,A0
+       lea       @basic_164.L,A0
        cmp.l     A0,D0
        bne.s     nextToken_20
 ; {
@@ -15202,7 +15244,7 @@ saveBasFile_11:
        jsr       (A0)
        move.l    D0,D6
 ; fsChangeDir("/");
-       pea       @basic_166.L
+       pea       @basic_165.L
        move.l    8388730,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -15506,7 +15548,7 @@ loadBasFile_11:
        cmp.b     #2,D0
        beq.s     loadBasFile_12
 ; printText("Loading...\r\n");
-       pea       @basic_114.L
+       pea       @basic_113.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -15526,7 +15568,7 @@ loadBasFile_12:
        jsr       (A0)
        move.l    D0,-4(A6)
 ; fsChangeDir("/");
-       pea       @basic_166.L
+       pea       @basic_165.L
        move.l    8388730,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -15552,7 +15594,7 @@ loadBasFile_12:
        cmp.b     #2,D0
        beq.s     loadBasFile_16
 ; printText("Processing...\r\n");
-       pea       @basic_116.L
+       pea       @basic_115.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -15617,7 +15659,7 @@ loadBasFile_20:
        cmp.b     #2,D0
        beq.s     loadBasFile_27
 ; printText("Done.\r\n");
-       pea       @basic_115.L
+       pea       @basic_114.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -15628,7 +15670,7 @@ loadBasFile_14:
 ; else
 ; {
 ; printText("Loading File Error...\r\n\0");
-       pea       @basic_118.L
+       pea       @basic_117.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -29041,6 +29083,2388 @@ _basRestore:
        clr.l     D0
        rts
 ; }
+; //--------------------------------------------------------------------------------------
+; // Editor em modo de tela cheia
+; //--------------------------------------------------------------------------------------
+; //--------------------------------------------------------------------------------------
+; // ENDERECO X/Y NA NAME TABLE
+; //--------------------------------------------------------------------------------------
+; unsigned int vdpXYAddr(int x, int y)
+; {
+       xdef      _vdpXYAddr
+_vdpXYAddr:
+       link      A6,#0
+; return textNameTable + (y * VDP_COLS) + x;
+       move.l    @basic_textNameTable.L,D0
+       move.l    12(A6),-(A7)
+       pea       40
+       jsr       LMUL
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       add.l     8(A6),D0
+       unlk      A6
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // LEITURA / ESCRITA DE CARACTERE NA TELA
+; //--------------------------------------------------------------------------------------
+; unsigned char vdpReadCharAt(int x, int y)
+; {
+       xdef      _vdpReadCharAt
+_vdpReadCharAt:
+       link      A6,#-8
+       movem.l   D2/D3,-(A7)
+       move.l    12(A6),D2
+       move.l    8(A6),D3
+; unsigned int addr;
+; unsigned char ch;
+; if (x < 0 || x >= VDP_COLS)
+       cmp.l     #0,D3
+       blt.s     vdpReadCharAt_3
+       cmp.l     #40,D3
+       blt.s     vdpReadCharAt_1
+vdpReadCharAt_3:
+; return 0x00;
+       clr.b     D0
+       bra       vdpReadCharAt_4
+vdpReadCharAt_1:
+; if (y < 0 || y >= VDP_ROWS)
+       cmp.l     #0,D2
+       blt.s     vdpReadCharAt_7
+       cmp.l     #24,D2
+       blt.s     vdpReadCharAt_5
+vdpReadCharAt_7:
+; return 0x00;
+       clr.b     D0
+       bra.s     vdpReadCharAt_4
+vdpReadCharAt_5:
+; addr = vdpXYAddr(x, y);
+       move.l    D2,-(A7)
+       move.l    D3,-(A7)
+       jsr       _vdpXYAddr
+       addq.w    #8,A7
+       move.l    D0,-6(A6)
+; setReadAddress(addr);
+       move.l    -6(A6),-(A7)
+       move.l    1198,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; //ch = *vvdgBASd; // dummy, se precisar
+; ch = *vvdgBASd;
+       move.l    _vvdgBASd.L,A0
+       move.b    (A0),-1(A6)
+; return ch;
+       move.b    -1(A6),D0
+vdpReadCharAt_4:
+       movem.l   (A7)+,D2/D3
+       unlk      A6
+       rts
+; }
+; void vdpWriteCharAt(int x, int y, unsigned char ch)
+; {
+       xdef      _vdpWriteCharAt
+_vdpWriteCharAt:
+       link      A6,#-4
+       movem.l   D2/D3,-(A7)
+       move.l    12(A6),D2
+       move.l    8(A6),D3
+; unsigned int addr;
+; if (x < 0 || x >= VDP_COLS)
+       cmp.l     #0,D3
+       blt.s     vdpWriteCharAt_3
+       cmp.l     #40,D3
+       blt.s     vdpWriteCharAt_1
+vdpWriteCharAt_3:
+; return;
+       bra       vdpWriteCharAt_4
+vdpWriteCharAt_1:
+; if (y < 0 || y >= VDP_ROWS)
+       cmp.l     #0,D2
+       blt.s     vdpWriteCharAt_7
+       cmp.l     #24,D2
+       blt.s     vdpWriteCharAt_5
+vdpWriteCharAt_7:
+; return;
+       bra.s     vdpWriteCharAt_4
+vdpWriteCharAt_5:
+; addr = vdpXYAddr(x, y);
+       move.l    D2,-(A7)
+       move.l    D3,-(A7)
+       jsr       _vdpXYAddr
+       addq.w    #8,A7
+       move.l    D0,-4(A6)
+; setWriteAddress(addr);
+       move.l    -4(A6),-(A7)
+       move.l    1194,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; *vvdgBASd = ch;
+       move.l    _vvdgBASd.L,A0
+       move.b    19(A6),(A0)
+vdpWriteCharAt_4:
+       movem.l   (A7)+,D2/D3
+       unlk      A6
+       rts
+; }
+; static int vdpEditFindNextInputRow(void)
+; {
+@basic_vdpEditFindNextInputRow:
+       link      A6,#-4
+       movem.l   D2/D3/D4,-(A7)
+; int y;
+; int x;
+; int lastUsed;
+; unsigned char ch;
+; lastUsed = -1;
+       moveq     #-1,D4
+; for (y = 0; y < VDP_ROWS; y++)
+       clr.l     D2
+@basic_vdpEditFindNextInputRow_1:
+       cmp.l     #24,D2
+       bge       @basic_vdpEditFindNextInputRow_3
+; {
+; for (x = 0; x < VDP_COLS; x++)
+       clr.l     D3
+@basic_vdpEditFindNextInputRow_4:
+       cmp.l     #40,D3
+       bge.s     @basic_vdpEditFindNextInputRow_6
+; {
+; ch = vdpReadCharAt(x, y);
+       move.l    D2,-(A7)
+       move.l    D3,-(A7)
+       jsr       _vdpReadCharAt
+       addq.w    #8,A7
+       move.b    D0,-1(A6)
+; if (ch != 0x00)
+       move.b    -1(A6),D0
+       beq.s     @basic_vdpEditFindNextInputRow_7
+; {
+; lastUsed = y;
+       move.l    D2,D4
+; break;
+       bra.s     @basic_vdpEditFindNextInputRow_6
+@basic_vdpEditFindNextInputRow_7:
+       addq.l    #1,D3
+       bra       @basic_vdpEditFindNextInputRow_4
+@basic_vdpEditFindNextInputRow_6:
+       addq.l    #1,D2
+       bra       @basic_vdpEditFindNextInputRow_1
+@basic_vdpEditFindNextInputRow_3:
+; }
+; }
+; }
+; y = lastUsed + 1;
+       move.l    D4,D0
+       addq.l    #1,D0
+       move.l    D0,D2
+; if (y < 0)
+       cmp.l     #0,D2
+       bge.s     @basic_vdpEditFindNextInputRow_9
+; y = 0;
+       clr.l     D2
+@basic_vdpEditFindNextInputRow_9:
+; if (y >= VDP_ROWS)
+       cmp.l     #24,D2
+       blt.s     @basic_vdpEditFindNextInputRow_11
+; y = VDP_ROWS - 1;
+       moveq     #23,D2
+@basic_vdpEditFindNextInputRow_11:
+; return y;
+       move.l    D2,D0
+       movem.l   (A7)+,D2/D3/D4
+       unlk      A6
+       rts
+; }
+; static void vdpEditCursorOff(void)
+; {
+@basic_vdpEditCursorOff:
+       link      A6,#-20
+       move.l    A2,-(A7)
+       lea       -20(A6),A2
+; unsigned char sqtdtam[20];
+; if (!vdpEditCursorVisible)
+       tst.b     @basic_vdpEditCursorVisible.L
+       bne.s     @basic_vdpEditCursorOff_1
+; return;
+       bra       @basic_vdpEditCursorOff_3
+@basic_vdpEditCursorOff_1:
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       @basic_vdpEditCursorOff_4
+; {
+; writeLongSerial("Aqui 06660.666.0 [\0");
+       pea       @basic_166.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vdpEditCurX, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    _vdpEditCurX.L,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_148.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vdpEditCurY, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    _vdpEditCurY.L,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_148.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeSerial(vdpEditCursorBackup);
+       move.b    @basic_vdpEditCursorBackup.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1162,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n\0");
+       pea       @basic_149.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+@basic_vdpEditCursorOff_4:
+; }
+; vdpWriteCharAt(vdpEditCurX, vdpEditCurY, vdpEditCursorBackup);
+       move.b    @basic_vdpEditCursorBackup.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurY.L,-(A7)
+       move.l    _vdpEditCurX.L,-(A7)
+       jsr       _vdpWriteCharAt
+       add.w     #12,A7
+; vdpEditCursorVisible = 0;
+       clr.b     @basic_vdpEditCursorVisible.L
+@basic_vdpEditCursorOff_3:
+       move.l    (A7)+,A2
+       unlk      A6
+       rts
+; }
+; static void vdpEditCursorOn(void)
+; {
+@basic_vdpEditCursorOn:
+       link      A6,#-20
+       move.l    A2,-(A7)
+       lea       -20(A6),A2
+; unsigned char sqtdtam[20];
+; if (vdpEditCursorVisible)
+       tst.b     @basic_vdpEditCursorVisible.L
+       beq.s     @basic_vdpEditCursorOn_1
+; return;
+       bra       @basic_vdpEditCursorOn_3
+@basic_vdpEditCursorOn_1:
+; vdpEditCursorBackup = vdpReadCharAt(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,-(A7)
+       move.l    _vdpEditCurX.L,-(A7)
+       jsr       _vdpReadCharAt
+       addq.w    #8,A7
+       move.b    D0,@basic_vdpEditCursorBackup.L
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       @basic_vdpEditCursorOn_4
+; {
+; writeLongSerial("Aqui 06661.666.0[\0");
+       pea       @basic_167.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vdpEditCurX, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    _vdpEditCurX.L,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_148.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vdpEditCurY, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    _vdpEditCurY.L,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_148.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeSerial(vdpEditCursorBackup);
+       move.b    @basic_vdpEditCursorBackup.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1162,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n\0");
+       pea       @basic_149.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+@basic_vdpEditCursorOn_4:
+; }
+; vdpWriteCharAt(vdpEditCurX, vdpEditCurY, VDP_EDIT_CURSOR_CHAR);
+       pea       254
+       move.l    _vdpEditCurY.L,-(A7)
+       move.l    _vdpEditCurX.L,-(A7)
+       jsr       _vdpWriteCharAt
+       add.w     #12,A7
+; vdpEditCursorVisible = 1;
+       move.b    #1,@basic_vdpEditCursorVisible.L
+; vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1118,A0
+       jsr       (A0)
+       addq.w    #8,A7
+@basic_vdpEditCursorOn_3:
+       move.l    (A7)+,A2
+       unlk      A6
+       rts
+; }
+; static void vdpEditCursorToggle(void)
+; {
+@basic_vdpEditCursorToggle:
+; if (vdpEditCursorVisible)
+       tst.b     @basic_vdpEditCursorVisible.L
+       beq.s     @basic_vdpEditCursorToggle_1
+; vdpEditCursorOff();
+       jsr       @basic_vdpEditCursorOff
+       bra.s     @basic_vdpEditCursorToggle_2
+@basic_vdpEditCursorToggle_1:
+; else
+; vdpEditCursorOn();
+       jsr       @basic_vdpEditCursorOn
+@basic_vdpEditCursorToggle_2:
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // CURSOR
+; //--------------------------------------------------------------------------------------
+; void vdpEditMoveCursor(int x, int y)
+; {
+       xdef      _vdpEditMoveCursor
+_vdpEditMoveCursor:
+       link      A6,#0
+       movem.l   D2/D3,-(A7)
+       move.l    12(A6),D2
+       move.l    8(A6),D3
+; if (x < 0)
+       cmp.l     #0,D3
+       bge.s     vdpEditMoveCursor_1
+; x = 0;
+       clr.l     D3
+vdpEditMoveCursor_1:
+; if (x >= VDP_COLS)
+       cmp.l     #40,D3
+       blt.s     vdpEditMoveCursor_3
+; x = VDP_COLS - 1;
+       moveq     #39,D3
+vdpEditMoveCursor_3:
+; if (y < 0)
+       cmp.l     #0,D2
+       bge.s     vdpEditMoveCursor_5
+; y = 0;
+       clr.l     D2
+vdpEditMoveCursor_5:
+; if (y >= VDP_ROWS)
+       cmp.l     #24,D2
+       blt.s     vdpEditMoveCursor_7
+; y = VDP_ROWS - 1;
+       moveq     #23,D2
+vdpEditMoveCursor_7:
+; vdpEditCurX = x;
+       move.l    D3,_vdpEditCurX.L
+; vdpEditCurY = y;
+       move.l    D2,_vdpEditCurY.L
+; vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1118,A0
+       jsr       (A0)
+       addq.w    #8,A7
+       movem.l   (A7)+,D2/D3
+       unlk      A6
+       rts
+; }
+; static void vdpEditGetLogicalBounds(int x, int y, int *pStartX, int *pStartY, int *pEndY)
+; {
+@basic_vdpEditGetLogicalBounds:
+       link      A6,#-48
+       movem.l   D2/D3/D4/D5,-(A7)
+; char temp[VDP_COLS + 1];
+; int startY;
+; int endY;
+; int lenLine;
+; int startX;
+; int ix;
+; startY = y;
+       move.l    12(A6),D3
+; while (startY > 0)
+@basic_vdpEditGetLogicalBounds_1:
+       cmp.l     #0,D3
+       ble.s     @basic_vdpEditGetLogicalBounds_3
+; {
+; lenLine = vdpReadTrimmedPhysicalLine(startY - 1, temp, VDP_COLS + 1);
+       pea       41
+       pea       -46(A6)
+       move.l    D3,D1
+       subq.l    #1,D1
+       move.l    D1,-(A7)
+       jsr       @basic_vdpReadTrimmedPhysicalLine
+       add.w     #12,A7
+       move.l    D0,D5
+; if (lenLine < VDP_COLS)
+       cmp.l     #40,D5
+       bge.s     @basic_vdpEditGetLogicalBounds_4
+; break;
+       bra.s     @basic_vdpEditGetLogicalBounds_3
+@basic_vdpEditGetLogicalBounds_4:
+; startY--;
+       subq.l    #1,D3
+       bra       @basic_vdpEditGetLogicalBounds_1
+@basic_vdpEditGetLogicalBounds_3:
+; }
+; endY = startY;
+       move.l    D3,D4
+; while (endY < (VDP_ROWS - 1))
+@basic_vdpEditGetLogicalBounds_6:
+       cmp.l     #23,D4
+       bge.s     @basic_vdpEditGetLogicalBounds_8
+; {
+; lenLine = vdpReadTrimmedPhysicalLine(endY, temp, VDP_COLS + 1);
+       pea       41
+       pea       -46(A6)
+       move.l    D4,-(A7)
+       jsr       @basic_vdpReadTrimmedPhysicalLine
+       add.w     #12,A7
+       move.l    D0,D5
+; if (lenLine < VDP_COLS)
+       cmp.l     #40,D5
+       bge.s     @basic_vdpEditGetLogicalBounds_9
+; break;
+       bra.s     @basic_vdpEditGetLogicalBounds_8
+@basic_vdpEditGetLogicalBounds_9:
+; endY++;
+       addq.l    #1,D4
+       bra       @basic_vdpEditGetLogicalBounds_6
+@basic_vdpEditGetLogicalBounds_8:
+; }
+; startX = x;
+       move.l    8(A6),D2
+; if (startX < 0)
+       cmp.l     #0,D2
+       bge.s     @basic_vdpEditGetLogicalBounds_11
+; startX = 0;
+       clr.l     D2
+@basic_vdpEditGetLogicalBounds_11:
+; if (startX >= VDP_COLS)
+       cmp.l     #40,D2
+       blt.s     @basic_vdpEditGetLogicalBounds_13
+; startX = VDP_COLS - 1;
+       moveq     #39,D2
+@basic_vdpEditGetLogicalBounds_13:
+; while (startX > 0)
+@basic_vdpEditGetLogicalBounds_15:
+       cmp.l     #0,D2
+       ble.s     @basic_vdpEditGetLogicalBounds_17
+; {
+; if (vdpReadCharAt(startX - 1, startY) == 0x00)
+       move.l    D3,-(A7)
+       move.l    D2,D1
+       subq.l    #1,D1
+       move.l    D1,-(A7)
+       jsr       _vdpReadCharAt
+       addq.w    #8,A7
+       tst.b     D0
+       bne.s     @basic_vdpEditGetLogicalBounds_18
+; break;
+       bra.s     @basic_vdpEditGetLogicalBounds_17
+@basic_vdpEditGetLogicalBounds_18:
+; startX--;
+       subq.l    #1,D2
+       bra       @basic_vdpEditGetLogicalBounds_15
+@basic_vdpEditGetLogicalBounds_17:
+; }
+; *pStartX = startX;
+       move.l    16(A6),A0
+       move.l    D2,(A0)
+; *pStartY = startY;
+       move.l    20(A6),A0
+       move.l    D3,(A0)
+; *pEndY = endY;
+       move.l    24(A6),A0
+       move.l    D4,(A0)
+       movem.l   (A7)+,D2/D3/D4/D5
+       unlk      A6
+       rts
+; }
+; static int vdpEditGetLogicalCursorPos(int startX, int startY, int lineLen)
+; {
+@basic_vdpEditGetLogicalCursorPos:
+       link      A6,#-4
+       move.l    D2,-(A7)
+; int cursorPos;
+; int firstWidth;
+; firstWidth = VDP_COLS - startX;
+       moveq     #40,D0
+       ext.w     D0
+       ext.l     D0
+       sub.l     8(A6),D0
+       move.l    D0,-4(A6)
+; if (vdpEditCurY == startY)
+       move.l    _vdpEditCurY.L,D0
+       cmp.l     12(A6),D0
+       bne.s     @basic_vdpEditGetLogicalCursorPos_1
+; cursorPos = vdpEditCurX - startX;
+       move.l    _vdpEditCurX.L,D0
+       sub.l     8(A6),D0
+       move.l    D0,D2
+       bra.s     @basic_vdpEditGetLogicalCursorPos_2
+@basic_vdpEditGetLogicalCursorPos_1:
+; else
+; cursorPos = firstWidth + ((vdpEditCurY - startY - 1) * VDP_COLS) + vdpEditCurX;
+       move.l    -4(A6),D0
+       move.l    _vdpEditCurY.L,D1
+       sub.l     12(A6),D1
+       subq.l    #1,D1
+       move.l    D1,-(A7)
+       pea       40
+       jsr       LMUL
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       add.l     _vdpEditCurX.L,D0
+       move.l    D0,D2
+@basic_vdpEditGetLogicalCursorPos_2:
+; if (cursorPos < 0)
+       cmp.l     #0,D2
+       bge.s     @basic_vdpEditGetLogicalCursorPos_3
+; cursorPos = 0;
+       clr.l     D2
+@basic_vdpEditGetLogicalCursorPos_3:
+; if (cursorPos > lineLen)
+       cmp.l     16(A6),D2
+       ble.s     @basic_vdpEditGetLogicalCursorPos_5
+; cursorPos = lineLen;
+       move.l    16(A6),D2
+@basic_vdpEditGetLogicalCursorPos_5:
+; return cursorPos;
+       move.l    D2,D0
+       move.l    (A7)+,D2
+       unlk      A6
+       rts
+; }
+; static void vdpEditSetCursorFromLogicalPos(int startX, int startY, int lineLen, int cursorPos)
+; {
+@basic_vdpEditSetCursorFromLogicalPos:
+       link      A6,#-20
+       movem.l   D2/D3/D4/D5/D6/D7/A2/A3,-(A7)
+       lea       -20(A6),A2
+       move.l    20(A6),D2
+       lea       _itoa.L,A3
+       move.l    16(A6),D5
+       move.l    12(A6),D6
+       move.l    8(A6),D7
+; int firstWidth;
+; int localPos;
+; unsigned char sqtdtam[20];
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       @basic_vdpEditSetCursorFromLogicalPos_1
+; {
+; writeLongSerial("Aqui 06660.666.0 [\0");
+       pea       @basic_166.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(startX, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D7,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_148.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(startY, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D6,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_148.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(lineLen, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D5,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_148.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(cursorPos, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    D2,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n\0");
+       pea       @basic_149.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+@basic_vdpEditSetCursorFromLogicalPos_1:
+; }
+; if (cursorPos < 0)
+       cmp.l     #0,D2
+       bge.s     @basic_vdpEditSetCursorFromLogicalPos_3
+; cursorPos = 0;
+       clr.l     D2
+@basic_vdpEditSetCursorFromLogicalPos_3:
+; if (cursorPos > lineLen)
+       cmp.l     D5,D2
+       ble.s     @basic_vdpEditSetCursorFromLogicalPos_5
+; cursorPos = lineLen;
+       move.l    D5,D2
+@basic_vdpEditSetCursorFromLogicalPos_5:
+; firstWidth = VDP_COLS - startX;
+       moveq     #40,D0
+       ext.w     D0
+       ext.l     D0
+       sub.l     D7,D0
+       move.l    D0,D4
+; if (cursorPos < firstWidth)
+       cmp.l     D4,D2
+       bge.s     @basic_vdpEditSetCursorFromLogicalPos_7
+; {
+; vdpEditCurY = startY;
+       move.l    D6,_vdpEditCurY.L
+; vdpEditCurX = startX + cursorPos;
+       move.l    D7,D0
+       add.l     D2,D0
+       move.l    D0,_vdpEditCurX.L
+       bra       @basic_vdpEditSetCursorFromLogicalPos_8
+@basic_vdpEditSetCursorFromLogicalPos_7:
+; }
+; else
+; {
+; localPos = cursorPos - firstWidth;
+       move.l    D2,D0
+       sub.l     D4,D0
+       move.l    D0,D3
+; vdpEditCurY = startY + 1 + (localPos / VDP_COLS);
+       move.l    D6,D0
+       addq.l    #1,D0
+       move.l    D3,-(A7)
+       pea       40
+       jsr       LDIV
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       move.l    D0,_vdpEditCurY.L
+; vdpEditCurX = localPos % VDP_COLS;
+       move.l    D3,-(A7)
+       pea       40
+       jsr       LDIV
+       move.l    4(A7),D0
+       addq.w    #8,A7
+       move.l    D0,_vdpEditCurX.L
+@basic_vdpEditSetCursorFromLogicalPos_8:
+; }
+; if (vdpEditCurY >= VDP_ROWS)
+       move.l    _vdpEditCurY.L,D0
+       cmp.l     #24,D0
+       blt.s     @basic_vdpEditSetCursorFromLogicalPos_9
+; {
+; vdpEditCurY = VDP_ROWS - 1;
+       move.l    #23,_vdpEditCurY.L
+; vdpEditCurX = VDP_COLS - 1;
+       move.l    #39,_vdpEditCurX.L
+@basic_vdpEditSetCursorFromLogicalPos_9:
+; }
+; if (vdpEditCurX < 0)
+       move.l    _vdpEditCurX.L,D0
+       cmp.l     #0,D0
+       bge.s     @basic_vdpEditSetCursorFromLogicalPos_11
+; vdpEditCurX = 0;
+       clr.l     _vdpEditCurX.L
+@basic_vdpEditSetCursorFromLogicalPos_11:
+; if (vdpEditCurX >= VDP_COLS)
+       move.l    _vdpEditCurX.L,D0
+       cmp.l     #40,D0
+       blt.s     @basic_vdpEditSetCursorFromLogicalPos_13
+; vdpEditCurX = VDP_COLS - 1;
+       move.l    #39,_vdpEditCurX.L
+@basic_vdpEditSetCursorFromLogicalPos_13:
+; if (*debugOn)
+       move.l    _debugOn.L,A0
+       tst.b     (A0)
+       beq       @basic_vdpEditSetCursorFromLogicalPos_15
+; {
+; writeLongSerial("Aqui 06660.666.1 [\0");
+       pea       @basic_168.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vdpEditCurX, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    _vdpEditCurX.L,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]-[");
+       pea       @basic_148.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vdpEditCurY, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    _vdpEditCurY.L,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; writeLongSerial(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("]\r\n\0");
+       pea       @basic_149.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+@basic_vdpEditSetCursorFromLogicalPos_15:
+; }
+; vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1118,A0
+       jsr       (A0)
+       addq.w    #8,A7
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3
+       unlk      A6
+       rts
+; }
+; static void vdpEditRenderLogicalLine(int startX, int startY, int oldEndY, char *line, int cursorPos)
+; {
+@basic_vdpEditRenderLogicalLine:
+       link      A6,#0
+       movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
+       move.l    12(A6),D5
+       move.l    8(A6),A2
+; int lenLine;
+; int rowsUsed;
+; int newEndY;
+; int maxEndY;
+; int y;
+; int x;
+; int pos;
+; int firstWidth;
+; lenLine = strlen(line);
+       move.l    20(A6),-(A7)
+       jsr       _strlen
+       addq.w    #4,A7
+       move.l    D0,D6
+; rowsUsed = 1;
+       move.w    #1,A5
+; firstWidth = VDP_COLS - startX;
+       moveq     #40,D0
+       ext.w     D0
+       ext.l     D0
+       sub.l     A2,D0
+       move.l    D0,A4
+; if (lenLine > firstWidth)
+       cmp.l     A4,D6
+       ble.s     @basic_vdpEditRenderLogicalLine_1
+; rowsUsed = 1 + (((lenLine - firstWidth) + (VDP_COLS - 1)) / VDP_COLS);
+       moveq     #1,D0
+       ext.w     D0
+       ext.l     D0
+       move.l    D6,D1
+       sub.l     A4,D1
+       add.l     #39,D1
+       move.l    D1,-(A7)
+       pea       40
+       jsr       LDIV
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       move.l    D0,A5
+@basic_vdpEditRenderLogicalLine_1:
+; newEndY = startY + rowsUsed - 1;
+       move.l    D5,D0
+       add.l     A5,D0
+       subq.l    #1,D0
+       move.l    D0,D4
+; if (newEndY >= VDP_ROWS)
+       cmp.l     #24,D4
+       blt.s     @basic_vdpEditRenderLogicalLine_3
+; newEndY = VDP_ROWS - 1;
+       moveq     #23,D4
+@basic_vdpEditRenderLogicalLine_3:
+; maxEndY = oldEndY;
+       move.l    16(A6),D7
+; if (newEndY > maxEndY)
+       cmp.l     D7,D4
+       ble.s     @basic_vdpEditRenderLogicalLine_5
+; maxEndY = newEndY;
+       move.l    D4,D7
+@basic_vdpEditRenderLogicalLine_5:
+; for (y = startY; y <= maxEndY && y < VDP_ROWS; y++)
+       move.l    D5,D2
+@basic_vdpEditRenderLogicalLine_7:
+       cmp.l     D7,D2
+       bgt       @basic_vdpEditRenderLogicalLine_9
+       cmp.l     #24,D2
+       bge       @basic_vdpEditRenderLogicalLine_9
+; {
+; for (x = (y == startY ? startX : 0); x < VDP_COLS; x++)
+       cmp.l     D5,D2
+       bne.s     @basic_vdpEditRenderLogicalLine_13
+       move.l    A2,D0
+       bra.s     @basic_vdpEditRenderLogicalLine_14
+@basic_vdpEditRenderLogicalLine_13:
+       clr.b     D0
+       ext.w     D0
+       ext.l     D0
+@basic_vdpEditRenderLogicalLine_14:
+       move.l    D0,D3
+@basic_vdpEditRenderLogicalLine_10:
+       cmp.l     #40,D3
+       bge.s     @basic_vdpEditRenderLogicalLine_12
+; vdpWriteCharAt(x, y, 0x00);
+       clr.l     -(A7)
+       move.l    D2,-(A7)
+       move.l    D3,-(A7)
+       jsr       _vdpWriteCharAt
+       add.w     #12,A7
+       addq.l    #1,D3
+       bra       @basic_vdpEditRenderLogicalLine_10
+@basic_vdpEditRenderLogicalLine_12:
+       addq.l    #1,D2
+       bra       @basic_vdpEditRenderLogicalLine_7
+@basic_vdpEditRenderLogicalLine_9:
+; }
+; pos = 0;
+       move.w    #0,A3
+; for (y = startY; y <= newEndY && y < VDP_ROWS; y++)
+       move.l    D5,D2
+@basic_vdpEditRenderLogicalLine_15:
+       cmp.l     D4,D2
+       bgt       @basic_vdpEditRenderLogicalLine_17
+       cmp.l     #24,D2
+       bge       @basic_vdpEditRenderLogicalLine_17
+; {
+; for (x = (y == startY ? startX : 0); x < VDP_COLS && pos < lenLine; x++)
+       cmp.l     D5,D2
+       bne.s     @basic_vdpEditRenderLogicalLine_21
+       move.l    A2,D0
+       bra.s     @basic_vdpEditRenderLogicalLine_22
+@basic_vdpEditRenderLogicalLine_21:
+       clr.b     D0
+       ext.w     D0
+       ext.l     D0
+@basic_vdpEditRenderLogicalLine_22:
+       move.l    D0,D3
+@basic_vdpEditRenderLogicalLine_18:
+       cmp.l     #40,D3
+       bge.s     @basic_vdpEditRenderLogicalLine_20
+       move.l    A3,D0
+       cmp.l     D6,D0
+       bge.s     @basic_vdpEditRenderLogicalLine_20
+; vdpWriteCharAt(x, y, line[pos++]);
+       move.l    20(A6),A0
+       move.l    A3,A1
+       addq.w    #1,A3
+       move.b    0(A1,A0.L),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    D2,-(A7)
+       move.l    D3,-(A7)
+       jsr       _vdpWriteCharAt
+       add.w     #12,A7
+       addq.l    #1,D3
+       bra       @basic_vdpEditRenderLogicalLine_18
+@basic_vdpEditRenderLogicalLine_20:
+       addq.l    #1,D2
+       bra       @basic_vdpEditRenderLogicalLine_15
+@basic_vdpEditRenderLogicalLine_17:
+; }
+; vdpEditLineEndY = newEndY;
+       move.l    D4,@basic_vdpEditLineEndY.L
+; vdpEditSetCursorFromLogicalPos(startX, startY, lenLine, cursorPos);
+       move.l    24(A6),-(A7)
+       move.l    D6,-(A7)
+       move.l    D5,-(A7)
+       move.l    A2,-(A7)
+       jsr       @basic_vdpEditSetCursorFromLogicalPos
+       add.w     #16,A7
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
+       unlk      A6
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // SCROLL LENDO/ESCREVENDO VRAM
+; //--------------------------------------------------------------------------------------
+; void vdpEditScrollUp(void)
+; {
+       xdef      _vdpEditScrollUp
+_vdpEditScrollUp:
+       link      A6,#-4
+       movem.l   D2/D3,-(A7)
+; int x;
+; int y;
+; unsigned char ch;
+; for (y = 0; y < VDP_ROWS - 1; y++)
+       clr.l     D3
+vdpEditScrollUp_1:
+       cmp.l     #23,D3
+       bge       vdpEditScrollUp_3
+; {
+; for (x = 0; x < VDP_COLS; x++)
+       clr.l     D2
+vdpEditScrollUp_4:
+       cmp.l     #40,D2
+       bge       vdpEditScrollUp_6
+; {
+; ch = vdpReadCharAt(x, y + 1);
+       move.l    D3,D1
+       addq.l    #1,D1
+       move.l    D1,-(A7)
+       move.l    D2,-(A7)
+       jsr       _vdpReadCharAt
+       addq.w    #8,A7
+       move.b    D0,-1(A6)
+; vdpWriteCharAt(x, y, ch);
+       move.b    -1(A6),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    D3,-(A7)
+       move.l    D2,-(A7)
+       jsr       _vdpWriteCharAt
+       add.w     #12,A7
+       addq.l    #1,D2
+       bra       vdpEditScrollUp_4
+vdpEditScrollUp_6:
+       addq.l    #1,D3
+       bra       vdpEditScrollUp_1
+vdpEditScrollUp_3:
+; }
+; }
+; for (x = 0; x < VDP_COLS; x++)
+       clr.l     D2
+vdpEditScrollUp_7:
+       cmp.l     #40,D2
+       bge.s     vdpEditScrollUp_9
+; vdpWriteCharAt(x, VDP_ROWS - 1, 0x00);
+       clr.l     -(A7)
+       pea       23
+       move.l    D2,-(A7)
+       jsr       _vdpWriteCharAt
+       add.w     #12,A7
+       addq.l    #1,D2
+       bra       vdpEditScrollUp_7
+vdpEditScrollUp_9:
+; if (vdpEditCurY > 0)
+       move.l    _vdpEditCurY.L,D0
+       cmp.l     #0,D0
+       ble.s     vdpEditScrollUp_10
+; vdpEditCurY--;
+       subq.l    #1,_vdpEditCurY.L
+vdpEditScrollUp_10:
+       movem.l   (A7)+,D2/D3
+       unlk      A6
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // ESCREVER CARACTERE DIGITADO
+; //--------------------------------------------------------------------------------------
+; void vdpEditPutChar(unsigned char ch)
+; {
+       xdef      _vdpEditPutChar
+_vdpEditPutChar:
+       link      A6,#0
+       movem.l   D2/A2/A3/A4,-(A7)
+       lea       _vdpEditLine.L,A2
+       lea       @basic_vdpEditCursorPos.L,A3
+       lea       @basic_vdpEditLineLen.L,A4
+; int ix;
+; vdpEditLoadLineFromCursor();
+       jsr       @basic_vdpEditLoadLineFromCursor
+; if (vdpEditLineLen >= (VDP_MAX_LINE - 1))
+       move.l    (A4),D0
+       cmp.l     #255,D0
+       blt.s     vdpEditPutChar_1
+; return;
+       bra       vdpEditPutChar_3
+vdpEditPutChar_1:
+; for (ix = vdpEditLineLen; ix >= vdpEditCursorPos; ix--)
+       move.l    (A4),D2
+vdpEditPutChar_4:
+       cmp.l     (A3),D2
+       blt.s     vdpEditPutChar_6
+; vdpEditLine[ix + 1] = vdpEditLine[ix];
+       move.l    D2,A0
+       move.b    0(A2,D2.L),1(A0,A2.L)
+       subq.l    #1,D2
+       bra       vdpEditPutChar_4
+vdpEditPutChar_6:
+; vdpEditLine[vdpEditCursorPos] = ch;
+       move.l    (A3),D0
+       move.b    11(A6),0(A2,D0.L)
+; vdpEditLineLen++;
+       addq.l    #1,(A4)
+; vdpEditCursorPos++;
+       addq.l    #1,(A3)
+; vdpEditRenderLogicalLine(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineEndY, vdpEditLine, vdpEditCursorPos);
+       move.l    (A3),-(A7)
+       move.l    A2,-(A7)
+       move.l    @basic_vdpEditLineEndY.L,-(A7)
+       move.l    @basic_vdpEditLineStartY.L,-(A7)
+       move.l    @basic_vdpEditLineStartX.L,-(A7)
+       jsr       @basic_vdpEditRenderLogicalLine
+       add.w     #20,A7
+vdpEditPutChar_3:
+       movem.l   (A7)+,D2/A2/A3/A4
+       unlk      A6
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // BACKSPACE / DELETE
+; //--------------------------------------------------------------------------------------
+; void vdpEditBackspace(void)
+; {
+       xdef      _vdpEditBackspace
+_vdpEditBackspace:
+       movem.l   D2/A2/A3/A4,-(A7)
+       lea       @basic_vdpEditCursorPos.L,A2
+       lea       _vdpEditLine.L,A3
+       lea       @basic_vdpEditLineLen.L,A4
+; int ix;
+; vdpEditLoadLineFromCursor();
+       jsr       @basic_vdpEditLoadLineFromCursor
+; if (vdpEditCursorPos <= 0 || vdpEditLineLen <= 0)
+       move.l    (A2),D0
+       cmp.l     #0,D0
+       ble.s     vdpEditBackspace_3
+       move.l    (A4),D0
+       cmp.l     #0,D0
+       bgt.s     vdpEditBackspace_1
+vdpEditBackspace_3:
+; return;
+       bra       vdpEditBackspace_4
+vdpEditBackspace_1:
+; vdpEditCursorPos--;
+       subq.l    #1,(A2)
+; for (ix = vdpEditCursorPos; ix < vdpEditLineLen; ix++)
+       move.l    (A2),D2
+vdpEditBackspace_5:
+       cmp.l     (A4),D2
+       bge.s     vdpEditBackspace_7
+; vdpEditLine[ix] = vdpEditLine[ix + 1];
+       move.l    D2,A0
+       move.b    1(A0,A3.L),0(A3,D2.L)
+       addq.l    #1,D2
+       bra       vdpEditBackspace_5
+vdpEditBackspace_7:
+; vdpEditLineLen--;
+       subq.l    #1,(A4)
+; vdpEditRenderLogicalLine(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineEndY, vdpEditLine, vdpEditCursorPos);
+       move.l    (A2),-(A7)
+       move.l    A3,-(A7)
+       move.l    @basic_vdpEditLineEndY.L,-(A7)
+       move.l    @basic_vdpEditLineStartY.L,-(A7)
+       move.l    @basic_vdpEditLineStartX.L,-(A7)
+       jsr       @basic_vdpEditRenderLogicalLine
+       add.w     #20,A7
+vdpEditBackspace_4:
+       movem.l   (A7)+,D2/A2/A3/A4
+       rts
+; }
+; void vdpEditDelete(void)
+; {
+       xdef      _vdpEditDelete
+_vdpEditDelete:
+       movem.l   D2/A2/A3/A4,-(A7)
+       lea       @basic_vdpEditLineLen.L,A2
+       lea       _vdpEditLine.L,A3
+       lea       @basic_vdpEditCursorPos.L,A4
+; int ix;
+; vdpEditLoadLineFromCursor();
+       jsr       @basic_vdpEditLoadLineFromCursor
+; if (vdpEditCursorPos >= vdpEditLineLen || vdpEditLineLen <= 0)
+       move.l    (A4),D0
+       cmp.l     (A2),D0
+       bge.s     vdpEditDelete_3
+       move.l    (A2),D0
+       cmp.l     #0,D0
+       bgt.s     vdpEditDelete_1
+vdpEditDelete_3:
+; return;
+       bra.s     vdpEditDelete_4
+vdpEditDelete_1:
+; for (ix = vdpEditCursorPos; ix < vdpEditLineLen; ix++)
+       move.l    (A4),D2
+vdpEditDelete_5:
+       cmp.l     (A2),D2
+       bge.s     vdpEditDelete_7
+; vdpEditLine[ix] = vdpEditLine[ix + 1];
+       move.l    D2,A0
+       move.b    1(A0,A3.L),0(A3,D2.L)
+       addq.l    #1,D2
+       bra       vdpEditDelete_5
+vdpEditDelete_7:
+; vdpEditLineLen--;
+       subq.l    #1,(A2)
+; vdpEditRenderLogicalLine(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineEndY, vdpEditLine, vdpEditCursorPos);
+       move.l    (A4),-(A7)
+       move.l    A3,-(A7)
+       move.l    @basic_vdpEditLineEndY.L,-(A7)
+       move.l    @basic_vdpEditLineStartY.L,-(A7)
+       move.l    @basic_vdpEditLineStartX.L,-(A7)
+       jsr       @basic_vdpEditRenderLogicalLine
+       add.w     #20,A7
+vdpEditDelete_4:
+       movem.l   (A7)+,D2/A2/A3/A4
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // MOVIMENTO DO CURSOR
+; //--------------------------------------------------------------------------------------
+; void vdpEditCursorLeft(void)
+; {
+       xdef      _vdpEditCursorLeft
+_vdpEditCursorLeft:
+       move.l    A2,-(A7)
+       lea       @basic_vdpEditCursorPos.L,A2
+; if (vdpEditLineLen <= 0)
+       move.l    @basic_vdpEditLineLen.L,D0
+       cmp.l     #0,D0
+       bgt       vdpEditCursorLeft_1
+; {
+; if (vdpEditCurX > 0)
+       move.l    _vdpEditCurX.L,D0
+       cmp.l     #0,D0
+       ble.s     vdpEditCursorLeft_3
+; vdpEditCurX--;
+       subq.l    #1,_vdpEditCurX.L
+       bra.s     vdpEditCursorLeft_5
+vdpEditCursorLeft_3:
+; else if (vdpEditCurY > 0)
+       move.l    _vdpEditCurY.L,D0
+       cmp.l     #0,D0
+       ble.s     vdpEditCursorLeft_5
+; {
+; vdpEditCurY--;
+       subq.l    #1,_vdpEditCurY.L
+; vdpEditCurX = VDP_COLS - 1;
+       move.l    #39,_vdpEditCurX.L
+vdpEditCursorLeft_5:
+; }
+; vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1118,A0
+       jsr       (A0)
+       addq.w    #8,A7
+; return;
+       bra.s     vdpEditCursorLeft_7
+vdpEditCursorLeft_1:
+; }
+; if (vdpEditCursorPos > 0)
+       move.l    (A2),D0
+       cmp.l     #0,D0
+       ble.s     vdpEditCursorLeft_8
+; vdpEditCursorPos--;
+       subq.l    #1,(A2)
+vdpEditCursorLeft_8:
+; vdpEditSetCursorFromLogicalPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen, vdpEditCursorPos);
+       move.l    (A2),-(A7)
+       move.l    @basic_vdpEditLineLen.L,-(A7)
+       move.l    @basic_vdpEditLineStartY.L,-(A7)
+       move.l    @basic_vdpEditLineStartX.L,-(A7)
+       jsr       @basic_vdpEditSetCursorFromLogicalPos
+       add.w     #16,A7
+vdpEditCursorLeft_7:
+       move.l    (A7)+,A2
+       rts
+; }
+; void vdpEditCursorRight(void)
+; {
+       xdef      _vdpEditCursorRight
+_vdpEditCursorRight:
+       movem.l   A2/A3,-(A7)
+       lea       @basic_vdpEditCursorPos.L,A2
+       lea       @basic_vdpEditLineLen.L,A3
+; if (vdpEditLineLen <= 0)
+       move.l    (A3),D0
+       cmp.l     #0,D0
+       bgt       vdpEditCursorRight_1
+; {
+; if (vdpEditCurX < (VDP_COLS - 1))
+       move.l    _vdpEditCurX.L,D0
+       cmp.l     #39,D0
+       bge.s     vdpEditCursorRight_3
+; vdpEditCurX++;
+       addq.l    #1,_vdpEditCurX.L
+       bra.s     vdpEditCursorRight_5
+vdpEditCursorRight_3:
+; else if (vdpEditCurY < (VDP_ROWS - 1))
+       move.l    _vdpEditCurY.L,D0
+       cmp.l     #23,D0
+       bge.s     vdpEditCursorRight_5
+; {
+; vdpEditCurY++;
+       addq.l    #1,_vdpEditCurY.L
+; vdpEditCurX = 0;
+       clr.l     _vdpEditCurX.L
+vdpEditCursorRight_5:
+; }
+; vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1118,A0
+       jsr       (A0)
+       addq.w    #8,A7
+; return;
+       bra.s     vdpEditCursorRight_7
+vdpEditCursorRight_1:
+; }
+; if (vdpEditCursorPos < vdpEditLineLen)
+       move.l    (A2),D0
+       cmp.l     (A3),D0
+       bge.s     vdpEditCursorRight_8
+; vdpEditCursorPos++;
+       addq.l    #1,(A2)
+vdpEditCursorRight_8:
+; vdpEditSetCursorFromLogicalPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen, vdpEditCursorPos);
+       move.l    (A2),-(A7)
+       move.l    (A3),-(A7)
+       move.l    @basic_vdpEditLineStartY.L,-(A7)
+       move.l    @basic_vdpEditLineStartX.L,-(A7)
+       jsr       @basic_vdpEditSetCursorFromLogicalPos
+       add.w     #16,A7
+vdpEditCursorRight_7:
+       movem.l   (A7)+,A2/A3
+       rts
+; }
+; void vdpEditCursorUp(void)
+; {
+       xdef      _vdpEditCursorUp
+_vdpEditCursorUp:
+       movem.l   D2/D3/D4/D5/A2/A3,-(A7)
+       lea       @basic_vdpEditCursorPos.L,A2
+       lea       @basic_vdpEditLineStartX.L,A3
+; int firstWidth;
+; int absCol;
+; int localPos;
+; int rowIdx;
+; if (vdpEditLineLen <= 0)
+       move.l    @basic_vdpEditLineLen.L,D0
+       cmp.l     #0,D0
+       bgt.s     vdpEditCursorUp_1
+; {
+; if (vdpEditCurY > 0)
+       move.l    _vdpEditCurY.L,D0
+       cmp.l     #0,D0
+       ble.s     vdpEditCursorUp_3
+; vdpEditCurY--;
+       subq.l    #1,_vdpEditCurY.L
+vdpEditCursorUp_3:
+; vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1118,A0
+       jsr       (A0)
+       addq.w    #8,A7
+; return;
+       bra       vdpEditCursorUp_5
+vdpEditCursorUp_1:
+; }
+; firstWidth = VDP_COLS - vdpEditLineStartX;
+       moveq     #40,D0
+       ext.w     D0
+       ext.l     D0
+       sub.l     (A3),D0
+       move.l    D0,D4
+; if (vdpEditCursorPos < firstWidth)
+       cmp.l     (A2),D4
+       ble.s     vdpEditCursorUp_6
+; {
+; rowIdx = 0;
+       clr.l     D3
+; absCol = vdpEditLineStartX + vdpEditCursorPos;
+       move.l    (A3),D0
+       add.l     (A2),D0
+       move.l    D0,D2
+       bra       vdpEditCursorUp_7
+vdpEditCursorUp_6:
+; }
+; else
+; {
+; localPos = vdpEditCursorPos - firstWidth;
+       move.l    (A2),D0
+       sub.l     D4,D0
+       move.l    D0,D5
+; rowIdx = 1 + (localPos / VDP_COLS);
+       moveq     #1,D0
+       ext.w     D0
+       ext.l     D0
+       move.l    D5,-(A7)
+       pea       40
+       jsr       LDIV
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       move.l    D0,D3
+; absCol = localPos % VDP_COLS;
+       move.l    D5,-(A7)
+       pea       40
+       jsr       LDIV
+       move.l    4(A7),D0
+       addq.w    #8,A7
+       move.l    D0,D2
+vdpEditCursorUp_7:
+; }
+; if (rowIdx > 0)
+       cmp.l     #0,D3
+       ble       vdpEditCursorUp_11
+; {
+; rowIdx--;
+       subq.l    #1,D3
+; if (rowIdx == 0)
+       tst.l     D3
+       bne.s     vdpEditCursorUp_10
+; {
+; if (absCol < vdpEditLineStartX)
+       cmp.l     (A3),D2
+       bge.s     vdpEditCursorUp_12
+; absCol = vdpEditLineStartX;
+       move.l    (A3),D2
+vdpEditCursorUp_12:
+; vdpEditCursorPos = absCol - vdpEditLineStartX;
+       move.l    D2,D0
+       sub.l     (A3),D0
+       move.l    D0,(A2)
+       bra.s     vdpEditCursorUp_11
+vdpEditCursorUp_10:
+; }
+; else
+; {
+; vdpEditCursorPos = firstWidth + ((rowIdx - 1) * VDP_COLS) + absCol;
+       move.l    D4,D0
+       move.l    D3,D1
+       subq.l    #1,D1
+       move.l    D1,-(A7)
+       pea       40
+       jsr       LMUL
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       add.l     D2,D0
+       move.l    D0,(A2)
+vdpEditCursorUp_11:
+; }
+; }
+; vdpEditSetCursorFromLogicalPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen, vdpEditCursorPos);
+       move.l    (A2),-(A7)
+       move.l    @basic_vdpEditLineLen.L,-(A7)
+       move.l    @basic_vdpEditLineStartY.L,-(A7)
+       move.l    (A3),-(A7)
+       jsr       @basic_vdpEditSetCursorFromLogicalPos
+       add.w     #16,A7
+vdpEditCursorUp_5:
+       movem.l   (A7)+,D2/D3/D4/D5/A2/A3
+       rts
+; }
+; void vdpEditCursorDown(void)
+; {
+       xdef      _vdpEditCursorDown
+_vdpEditCursorDown:
+       movem.l   D2/D3/D4/D5/A2/A3/A4,-(A7)
+       lea       @basic_vdpEditCursorPos.L,A2
+       lea       @basic_vdpEditLineStartX.L,A3
+       lea       @basic_vdpEditLineLen.L,A4
+; int firstWidth;
+; int absCol;
+; int localPos;
+; int rowIdx;
+; if (vdpEditLineLen <= 0)
+       move.l    (A4),D0
+       cmp.l     #0,D0
+       bgt.s     vdpEditCursorDown_1
+; {
+; if (vdpEditCurY < (VDP_ROWS - 1))
+       move.l    _vdpEditCurY.L,D0
+       cmp.l     #23,D0
+       bge.s     vdpEditCursorDown_3
+; vdpEditCurY++;
+       addq.l    #1,_vdpEditCurY.L
+vdpEditCursorDown_3:
+; vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1118,A0
+       jsr       (A0)
+       addq.w    #8,A7
+; return;
+       bra       vdpEditCursorDown_5
+vdpEditCursorDown_1:
+; }
+; firstWidth = VDP_COLS - vdpEditLineStartX;
+       moveq     #40,D0
+       ext.w     D0
+       ext.l     D0
+       sub.l     (A3),D0
+       move.l    D0,D4
+; if (vdpEditCursorPos < firstWidth)
+       cmp.l     (A2),D4
+       ble.s     vdpEditCursorDown_6
+; {
+; rowIdx = 0;
+       clr.l     D2
+; absCol = vdpEditLineStartX + vdpEditCursorPos;
+       move.l    (A3),D0
+       add.l     (A2),D0
+       move.l    D0,D3
+       bra       vdpEditCursorDown_7
+vdpEditCursorDown_6:
+; }
+; else
+; {
+; localPos = vdpEditCursorPos - firstWidth;
+       move.l    (A2),D0
+       sub.l     D4,D0
+       move.l    D0,D5
+; rowIdx = 1 + (localPos / VDP_COLS);
+       moveq     #1,D0
+       ext.w     D0
+       ext.l     D0
+       move.l    D5,-(A7)
+       pea       40
+       jsr       LDIV
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       move.l    D0,D2
+; absCol = localPos % VDP_COLS;
+       move.l    D5,-(A7)
+       pea       40
+       jsr       LDIV
+       move.l    4(A7),D0
+       addq.w    #8,A7
+       move.l    D0,D3
+vdpEditCursorDown_7:
+; }
+; rowIdx++;
+       addq.l    #1,D2
+; if (rowIdx == 0)
+       tst.l     D2
+       bne.s     vdpEditCursorDown_8
+; vdpEditCursorPos = absCol - vdpEditLineStartX;
+       move.l    D3,D0
+       sub.l     (A3),D0
+       move.l    D0,(A2)
+       bra.s     vdpEditCursorDown_9
+vdpEditCursorDown_8:
+; else
+; vdpEditCursorPos = firstWidth + ((rowIdx - 1) * VDP_COLS) + absCol;
+       move.l    D4,D0
+       move.l    D2,D1
+       subq.l    #1,D1
+       move.l    D1,-(A7)
+       pea       40
+       jsr       LMUL
+       move.l    (A7),D1
+       addq.w    #8,A7
+       add.l     D1,D0
+       add.l     D3,D0
+       move.l    D0,(A2)
+vdpEditCursorDown_9:
+; if (vdpEditCursorPos > vdpEditLineLen)
+       move.l    (A2),D0
+       cmp.l     (A4),D0
+       ble.s     vdpEditCursorDown_10
+; vdpEditCursorPos = vdpEditLineLen;
+       move.l    (A4),(A2)
+vdpEditCursorDown_10:
+; vdpEditSetCursorFromLogicalPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen, vdpEditCursorPos);
+       move.l    (A2),-(A7)
+       move.l    (A4),-(A7)
+       move.l    @basic_vdpEditLineStartY.L,-(A7)
+       move.l    (A3),-(A7)
+       jsr       @basic_vdpEditSetCursorFromLogicalPos
+       add.w     #16,A7
+vdpEditCursorDown_5:
+       movem.l   (A7)+,D2/D3/D4/D5/A2/A3/A4
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // LER LINHA FISICA DO VDP
+; //--------------------------------------------------------------------------------------
+; int vdpReadPhysicalLine(int y, char *dest, int maxLen)
+; {
+       xdef      _vdpReadPhysicalLine
+_vdpReadPhysicalLine:
+       link      A6,#-4
+       movem.l   D2/D3,-(A7)
+; int x;
+; int p;
+; unsigned char ch;
+; p = 0;
+       clr.l     D2
+; for (x = 0; x < VDP_COLS; x++)
+       clr.l     D3
+vdpReadPhysicalLine_1:
+       cmp.l     #40,D3
+       bge.s     vdpReadPhysicalLine_3
+; {
+; ch = vdpReadCharAt(x, y);
+       move.l    8(A6),-(A7)
+       move.l    D3,-(A7)
+       jsr       _vdpReadCharAt
+       addq.w    #8,A7
+       move.b    D0,-1(A6)
+; if (p < maxLen - 1)
+       move.l    16(A6),D0
+       subq.l    #1,D0
+       cmp.l     D0,D2
+       bge.s     vdpReadPhysicalLine_4
+; {
+; dest[p] = ch;
+       move.l    12(A6),A0
+       move.b    -1(A6),0(A0,D2.L)
+; p++;
+       addq.l    #1,D2
+vdpReadPhysicalLine_4:
+       addq.l    #1,D3
+       bra       vdpReadPhysicalLine_1
+vdpReadPhysicalLine_3:
+; }
+; }
+; dest[p] = 0;
+       move.l    12(A6),A0
+       clr.b     0(A0,D2.L)
+; return p;
+       move.l    D2,D0
+       movem.l   (A7)+,D2/D3
+       unlk      A6
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // TRIM A DIREITA
+; //--------------------------------------------------------------------------------------
+; void vdpTrimRight(char *s)
+; {
+       xdef      _vdpTrimRight
+_vdpTrimRight:
+       link      A6,#0
+       movem.l   D2/D3,-(A7)
+       move.l    8(A6),D3
+; int i;
+; i = 0;
+       clr.l     D2
+; while (s[i])
+vdpTrimRight_1:
+       move.l    D3,A0
+       tst.b     0(A0,D2.L)
+       beq.s     vdpTrimRight_3
+; i++;
+       addq.l    #1,D2
+       bra       vdpTrimRight_1
+vdpTrimRight_3:
+; i--;
+       subq.l    #1,D2
+; while (i >= 0 && s[i] == ' ')
+vdpTrimRight_4:
+       cmp.l     #0,D2
+       blt.s     vdpTrimRight_6
+       move.l    D3,A0
+       move.b    0(A0,D2.L),D0
+       cmp.b     #32,D0
+       bne.s     vdpTrimRight_6
+; {
+; s[i] = 0;
+       move.l    D3,A0
+       clr.b     0(A0,D2.L)
+; i--;
+       subq.l    #1,D2
+       bra       vdpTrimRight_4
+vdpTrimRight_6:
+       movem.l   (A7)+,D2/D3
+       unlk      A6
+       rts
+; }
+; }
+; static int vdpReadTrimmedPhysicalLine(int y, char *dest, int maxLen)
+; {
+@basic_vdpReadTrimmedPhysicalLine:
+       link      A6,#0
+       move.l    D2,-(A7)
+       move.l    12(A6),D2
+; vdpReadPhysicalLine(y, dest, maxLen);
+       move.l    16(A6),-(A7)
+       move.l    D2,-(A7)
+       move.l    8(A6),-(A7)
+       jsr       _vdpReadPhysicalLine
+       add.w     #12,A7
+; vdpTrimRight(dest);
+       move.l    D2,-(A7)
+       jsr       _vdpTrimRight
+       addq.w    #4,A7
+; return strlen(dest);
+       move.l    D2,-(A7)
+       jsr       _strlen
+       addq.w    #4,A7
+       move.l    (A7)+,D2
+       unlk      A6
+       rts
+; }
+; static int vdpEditReadLogicalLineAt(int x, int y, char *dest, int maxLen, int *pStartX, int *pStartY, int *pEndY)
+; {
+@basic_vdpEditReadLogicalLineAt:
+       link      A6,#-56
+       movem.l   D2/D3/D4/D5/D6/A2,-(A7)
+       lea       -54(A6),A2
+       move.l    12(A6),D4
+       move.l    16(A6),D6
+; char temp[VDP_COLS + 1];
+; int startX = 0;
+       clr.l     -12(A6)
+; int startY = 0;
+       clr.l     -8(A6)
+; int endY = 0;
+       clr.l     -4(A6)
+; int p;
+; int ix;
+; int lenLine;
+; vdpEditGetLogicalBounds(x, y, &startX, &startY, &endY);
+       pea       -4(A6)
+       pea       -8(A6)
+       pea       -12(A6)
+       move.l    D4,-(A7)
+       move.l    8(A6),-(A7)
+       jsr       @basic_vdpEditGetLogicalBounds
+       add.w     #20,A7
+; p = 0;
+       clr.l     D3
+; for (ix = startX; ix < VDP_COLS; ix++)
+       move.l    -12(A6),D2
+@basic_vdpEditReadLogicalLineAt_1:
+       cmp.l     #40,D2
+       bge.s     @basic_vdpEditReadLogicalLineAt_3
+; {
+; temp[ix - startX] = vdpReadCharAt(ix, startY);
+       move.l    -8(A6),-(A7)
+       move.l    D2,-(A7)
+       jsr       _vdpReadCharAt
+       addq.w    #8,A7
+       move.l    D2,D1
+       sub.l     -12(A6),D1
+       move.b    D0,0(A2,D1.L)
+       addq.l    #1,D2
+       bra       @basic_vdpEditReadLogicalLineAt_1
+@basic_vdpEditReadLogicalLineAt_3:
+; }
+; temp[VDP_COLS - startX] = 0x00;
+       moveq     #40,D0
+       ext.w     D0
+       ext.l     D0
+       sub.l     -12(A6),D0
+       clr.b     0(A2,D0.L)
+; for (ix = 0; temp[ix] && p < (maxLen - 1); ix++)
+       clr.l     D2
+@basic_vdpEditReadLogicalLineAt_4:
+       move.b    0(A2,D2.L),D0
+       ext.w     D0
+       ext.l     D0
+       tst.l     D0
+       beq.s     @basic_vdpEditReadLogicalLineAt_6
+       move.l    20(A6),D0
+       subq.l    #1,D0
+       cmp.l     D0,D3
+       bge.s     @basic_vdpEditReadLogicalLineAt_6
+; dest[p++] = temp[ix];
+       move.l    D6,A0
+       move.l    D3,D0
+       addq.l    #1,D3
+       move.b    0(A2,D2.L),0(A0,D0.L)
+       addq.l    #1,D2
+       bra       @basic_vdpEditReadLogicalLineAt_4
+@basic_vdpEditReadLogicalLineAt_6:
+; lenLine = ix;
+       move.l    D2,D5
+; y = startY + 1;
+       move.l    -8(A6),D0
+       addq.l    #1,D0
+       move.l    D0,D4
+; while (lenLine == (VDP_COLS - startX) && y < VDP_ROWS)
+@basic_vdpEditReadLogicalLineAt_7:
+       moveq     #40,D0
+       ext.w     D0
+       ext.l     D0
+       sub.l     -12(A6),D0
+       cmp.l     D0,D5
+       bne       @basic_vdpEditReadLogicalLineAt_9
+       cmp.l     #24,D4
+       bge       @basic_vdpEditReadLogicalLineAt_9
+; {
+; vdpReadPhysicalLine(y, temp, VDP_COLS + 1);
+       pea       41
+       move.l    A2,-(A7)
+       move.l    D4,-(A7)
+       jsr       _vdpReadPhysicalLine
+       add.w     #12,A7
+; for (ix = 0; temp[ix] && p < (maxLen - 1); ix++)
+       clr.l     D2
+@basic_vdpEditReadLogicalLineAt_10:
+       move.b    0(A2,D2.L),D0
+       ext.w     D0
+       ext.l     D0
+       tst.l     D0
+       beq.s     @basic_vdpEditReadLogicalLineAt_12
+       move.l    20(A6),D0
+       subq.l    #1,D0
+       cmp.l     D0,D3
+       bge.s     @basic_vdpEditReadLogicalLineAt_12
+; dest[p++] = temp[ix];
+       move.l    D6,A0
+       move.l    D3,D0
+       addq.l    #1,D3
+       move.b    0(A2,D2.L),0(A0,D0.L)
+       addq.l    #1,D2
+       bra       @basic_vdpEditReadLogicalLineAt_10
+@basic_vdpEditReadLogicalLineAt_12:
+; lenLine = ix;
+       move.l    D2,D5
+; if (lenLine < VDP_COLS)
+       cmp.l     #40,D5
+       bge.s     @basic_vdpEditReadLogicalLineAt_13
+; break;
+       bra.s     @basic_vdpEditReadLogicalLineAt_9
+@basic_vdpEditReadLogicalLineAt_13:
+; y++;
+       addq.l    #1,D4
+       bra       @basic_vdpEditReadLogicalLineAt_7
+@basic_vdpEditReadLogicalLineAt_9:
+; }
+; dest[p] = 0x00;
+       move.l    D6,A0
+       clr.b     0(A0,D3.L)
+; if (pStartX)
+       tst.l     24(A6)
+       beq.s     @basic_vdpEditReadLogicalLineAt_15
+; *pStartX = startX;
+       move.l    24(A6),A0
+       move.l    -12(A6),(A0)
+@basic_vdpEditReadLogicalLineAt_15:
+; if (pStartY)
+       tst.l     28(A6)
+       beq.s     @basic_vdpEditReadLogicalLineAt_17
+; *pStartY = startY;
+       move.l    28(A6),A0
+       move.l    -8(A6),(A0)
+@basic_vdpEditReadLogicalLineAt_17:
+; if (pEndY)
+       tst.l     32(A6)
+       beq.s     @basic_vdpEditReadLogicalLineAt_19
+; *pEndY = y > endY ? y : endY;
+       cmp.l     -4(A6),D4
+       ble.s     @basic_vdpEditReadLogicalLineAt_21
+       move.l    D4,D0
+       bra.s     @basic_vdpEditReadLogicalLineAt_22
+@basic_vdpEditReadLogicalLineAt_21:
+       move.l    -4(A6),D0
+@basic_vdpEditReadLogicalLineAt_22:
+       move.l    32(A6),A0
+       move.l    D0,(A0)
+@basic_vdpEditReadLogicalLineAt_19:
+; return p;
+       move.l    D3,D0
+       movem.l   (A7)+,D2/D3/D4/D5/D6/A2
+       unlk      A6
+       rts
+; }
+; static void vdpEditLoadLineFromCursor(void)
+; {
+@basic_vdpEditLoadLineFromCursor:
+       move.l    A2,-(A7)
+       lea       @basic_vdpEditLineLen.L,A2
+; if (vdpEditLineLen > 0)
+       move.l    (A2),D0
+       cmp.l     #0,D0
+       ble.s     @basic_vdpEditLoadLineFromCursor_1
+; return;
+       bra       @basic_vdpEditLoadLineFromCursor_3
+@basic_vdpEditLoadLineFromCursor_1:
+; vdpEditLineLen = vdpEditReadLogicalLineAt(
+       pea       @basic_vdpEditLineEndY.L
+       pea       @basic_vdpEditLineStartY.L
+       pea       @basic_vdpEditLineStartX.L
+       pea       256
+       pea       _vdpEditLine.L
+       move.l    _vdpEditCurY.L,-(A7)
+       move.l    _vdpEditCurX.L,-(A7)
+       jsr       @basic_vdpEditReadLogicalLineAt
+       add.w     #28,A7
+       move.l    D0,(A2)
+; vdpEditCurX,
+; vdpEditCurY,
+; vdpEditLine,
+; VDP_MAX_LINE,
+; &vdpEditLineStartX,
+; &vdpEditLineStartY,
+; &vdpEditLineEndY
+; );
+; vdpEditCursorPos = vdpEditGetLogicalCursorPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen);
+       move.l    (A2),-(A7)
+       move.l    @basic_vdpEditLineStartY.L,-(A7)
+       move.l    @basic_vdpEditLineStartX.L,-(A7)
+       jsr       @basic_vdpEditGetLogicalCursorPos
+       add.w     #12,A7
+       move.l    D0,@basic_vdpEditCursorPos.L
+@basic_vdpEditLoadLineFromCursor_3:
+       move.l    (A7)+,A2
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // TESTA SE LINHA PARECE COMECO DE LINHA BASIC
+; // Ex: "10 PRINT", "100 GOTO", etc.
+; //--------------------------------------------------------------------------------------
+; int vdpLineStartsWithNumber(char *s)
+; {
+       xdef      _vdpLineStartsWithNumber
+_vdpLineStartsWithNumber:
+       link      A6,#0
+       movem.l   D2/D3/D4,-(A7)
+       move.l    8(A6),D3
+; int i;
+; int found;
+; i = 0;
+       clr.l     D2
+; found = 0;
+       clr.l     D4
+; while (s[i] == ' ')
+vdpLineStartsWithNumber_1:
+       move.l    D3,A0
+       move.b    0(A0,D2.L),D0
+       cmp.b     #32,D0
+       bne.s     vdpLineStartsWithNumber_3
+; i++;
+       addq.l    #1,D2
+       bra       vdpLineStartsWithNumber_1
+vdpLineStartsWithNumber_3:
+; while (s[i] >= '0' && s[i] <= '9')
+vdpLineStartsWithNumber_4:
+       move.l    D3,A0
+       move.b    0(A0,D2.L),D0
+       cmp.b     #48,D0
+       blt.s     vdpLineStartsWithNumber_6
+       move.l    D3,A0
+       move.b    0(A0,D2.L),D0
+       cmp.b     #57,D0
+       bgt.s     vdpLineStartsWithNumber_6
+; {
+; found = 1;
+       moveq     #1,D4
+; i++;
+       addq.l    #1,D2
+       bra       vdpLineStartsWithNumber_4
+vdpLineStartsWithNumber_6:
+; }
+; return found;
+       move.l    D4,D0
+       movem.l   (A7)+,D2/D3/D4
+       unlk      A6
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // LER LINHA LOGICA DO VDP
+; //
+; // Ideia:
+; // - sobe ate achar uma linha que começa com numero
+; // - junta essa linha e as linhas abaixo
+; // - para quando encontrar outra linha que começa com numero
+; //--------------------------------------------------------------------------------------
+; int vdpReadLogicalBasicLine(int y, char *dest, int maxLen)
+; {
+       xdef      _vdpReadLogicalBasicLine
+_vdpReadLogicalBasicLine:
+       link      A6,#-44
+       movem.l   D2/D3/D4/D5/D6/D7/A2,-(A7)
+       move.l    8(A6),D3
+       lea       -42(A6),A2
+       move.l    12(A6),D7
+; char temp[VDP_COLS + 1];
+; int startY;
+; int p;
+; int i;
+; int lenLine;
+; startY = y;
+       move.l    D3,D4
+; while (startY > 0)
+vdpReadLogicalBasicLine_1:
+       cmp.l     #0,D4
+       ble.s     vdpReadLogicalBasicLine_3
+; {
+; lenLine = vdpReadTrimmedPhysicalLine(startY - 1, temp, VDP_COLS + 1);
+       pea       41
+       move.l    A2,-(A7)
+       move.l    D4,D1
+       subq.l    #1,D1
+       move.l    D1,-(A7)
+       jsr       @basic_vdpReadTrimmedPhysicalLine
+       add.w     #12,A7
+       move.l    D0,D6
+; if (lenLine < VDP_COLS)
+       cmp.l     #40,D6
+       bge.s     vdpReadLogicalBasicLine_4
+; break;
+       bra.s     vdpReadLogicalBasicLine_3
+vdpReadLogicalBasicLine_4:
+; startY--;
+       subq.l    #1,D4
+       bra       vdpReadLogicalBasicLine_1
+vdpReadLogicalBasicLine_3:
+; }
+; p = 0;
+       clr.l     D2
+; y = startY;
+       move.l    D4,D3
+; while (y < VDP_ROWS)
+vdpReadLogicalBasicLine_6:
+       cmp.l     #24,D3
+       bge       vdpReadLogicalBasicLine_8
+; {
+; lenLine = vdpReadTrimmedPhysicalLine(y, temp, VDP_COLS + 1);
+       pea       41
+       move.l    A2,-(A7)
+       move.l    D3,-(A7)
+       jsr       @basic_vdpReadTrimmedPhysicalLine
+       add.w     #12,A7
+       move.l    D0,D6
+; i = 0;
+       clr.l     D5
+; while (temp[i])
+vdpReadLogicalBasicLine_9:
+       tst.b     0(A2,D5.L)
+       beq.s     vdpReadLogicalBasicLine_11
+; {
+; if (p < maxLen - 1)
+       move.l    16(A6),D0
+       subq.l    #1,D0
+       cmp.l     D0,D2
+       bge.s     vdpReadLogicalBasicLine_12
+; {
+; dest[p] = temp[i];
+       move.l    D7,A0
+       move.b    0(A2,D5.L),0(A0,D2.L)
+; p++;
+       addq.l    #1,D2
+vdpReadLogicalBasicLine_12:
+; }
+; i++;
+       addq.l    #1,D5
+       bra       vdpReadLogicalBasicLine_9
+vdpReadLogicalBasicLine_11:
+; }
+; if (lenLine < VDP_COLS)
+       cmp.l     #40,D6
+       bge.s     vdpReadLogicalBasicLine_14
+; break;
+       bra.s     vdpReadLogicalBasicLine_8
+vdpReadLogicalBasicLine_14:
+; y++;
+       addq.l    #1,D3
+       bra       vdpReadLogicalBasicLine_6
+vdpReadLogicalBasicLine_8:
+; }
+; dest[p] = 0;
+       move.l    D7,A0
+       clr.b     0(A0,D2.L)
+; vdpTrimRight(dest);
+       move.l    D7,-(A7)
+       jsr       _vdpTrimRight
+       addq.w    #4,A7
+; return p;
+       move.l    D2,D0
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2
+       unlk      A6
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // ENTER
+; //--------------------------------------------------------------------------------------
+; void vdpEditEnter(void)
+; {
+       xdef      _vdpEditEnter
+_vdpEditEnter:
+       movem.l   D2/D3/D4/A2/A3/A4,-(A7)
+       lea       _vbufInput.L,A2
+       lea       @basic_vdpEditLineLen.L,A3
+       lea       @basic_vdpEditLineStartY.L,A4
+; unsigned short vNumLin;
+; unsigned long vLineAddr;
+; unsigned char *pLineAddr;
+; if (vdpEditLineLen > 0)
+       move.l    (A3),D0
+       cmp.l     #0,D0
+       ble       vdpEditEnter_1
+; {
+; memcpy(vbufInput, vdpEditLine, vdpEditLineLen);
+       move.l    (A3),-(A7)
+       pea       _vdpEditLine.L
+       move.l    A2,-(A7)
+       jsr       _memcpy
+       add.w     #12,A7
+; *(vbufInput + vdpEditLineLen) = 0x00;
+       move.l    (A3),D0
+       clr.b     0(A2,D0.L)
+; if (vdpLineStartsWithNumber(vbufInput))
+       move.l    A2,-(A7)
+       jsr       _vdpLineStartsWithNumber
+       addq.w    #4,A7
+       tst.l     D0
+       beq       vdpEditEnter_7
+; {
+; vNumLin = atoi(vbufInput);
+       move.l    A2,-(A7)
+       jsr       _atoi
+       addq.w    #4,A7
+       move.w    D0,D4
+; vLineAddr = findNumberLine(vNumLin, 0, 0);
+       clr.l     -(A7)
+       clr.l     -(A7)
+       and.l     #65535,D4
+       move.l    D4,-(A7)
+       jsr       _findNumberLine
+       add.w     #12,A7
+       move.l    D0,D3
+; if (vLineAddr)
+       tst.l     D3
+       beq.s     vdpEditEnter_7
+; {
+; pLineAddr = (unsigned char *)vLineAddr;
+       move.l    D3,D2
+; if (((*(pLineAddr + 3) << 8) | *(pLineAddr + 4)) == vNumLin)
+       move.l    D2,A0
+       move.b    3(A0),D0
+       lsl.b     #8,D0
+       move.l    D2,A0
+       or.b      4(A0),D0
+       and.w     #255,D0
+       cmp.w     D4,D0
+       bne.s     vdpEditEnter_7
+; delLine(vbufInput);
+       move.l    A2,-(A7)
+       jsr       _delLine
+       addq.w    #4,A7
+vdpEditEnter_7:
+; }
+; }
+; printText("\r\n\0");
+       pea       @basic_109.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; processLine();
+       jsr       _processLine
+; if (!*pTypeLine && *pProcess)
+       move.l    _pTypeLine.L,A0
+       tst.b     (A0)
+       bne.s     vdpEditEnter_9
+       move.l    _pProcess.L,A0
+       tst.b     (A0)
+       beq.s     vdpEditEnter_9
+; printText("\r\nOK\0");
+       pea       @basic_156.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+vdpEditEnter_9:
+; if (!*pTypeLine && *pProcess)
+       move.l    _pTypeLine.L,A0
+       tst.b     (A0)
+       bne.s     vdpEditEnter_11
+       move.l    _pProcess.L,A0
+       tst.b     (A0)
+       beq.s     vdpEditEnter_11
+; printText("\r\n\0");
+       pea       @basic_109.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+vdpEditEnter_11:
+       bra.s     vdpEditEnter_2
+vdpEditEnter_1:
+; }
+; else
+; {
+; printText("\r\n\0");
+       pea       @basic_109.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+vdpEditEnter_2:
+; }
+; vbufInput[0] = 0x00;
+       clr.b     (A2)
+; vdpEditLine[0] = 0x00;
+       clr.b     _vdpEditLine.L
+; vdpEditLineLen = 0;
+       clr.l     (A3)
+; vdpEditCursorPos = 0;
+       clr.l     @basic_vdpEditCursorPos.L
+; vdpEditLineStartX = 0;
+       clr.l     @basic_vdpEditLineStartX.L
+; vdpEditLineStartY = vdpEditFindNextInputRow();
+       jsr       @basic_vdpEditFindNextInputRow
+       move.l    D0,(A4)
+; vdpEditLineEndY = vdpEditLineStartY;
+       move.l    (A4),@basic_vdpEditLineEndY.L
+; vdpEditCurX = vdpEditLineStartX;
+       move.l    @basic_vdpEditLineStartX.L,_vdpEditCurX.L
+; vdpEditCurY = vdpEditLineStartY;
+       move.l    (A4),_vdpEditCurY.L
+; vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+       move.l    _vdpEditCurY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    _vdpEditCurX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       move.l    1118,A0
+       jsr       (A0)
+       addq.w    #8,A7
+       movem.l   (A7)+,D2/D3/D4/A2/A3/A4
+       rts
+; }
+; //--------------------------------------------------------------------------------------
+; // PROCESSAR TECLA
+; //--------------------------------------------------------------------------------------
+; void vdpEditProcessKey(int key)
+; {
+       xdef      _vdpEditProcessKey
+_vdpEditProcessKey:
+       link      A6,#0
+       move.l    D2,-(A7)
+       move.l    8(A6),D2
+; if (key == KEY_ENTER || key == 0x0A)
+       cmp.l     #13,D2
+       beq.s     vdpEditProcessKey_3
+       cmp.l     #10,D2
+       bne.s     vdpEditProcessKey_1
+vdpEditProcessKey_3:
+; {
+; vdpEditEnter();
+       jsr       _vdpEditEnter
+       bra       vdpEditProcessKey_17
+vdpEditProcessKey_1:
+; }
+; else if (key == KEY_BACKSPACE)
+       cmp.l     #8,D2
+       bne.s     vdpEditProcessKey_4
+; {
+; vdpEditBackspace();
+       jsr       _vdpEditBackspace
+       bra       vdpEditProcessKey_17
+vdpEditProcessKey_4:
+; }
+; else if (key == KEY_DELETE || key == 0x7F || key == 0x04)
+       cmp.l     #127,D2
+       beq.s     vdpEditProcessKey_8
+       cmp.l     #127,D2
+       beq.s     vdpEditProcessKey_8
+       cmp.l     #4,D2
+       bne.s     vdpEditProcessKey_6
+vdpEditProcessKey_8:
+; {
+; vdpEditDelete();
+       jsr       _vdpEditDelete
+       bra       vdpEditProcessKey_17
+vdpEditProcessKey_6:
+; }
+; else if (key == KEY_LEFT)
+       cmp.l     #18,D2
+       bne.s     vdpEditProcessKey_9
+; {
+; vdpEditCursorLeft();
+       jsr       _vdpEditCursorLeft
+       bra       vdpEditProcessKey_17
+vdpEditProcessKey_9:
+; }
+; else if (key == KEY_RIGHT)
+       cmp.l     #20,D2
+       bne.s     vdpEditProcessKey_11
+; {
+; vdpEditCursorRight();
+       jsr       _vdpEditCursorRight
+       bra       vdpEditProcessKey_17
+vdpEditProcessKey_11:
+; }
+; else if (key == KEY_UP)
+       cmp.l     #17,D2
+       bne.s     vdpEditProcessKey_13
+; {
+; vdpEditCursorUp();
+       jsr       _vdpEditCursorUp
+       bra.s     vdpEditProcessKey_17
+vdpEditProcessKey_13:
+; }
+; else if (key == KEY_DOWN)
+       cmp.l     #19,D2
+       bne.s     vdpEditProcessKey_15
+; {
+; vdpEditCursorDown();
+       jsr       _vdpEditCursorDown
+       bra.s     vdpEditProcessKey_17
+vdpEditProcessKey_15:
+; }
+; else
+; {
+; if (key >= 32 && key <= 126)
+       cmp.l     #32,D2
+       blt.s     vdpEditProcessKey_17
+       cmp.l     #126,D2
+       bgt.s     vdpEditProcessKey_17
+; vdpEditPutChar((unsigned char)key);
+       and.l     #255,D2
+       move.l    D2,-(A7)
+       jsr       _vdpEditPutChar
+       addq.w    #4,A7
+vdpEditProcessKey_17:
+       move.l    (A7)+,D2
+       unlk      A6
+       rts
+; }
+; }
+; void vdpEditReadEnterLine(char *dest, int maxLen)
+; {
+       xdef      _vdpEditReadEnterLine
+_vdpEditReadEnterLine:
+       link      A6,#0
+       move.l    D2,-(A7)
+; int len;
+; len = vdpEditLineLen;
+       move.l    @basic_vdpEditLineLen.L,D2
+; if (len >= (maxLen - 1))
+       move.l    12(A6),D0
+       subq.l    #1,D0
+       cmp.l     D0,D2
+       blt.s     vdpEditReadEnterLine_1
+; len = maxLen - 1;
+       move.l    12(A6),D0
+       subq.l    #1,D0
+       move.l    D0,D2
+vdpEditReadEnterLine_1:
+; memcpy(dest, vdpEditLine, len);
+       move.l    D2,-(A7)
+       pea       _vdpEditLine.L
+       move.l    8(A6),-(A7)
+       jsr       _memcpy
+       add.w     #12,A7
+; dest[len] = 0x00;
+       move.l    8(A6),A0
+       clr.b     0(A0,D2.L)
+       move.l    (A7)+,D2
+       unlk      A6
+       rts
+; }
        section   const
 @basic_1:
        dc.b      63,114,101,115,101,114,118,101,100,32,48,0
@@ -29295,109 +31719,109 @@ _basRestore:
 @basic_112:
        dc.b      79,75,13,10,0
 @basic_113:
-       dc.b      13,10,79,75,0
-@basic_114:
        dc.b      76,111,97,100,105,110,103,46,46,46,13,10,0
-@basic_115:
+@basic_114:
        dc.b      68,111,110,101,46,13,10,0
-@basic_116:
+@basic_115:
        dc.b      80,114,111,99,101,115,115,105,110,103,46,46
        dc.b      46,13,10,0
-@basic_117:
+@basic_116:
        dc.b      82,117,110,110,105,110,103,46,46,46,13,10,0
-@basic_118:
+@basic_117:
        dc.b      76,111,97,100,105,110,103,32,70,105,108,101
        dc.b      32,69,114,114,111,114,46,46,46,13,10,0
-@basic_119:
+@basic_118:
        dc.b      79,107,13,10,0
-@basic_120:
+@basic_119:
        dc.b      35,62,0
-@basic_121:
+@basic_120:
        dc.b      78,69,87,0
-@basic_122:
+@basic_121:
        dc.b      69,68,73,84,0
-@basic_123:
+@basic_122:
        dc.b      76,73,83,84,0
-@basic_124:
+@basic_123:
        dc.b      76,73,83,84,80,0
-@basic_125:
+@basic_124:
        dc.b      82,85,78,0
-@basic_126:
+@basic_125:
        dc.b      68,69,76,0
-@basic_127:
+@basic_126:
        dc.b      76,79,65,68,0
-@basic_128:
+@basic_127:
        dc.b      83,65,86,69,0
-@basic_129:
+@basic_128:
        dc.b      88,76,79,65,68,0
-@basic_130:
+@basic_129:
        dc.b      88,76,79,65,68,49,75,0
-@basic_131:
+@basic_130:
        dc.b      84,73,77,69,82,0
-@basic_132:
+@basic_131:
        dc.b      84,105,109,101,114,58,32,0
-@basic_133:
+@basic_132:
        dc.b      109,115,13,10,0
-@basic_134:
+@basic_133:
        dc.b      84,82,65,67,69,79,78,0
-@basic_135:
+@basic_134:
        dc.b      84,82,65,67,69,79,70,70,0
-@basic_136:
+@basic_135:
        dc.b      68,69,66,85,71,79,78,0
-@basic_137:
+@basic_136:
        dc.b      68,69,66,85,71,79,70,70,0
-@basic_138:
+@basic_137:
        dc.b      76,73,83,84,77,69,77,0
-@basic_139:
+@basic_138:
        dc.b      112,83,116,97,114,116,83,105,109,112,86,97,114
        dc.b      32,32,0
-@basic_140:
+@basic_139:
        dc.b      104,13,10,0
-@basic_141:
+@basic_140:
        dc.b      112,83,116,97,114,116,65,114,114,97,121,86,97
        dc.b      114,32,0
-@basic_142:
+@basic_141:
        dc.b      112,83,116,97,114,116,83,116,114,105,110,103
        dc.b      32,32,32,0
-@basic_143:
+@basic_142:
        dc.b      112,83,116,97,114,116,80,114,111,103,32,32,32
        dc.b      32,32,0
-@basic_144:
+@basic_143:
        dc.b      112,83,116,97,114,116,88,66,97,115,76,111,97
        dc.b      100,32,0
-@basic_145:
+@basic_144:
        dc.b      112,83,116,97,114,116,83,116,97,99,107,32,32
        dc.b      32,32,0
-@basic_146:
+@basic_145:
        dc.b      81,85,73,84,0
-@basic_147:
+@basic_146:
        dc.b      32,0
-@basic_148:
+@basic_147:
        dc.b      65,113,117,105,32,52,51,52,46,54,54,54,46,48
        dc.b      32,91,0
-@basic_149:
+@basic_148:
        dc.b      93,45,91,0
-@basic_150:
+@basic_149:
        dc.b      93,13,10,0
-@basic_151:
+@basic_150:
        dc.b      32,59,44,43,45,60,62,40,41,47,42,94,61,58,0
-@basic_152:
+@basic_151:
        dc.b      76,105,110,101,32,110,117,109,98,101,114,32
        dc.b      97,108,114,101,97,100,121,32,101,120,105,115
        dc.b      116,115,13,10,0
-@basic_153:
+@basic_152:
        dc.b      78,111,110,45,101,120,105,115,116,101,110,116
        dc.b      32,108,105,110,101,32,110,117,109,98,101,114
        dc.b      13,10,0
-@basic_154:
+@basic_153:
        dc.b      112,114,101,115,115,32,97,110,121,32,107,101
        dc.b      121,32,116,111,32,99,111,110,116,105,110,117
        dc.b      101,0
-@basic_155:
+@basic_154:
        dc.b      64,0
-@basic_156:
+@basic_155:
        dc.b      83,121,110,116,97,120,32,69,114,114,111,114
        dc.b      32,33,0
+@basic_156:
+       dc.b      13,10,79,75,0
 @basic_157:
        dc.b      13,10,65,98,111,114,116,101,100,32,33,33,33
        dc.b      13,10,0
@@ -29420,12 +31844,18 @@ _basRestore:
        dc.b      32,80,114,111,103,114,97,109,32,49,107,46,46
        dc.b      46,13,10,0
 @basic_164:
-       dc.b      65,113,117,105,32,53,54,53,46,54,54,54,46,48
-       dc.b      32,91,0
-@basic_165:
        dc.b      58,0
-@basic_166:
+@basic_165:
        dc.b      47,0
+@basic_166:
+       dc.b      65,113,117,105,32,48,54,54,54,48,46,54,54,54
+       dc.b      46,48,32,91,0
+@basic_167:
+       dc.b      65,113,117,105,32,48,54,54,54,49,46,54,54,54
+       dc.b      46,48,91,0
+@basic_168:
+       dc.b      65,113,117,105,32,48,54,54,54,48,46,54,54,54
+       dc.b      46,49,32,91,0
        xdef      _strValidChars
 _strValidChars:
        dc.b      48,49,50,51,52,53,54,55,56,57,65,66,67,68,69
@@ -29686,6 +32116,26 @@ _vvdgBASd:
        xdef      _vvdgBASc
 _vvdgBASc:
        dc.l      4194371
+@basic_vdpEditCursorBackup:
+       dc.b      0
+@basic_vdpEditCursorVisible:
+       dc.b      0
+@basic_vdpEditBlinkCount:
+       dc.w      0
+@basic_vdpEditLineLen:
+       dc.l      0
+@basic_vdpEditCursorPos:
+       dc.l      0
+@basic_vdpEditLineStartX:
+       dc.l      0
+@basic_vdpEditLineStartY:
+       dc.l      0
+@basic_vdpEditLineEndY:
+       dc.l      0
+@basic_textPatternTable:
+       dc.l      0
+@basic_textNameTable:
+       dc.l      2048
 @basic_lastVarCacheName0:
        dc.b      0,0,0,0,0,0,0,0
 @basic_lastVarCacheName1:
@@ -29788,6 +32238,15 @@ _pStartXBasLoad:
        xdef      _pStartStack
 _pStartStack:
        ds.b      4
+       xdef      _vdpEditCurX
+_vdpEditCurX:
+       ds.b      4
+       xdef      _vdpEditCurY
+_vdpEditCurY:
+       ds.b      4
+       xdef      _vdpEditLine
+_vdpEditLine:
+       ds.b      256
 @basic_paintStackX:
        ds.b      4096
 @basic_paintStackY:

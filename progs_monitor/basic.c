@@ -79,6 +79,50 @@
 unsigned char *vvdgBASd = 0x00400041; // VDP TMS9118 Data Mode
 unsigned char *vvdgBASc = 0x00400043; // VDP TMS9118 Registers/Address Mode
 
+//--------------------------------------------------------------------------------------
+// Editor em modo de tela cheia
+//--------------------------------------------------------------------------------------
+#define INPUT_BASIC_TELA 1
+#define VDP_COLS        40
+#define VDP_ROWS        24
+#define VDP_MAX_LINE    256
+
+#define KEY_ENTER       13
+#define KEY_BACKSPACE   8
+#define KEY_DELETE      127
+
+#define KEY_LEFT        18
+#define KEY_RIGHT       20
+#define KEY_UP          17
+#define KEY_DOWN        19
+#define VDP_EDIT_CURSOR_CHAR   0xFE
+#define VDP_EDIT_BLINK_TICKS   3500
+
+int vdpEditCurX;
+int vdpEditCurY;
+
+char vdpEditLine[VDP_MAX_LINE];
+static unsigned char vdpEditCursorBackup = 0x00;
+static unsigned char vdpEditCursorVisible = 0;
+static unsigned short vdpEditBlinkCount = 0;
+static int vdpEditLineLen = 0;
+static int vdpEditCursorPos = 0;
+static int vdpEditLineStartX = 0;
+static int vdpEditLineStartY = 0;
+static int vdpEditLineEndY = 0;
+
+static int vdpEditFindNextInputRow(void);
+static void vdpEditCursorOff(void);
+static void vdpEditCursorOn(void);
+static void vdpEditCursorToggle(void);
+static int vdpEditReadLogicalLineAt(int x, int y, char *dest, int maxLen, int *pStartX, int *pStartY, int *pEndY);
+
+static unsigned int textPatternTable = 0x0000;
+static unsigned int textNameTable = 0x0800;
+//--------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------
+
 static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 static unsigned char *lastVarCacheAddr[SIMPLE_VAR_CACHE_SLOTS] = {0,0,0,0,0,0,0,0};
@@ -355,7 +399,7 @@ void main(void)
         pStartArrayVar  = *startBasic0 + 0x02000;   // Area Arrays
         pStartString    = *startBasic0 + 0x06000;   // Area Strings
         pStartProg      = *startBasic0 + 0x08000;   // Area Programa  deve ser 0x00810000
-        pStartVdpBuffer = *startBasic0 + 0x10000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM 
+        pStartVdpBuffer = *startBasic0 + 0x10000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM
         pStartXBasLoad  = *startBasic0 + 0x04000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
         pStartStack     = *startBasic0 + 0x10000;   // Area variaveis sistema e stack pointer
 
@@ -445,31 +489,78 @@ void main(void)
 
     if (*paramBasic == 0x00)
     {
-        // Prompt de comandos
-        while (*pProcess)
-        {
-            vRetInput = inputLineBasic(128,'$');
+        #ifdef INPUT_BASIC_TELA
+            vdpEditLine[0] = 0x00;
+            vdpEditLineLen = 0;
+            vdpEditCursorPos = 0;
+            vdpEditLineStartX = 0;
+            vdpEditLineStartY = vdpEditFindNextInputRow();
+            vdpEditLineEndY = vdpEditLineStartY;
+            vdpEditCurX = vdpEditLineStartX;
+            vdpEditCurY = vdpEditLineStartY;
+            vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+            vdpEditCursorVisible = 0;
+            vdpEditBlinkCount = 0;
+            vdpEditCursorOn();
 
-            if (vbufInput[0] != 0x00 && (vRetInput == 0x0D || vRetInput == 0x0A))
+            while (*pProcess)
             {
-                printText("\r\n\0");
+                vRetInput = readChar();   // tua rotina que lê uma tecla
 
-                processLine();
+                if (vRetInput == 0x00)
+                {
+                    vdpEditBlinkCount++;
+                    if (vdpEditBlinkCount >= VDP_EDIT_BLINK_TICKS)
+                    {
+                        vdpEditBlinkCount = 0;
+                        vdpEditCursorToggle();
+                    }
 
-                vbufInput[0] = 0x00;
-                vBufptr = &vbufInput;
+                    continue;
+                }
 
-                if (!*pTypeLine && *pProcess)
-                    printText("\r\nOK\0");
+                vdpEditBlinkCount = 0;
+                vdpEditCursorOff();
 
-                if (!*pTypeLine && *pProcess)
-                    printText("\r\n\0");   // printText("\r\n>\0");
+                if (vRetInput == 0x1B)
+                {
+                    // ESC
+                    vdpEditCursorOn();
+                    break;
+                }
+
+                // Aqui não chama inputLineBasic. Aqui você processa tecla por tecla direto na tela.
+                vdpEditProcessKey(vRetInput);
+
+                vdpEditCursorOn();
             }
-            else if (vRetInput != 0x1B)
+        #else
+            // Prompt de comandos
+            while (*pProcess)
             {
-                printText("\r\n\0");
+                vRetInput = inputLineBasic(128,'$');
+
+                if (vbufInput[0] != 0x00 && (vRetInput == 0x0D || vRetInput == 0x0A))
+                {
+                    printText("\r\n\0");
+
+                    processLine();
+
+                    vbufInput[0] = 0x00;
+                    vBufptr = &vbufInput;
+
+                    if (!*pTypeLine && *pProcess)
+                        printText("\r\nOK\0");
+
+                    if (!*pTypeLine && *pProcess)
+                        printText("\r\n\0");   // printText("\r\n>\0");
+                }
+                else if (vRetInput != 0x1B)
+                {
+                    printText("\r\n\0");
+                }
             }
-        }
+        #endif
     }
     else
     {
@@ -534,13 +625,15 @@ void main(void)
             printText("Loading File Error...\r\n\0");
         }
     }
-        
+
     printText("\r\n\0");
-    printText("Ok\r\n\0");
-    printText("#>");
 
     if (*startBasic == 1)
+    {
+        printText("Ok\r\n\0");
+        printText("#>");
         OSTaskResume(TASK_MMSJOS_MAIN);
+    }
 }
 
 /******************************************************************************************/
@@ -570,7 +663,7 @@ unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
 
     // Entrada normal sempre começa com buffer limpo.
     if (pTipo != 'S' && pTipo != 'I' && pTipo != 'R')
-        memset(vbufInput, 0x00, sizeof(vbufInput)); 
+        memset(vbufInput, 0x00, sizeof(vbufInput));
 
     // Se for Linha editavel apresenta a linha na tela
     if (pTipo == 'S' || pTipo == 'I' || pTipo == 'R')
@@ -1040,7 +1133,7 @@ void processLine(void)
 
                 strcat(vRetInf.tString, vLinhaArg);
 
-if (*debugOn)  
+if (*debugOn)
 {
     writeLongSerial("Aqui 434.666.0 [\0");
     writeLongSerial(vRetInf.tString);
@@ -2173,7 +2266,6 @@ int executeToken(unsigned char pToken)
 #ifndef __TESTE_TOKENIZE__
     unsigned char *pForStack = forStack;
     int ix;
-    unsigned char sqtdtam[20];
 
     switch (pToken)
     {
@@ -2406,13 +2498,6 @@ int executeToken(unsigned char pToken)
             if (pToken < 0x80)  // variavel sem LET
             {
                 *pointerRunProg = *pointerRunProg - 1;
-if (*debugOn)
-{
-writeLongSerial("Aqui 565.666.0 [\0");
-itoa(pToken, sqtdtam, 16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");
-}                
                 vReta = basLet();
             }
             else // Nao forem operadores logicos
@@ -10719,4 +10804,899 @@ int basRestore(void)
     *vDataPointer = (*vDataLineAtu + 6);
 
     return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// Editor em modo de tela cheia
+//--------------------------------------------------------------------------------------
+
+//--------------------------------------------------------------------------------------
+// ENDERECO X/Y NA NAME TABLE
+//--------------------------------------------------------------------------------------
+unsigned int vdpXYAddr(int x, int y)
+{
+    return textNameTable + (y * VDP_COLS) + x;
+}
+
+//--------------------------------------------------------------------------------------
+// LEITURA / ESCRITA DE CARACTERE NA TELA
+//--------------------------------------------------------------------------------------
+unsigned char vdpReadCharAt(int x, int y)
+{
+    unsigned int addr;
+    unsigned char ch;
+
+    if (x < 0 || x >= VDP_COLS)
+        return 0x00;
+
+    if (y < 0 || y >= VDP_ROWS)
+        return 0x00;
+
+    addr = vdpXYAddr(x, y);
+
+    setReadAddress(addr);
+
+    //ch = *vvdgBASd; // dummy, se precisar
+    ch = *vvdgBASd;
+
+    return ch;
+}
+
+void vdpWriteCharAt(int x, int y, unsigned char ch)
+{
+    unsigned int addr;
+
+    if (x < 0 || x >= VDP_COLS)
+        return;
+
+    if (y < 0 || y >= VDP_ROWS)
+        return;
+
+    addr = vdpXYAddr(x, y);
+
+    setWriteAddress(addr);
+    *vvdgBASd = ch;
+}
+
+static int vdpEditFindNextInputRow(void)
+{
+    int y;
+    int x;
+    int lastUsed;
+    unsigned char ch;
+
+    lastUsed = -1;
+
+    for (y = 0; y < VDP_ROWS; y++)
+    {
+        for (x = 0; x < VDP_COLS; x++)
+        {
+            ch = vdpReadCharAt(x, y);
+            if (ch != 0x00)
+            {
+                lastUsed = y;
+                break;
+            }
+        }
+    }
+
+    y = lastUsed + 1;
+    if (y < 0)
+        y = 0;
+    if (y >= VDP_ROWS)
+        y = VDP_ROWS - 1;
+
+    return y;
+}
+
+static void vdpEditCursorOff(void)
+{
+    unsigned char sqtdtam[20];
+    if (!vdpEditCursorVisible)
+        return;
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 06660.666.0 [\0");
+itoa(vdpEditCurX, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vdpEditCurY, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+writeSerial(vdpEditCursorBackup);
+writeLongSerial("]\r\n\0");
+}
+
+    vdpWriteCharAt(vdpEditCurX, vdpEditCurY, vdpEditCursorBackup);
+    vdpEditCursorVisible = 0;
+}
+
+static void vdpEditCursorOn(void)
+{
+    unsigned char sqtdtam[20];
+
+    if (vdpEditCursorVisible)
+        return;
+
+    vdpEditCursorBackup = vdpReadCharAt(vdpEditCurX, vdpEditCurY);
+if (*debugOn)
+{
+writeLongSerial("Aqui 06661.666.0[\0");
+itoa(vdpEditCurX, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vdpEditCurY, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+writeSerial(vdpEditCursorBackup);
+writeLongSerial("]\r\n\0");
+}
+
+    vdpWriteCharAt(vdpEditCurX, vdpEditCurY, VDP_EDIT_CURSOR_CHAR);
+    vdpEditCursorVisible = 1;
+    vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+}
+
+static void vdpEditCursorToggle(void)
+{
+    if (vdpEditCursorVisible)
+        vdpEditCursorOff();
+    else
+        vdpEditCursorOn();
+}
+
+
+//--------------------------------------------------------------------------------------
+// CURSOR
+//--------------------------------------------------------------------------------------
+void vdpEditMoveCursor(int x, int y)
+{
+    if (x < 0)
+        x = 0;
+
+    if (x >= VDP_COLS)
+        x = VDP_COLS - 1;
+
+    if (y < 0)
+        y = 0;
+
+    if (y >= VDP_ROWS)
+        y = VDP_ROWS - 1;
+
+    vdpEditCurX = x;
+    vdpEditCurY = y;
+
+    vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+}
+
+static void vdpEditGetLogicalBounds(int x, int y, int *pStartX, int *pStartY, int *pEndY)
+{
+    char temp[VDP_COLS + 1];
+    int startY;
+    int endY;
+    int lenLine;
+    int startX;
+    int ix;
+
+    startY = y;
+
+    while (startY > 0)
+    {
+        lenLine = vdpReadTrimmedPhysicalLine(startY - 1, temp, VDP_COLS + 1);
+
+        if (lenLine < VDP_COLS)
+            break;
+
+        startY--;
+    }
+
+    endY = startY;
+
+    while (endY < (VDP_ROWS - 1))
+    {
+        lenLine = vdpReadTrimmedPhysicalLine(endY, temp, VDP_COLS + 1);
+
+        if (lenLine < VDP_COLS)
+            break;
+
+        endY++;
+    }
+
+    startX = x;
+    if (startX < 0)
+        startX = 0;
+    if (startX >= VDP_COLS)
+        startX = VDP_COLS - 1;
+
+    while (startX > 0)
+    {
+        if (vdpReadCharAt(startX - 1, startY) == 0x00)
+            break;
+
+        startX--;
+    }
+
+    *pStartX = startX;
+    *pStartY = startY;
+    *pEndY = endY;
+}
+
+static int vdpEditGetLogicalCursorPos(int startX, int startY, int lineLen)
+{
+    int cursorPos;
+    int firstWidth;
+
+    firstWidth = VDP_COLS - startX;
+
+    if (vdpEditCurY == startY)
+        cursorPos = vdpEditCurX - startX;
+    else
+        cursorPos = firstWidth + ((vdpEditCurY - startY - 1) * VDP_COLS) + vdpEditCurX;
+
+    if (cursorPos < 0)
+        cursorPos = 0;
+
+    if (cursorPos > lineLen)
+        cursorPos = lineLen;
+
+    return cursorPos;
+}
+
+static void vdpEditSetCursorFromLogicalPos(int startX, int startY, int lineLen, int cursorPos)
+{
+    int firstWidth;
+    int localPos;
+    unsigned char sqtdtam[20];
+if (*debugOn)
+{
+writeLongSerial("Aqui 06660.666.0 [\0");
+itoa(startX, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(startY, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(lineLen, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(cursorPos, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+
+    if (cursorPos < 0)
+        cursorPos = 0;
+
+    if (cursorPos > lineLen)
+        cursorPos = lineLen;
+
+    firstWidth = VDP_COLS - startX;
+
+    if (cursorPos < firstWidth)
+    {
+        vdpEditCurY = startY;
+        vdpEditCurX = startX + cursorPos;
+    }
+    else
+    {
+        localPos = cursorPos - firstWidth;
+        vdpEditCurY = startY + 1 + (localPos / VDP_COLS);
+        vdpEditCurX = localPos % VDP_COLS;
+    }
+
+    if (vdpEditCurY >= VDP_ROWS)
+    {
+        vdpEditCurY = VDP_ROWS - 1;
+        vdpEditCurX = VDP_COLS - 1;
+    }
+
+    if (vdpEditCurX < 0)
+        vdpEditCurX = 0;
+
+    if (vdpEditCurX >= VDP_COLS)
+        vdpEditCurX = VDP_COLS - 1;
+
+if (*debugOn)
+{
+writeLongSerial("Aqui 06660.666.1 [\0");
+itoa(vdpEditCurX, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[");
+itoa(vdpEditCurY, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}
+
+    vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+}
+
+static void vdpEditRenderLogicalLine(int startX, int startY, int oldEndY, char *line, int cursorPos)
+{
+    int lenLine;
+    int rowsUsed;
+    int newEndY;
+    int maxEndY;
+    int y;
+    int x;
+    int pos;
+    int firstWidth;
+
+    lenLine = strlen(line);
+    rowsUsed = 1;
+    firstWidth = VDP_COLS - startX;
+
+    if (lenLine > firstWidth)
+        rowsUsed = 1 + (((lenLine - firstWidth) + (VDP_COLS - 1)) / VDP_COLS);
+
+    newEndY = startY + rowsUsed - 1;
+
+    if (newEndY >= VDP_ROWS)
+        newEndY = VDP_ROWS - 1;
+
+    maxEndY = oldEndY;
+    if (newEndY > maxEndY)
+        maxEndY = newEndY;
+
+    for (y = startY; y <= maxEndY && y < VDP_ROWS; y++)
+    {
+        for (x = (y == startY ? startX : 0); x < VDP_COLS; x++)
+            vdpWriteCharAt(x, y, 0x00);
+    }
+
+    pos = 0;
+    for (y = startY; y <= newEndY && y < VDP_ROWS; y++)
+    {
+        for (x = (y == startY ? startX : 0); x < VDP_COLS && pos < lenLine; x++)
+            vdpWriteCharAt(x, y, line[pos++]);
+    }
+
+    vdpEditLineEndY = newEndY;
+    vdpEditSetCursorFromLogicalPos(startX, startY, lenLine, cursorPos);
+}
+
+
+//--------------------------------------------------------------------------------------
+// SCROLL LENDO/ESCREVENDO VRAM
+//--------------------------------------------------------------------------------------
+void vdpEditScrollUp(void)
+{
+    int x;
+    int y;
+    unsigned char ch;
+
+    for (y = 0; y < VDP_ROWS - 1; y++)
+    {
+        for (x = 0; x < VDP_COLS; x++)
+        {
+            ch = vdpReadCharAt(x, y + 1);
+            vdpWriteCharAt(x, y, ch);
+        }
+    }
+
+    for (x = 0; x < VDP_COLS; x++)
+        vdpWriteCharAt(x, VDP_ROWS - 1, 0x00);
+
+    if (vdpEditCurY > 0)
+        vdpEditCurY--;
+}
+
+//--------------------------------------------------------------------------------------
+// ESCREVER CARACTERE DIGITADO
+//--------------------------------------------------------------------------------------
+void vdpEditPutChar(unsigned char ch)
+{
+    int ix;
+
+    vdpEditLoadLineFromCursor();
+
+    if (vdpEditLineLen >= (VDP_MAX_LINE - 1))
+        return;
+
+    for (ix = vdpEditLineLen; ix >= vdpEditCursorPos; ix--)
+        vdpEditLine[ix + 1] = vdpEditLine[ix];
+
+    vdpEditLine[vdpEditCursorPos] = ch;
+    vdpEditLineLen++;
+    vdpEditCursorPos++;
+    vdpEditRenderLogicalLine(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineEndY, vdpEditLine, vdpEditCursorPos);
+}
+
+//--------------------------------------------------------------------------------------
+// BACKSPACE / DELETE
+//--------------------------------------------------------------------------------------
+void vdpEditBackspace(void)
+{
+    int ix;
+
+    vdpEditLoadLineFromCursor();
+
+    if (vdpEditCursorPos <= 0 || vdpEditLineLen <= 0)
+        return;
+
+    vdpEditCursorPos--;
+
+    for (ix = vdpEditCursorPos; ix < vdpEditLineLen; ix++)
+        vdpEditLine[ix] = vdpEditLine[ix + 1];
+
+    vdpEditLineLen--;
+    vdpEditRenderLogicalLine(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineEndY, vdpEditLine, vdpEditCursorPos);
+}
+
+void vdpEditDelete(void)
+{
+    int ix;
+
+    vdpEditLoadLineFromCursor();
+
+    if (vdpEditCursorPos >= vdpEditLineLen || vdpEditLineLen <= 0)
+        return;
+
+    for (ix = vdpEditCursorPos; ix < vdpEditLineLen; ix++)
+        vdpEditLine[ix] = vdpEditLine[ix + 1];
+
+    vdpEditLineLen--;
+    vdpEditRenderLogicalLine(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineEndY, vdpEditLine, vdpEditCursorPos);
+}
+
+//--------------------------------------------------------------------------------------
+// MOVIMENTO DO CURSOR
+//--------------------------------------------------------------------------------------
+void vdpEditCursorLeft(void)
+{
+    if (vdpEditLineLen <= 0)
+    {
+        if (vdpEditCurX > 0)
+            vdpEditCurX--;
+        else if (vdpEditCurY > 0)
+        {
+            vdpEditCurY--;
+            vdpEditCurX = VDP_COLS - 1;
+        }
+
+        vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+        return;
+    }
+
+    if (vdpEditCursorPos > 0)
+        vdpEditCursorPos--;
+
+    vdpEditSetCursorFromLogicalPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen, vdpEditCursorPos);
+}
+
+void vdpEditCursorRight(void)
+{
+    if (vdpEditLineLen <= 0)
+    {
+        if (vdpEditCurX < (VDP_COLS - 1))
+            vdpEditCurX++;
+        else if (vdpEditCurY < (VDP_ROWS - 1))
+        {
+            vdpEditCurY++;
+            vdpEditCurX = 0;
+        }
+
+        vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+        return;
+    }
+
+    if (vdpEditCursorPos < vdpEditLineLen)
+        vdpEditCursorPos++;
+
+    vdpEditSetCursorFromLogicalPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen, vdpEditCursorPos);
+}
+
+void vdpEditCursorUp(void)
+{
+    int firstWidth;
+    int absCol;
+    int localPos;
+    int rowIdx;
+
+    if (vdpEditLineLen <= 0)
+    {
+        if (vdpEditCurY > 0)
+            vdpEditCurY--;
+
+        vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+        return;
+    }
+
+    firstWidth = VDP_COLS - vdpEditLineStartX;
+
+    if (vdpEditCursorPos < firstWidth)
+    {
+        rowIdx = 0;
+        absCol = vdpEditLineStartX + vdpEditCursorPos;
+    }
+    else
+    {
+        localPos = vdpEditCursorPos - firstWidth;
+        rowIdx = 1 + (localPos / VDP_COLS);
+        absCol = localPos % VDP_COLS;
+    }
+
+    if (rowIdx > 0)
+    {
+        rowIdx--;
+
+        if (rowIdx == 0)
+        {
+            if (absCol < vdpEditLineStartX)
+                absCol = vdpEditLineStartX;
+
+            vdpEditCursorPos = absCol - vdpEditLineStartX;
+        }
+        else
+        {
+            vdpEditCursorPos = firstWidth + ((rowIdx - 1) * VDP_COLS) + absCol;
+        }
+    }
+
+    vdpEditSetCursorFromLogicalPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen, vdpEditCursorPos);
+}
+
+void vdpEditCursorDown(void)
+{
+    int firstWidth;
+    int absCol;
+    int localPos;
+    int rowIdx;
+
+    if (vdpEditLineLen <= 0)
+    {
+        if (vdpEditCurY < (VDP_ROWS - 1))
+            vdpEditCurY++;
+
+        vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+        return;
+    }
+
+    firstWidth = VDP_COLS - vdpEditLineStartX;
+
+    if (vdpEditCursorPos < firstWidth)
+    {
+        rowIdx = 0;
+        absCol = vdpEditLineStartX + vdpEditCursorPos;
+    }
+    else
+    {
+        localPos = vdpEditCursorPos - firstWidth;
+        rowIdx = 1 + (localPos / VDP_COLS);
+        absCol = localPos % VDP_COLS;
+    }
+
+    rowIdx++;
+
+    if (rowIdx == 0)
+        vdpEditCursorPos = absCol - vdpEditLineStartX;
+    else
+        vdpEditCursorPos = firstWidth + ((rowIdx - 1) * VDP_COLS) + absCol;
+
+    if (vdpEditCursorPos > vdpEditLineLen)
+        vdpEditCursorPos = vdpEditLineLen;
+
+    vdpEditSetCursorFromLogicalPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen, vdpEditCursorPos);
+}
+
+
+//--------------------------------------------------------------------------------------
+// LER LINHA FISICA DO VDP
+//--------------------------------------------------------------------------------------
+int vdpReadPhysicalLine(int y, char *dest, int maxLen)
+{
+    int x;
+    int p;
+    unsigned char ch;
+
+    p = 0;
+
+    for (x = 0; x < VDP_COLS; x++)
+    {
+        ch = vdpReadCharAt(x, y);
+
+        if (p < maxLen - 1)
+        {
+            dest[p] = ch;
+            p++;
+        }
+    }
+
+    dest[p] = 0;
+
+    return p;
+}
+
+
+//--------------------------------------------------------------------------------------
+// TRIM A DIREITA
+//--------------------------------------------------------------------------------------
+void vdpTrimRight(char *s)
+{
+    int i;
+
+    i = 0;
+
+    while (s[i])
+        i++;
+
+    i--;
+
+    while (i >= 0 && s[i] == ' ')
+    {
+        s[i] = 0;
+        i--;
+    }
+}
+
+static int vdpReadTrimmedPhysicalLine(int y, char *dest, int maxLen)
+{
+    vdpReadPhysicalLine(y, dest, maxLen);
+    vdpTrimRight(dest);
+    return strlen(dest);
+}
+
+static int vdpEditReadLogicalLineAt(int x, int y, char *dest, int maxLen, int *pStartX, int *pStartY, int *pEndY)
+{
+    char temp[VDP_COLS + 1];
+    int startX = 0;
+    int startY = 0;
+    int endY = 0;
+    int p;
+    int ix;
+    int lenLine;
+
+    vdpEditGetLogicalBounds(x, y, &startX, &startY, &endY);
+
+    p = 0;
+
+    for (ix = startX; ix < VDP_COLS; ix++)
+    {
+        temp[ix - startX] = vdpReadCharAt(ix, startY);
+    }
+    temp[VDP_COLS - startX] = 0x00;
+
+    for (ix = 0; temp[ix] && p < (maxLen - 1); ix++)
+        dest[p++] = temp[ix];
+
+    lenLine = ix;
+
+    y = startY + 1;
+    while (lenLine == (VDP_COLS - startX) && y < VDP_ROWS)
+    {
+        vdpReadPhysicalLine(y, temp, VDP_COLS + 1);
+
+        for (ix = 0; temp[ix] && p < (maxLen - 1); ix++)
+            dest[p++] = temp[ix];
+
+        lenLine = ix;
+        if (lenLine < VDP_COLS)
+            break;
+
+        y++;
+    }
+
+    dest[p] = 0x00;
+
+    if (pStartX)
+        *pStartX = startX;
+    if (pStartY)
+        *pStartY = startY;
+    if (pEndY)
+        *pEndY = y > endY ? y : endY;
+
+    return p;
+}
+
+static void vdpEditLoadLineFromCursor(void)
+{
+    if (vdpEditLineLen > 0)
+        return;
+
+    vdpEditLineLen = vdpEditReadLogicalLineAt(
+        vdpEditCurX,
+        vdpEditCurY,
+        vdpEditLine,
+        VDP_MAX_LINE,
+        &vdpEditLineStartX,
+        &vdpEditLineStartY,
+        &vdpEditLineEndY
+    );
+
+    vdpEditCursorPos = vdpEditGetLogicalCursorPos(vdpEditLineStartX, vdpEditLineStartY, vdpEditLineLen);
+}
+
+
+//--------------------------------------------------------------------------------------
+// TESTA SE LINHA PARECE COMECO DE LINHA BASIC
+// Ex: "10 PRINT", "100 GOTO", etc.
+//--------------------------------------------------------------------------------------
+int vdpLineStartsWithNumber(char *s)
+{
+    int i;
+    int found;
+
+    i = 0;
+    found = 0;
+
+    while (s[i] == ' ')
+        i++;
+
+    while (s[i] >= '0' && s[i] <= '9')
+    {
+        found = 1;
+        i++;
+    }
+
+    return found;
+}
+
+
+//--------------------------------------------------------------------------------------
+// LER LINHA LOGICA DO VDP
+//
+// Ideia:
+// - sobe ate achar uma linha que começa com numero
+// - junta essa linha e as linhas abaixo
+// - para quando encontrar outra linha que começa com numero
+//--------------------------------------------------------------------------------------
+int vdpReadLogicalBasicLine(int y, char *dest, int maxLen)
+{
+    char temp[VDP_COLS + 1];
+    int startY;
+    int p;
+    int i;
+    int lenLine;
+
+    startY = y;
+
+    while (startY > 0)
+    {
+        lenLine = vdpReadTrimmedPhysicalLine(startY - 1, temp, VDP_COLS + 1);
+
+        if (lenLine < VDP_COLS)
+            break;
+
+        startY--;
+    }
+
+    p = 0;
+
+    y = startY;
+
+    while (y < VDP_ROWS)
+    {
+        lenLine = vdpReadTrimmedPhysicalLine(y, temp, VDP_COLS + 1);
+
+        i = 0;
+
+        while (temp[i])
+        {
+            if (p < maxLen - 1)
+            {
+                dest[p] = temp[i];
+                p++;
+            }
+
+            i++;
+        }
+
+        if (lenLine < VDP_COLS)
+            break;
+
+        y++;
+    }
+
+    dest[p] = 0;
+    vdpTrimRight(dest);
+
+    return p;
+}
+
+//--------------------------------------------------------------------------------------
+// ENTER
+//--------------------------------------------------------------------------------------
+void vdpEditEnter(void)
+{
+    unsigned short vNumLin;
+    unsigned long vLineAddr;
+    unsigned char *pLineAddr;
+
+    if (vdpEditLineLen > 0)
+    {
+        memcpy(vbufInput, vdpEditLine, vdpEditLineLen);
+        *(vbufInput + vdpEditLineLen) = 0x00;
+
+        if (vdpLineStartsWithNumber(vbufInput))
+        {
+            vNumLin = atoi(vbufInput);
+            vLineAddr = findNumberLine(vNumLin, 0, 0);
+
+            if (vLineAddr)
+            {
+                pLineAddr = (unsigned char *)vLineAddr;
+
+                if (((*(pLineAddr + 3) << 8) | *(pLineAddr + 4)) == vNumLin)
+                    delLine(vbufInput);
+            }
+        }
+
+        printText("\r\n\0");
+        processLine();
+
+        if (!*pTypeLine && *pProcess)
+            printText("\r\nOK\0");
+
+        if (!*pTypeLine && *pProcess)
+            printText("\r\n\0");
+    }
+    else
+    {
+        printText("\r\n\0");
+    }
+
+    vbufInput[0] = 0x00;
+    vdpEditLine[0] = 0x00;
+    vdpEditLineLen = 0;
+    vdpEditCursorPos = 0;
+
+    vdpEditLineStartX = 0;
+    vdpEditLineStartY = vdpEditFindNextInputRow();
+    vdpEditLineEndY = vdpEditLineStartY;
+    vdpEditCurX = vdpEditLineStartX;
+    vdpEditCurY = vdpEditLineStartY;
+
+    vdp_set_cursor(vdpEditCurX, vdpEditCurY);
+}
+
+//--------------------------------------------------------------------------------------
+// PROCESSAR TECLA
+//--------------------------------------------------------------------------------------
+void vdpEditProcessKey(int key)
+{
+    if (key == KEY_ENTER || key == 0x0A)
+    {
+        vdpEditEnter();
+    }
+    else if (key == KEY_BACKSPACE)
+    {
+        vdpEditBackspace();
+    }
+    else if (key == KEY_DELETE || key == 0x7F || key == 0x04)
+    {
+        vdpEditDelete();
+    }
+    else if (key == KEY_LEFT)
+    {
+        vdpEditCursorLeft();
+    }
+    else if (key == KEY_RIGHT)
+    {
+        vdpEditCursorRight();
+    }
+    else if (key == KEY_UP)
+    {
+        vdpEditCursorUp();
+    }
+    else if (key == KEY_DOWN)
+    {
+        vdpEditCursorDown();
+    }
+    else
+    {
+        if (key >= 32 && key <= 126)
+            vdpEditPutChar((unsigned char)key);
+    }
+}
+
+void vdpEditReadEnterLine(char *dest, int maxLen)
+{
+    int len;
+
+    len = vdpEditLineLen;
+    if (len >= (maxLen - 1))
+        len = maxLen - 1;
+
+    memcpy(dest, vdpEditLine, len);
+    dest[len] = 0x00;
 }
