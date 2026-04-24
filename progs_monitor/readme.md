@@ -17,7 +17,7 @@ Rotinas internas sem token continuam fora.
 | `NEXT` | `NEXT [<var>]` | Fecha o laço `FOR` e avança para a próxima iteração. | `NEXT I` |
 | `ON` | `ON <expr> GOTO <l1>,<l2>,...` / `ON <expr> GOSUB <l1>,<l2>,...` | Faz desvio por índice: 1 vai para a primeira linha, 2 para a segunda, e assim por diante. | `ON N GOTO 100,200,300` |
 | `ONERR` | `ONERR GOTO <linha>` | Define uma linha de tratamento para erro. | `ONERR GOTO 900` |
-| `PRINT` | `PRINT <valor>[;|, <valor> ...]` | Mostra texto ou valores na tela. `;` e `,` são aceitos como separadores. | `PRINT "X=";X` |
+| `PRINT` | `PRINT <valor>[;/, <valor> ...]` | Mostra texto ou valores na tela. `;` e `,` são aceitos como separadores. | `PRINT "X=";X` |
 | `REM` | `REM <texto>` | Comentário; o resto da linha é ignorado. | `REM sem efeito` |
 | `RETURN` | `RETURN` | Retorna de um `GOSUB`. | `RETURN` |
 | `SAVE` | `SAVE <arquivo>` | Salva o programa atual no disco em formato textual (igual ao `LIST`) usando o nome informado. | `SAVE CUBE.BAS` |
