@@ -70,6 +70,7 @@ unsigned int vMemTotalSimpVar; // Total de memoria alocada para variaveis simple
 unsigned int vMemTotalArrayVar; // Total de memoria alocada para variaveis de array
 unsigned int vMemTotalString; // Total de memoria alocada para strings 
 unsigned int vMemTotalProg; // Total de memoria alocada para programa
+unsigned int vMemTotalVdpBuffer; // Total de memoria alocada para buffer de video
 unsigned int vMemTotalXBasLoad; // Total de memoria alocada para carregar basic
 unsigned int vMemTotalStack; // Total de memoria alocada para stack
 
@@ -233,6 +234,7 @@ static const struct keyword_token keywords[] =
   {"ONERR",   0xBB},   // .. .. ok
   {"WHILE",   0xBC},   // .. .. ok
   {"WEND",    0xBD},   // .. .. ok
+  {"RESERVED",    0xBE},   // .. .. ok  
   {"ASC",     0xC4},   // .. .. ok
   {"HEX$",    0xC5},   // .. .. ok
   {"BIN$",    0xC6},   // .. .. ok
@@ -359,6 +361,8 @@ void fillRect(int x1, int y1, int x2, int y2, int fillColor);
 unsigned char *topWhile(void);
 int pushWhile(unsigned char *ptr);
 int popWhile(void);
+int saveBasFile(unsigned char* pArquivo);
+int loadBasFile(unsigned char* pArquivo);
 
 // -------------------------------------------------------------------------------
 // Funcoes dos Comandos Basic

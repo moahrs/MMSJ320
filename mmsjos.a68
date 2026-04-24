@@ -43,11 +43,13 @@ mmsjos_func_table:
             dc.l _fsMalloc
             dc.l _fsFindNextCluster
             dc.l _fsFindClusterFree
+            dc.l _OSTaskSuspend
+            dc.l _OSTaskResume
 
 __exit:                                ; exit() functions
 _exit:
-           lea         __stack,A7      ; reset stack
-           trap        #15
+           ;lea         __stack,A7      ; reset stack
+           ;trap        #15
            dc.w        0               ; IDE68K system call 0 -> EXIT (no return)
            jsr         _main           ; when re-started after exit() call
 

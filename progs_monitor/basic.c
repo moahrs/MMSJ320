@@ -22,6 +22,7 @@
 * 18/04/2026  2.0a02  Moacir Jr.   Novas funcoes. Basic Proprio. Ajustes gerais.
 * 19/04/2026  2.0a03  Moacir Jr.   While e WEND. Ajustes gerais.
 * 20/04/2026  2.0a04  Moacir Jr.   Dual chamada, pelo monitor, e pelo mmsjos.
+* 22/04/2026  2.0a05  Moacir Jr.   Buffer video, hex, oct, bin e save e load no disco
 *--------------------------------------------------------------------------------
 * Variables Simples: start at 00800000
 *   --------------------------------------------------------
@@ -58,7 +59,7 @@
 #include "../mmsjosapi.h"
 #include "basic.h"
 
-#define versionBasic "2.0a04"
+#define versionBasic "2.0a05"
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
@@ -350,12 +351,13 @@ void main(void)
     // Se veio do mmsjos, 1, então usa os que o mmsjos passou usando malloc
     if (*startBasic)
     {
-        pStartSimpVar  = *startBasic0;   // Area Variaveis Simples
-        pStartArrayVar = *startBasic0 + 0x02000;   // Area Arrays
-        pStartString   = *startBasic0 + 0x08000;   // Area Strings
-        pStartProg     = *startBasic0 + 0x10000;   // Area Programa  deve ser 0x00810000
-        pStartXBasLoad = *startBasic0 + 0x20000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
-        pStartStack    = *startBasic0 + 0x30000;   // Area variaveis sistema e stack pointer
+        pStartSimpVar   = *startBasic0;   // Area Variaveis Simples
+        pStartArrayVar  = *startBasic0 + 0x02000;   // Area Arrays
+        pStartString    = *startBasic0 + 0x06000;   // Area Strings
+        pStartProg      = *startBasic0 + 0x08000;   // Area Programa  deve ser 0x00810000
+        pStartVdpBuffer = *startBasic0 + 0x10000;   // Area de Buffer para trabalhar os dados do video antes de enviar pra VRAM 
+        pStartXBasLoad  = *startBasic0 + 0x04000;   // Area onde será importado o programa em basic texto a ser tokenizado depois
+        pStartStack     = *startBasic0 + 0x10000;   // Area variaveis sistema e stack pointer
 
         vMemTotalSimpVar = 8192;
         vMemTotalArrayVar = 24576;
@@ -363,6 +365,9 @@ void main(void)
         vMemTotalProg = 65536;
         vMemTotalXBasLoad = 65536;
         vMemTotalStack = 8192;
+
+        if (*startBasic == 1)
+            OSTaskSuspend(TASK_MMSJOS_MAIN);
     }
     else
     {
@@ -399,10 +404,14 @@ void main(void)
         #endif
     }
 
+    vMemTotalVdpBuffer = 16384;
+
     if (!*startBasic || *startBasic == 1)
     {
         if (!*startBasic)
             clearScr();
+        else
+            printText("\r\n\0");
 
         printText("MMSJ-BASIC v"versionBasic);
         printText("\r\n\0");
@@ -446,13 +455,9 @@ void main(void)
                 printText("\r\n\0");
 
                 processLine();
-if (*debugOn)
-{
-writeLongSerial("pStartSimpVar: [");
-itoa(pStartSimpVar, sqtdtam, 16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
+
+                vbufInput[0] = 0x00;
+                vBufptr = &vbufInput;
 
                 if (!*pTypeLine && *pProcess)
                     printText("\r\nOK\0");
@@ -512,6 +517,9 @@ writeLongSerial("]\r\n");
                     break;
             }
 
+            vbufInput[0] = 0x00;
+            vBufptr = &vbufInput;
+
             // Executar, se nao houve erros
             if (*startBasic != 2)
             {
@@ -526,8 +534,13 @@ writeLongSerial("]\r\n");
             printText("Loading File Error...\r\n\0");
         }
     }
-
+        
     printText("\r\n\0");
+    printText("Ok\r\n\0");
+    printText("#>");
+
+    if (*startBasic == 1)
+        OSTaskResume(TASK_MMSJOS_MAIN);
 }
 
 /******************************************************************************************/
@@ -554,6 +567,10 @@ unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
 
     vtecant = 0x00;
     vbufptr = &vbufInput;
+
+    // Entrada normal sempre começa com buffer limpo.
+    if (pTipo != 'S' && pTipo != 'I' && pTipo != 'R')
+        memset(vbufInput, 0x00, sizeof(vbufInput)); 
 
     // Se for Linha editavel apresenta a linha na tela
     if (pTipo == 'S' || pTipo == 'I' || pTipo == 'R')
@@ -738,12 +755,12 @@ unsigned char inputLineBasic(unsigned int pQtdInput, unsigned char pTipo)
             {
                 pIns = ~pIns;
             }
-            else if (vtec == 0x08 && !pEdit)  // Backspace
+            else if ((vtec == 0x08 || vtec == 0x7F) && !pEdit)  // Backspace/Delete
             {
                 // Digitcao Normal
                 if (vbufptr > &vbufInput)
                 {
-                    *vbufptr--;
+                    vbufptr--;
                     *vbufptr = 0x00;
 
                     if (pTipo != '@')
@@ -945,6 +962,14 @@ void processLine(void)
             {
                 delLine(vLinhaArg);
             }
+            else if (!strcmp(linhacomando,"LOAD") && iy == 4 && *startBasic == 1)
+            {
+                loadBasFile(vLinhaArg);
+            }
+            else if (!strcmp(linhacomando,"SAVE") && iy == 4 && *startBasic == 1)
+            {
+                saveBasFile(vLinhaArg);
+            }
             else if (!strcmp(linhacomando,"XLOAD") && iy == 5)
             {
                 basXBasLoad();
@@ -952,14 +977,6 @@ void processLine(void)
             else if (!strcmp(linhacomando,"XLOAD1K") && iy == 7)
             {
                 basXBasLoad1k();
-if (*debugOn)
-{
-writeLongSerial("pStartSimpVar3: [");
-itoa(pStartSimpVar, sqtdtam, 16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
-
             }
             else if (!strcmp(linhacomando,"TIMER") && iy == 5)
             {
@@ -1022,6 +1039,15 @@ writeLongSerial("]\r\n");
                     strcat(vRetInf.tString, " ");
 
                 strcat(vRetInf.tString, vLinhaArg);
+
+if (*debugOn)  
+{
+    writeLongSerial("Aqui 434.666.0 [\0");
+    writeLongSerial(vRetInf.tString);
+    writeLongSerial("]-[");
+    writeLongSerial(linhacomando);
+    writeLongSerial("]\r\n\0");
+}
 
                 tokenizeLine(vRetInf.tString);
 
@@ -1346,6 +1372,75 @@ void saveLine(unsigned char *pNumber, unsigned char *pTokenized)
     }
 }
 
+static unsigned short basBuildListTextLine(unsigned char *pTokenLine, unsigned char *pOutLine, unsigned short pOutMax, unsigned short *pWrapRows)
+{
+    unsigned short vNumLin;
+    char sNumLin[sizeof(short) * 8 + 1];
+    unsigned char vToken;
+    unsigned char vFirstByte;
+    int ix, iy, iz;
+
+    vNumLin = (*(pTokenLine + 3) << 8) | *(pTokenLine + 4);
+    pTokenLine += 5;
+    ix = 0;
+
+    itoa(vNumLin, sNumLin, 10);
+    iz = 0;
+    while (sNumLin[iz] && ix < (pOutMax - 1))
+        pOutLine[ix++] = sNumLin[iz++];
+
+    if (ix < (pOutMax - 1))
+        pOutLine[ix++] = 0x20;
+
+    vFirstByte = 1;
+
+    while (*pTokenLine && ix < (pOutMax - 3))
+    {
+        vToken = *pTokenLine++;
+
+        if (vToken >= 0x80)
+        {
+            iy = findToken(vToken);
+            iz = 0;
+
+            if (!vFirstByte)
+            {
+                if (isalphas(*(pTokenLine - 2)) || isdigitus(*(pTokenLine - 2)) || *(pTokenLine - 2) == ')')
+                    pOutLine[ix++] = 0x20;
+            }
+            else
+                vFirstByte = 0;
+
+            while (keywords[iy].keyword[iz] && ix < (pOutMax - 1))
+                pOutLine[ix++] = keywords[iy].keyword[iz++];
+
+            if (*pTokenLine != '=' && (vToken < 0xC0 || vToken > 0xEF) && ix < (pOutMax - 1))
+                pOutLine[ix++] = 0x20;
+        }
+        else
+        {
+            pOutLine[ix++] = vToken;
+
+            if (vToken == 0x22 && *pTokenLine >= 0x80 && ix < (pOutMax - 1))
+                pOutLine[ix++] = 0x20;
+        }
+    }
+
+    pOutLine[ix] = '\0';
+
+    if (pWrapRows)
+        *pWrapRows = strlen(pOutLine) / 40;
+
+    if (ix < (pOutMax - 2))
+    {
+        pOutLine[ix++] = '\r';
+        pOutLine[ix++] = '\n';
+        pOutLine[ix] = '\0';
+    }
+
+    return (unsigned short)ix;
+}
+
 //-----------------------------------------------------------------------------
 // Sintaxe:
 //      LIST                : lista tudo
@@ -1362,10 +1457,10 @@ void listProg(unsigned char *pArg, unsigned short pPause)
     unsigned char *vStartList = pStartProg;
     unsigned long vNextList;
     unsigned short vNumLin;
-    char sNumLin [sizeof(short)*8+1], vFirstByte;
     unsigned char vtec;
-    unsigned char vLinhaList[255], sNumPar[10], vToken;
-    int iw, ix, iy, iz, vPauseRowCounter;
+    unsigned char vLinhaList[255], sNumPar[10];
+    unsigned short iw = 0;
+    int ix, iy, iz, vPauseRowCounter;
     unsigned char sqtdtam[20];
 
     if (pArg[0] != 0x00 && strchr(pArg,'-') != 0x00)
@@ -1426,95 +1521,11 @@ void listProg(unsigned char *pArg, unsigned short pPause)
             if (vNumLin > pFim)
                 break;
 
-            vStartList += 5;
-            ix = 0;
-
-            // Coloca numero da linha na listagem
-            itoa(vNumLin, sNumLin, 10);
-            iz = 0;
-
-            while (sNumLin[iz])
-            {
-                vLinhaList[ix++] = sNumLin[iz++];
-            }
-
-            vLinhaList[ix++] = 0x20;
-            vFirstByte = 1;
-
-            // Pega caracter a caracter da linha
-            while (*vStartList)
-            {
-                vToken = *vStartList++;
-
-                // Verifica se é token, se for, muda pra escrito
-                if (vToken >= 0x80)
-                {
-                    // Procura token na lista
-                    iy = findToken(vToken);
-                    iz = 0;
-
-                    if (!vFirstByte)
-                    {
-                        if (isalphas(*(vStartList - 2)) || isdigitus(*(vStartList - 2)) || *(vStartList - 2) == ')')
-                            vLinhaList[ix++] = 0x20;
-                    }
-                    else
-                        vFirstByte = 0;
-
-                    while (keywords[iy].keyword[iz])
-                    {
-                        vLinhaList[ix++] = keywords[iy].keyword[iz++];
-                    }
-
-                    // Se nao for intervalo de funcao, coloca espaço depois do comando
-                    if (*vStartList != '=' && (vToken < 0xC0 || vToken > 0xEF))
-                        vLinhaList[ix++] = 0x20;
-
-/*                    if (*vStartList != 0x28)
-                        vLinhaList[ix++] = 0x20;*/
-                }
-                else
-                {
-                    // Apenas inclui na listagem
-                    //if (strchr("+-*^/=;:><", *vTempPointer) || *vTempPointer >= 0xF0)
-                    vLinhaList[ix++] = vToken;
-
-                    // Se nao for aspas e o proximo for um token, inclui um espaço
-                    if (vToken == 0x22 && *vStartList >=0x80)
-                        vLinhaList[ix++] = 0x20;
-
-                    /*if (isdigitus(vToken) && *vStartList!=')' && *vStartList!='.' && *vStartList!='"' && !isdigitus(*vStartList))
-                        vLinhaList[ix++] = 0x20;*/
-                }
-            }
-
-            vLinhaList[ix] = '\0';
-            iw = strlen(vLinhaList) / 40;
-
-            vLinhaList[ix++] = '\r';
-            vLinhaList[ix++] = '\n';
-            vLinhaList[ix++] = '\0';
+            basBuildListTextLine(vStartList, vLinhaList, sizeof(vLinhaList), &iw);
 
             printText(vLinhaList);
 
             vPauseRowCounter = vPauseRowCounter + 1 + iw;
-
-/*writeLongSerial("Aqui 332.666.0-[");
-itoa(pPause,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(vPauseRowCounter,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(iw,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(videoCursorPosRowY,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(videoCursorPosRow,sqtdtam,10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");*/
 
             if (pPause && vPauseRowCounter >= vdpMaxRows)
             {
@@ -2075,6 +2086,9 @@ int basXBasLoad(void)
             *vErroProc = 20;
     }
 
+    vbufInput[0] = 0x00;
+    vBufptr = &vbufInput;
+
     return 0;
 }
 
@@ -2120,50 +2134,15 @@ int basXBasLoad1k(void)
                     if (*vbufInput == 0x00)
                         break;
                     processLine();
-if (*debugOn)
-{
-writeLongSerial("pStartSimpVar6: [");
-itoa(pStartSimpVar, sqtdtam, 16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
                 }
-if (*debugOn)
-{
-writeLongSerial("pStartSimpVar7: [");
-itoa(pStartSimpVar, sqtdtam, 16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
             }
             else
             {
-if (*debugOn)
-{
-writeLongSerial("pStartSimpVar8: [");
-itoa(pStartSimpVar, sqtdtam, 16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
 
                 break;
             }
-if (*debugOn)
-{
-writeLongSerial("pStartSimpVar9: [");
-itoa(pStartSimpVar, sqtdtam, 16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
         }
 
-if (*debugOn)
-{
-writeLongSerial("pStartSimpVar1: [");
-itoa(pStartSimpVar, sqtdtam, 16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
         printText("Done.\r\n");
     }
     else
@@ -2174,13 +2153,9 @@ writeLongSerial("]\r\n");
             *vErroProc = 20;
     }
 
-if (*debugOn)
-{
-writeLongSerial("pStartSimpVar2: [");
-itoa(pStartSimpVar, sqtdtam, 16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n");
-}
+    vbufInput[0] = 0x00;
+    vBufptr = &vbufInput;
+
     return 0;
 }
 
@@ -2431,6 +2406,13 @@ int executeToken(unsigned char pToken)
             if (pToken < 0x80)  // variavel sem LET
             {
                 *pointerRunProg = *pointerRunProg - 1;
+if (*debugOn)
+{
+writeLongSerial("Aqui 565.666.0 [\0");
+itoa(pToken, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+}                
                 vReta = basLet();
             }
             else // Nao forem operadores logicos
@@ -5677,6 +5659,200 @@ writeLongSerial("]\r\n");
     return 0;
 }
 
+//--------------------------------------------------------------------------------------
+//  SAVE <name> salva program basic atual na memoria, no disco
+//--------------------------------------------------------------------------------------
+int saveBasFile(unsigned char* pArquivo)
+{
+    unsigned char fileName[32];
+    unsigned short ix;
+    unsigned long vNextList;
+    unsigned char *vStartList;
+    unsigned char vLinhaList[255];
+    unsigned long vOffset;
+    unsigned short vLen, vChunk, vPos;
+    unsigned long vClusterOld;
+
+    if (*startBasic != 1)
+    {
+        *vErroProc = 27;
+        return 0;
+    }
+
+    if (!pArquivo || !*pArquivo)
+    {
+        *vErroProc = 14;
+        return 0;
+    }
+
+    // FS local trabalha com short name em uppercase.
+    ix = 0;
+    while (pArquivo[ix] && ix < (sizeof(fileName) - 1))
+    {
+        fileName[ix] = toupper(pArquivo[ix]);
+        ix++;
+    }
+    fileName[ix] = 0x00;
+
+    vClusterOld = fsGetClusterDir();
+    fsChangeDir("/");
+
+    if (fsOpenFile(fileName) == RETURN_OK)
+    {
+        if (fsDelFile(fileName) != RETURN_OK)
+        {
+            fsSetClusterDir(vClusterOld);
+            *vErroProc = 27;
+            return 0;
+        }
+    }
+
+    if (fsCreateFile(fileName) != RETURN_OK)
+    {
+        fsSetClusterDir(vClusterOld);
+        *vErroProc = 27;
+        return 0;
+    }
+
+    vStartList = pStartProg;
+    vOffset = 0;
+
+    while (1)
+    {
+        vNextList = (*(vStartList) << 16) | (*(vStartList + 1) << 8) | *(vStartList + 2);
+
+        if (!vNextList)
+            break;
+
+        vLen = basBuildListTextLine(vStartList, vLinhaList, sizeof(vLinhaList), 0);
+        vPos = 0;
+        while (vPos < vLen)
+        {
+            vChunk = (unsigned short)(vLen - vPos);
+            if (vChunk > 128)
+                vChunk = 128;
+
+            if (fsWriteFile(fileName, vOffset, &vLinhaList[vPos], (unsigned char)vChunk) != RETURN_OK)
+            {
+                fsCloseFile(fileName, 0);
+                fsSetClusterDir(vClusterOld);
+                *vErroProc = 27;
+                return 0;
+            }
+
+            vOffset += vChunk;
+            vPos += vChunk;
+        }
+
+        vStartList = (unsigned char *)vNextList;
+    }
+
+    fsCloseFile(fileName, 1);
+    fsSetClusterDir(vClusterOld);
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+//  LOAD <name> carrega um programa do disco
+//--------------------------------------------------------------------------------------
+int loadBasFile(unsigned char* pArquivo)
+{
+    unsigned char fileName[32];
+    unsigned short ix;
+    unsigned char countTec = 0, vByte;
+    unsigned char *vTemp;
+    unsigned char *vBufptr = &vbufInput;
+    unsigned long vClusterOld;
+
+    if (*startBasic != 1)
+    {
+        *vErroProc = 27;
+        return 0;
+    }
+
+    if (!pArquivo || !*pArquivo)
+    {
+        *vErroProc = 14;
+        return 0;
+    }
+
+    ix = 0;
+    while (pArquivo[ix] && ix < (sizeof(fileName) - 1))
+    {
+        fileName[ix] = toupper(pArquivo[ix]);
+        ix++;
+    }
+    fileName[ix] = 0x00;
+
+    // Limpa programa atual antes de carregar o novo.
+    *pStartProg = 0x00;
+    *(pStartProg + 1) = 0x00;
+    *(pStartProg + 2) = 0x00;
+    *nextAddrLine = pStartProg;
+    *firstLineNumber = 0;
+    *addrFirstLineNumber = 0;
+    *nextAddrSimpVar = pStartSimpVar;
+    *nextAddrArrayVar = pStartArrayVar;
+    *nextAddrString = pStartString;
+    clearRuntimeData((unsigned char*)forStack);
+
+    // Carregar Arquivo do disco na memoria
+    if (*startBasic != 2)
+        printText("Loading...\r\n");
+
+    // Limpando memoria
+    memset(pStartXBasLoad,0x1A,vMemTotalXBasLoad);
+    // Carrega do disco
+    verro = 0x00;
+    vClusterOld = fsGetClusterDir();
+    fsChangeDir("/");
+    loadFile(fileName, (unsigned long*)pStartXBasLoad);
+    fsSetClusterDir(vClusterOld);
+    if (!verro)
+    {
+        // Processar
+        if (*startBasic != 2)
+            printText("Processing...\r\n");
+
+        vTemp = pStartXBasLoad;
+
+        while (1)
+        {
+            vByte = *vTemp++;
+
+            if (vByte != 0x1A)
+            {
+                if (vByte != 0xD && vByte != 0x0A)
+                    *vBufptr++ = vByte;
+                else
+                {
+                    vTemp++;
+                    *vBufptr = 0x00;
+                    vBufptr = &vbufInput;
+                    if (*vbufInput == 0x00)
+                        break;
+                    processLine();
+                }
+            }
+            else
+                break;
+        }
+
+        if (*startBasic != 2)
+            printText("Done.\r\n");
+    }
+    else
+    {
+        printText("Loading File Error...\r\n\0");
+    }
+
+    vbufInput[0] = 0x00;
+    vBufptr = &vbufInput;
+
+    return 0;
+}
+
 /*****************************************************************************/
 /* FUNCOES BASIC                                                             */
 /*****************************************************************************/
@@ -6335,7 +6511,7 @@ int basTrig(unsigned char pFunc)
 }
 
 //--------------------------------------------------------------------------------------
-//
+//  ASC("x") devolve o codigo ascii do caracter
 //--------------------------------------------------------------------------------------
 int basAsc(void)
 {

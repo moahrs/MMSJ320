@@ -350,7 +350,7 @@ void basicTask(void *pData)
     unsigned char *linhaarg = (unsigned char*)pData;
 
     // Aloca espaços para o interpretador BASIC e executa ele
-    *startBasic0 = fsMalloc(204800);
+    *startBasic0 = fsMalloc(221184);
 
     if (!*startBasic0)
     {

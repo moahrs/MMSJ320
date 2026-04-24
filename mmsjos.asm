@@ -719,8 +719,8 @@ _basicTask:
 ; unsigned char *linhaarg = (unsigned char*)pData;
        move.l    8(A6),D2
 ; // Aloca espaços para o interpretador BASIC e executa ele
-; *startBasic0 = fsMalloc(204800);
-       pea       204800
+; *startBasic0 = fsMalloc(221184);
+       pea       221184
        jsr       _fsMalloc
        addq.w    #4,A7
        move.l    (A2),A0

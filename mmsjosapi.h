@@ -3,7 +3,7 @@
 
 // Function Shared Definitions
 #define MMSJOS_FUNC_TABLE    0x00800032
-#define MGUI_FUNC_TABLE      0x00805576
+#define MGUI_FUNC_TABLE      0x0080557E
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);
@@ -32,6 +32,8 @@ typedef unsigned long (*fsMallocType)(unsigned long vMemSize);
 typedef unsigned long (*fsFindNextClusterType)(unsigned long vclusteratual, unsigned char vtype);
 typedef unsigned long (*fsFindClusterFreeType)(unsigned char vtype);
 typedef unsigned char (*OSTimeDlyHMSMType)(unsigned char hours, unsigned char minutes, unsigned char seconds, unsigned int ms);
+typedef unsigned char (*OSTaskSuspendType)(unsigned char prio);
+typedef unsigned char (*OSTaskResumeType)(unsigned char prio);
 
 // MGUI Struct for Functions
 typedef void (*writesxyType)(unsigned short x, unsigned short y, unsigned char sizef, unsigned char *msgs, unsigned short pcolor, unsigned short pbcolor);
@@ -93,6 +95,8 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define fsMalloc ((fsMallocType *)(unsigned long)MMSJOS_FUNC_TABLE)[22] // Índice da função
 #define fsFindNextCluster ((fsFindNextClusterType *)(unsigned long)MMSJOS_FUNC_TABLE)[23] // Índice da função
 #define fsFindClusterFree ((fsFindClusterFreeType *)(unsigned long)MMSJOS_FUNC_TABLE)[24] // Índice da função
+#define OSTaskSuspend ((OSTaskSuspendType *)(unsigned long)MMSJOS_FUNC_TABLE)[25] // Índice da função
+#define OSTaskResume ((OSTaskResumeType *)(unsigned long)MMSJOS_FUNC_TABLE)[26] // Índice da função
 
 // MGUI define functions
 #define writesxy ((writesxyType *)(unsigned long)MGUI_FUNC_TABLE)[0] // Índice da função
