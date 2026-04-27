@@ -27,8 +27,7 @@ Base: parser real dos arquivos `monitor.c` e `mmsjos.c`.
 | `RUNSO` | `RUNSO` | Executa o sistema operacional previamente carregado. | `RUNSO` |  |
 | `DEBUG` | `DEBUG` | Alterna modo de depuração (on/off). | `DEBUG` |  |
 | `DUMP` | `DUMP <endereco_hex> <quantidade> <colunas>` | Dump de memória em formato geral. | `DUMP 006020A0 128 16` |  |
-| `DDUUMMPP` | `DDUUMMPP` | Atalho fixo de debug para dump em `6020A0h` com 128 bytes. | `DDUUMMPP` |  |
-| `DUMPS` | `DUMPS <endereco_hex> <quantidade>` | Dump simplificado de memória. | `DUMPS 006020A0 128` |  |
+| `DUMPS` | `DUMPS <endereco_hex> <quantidade>` | Dump de memória para serial. | `DUMPS 006020A0 128` |  |
 | `DUMPW` | `DUMPW <endereco_hex> <quantidade> <colunas>` | Dump de memória em formato de janela. | `DUMPW 006020A0 128 16` |  |
 
 ## MMSJOS
@@ -50,7 +49,7 @@ Base: parser real dos arquivos `monitor.c` e `mmsjos.c`.
 | `CD` | `CD <diretorio>` | Muda diretório atual. | `CD /MGUI` | Trata também `..` e `/`. |
 | `RD` | `RD <diretorio>` | Remove diretório. | `RD TEMP` |  |
 | `STOF` | `STOF <arquivo>` | Recebe via serial e grava em arquivo. | `STOF TESTE.BIN` |  |
-| `STOR` | `STOR <arquivo>` | Recebe via serial e executa via rotina do SO. | `STOR TESTE.BIN` | Fluxo exato depende de `fsLoadSerialToRun`. |
+| `STOR` | `STOR <endereço memoria>` | Recebe via serial e executa via rotina do SO. | `STOR TESTE.BIN` | Fluxo exato depende de `fsLoadSerialToRun`. |
 | `DATE` | `DATE [parametros]` | Comando reservado. | `DATE` | `TBD` |
 | `TIME` | `TIME [parametros]` | Comando reservado. | `TIME` | `TBD` |
 | `FORMAT` | `FORMAT <rotulo_ou_parametro>` | Formata unidade com `fsFormat(0x5678, argumento)`. | `FORMAT DISCO` | Significado exato do argumento ainda precisa confirmação. |
