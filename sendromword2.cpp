@@ -8,22 +8,22 @@
 *	  PROTOCOLO DE COMUNICACAO:
 *	  ------------------------------------------
 *	  SENTIDO  
-*	   PC/PIC  COMANDO  FUN��O
+*	   PC/PIC  COMANDO  FUNCAO
 *	      ->   DDDD     INICIA COMUNICACAO
 *	   <-      DDDD     COMUNICACAO ESTABELECIDA
 *	   <- ->   DDdd     RECEBE OU ENVIA DADO (dd)
 *	      ->   EE00     DADO VERIFICADO COM SUCESSO
-*	      ->   EE01     ERRO NA VERIFICA��O DO DADO
+*	      ->   EE01     ERRO NA VERIFICACAO DO DADO
 *	   <-      EE69     ENVIAR BYTE
-*	   <-      EE70     INICIO DO PROCESSO DE GRAVA��O
-*	   <-      EE71     GRAVA��O BYTE OK
-*	   <-      EE72     GRAVA��O BYTE COM ERRO
-*	   <-      EE73     TERMINO DO PROCESSO DE GRAVA��O
+*	   <-      EE70     INICIO DO PROCESSO DE GRAVACAO
+*	   <-      EE71     GRAVACAO BYTE OK
+*	   <-      EE72     GRAVACAO BYTE COM ERRO
+*	   <-      EE73     TERMINO DO PROCESSO DE GRAVACAO
 *	      ->   EEDD     ENCERRA COMUNICACAO
 *	  ------------------------------------------
 *--------------------------------------------------------------------------------
 * Data        Responsavel  Motivo
-* 20/12/2011  Moacir Jr.   cria��o
+* 20/12/2011  Moacir Jr.   criacao
 ********************************************************************************/
 
 #include <stdio.h> 
@@ -32,7 +32,7 @@
 #include <dos.h> 
 #include <iostream>
 #include <string>
-#include <windows.h>  //Necess�rio para: LoadLibrary(), GetProcAddress() e HINSTANCE.
+#include <windows.h>  //Necessario para: LoadLibrary(), GetProcAddress() e HINSTANCE.
 using namespace std;
 
 unsigned char endlsb, endlsb_bkp;
@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 {
   FILE *fp;
 	char xfilebin[100] = "d:\\projetos\\mmsj320\\";
-	int vnumFF = 0, verro, vnumerros, vsendlsb, vsendmsb, vsenddados;
+	int vnumFF = 0, verro, vnumerros, vsendlsb, vsendmsb, vsendhighmsb, vsenddados;
 	unsigned char dados, dadosf;
 	unsigned char dadosrec;
   string argum;
@@ -73,13 +73,13 @@ int main(int argc, char *argv[])
             printf("         <lsb/msb/word> - lsb - grava dado LSB (grava no chip com 0xFE)\n");
             printf("                          msb - grava dado MSB (grava no chip com 0xFF)\n");
             printf("                          word - envia todos os dados na ordem que sao lidos (grava em ambos os chips)\n");
-            printf("         [endinic] - em hex no formato 9999. Default 0000\n");
+            printf("         [endinic] - em hex no formato 999999. Default 000000\n");
             printf("         [verb] -saida detalhado\n");
             return 0;
       	}
   	    else if (argc < 4)
         {
-      	    argum = "0000";
+      	    argum = "000000";
         }
         else 
         {
@@ -97,19 +97,19 @@ int main(int argc, char *argv[])
 	
 	// Inicio da Rotina
     if (showVerb)
-    	printf(">Iniciando Programa��o do Modulo via porta Serial. Usando %s.\n", argv[1]);
+    	printf(">Iniciando Programacao do Modulo via porta Serial. Usando %s.\n", argv[1]);
 
     if (showVerb)
 	    printf(">Inicializando Porta Serial (COM3, 19200, 8, N, 1).\n");
 	IniciaSerial();
 
 	if (showVerb)
-	    printf(">Abrindo Comunica��o.\n");
-	EnviaComando(0xDD);  // Envia Inicio de Comunica��o: 0xDD + 0xDD
+	    printf(">Abrindo Comunicacao.\n");
+	EnviaComando(0xDD);  // Envia Inicio de Comunicacao: 0xDD + 0xDD
 	
 	if (showVerb)
-	    printf(">Aguardando Confirma��o.\n");
-	RecebeComando(); // Recebe Confirma��o de Inicio: 0xDD + 0xDD
+	    printf(">Aguardando Confirmacao.\n");
+	RecebeComando(); // Recebe Confirmacao de Inicio: 0xDD + 0xDD
 	
 	if (RetInput[0] != 0xDD || RetInput[1] != 0xDD)
 		vnumFF = 255;
@@ -128,15 +128,17 @@ int main(int argc, char *argv[])
     }
   }
   else
-	printf(">Comunica��o n�o Estabelecida. Recebido %02X:%02X. Verifique.\n", RetInput[0], RetInput[1]);
+	printf(">Comunicacao nao Estabelecida. Recebido %02X:%02X. Verifique.\n", RetInput[0], RetInput[1]);
 
 	// Enviando Dados (Adress LSB -> MSB -> Dados)
   if (vnumFF != 255) {
-    sscanf(argum.substr(2,2).c_str(), "%x", &endlsb);
-    sscanf(argum.substr(0,2).c_str(), "%x", &endmsb);
+    sscanf(argum.substr(4,2).c_str(), "%x", &endlsb);
+    sscanf(argum.substr(2,2).c_str(), "%x", &endmsb);
+    sscanf(argum.substr(0,2).c_str(), "%x", &endhighmsb);
     
     vsendlsb = 0;
     vsendmsb = 0;
+	vsendhighmsb = 0;
     vsenddados = 0;
 
     printf(">Enviando Dados.\n");
@@ -151,7 +153,7 @@ int main(int argc, char *argv[])
   		if (dados != 0xFF)
   			vnumFF = 0;
 
-      if (!vsendlsb || !vsendmsb || (strcmp(argv[2],"word") == 0) || (strcmp(argv[2],"lsb") == 0 && (endlsb & 0x01) == 0) || (strcmp(argv[2],"msb") == 0 && (endlsb & 0x01) == 1)) 
+      if (!vsendlsb || !vsendmsb || !vsendhighmsb || (strcmp(argv[2],"word") == 0) || (strcmp(argv[2],"lsb") == 0 && (endlsb & 0x01) == 0) || (strcmp(argv[2],"msb") == 0 && (endlsb & 0x01) == 1)) 
       {        
         do 
         {
@@ -159,7 +161,7 @@ int main(int argc, char *argv[])
             RetErro = 0;
       		while (verro)
       		{
-              if (vsendlsb && vsendmsb && (strcmp(argv[2],"msb") == 0 && (endlsb & 0x01) == 0)) 
+              if (vsendlsb && vsendmsb && vsendhighmsb && (strcmp(argv[2],"msb") == 0 && (endlsb & 0x01) == 0)) 
               {
                 vsenddados = 1;            
                 break;
@@ -171,6 +173,8 @@ int main(int argc, char *argv[])
                 dados = endlsb;
               else if (!vsendmsb) 
                 dados = endmsb;
+              else if (!vsendhighmsb) 
+                dados = endhighmsb;
                
       		  // Grava Dados
       		  printf(">%02X",endhighmsb);
@@ -196,7 +200,7 @@ int main(int argc, char *argv[])
                   RetErro = 0;
                 }
 
-             	EnviaCtrl(0x01); // Compara��o Byte Com Erro: 0xEE + 0x01
+             	EnviaCtrl(0x01); // Comparacao Byte Com Erro: 0xEE + 0x01
       		  }
       		  else 
               {
@@ -206,8 +210,8 @@ int main(int argc, char *argv[])
                   printf("\r");
 
         		verro = 0;
-        		EnviaCtrl(0x00); // Compara��o Byte OK: 0xEE + 0x00
-        		RecebeComando(); // Rece Controle Final: 0xEE + 69 ou 70
+        		EnviaCtrl(0x00); // Comparacao Byte OK: 0xEE + 0x00
+        		RecebeComando(); // Recebe Controle Final: 0xEE + 69 ou 70
               
             	if (RetInput[0] == 0xEE && RetInput[1] == 0x70)
                     AcompanhaGravacao();
@@ -217,10 +221,12 @@ int main(int argc, char *argv[])
                 vsendlsb = 1;
               else if (!vsendmsb)
                 vsendmsb = 1;
+              else if (!vsendhighmsb)
+                vsendhighmsb = 1;
               else if (!vsenddados)
                 vsenddados = 1;            
       	    } 
-        } while (!vsendlsb || !vsendmsb || !vsenddados); 
+        } while (!vsendlsb || !vsendmsb || !vsendhighmsb || !vsenddados); 
       }
 
       if (endlsb == 0xFF)
@@ -240,7 +246,7 @@ int main(int argc, char *argv[])
 
   	fclose(fp);
   
-  	printf(">Finalizando Comunica��o.\n");
+  	printf(">Finalizando Comunicacao.\n");
   
   	EnviaCtrl(0xDD); // Envia FIM: 0xEE + 0xDD
 
@@ -252,7 +258,7 @@ int main(int argc, char *argv[])
   	TerminaSerial();
   
   	printf(">Dados Enviados.\n");
-	printf(">Programa��o Concluida. Bom Teste.\n");
+	printf(">Programacao Concluida. Bom Teste.\n");
   }
   
 	return(0);
@@ -303,7 +309,7 @@ void TerminaSerial(){
 	CloseHandle( hSerial );	 //Fecha a porta 
 } 
 
-//envia dados come�ando com 0xDDh 
+//envia dados comecando com 0xDDh 
 DWORD EnviaComando(unsigned char sbyte){ 
 	DWORD BytesEscritos = 0; 
 
@@ -317,7 +323,7 @@ DWORD EnviaComando(unsigned char sbyte){
 	return BytesEscritos;
 } 
 
-// envia controle come�ando com 0xEEh
+// envia controle comecando com 0xEEh
 DWORD EnviaCtrl(unsigned char sbyte){ 
 	DWORD BytesEscritos = 0; 
 
@@ -348,20 +354,20 @@ DWORD RecebeByte(){
 	return BytesLidos;
 }
 
-// acompanha grava��o dos 64 bytes enviados
+// acompanha gravacao dos 64 bytes enviados
 void AcompanhaGravacao(){
   unsigned char vstatus;
   
   vstatus = 1;
   
   if (showVerb)
-    printf("\n>PIC: Iniciando Grava��o 512 Bytes / 256 Words.\n");
+    printf("\n>PIC: Iniciando Gravacao 512 Bytes / 256 Words.\n");
 
   while (vstatus) {
   	RecebeComando(); // Recebe Controle: 0xEE + 71, 72 ou 73
     
     if (RetInput[0] == 0xEE && RetInput[1] == 0x72) {
-  		printf(">PIC: Ocorreu(ram) Erro(s) de Grava��o(�es). Tentando Novamente.\n");
+  		printf(">PIC: Ocorreu(ram) Erro(s) de Gravacao(oes). Tentando Novamente.\n");
     	RecebeComando(); // Recebe Controle: 0xEE + endereco lsb com problema
         if (showVerb)
   		    printf(">PIC: LSB com erro %02X\n", RetInput[1]);
@@ -375,12 +381,12 @@ void AcompanhaGravacao(){
     else if (RetInput[0] == 0xEE && RetInput[1] == 0x71)
     {
         if (showVerb)
-  		    printf(">PIC: Grava��o Executada com Sucesso.\n");
+  		    printf(">PIC: Gravacao Executada com Sucesso.\n");
     }
     else if (RetInput[0] == 0xEE && RetInput[1] == 0x73)
     {
         if (showVerb)
-  	        printf(">PIC: Fim de Grava��o.\n");
+  	        printf(">PIC: Fim de Gravacao.\n");
             
         vstatus = 0;
     }

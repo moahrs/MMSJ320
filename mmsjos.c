@@ -31,7 +31,7 @@
 
 unsigned long runOSMemory;
 
-#define MMSJ_HEAP_LIMIT 0x00900000UL
+#define MMSJ_HEAP_LIMIT 0x00870000UL
 
 FAT32_DIR vdir;
 DISK  vdisk;
@@ -143,6 +143,7 @@ OS_STK StkTask03[STACKSIZEMGUI];
 OS_STK StkTask04[STACKSIZEMGUI];
 OS_STK StkTask05[STACKSIZEMGUI];
 OS_STK StkTask06[STACKSIZEMGUI];
+static unsigned char basicTaskArg[64];
 
 OS_EVENT *shared_sem;
 
@@ -231,6 +232,8 @@ void main(void)
 {
     unsigned char vRetInput;
     int vRetProcCmd;
+
+    *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
 
     clearScr();
     printText("MMSJ-OS v"versionMMSJOS);
@@ -348,9 +351,10 @@ void mguiTask(void *pData)
 void basicTask(void *pData)
 {
     unsigned char *linhaarg = (unsigned char*)pData;
+    unsigned short ix;
 
     // Aloca espaços para o interpretador BASIC e executa ele
-    *startBasic0 = fsMalloc(221184);
+    *startBasic0 = fsMalloc(212992); // 0x00034000 bytes para o Basic, que deve ser carregado a partir do endereco 0x00800000, para o Basic iniciar a execucao a partir desse endereco
 
     if (!*startBasic0)
     {
@@ -363,17 +367,22 @@ void basicTask(void *pData)
     }
     else
     {
-        // Run Basic
+        // Carrega parametros pro Basic
+        memcpy(paramBasic, linhaarg, 64);
         if (*linhaarg)
-            memcpy(paramBasic, linhaarg, 255);
+        {
+            for (ix = 0; ix < 254 && *(linhaarg + ix) != 0x00; ix++)
+                *(paramBasic + ix) = toupper(*(linhaarg + ix));
+
+            *(paramBasic + ix) = 0x00;
+        }
         else
             *paramBasic = 0x00;
 
-        *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
-
+        // Run Basic
         while(1)
         {
-            runOSMemory = 0x00870000; // Endereço provisorio. Sera 0x00020000
+            runOSMemory = 0x00020000; // Testes = 0x00870000, Producao = 0x00020000
             runFromOsCmd();
             break;
         }
@@ -1208,7 +1217,11 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
             }
             else if (!strcmp(linhacomando,"BASIC") && iy == 5)
             {
-                OSTaskCreate(basicTask, (void *)linhaarg, &StkBasic[STACKSIZEBASIC], 11);
+                memset(basicTaskArg, 0x00, sizeof(basicTaskArg));
+                if (linhaarg[0] != 0x00)
+                    memcpy(basicTaskArg, linhaarg, sizeof(basicTaskArg) - 1);
+
+                OSTaskCreate(basicTask, (void *)basicTaskArg, &StkBasic[STACKSIZEBASIC], 11);
             }
             else
             {

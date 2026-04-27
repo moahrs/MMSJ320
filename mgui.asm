@@ -30,11 +30,21 @@
 ; #include "monitor.h"
 ; #include "monitorapi.h"
 ; #include "mgui.h"
+; // Variaveis definidas em mmsj320api.h (incluido pelo mmsjos.c).
+; // Declaradas aqui como extern para evitar multipla definicao.
+; extern unsigned char *startBasic;
+; extern unsigned long *startBasic0;
+; extern unsigned long *startBasic1;
+; extern unsigned long *startBasic2;
+; extern unsigned long *startBasic3;
+; extern unsigned long *startBasic4;
+; extern unsigned long *startBasic5;
+; extern unsigned char *paramBasic;
 ; #define versionMgui "0.7a03"
 ; #define __EM_OBRAS__ 1
 ; unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
 ; unsigned char *vvdgc = 0x00400043; // VDP TMS9118 Registers/Address Mode
-; unsigned char memPosConfig; // Config file
+; unsigned char *memPosConfig = 0x00; // Config file
 ; unsigned char *imgsMenuSys = 0x00; // Images PBM 16x16 each icone in order (64 Bytes Each)
 ; unsigned char vFinalOS; // Atualizar sempre que a compilacao passar desse valor
 ; unsigned char vcorwf; //
@@ -3904,31 +3914,328 @@ _read_status_reg_gui:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
+; // Config INI - Busca direta no buffer de memoria
+; // Busca 'key' dentro de '[section]' em memPosConfig; copia o valor em vOutBuf como string.
+; // Retorna vOutBuf em caso de sucesso, NULL se nao encontrado.
+; // vOutMax: tamanho do vOutBuf incluindo '\0'
+; //-----------------------------------------------------------------------------
+; char *mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax)
+; {
+       xdef      _mguiCfgGet
+_mguiCfgGet:
+       link      A6,#-4
+       movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4,-(A7)
+       move.l    16(A6),D5
+       move.l    12(A6),A3
+       move.l    8(A6),A4
+; unsigned char slen = (unsigned char)strlen(section);
+       move.l    A4,-(A7)
+       jsr       _strlen
+       addq.w    #4,A7
+       move.b    D0,D7
+; unsigned char klen = (unsigned char)strlen(key);
+       move.l    A3,-(A7)
+       jsr       _strlen
+       addq.w    #4,A7
+       move.b    D0,D6
+; unsigned char *p = memPosConfig;
+       move.l    _memPosConfig.L,D2
+; unsigned char i;
+; unsigned char inSection = 0;
+       clr.b     -1(A6)
+; if (!p || !section || !slen || !key || !klen || !vOutBuf || vOutMax == 0)
+       tst.l     D2
+       beq       mguiCfgGet_3
+       move.l    A4,D0
+       beq       mguiCfgGet_3
+       tst.b     D7
+       bne.s     mguiCfgGet_4
+       moveq     #1,D0
+       bra.s     mguiCfgGet_5
+mguiCfgGet_4:
+       clr.l     D0
+mguiCfgGet_5:
+       and.l     #255,D0
+       bne.s     mguiCfgGet_3
+       move.l    A3,D0
+       beq.s     mguiCfgGet_3
+       tst.b     D6
+       bne.s     mguiCfgGet_6
+       moveq     #1,D0
+       bra.s     mguiCfgGet_7
+mguiCfgGet_6:
+       clr.l     D0
+mguiCfgGet_7:
+       and.l     #255,D0
+       bne.s     mguiCfgGet_3
+       tst.l     D5
+       beq.s     mguiCfgGet_3
+       move.b    23(A6),D0
+       bne.s     mguiCfgGet_1
+mguiCfgGet_3:
+; return (char *)0;
+       clr.l     D0
+       bra       mguiCfgGet_8
+mguiCfgGet_1:
+; // Ignore UTF-8 BOM no inicio do arquivo, se existir.
+; if (p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF)
+       move.l    D2,A0
+       move.b    (A0),D0
+       and.w     #255,D0
+       cmp.w     #239,D0
+       bne.s     mguiCfgGet_9
+       move.l    D2,A0
+       move.b    1(A0),D0
+       and.w     #255,D0
+       cmp.w     #187,D0
+       bne.s     mguiCfgGet_9
+       move.l    D2,A0
+       move.b    2(A0),D0
+       and.w     #255,D0
+       cmp.w     #191,D0
+       bne.s     mguiCfgGet_9
+; p += 3;
+       addq.l    #3,D2
+mguiCfgGet_9:
+; while (*p)
+mguiCfgGet_11:
+       move.l    D2,A0
+       tst.b     (A0)
+       beq       mguiCfgGet_13
+; {
+; // Pula espacos e tabulacoes no inicio da linha
+; while (*p == ' ' || *p == '\t') p++;
+mguiCfgGet_14:
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #32,D0
+       beq.s     mguiCfgGet_17
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #9,D0
+       bne.s     mguiCfgGet_16
+mguiCfgGet_17:
+       addq.l    #1,D2
+       bra       mguiCfgGet_14
+mguiCfgGet_16:
+; // Verifica cabecalho de secao [NOME]
+; if (*p == '[')
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #91,D0
+       bne       mguiCfgGet_18
+; {
+; unsigned char *q = p + 1;
+       move.l    D2,D0
+       addq.l    #1,D0
+       move.l    D0,A2
+; inSection = (strncmp((char *)q, section, slen) == 0 && q[slen] == ']') ? 1 : 0;
+       and.l     #255,D7
+       move.l    D7,-(A7)
+       move.l    A4,-(A7)
+       move.l    A2,-(A7)
+       jsr       _strncmp
+       add.w     #12,A7
+       tst.l     D0
+       bne.s     mguiCfgGet_20
+       and.l     #255,D7
+       move.b    0(A2,D7.L),D0
+       cmp.b     #93,D0
+       bne.s     mguiCfgGet_20
+       moveq     #1,D0
+       bra.s     mguiCfgGet_21
+mguiCfgGet_20:
+       clr.b     D0
+mguiCfgGet_21:
+       move.b    D0,-1(A6)
+       bra       mguiCfgGet_30
+mguiCfgGet_18:
+; }
+; else if (inSection)
+       tst.b     -1(A6)
+       beq       mguiCfgGet_30
+; {
+; // Verifica se a chave bate nessa linha
+; if (strncmp((char *)p, key, klen) == 0)
+       and.l     #255,D6
+       move.l    D6,-(A7)
+       move.l    A3,-(A7)
+       move.l    D2,-(A7)
+       jsr       _strncmp
+       add.w     #12,A7
+       tst.l     D0
+       bne       mguiCfgGet_30
+; {
+; unsigned char *q = p + klen;
+       move.l    D2,D0
+       and.l     #255,D6
+       add.l     D6,D0
+       move.l    D0,D3
+; // Pula espacos antes do '='
+; while (*q == ' ' || *q == '\t') q++;
+mguiCfgGet_26:
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #32,D0
+       beq.s     mguiCfgGet_29
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #9,D0
+       bne.s     mguiCfgGet_28
+mguiCfgGet_29:
+       addq.l    #1,D3
+       bra       mguiCfgGet_26
+mguiCfgGet_28:
+; if (*q == '=')
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #61,D0
+       bne       mguiCfgGet_30
+; {
+; q++;
+       addq.l    #1,D3
+; // Pula espacos apos o '='
+; while (*q == ' ' || *q == '\t') q++;
+mguiCfgGet_32:
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #32,D0
+       beq.s     mguiCfgGet_35
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #9,D0
+       bne.s     mguiCfgGet_34
+mguiCfgGet_35:
+       addq.l    #1,D3
+       bra       mguiCfgGet_32
+mguiCfgGet_34:
+; i = 0;
+       clr.b     D4
+; while (*q && *q != '\n' && *q != '\r' && i < (unsigned char)(vOutMax - 1))
+mguiCfgGet_36:
+       move.l    D3,A0
+       move.b    (A0),D0
+       and.l     #255,D0
+       beq       mguiCfgGet_38
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #10,D0
+       beq       mguiCfgGet_38
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #13,D0
+       beq.s     mguiCfgGet_38
+       move.b    23(A6),D0
+       subq.b    #1,D0
+       cmp.b     D0,D4
+       bhs.s     mguiCfgGet_38
+; vOutBuf[i++] = (char)*q++;
+       move.l    D3,A0
+       addq.l    #1,D3
+       move.l    D5,A1
+       move.b    D4,D0
+       addq.b    #1,D4
+       and.l     #255,D0
+       move.b    (A0),0(A1,D0.L)
+       bra       mguiCfgGet_36
+mguiCfgGet_38:
+; // Remove espacos no final
+; while (i > 0 && (vOutBuf[i-1] == ' ' || vOutBuf[i-1] == '\t'))
+mguiCfgGet_39:
+       cmp.b     #0,D4
+       bls       mguiCfgGet_41
+       move.l    D5,A0
+       and.l     #255,D4
+       move.l    D4,D0
+       subq.l    #1,D0
+       move.b    0(A0,D0.L),D0
+       cmp.b     #32,D0
+       beq.s     mguiCfgGet_42
+       move.l    D5,A0
+       and.l     #255,D4
+       move.l    D4,D0
+       subq.l    #1,D0
+       move.b    0(A0,D0.L),D0
+       cmp.b     #9,D0
+       bne.s     mguiCfgGet_41
+mguiCfgGet_42:
+; i--;
+       subq.b    #1,D4
+       bra       mguiCfgGet_39
+mguiCfgGet_41:
+; vOutBuf[i] = '\0';
+       move.l    D5,A0
+       and.l     #255,D4
+       clr.b     0(A0,D4.L)
+; return vOutBuf;
+       move.l    D5,D0
+       bra       mguiCfgGet_8
+mguiCfgGet_30:
+; }
+; }
+; }
+; // Avanca ate o proximo fim de linha
+; while (*p && *p != '\n') p++;
+mguiCfgGet_43:
+       move.l    D2,A0
+       move.b    (A0),D0
+       and.l     #255,D0
+       beq.s     mguiCfgGet_45
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #10,D0
+       beq.s     mguiCfgGet_45
+       addq.l    #1,D2
+       bra       mguiCfgGet_43
+mguiCfgGet_45:
+; if (*p == '\n') p++;
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #10,D0
+       bne.s     mguiCfgGet_46
+       addq.l    #1,D2
+mguiCfgGet_46:
+       bra       mguiCfgGet_11
+mguiCfgGet_13:
+; }
+; return (char *)0;
+       clr.l     D0
+mguiCfgGet_8:
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
 ; void startMGI(void) {
        xdef      _startMGI
 _startMGI:
-       link      A6,#-40
-       movem.l   D2/D3/A2/A3/A4/A5,-(A7)
+       link      A6,#-72
+       movem.l   D2/D3/D4/A2/A3/A4/A5,-(A7)
        lea       _vcorwb.L,A2
        lea       _vcorwf.L,A3
        lea       _writesxy.L,A4
-       lea       _imgsMenuSys.L,A5
+       lea       -32(A6),A5
 ; unsigned char vnomefile[12];
 ; unsigned char lc, ll, *ptr_ico, *ptr_prg, *ptr_pos;
 ; unsigned char* vLoadImage = 0x00;
        clr.l     D2
+; unsigned long cfgSize;
 ; int percent;
 ; long ix;
 ; VDP_COLOR cores;
 ; VDP_COORD cursor;
 ; unsigned int error_code = OS_ERR_NONE;
-       clr.l     -4(A6)
+       clr.l     -36(A6)
+; char tmp[32];
 ; OSTaskSuspend(TASK_MMSJOS_MAIN);
        pea       10
        jsr       _OSTaskSuspend
        addq.w    #4,A7
+; *startBasic = 2;    // Inicia Basic vindo do MGUI sem mensagens e textos
+       move.l    _startBasic.L,A0
+       move.b    #2,(A0)
 ; cursor = vdp_get_cursor();
-       pea       -8(A6)
+       pea       -40(A6)
        move.l    1170,A1
        jsr       (A1)
        move.l    (A7)+,A0
@@ -3940,7 +4247,7 @@ _startMGI:
        jsr       (A0)
        move.l    D0,_mguiVideoFontes.L
 ; vxgmax = cursor.maxx;
-       lea       -8(A6),A0
+       lea       -40(A6),A0
        move.b    2(A0),D0
        and.w     #255,D0
        move.w    D0,_vxgmax.L
@@ -4068,13 +4375,32 @@ _startMGI:
        pea       86
        jsr       (A4)
        add.w     #24,A7
-; loadFile("/MGUI/MGUI.CFG", memPosConfig);
-       move.b    _memPosConfig.L,D1
-       and.l     #255,D1
-       move.l    D1,-(A7)
+; memPosConfig = malloc(SIZE_LOAD_CFG_MEM + 1);
+       pea       513
+       jsr       _malloc
+       addq.w    #4,A7
+       move.l    D0,_memPosConfig.L
+; if (memPosConfig)
+       tst.l     _memPosConfig.L
+       beq.s     startMGI_1
+; {
+; cfgSize = loadFile("/MGUI/MGUI.CFG", (unsigned short*)memPosConfig);
+       move.l    _memPosConfig.L,-(A7)
        pea       @mgui_7.L
        jsr       _loadFile
        addq.w    #8,A7
+       move.l    D0,D3
+; if (cfgSize > SIZE_LOAD_CFG_MEM)
+       cmp.l     #512,D3
+       bls.s     startMGI_3
+; cfgSize = SIZE_LOAD_CFG_MEM;
+       move.l    #512,D3
+startMGI_3:
+; memPosConfig[cfgSize] = 0x00;
+       move.l    _memPosConfig.L,A0
+       clr.b     0(A0,D3.L)
+startMGI_1:
+; }
 ; writesxy(53,170,1,"Loading Icons ",vcorwf,vcorwb);
        move.b    (A2),D1
        and.w     #255,D1
@@ -4094,7 +4420,7 @@ _startMGI:
        pea       8192
        jsr       _malloc
        addq.w    #4,A7
-       move.l    D0,(A5)
+       move.l    D0,_imgsMenuSys.L
 ; writesxy(137,170,1,"ICOFOLD.PBM",vcorwf,vcorwb);
        move.b    (A2),D1
        and.w     #255,D1
@@ -4111,7 +4437,7 @@ _startMGI:
        jsr       (A4)
        add.w     #24,A7
 ; loadFile("/MGUI/IMAGES/ICOFOLD.PBM", imgsMenuSys);
-       move.l    (A5),-(A7)
+       move.l    _imgsMenuSys.L,-(A7)
        pea       @mgui_10.L
        jsr       _loadFile
        addq.w    #8,A7
@@ -4131,7 +4457,7 @@ _startMGI:
        jsr       (A4)
        add.w     #24,A7
 ; loadFile("/MGUI/IMAGES/ICORUN.PBM", (imgsMenuSys + 64));
-       move.l    (A5),D1
+       move.l    _imgsMenuSys.L,D1
        add.l     #64,D1
        move.l    D1,-(A7)
        pea       @mgui_12.L
@@ -4153,7 +4479,7 @@ _startMGI:
        jsr       (A4)
        add.w     #24,A7
 ; loadFile("/MGUI/IMAGES/ICOOS.PBM", (imgsMenuSys + 128));
-       move.l    (A5),D1
+       move.l    _imgsMenuSys.L,D1
        add.l     #128,D1
        move.l    D1,-(A7)
        pea       @mgui_14.L
@@ -4175,7 +4501,7 @@ _startMGI:
        jsr       (A4)
        add.w     #24,A7
 ; loadFile("/MGUI/IMAGES/ICOSET.PBM", (imgsMenuSys + 192));
-       move.l    (A5),D1
+       move.l    _imgsMenuSys.L,D1
        add.l     #192,D1
        move.l    D1,-(A7)
        pea       @mgui_16.L
@@ -4197,7 +4523,7 @@ _startMGI:
        jsr       (A4)
        add.w     #24,A7
 ; loadFile("/MGUI/IMAGES/ICOOFF.PBM", (imgsMenuSys + 256));
-       move.l    (A5),D1
+       move.l    _imgsMenuSys.L,D1
        add.l     #256,D1
        move.l    D1,-(A7)
        pea       @mgui_18.L
@@ -4219,29 +4545,90 @@ _startMGI:
        jsr       (A4)
        add.w     #24,A7
 ; for (ix = 0; ix < 99999; ix++);
-       clr.l     D3
-startMGI_1:
-       cmp.l     #99999,D3
-       bge.s     startMGI_3
-       addq.l    #1,D3
-       bra       startMGI_1
-startMGI_3:
-; vcorwf = VDP_WHITE;
-       move.b    #15,(A3)
-; vcorwb = VDP_TRANSPARENT;
-       clr.b     (A2)
-; vcorwb2 = VDP_BLACK;
-       move.b    #1,_vcorwb2.L
-; vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
+       clr.l     D4
+startMGI_5:
+       cmp.l     #99999,D4
+       bge.s     startMGI_7
+       addq.l    #1,D4
+       bra       startMGI_5
+startMGI_7:
+; memset(tmp, 0x00, sizeof(tmp));
+       pea       32
+       clr.l     -(A7)
+       move.l    A5,-(A7)
+       jsr       _memset
+       add.w     #12,A7
+; if (mguiCfgGet("START", "COLOR_F", tmp, sizeof(tmp)))
+       pea       32
+       move.l    A5,-(A7)
+       pea       @mgui_21.L
+       pea       @mgui_20.L
+       jsr       _mguiCfgGet
+       add.w     #16,A7
+       tst.l     D0
+       beq.s     startMGI_8
+; vcorwf = atoi(tmp);
+       move.l    A5,-(A7)
+       jsr       _atoi
+       addq.w    #4,A7
+       move.b    D0,(A3)
+startMGI_8:
+; memset(tmp, 0x00, sizeof(tmp));
+       pea       32
+       clr.l     -(A7)
+       move.l    A5,-(A7)
+       jsr       _memset
+       add.w     #12,A7
+; if (mguiCfgGet("START", "COLOR_B", tmp, sizeof(tmp)))
+       pea       32
+       move.l    A5,-(A7)
+       pea       @mgui_22.L
+       pea       @mgui_20.L
+       jsr       _mguiCfgGet
+       add.w     #16,A7
+       tst.l     D0
+       beq.s     startMGI_10
+; vcorwb = atoi(tmp);
+       move.l    A5,-(A7)
+       jsr       _atoi
+       addq.w    #4,A7
+       move.b    D0,(A2)
+startMGI_10:
+; memset(tmp, 0x00, sizeof(tmp));
+       pea       32
+       clr.l     -(A7)
+       move.l    A5,-(A7)
+       jsr       _memset
+       add.w     #12,A7
+; if (mguiCfgGet("START", "COLOR_B2", tmp, sizeof(tmp)))
+       pea       32
+       move.l    A5,-(A7)
+       pea       @mgui_23.L
+       pea       @mgui_20.L
+       jsr       _mguiCfgGet
+       add.w     #16,A7
+       tst.l     D0
+       beq.s     startMGI_12
+; vcorwb2 = atoi(tmp);
+       move.l    A5,-(A7)
+       jsr       _atoi
+       addq.w    #4,A7
+       move.b    D0,_vcorwb2.L
+startMGI_12:
+; vdp_init(VDP_MODE_G2, vcorwb2, 0, 0);
        clr.l     -(A7)
        clr.l     -(A7)
-       pea       1
+       move.b    _vcorwb2.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
        pea       1
        move.l    1094,A0
        jsr       (A0)
        add.w     #16,A7
-; vdp_set_bdcolor(VDP_BLACK);
-       pea       1
+; vdp_set_bdcolor(vcorwb2);
+       move.b    _vcorwb2.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
        move.l    1110,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4286,23 +4673,23 @@ startMGI_3:
        clr.b     _vIndicaDialog.L
 ; // Inicia Controles de Tela (Mouse e Teclado)
 ; while(1)
-startMGI_4:
+startMGI_14:
 ; {
 ; if (vIndicaDialog)
        tst.b     _vIndicaDialog.L
-       beq.s     startMGI_7
+       beq.s     startMGI_17
 ; OSTaskSuspend(OS_PRIO_SELF);
        pea       255
        jsr       _OSTaskSuspend
        addq.w    #4,A7
-startMGI_7:
+startMGI_17:
 ; if (!editortela())
        jsr       _editortela
        tst.b     D0
-       bne.s     startMGI_9
+       bne.s     startMGI_19
 ; break;
-       bra.s     startMGI_6
-startMGI_9:
+       bra.s     startMGI_16
+startMGI_19:
 ; OSTimeDlyHMSM(0, 0, 0, 15);
        pea       15
        clr.l     -(A7)
@@ -4310,13 +4697,25 @@ startMGI_9:
        clr.l     -(A7)
        jsr       _OSTimeDlyHMSM
        add.w     #16,A7
-       bra       startMGI_4
-startMGI_6:
+       bra       startMGI_14
+startMGI_16:
 ; }
 ; free(imgsMenuSys);
-       move.l    (A5),-(A7)
+       move.l    _imgsMenuSys.L,-(A7)
        jsr       _free
        addq.w    #4,A7
+; if (memPosConfig)
+       tst.l     _memPosConfig.L
+       beq.s     startMGI_21
+; {
+; free(memPosConfig);
+       move.l    _memPosConfig.L,-(A7)
+       jsr       _free
+       addq.w    #4,A7
+; memPosConfig = 0x00;
+       clr.l     _memPosConfig.L
+startMGI_21:
+; }
 ; vdp_init(VDP_MODE_TEXT, VDP_BLACK, 0, 0);
        clr.l     -(A7)
        clr.l     -(A7)
@@ -4339,23 +4738,26 @@ startMGI_6:
        jsr       _OSTaskDel
        addq.w    #4,A7
 ; printText("Ok\r\n\0");
-       pea       @mgui_20.L
+       pea       @mgui_24.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; printText("#>");
-       pea       @mgui_21.L
+       pea       @mgui_25.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
 ; showCursor();
        move.l    1082,A0
        jsr       (A0)
+; *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
+       move.l    _startBasic.L,A0
+       move.b    #1,(A0)
 ; OSTaskResume(TASK_MMSJOS_MAIN);
        pea       10
        jsr       _OSTaskResume
        addq.w    #4,A7
-       movem.l   (A7)+,D2/D3/A2/A3/A4/A5
+       movem.l   (A7)+,D2/D3/D4/A2/A3/A4/A5
        unlk      A6
        rts
 ; }
@@ -4614,7 +5016,7 @@ _drawButtonsnew:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_22.L
+       pea       @mgui_26.L
        pea       1
        move.w    D4,D1
        addq.w    #2,D1
@@ -4655,7 +5057,7 @@ drawButtonsnew_1:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_23.L
+       pea       @mgui_20.L
        pea       1
        move.w    D4,D1
        addq.w    #2,D1
@@ -4696,7 +5098,7 @@ drawButtonsnew_3:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_24.L
+       pea       @mgui_27.L
        pea       1
        move.w    D4,D1
        addq.w    #2,D1
@@ -4737,7 +5139,7 @@ drawButtonsnew_5:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_25.L
+       pea       @mgui_28.L
        pea       1
        move.w    D4,D1
        addq.w    #2,D1
@@ -4778,7 +5180,7 @@ drawButtonsnew_7:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_26.L
+       pea       @mgui_29.L
        pea       1
        move.w    D4,D1
        addq.w    #2,D1
@@ -4819,7 +5221,7 @@ drawButtonsnew_9:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_27.L
+       pea       @mgui_30.L
        pea       1
        move.w    D4,D1
        addq.w    #2,D1
@@ -4860,7 +5262,7 @@ drawButtonsnew_11:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_28.L
+       pea       @mgui_31.L
        pea       1
        move.w    D4,D1
        addq.w    #2,D1
@@ -4931,7 +5333,7 @@ _drawButtons:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_22.L
+       pea       @mgui_26.L
        pea       1
        move.w    D3,D1
        addq.w    #2,D1
@@ -4968,7 +5370,7 @@ drawButtons_1:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_23.L
+       pea       @mgui_20.L
        pea       1
        move.w    D3,D1
        addq.w    #2,D1
@@ -5005,7 +5407,7 @@ drawButtons_3:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_24.L
+       pea       @mgui_27.L
        pea       1
        move.w    D3,D1
        addq.w    #2,D1
@@ -5042,7 +5444,7 @@ drawButtons_5:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_25.L
+       pea       @mgui_28.L
        pea       1
        move.w    D3,D1
        addq.w    #2,D1
@@ -5079,7 +5481,7 @@ drawButtons_7:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_26.L
+       pea       @mgui_29.L
        pea       1
        move.w    D3,D1
        addq.w    #2,D1
@@ -5116,7 +5518,7 @@ drawButtons_9:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_27.L
+       pea       @mgui_30.L
        pea       1
        move.w    D3,D1
        addq.w    #2,D1
@@ -5153,7 +5555,7 @@ drawButtons_11:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_28.L
+       pea       @mgui_31.L
        pea       1
        move.w    D3,D1
        addq.w    #2,D1
@@ -6494,7 +6896,7 @@ new_menu_16:
 ; mpos = message("Do you want to exit ?\0", BTYES | BTNO, 0);
        clr.l     -(A7)
        pea       12
-       pea       @mgui_29.L
+       pea       @mgui_32.L
        jsr       _message
        add.w     #12,A7
        move.b    D0,-88(A6)
@@ -6520,8 +6922,8 @@ new_menu_11:
 ; {
        xdef      _menuTask
 _menuTask:
-       link      A6,#-4
-       movem.l   D2/D3/D4/D5/D6/A2/A3/A4/A5,-(A7)
+       link      A6,#-24
+       movem.l   D2/D3/D4/D5/A2/A3/A4/A5,-(A7)
        lea       _vcorwf.L,A2
        lea       _menyi.L,A3
        lea       _TrocaSpriteMouse.L,A4
@@ -6531,6 +6933,7 @@ _menuTask:
 ; unsigned short vx, vy, vposicony;
 ; unsigned char *vEndExec;
 ; unsigned long vsizefilemalloc;
+; unsigned char tmp[16];
 ; mx = 0;
        clr.w     _mx.L
 ; my = LINHAMENU;
@@ -6598,7 +7001,7 @@ _menuTask:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_30.L
+       pea       @mgui_33.L
        pea       1
        move.w    _my.L,D1
        and.w     #255,D2
@@ -6658,7 +7061,7 @@ _menuTask:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_31.L
+       pea       @mgui_34.L
        pea       1
        move.w    _my.L,D1
        and.w     #255,D2
@@ -6694,7 +7097,7 @@ _menuTask:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_32.L
+       pea       @mgui_35.L
        pea       1
        move.w    _my.L,D1
        and.w     #255,D2
@@ -6769,7 +7172,7 @@ menuTask_1:
 ; vpos = 0;
        clr.b     D5
 ; vposicony = 0;
-       clr.w     -2(A6)
+       clr.w     -22(A6)
 ; for(vy = 0; vy <= 1; vy++)
        clr.w     D3
 menuTask_8:
@@ -6795,7 +7198,7 @@ menuTask_8:
        and.l     #65535,D3
        move.l    D3,D0
        lsl.l     #1,D0
-       move.w    0(A3,D0.L),-2(A6)
+       move.w    0(A3,D0.L),-22(A6)
 ; break;
        bra.s     menuTask_10
 menuTask_11:
@@ -6823,26 +7226,41 @@ menuTask_15:
 ; case 0: // Call "Files" Program from Disk
 ; vsizefilemalloc = fsInfoFile("/MGUI/PROGS/FILES.BIN", INFO_SIZE);
        pea       1
-       pea       @mgui_33.L
+       pea       @mgui_36.L
        jsr       _fsInfoFile
        addq.w    #8,A7
-       move.l    D0,D6
+       move.l    D0,-20(A6)
 ; if (vsizefilemalloc != ERRO_D_NOT_FOUND)
-       cmp.l     #-1,D6
+       move.l    -20(A6),D0
+       cmp.l     #-1,D0
        beq       menuTask_19
 ; {
 ; TrocaSpriteMouse(MOUSE_HOURGLASS);
        pea       2
        jsr       (A4)
        addq.w    #4,A7
-; vEndExec = malloc(vsizefilemalloc);
-       move.l    D6,-(A7)
+; vEndExec = 0x00870000; // malloc(vsizefilemalloc);
+       move.l    #8847360,D4
+; *startBasic1 = malloc(2048);
+       pea       2048
        jsr       _malloc
        addq.w    #4,A7
-       move.l    D0,D4
-; if (!vEndExec)
+       move.l    _startBasic1.L,A0
+       move.l    D0,(A0)
+; if (!vEndExec || !*startBasic1)
        tst.l     D4
-       bne.s     menuTask_21
+       beq.s     menuTask_23
+       move.l    _startBasic1.L,A0
+       tst.l     (A0)
+       bne.s     menuTask_24
+       moveq     #1,D0
+       bra.s     menuTask_25
+menuTask_24:
+       clr.l     D0
+menuTask_25:
+       tst.l     D0
+       beq.s     menuTask_21
+menuTask_23:
 ; {
 ; TrocaSpriteMouse(MOUSE_POINTER);
        pea       1
@@ -6851,17 +7269,17 @@ menuTask_15:
 ; message("No memory to load FILES.BIN\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_34.L
+       pea       @mgui_37.L
        jsr       (A5)
        add.w     #12,A7
-       bra       menuTask_24
+       bra       menuTask_27
 menuTask_21:
 ; }
 ; else
 ; {
 ; loadFile("/MGUI/PROGS/FILES.BIN", (unsigned long*)vEndExec);
        move.l    D4,-(A7)
-       pea       @mgui_33.L
+       pea       @mgui_36.L
        jsr       _loadFile
        addq.w    #8,A7
 ; TrocaSpriteMouse(MOUSE_POINTER);
@@ -6870,25 +7288,26 @@ menuTask_21:
        addq.w    #4,A7
 ; if (!verro)
        tst.b     _verro.L
-       bne.s     menuTask_23
+       bne.s     menuTask_26
 ; runFromMGUI(vEndExec);
        move.l    D4,-(A7)
        jsr       _runFromMGUI
        addq.w    #4,A7
-       bra.s     menuTask_24
-menuTask_23:
+       bra.s     menuTask_27
+menuTask_26:
 ; else {
 ; message("Loading Error...\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_35.L
+       pea       @mgui_38.L
        jsr       (A5)
        add.w     #12,A7
-; free(vEndExec);
-       move.l    D4,-(A7)
+; //free(vEndExec);
+; free(startBasic1);
+       move.l    _startBasic1.L,-(A7)
        jsr       _free
        addq.w    #4,A7
-menuTask_24:
+menuTask_27:
        bra.s     menuTask_20
 menuTask_19:
 ; }
@@ -6898,7 +7317,7 @@ menuTask_19:
 ; message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_36.L
+       pea       @mgui_39.L
        jsr       (A5)
        add.w     #12,A7
 menuTask_20:
@@ -6915,7 +7334,7 @@ menuTask_17:
 ; message("MGUI v0.1\nGraphical User Interface\n \nwww.utilityinf.com.br\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_37.L
+       pea       @mgui_40.L
        jsr       (A5)
        add.w     #12,A7
 ; break;
@@ -6948,7 +7367,7 @@ menuTask_3:
        pea       255
        jsr       _OSTaskDel
        addq.w    #4,A7
-       movem.l   (A7)+,D2/D3/D4/D5/D6/A2/A3/A4/A5
+       movem.l   (A7)+,D2/D3/D4/D5/A2/A3/A4/A5
        unlk      A6
        rts
 ; }
@@ -6990,7 +7409,7 @@ _runBin:
        pea       240
        pea       40
        pea       10
-       pea       @mgui_38.L
+       pea       @mgui_41.L
        jsr       _showWindow
        add.w     #24,A7
 ; writesxy(12,57,8,"File Name:",vcorwf,vcorwb);
@@ -7002,7 +7421,7 @@ _runBin:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_39.L
+       pea       @mgui_42.L
        pea       8
        pea       57
        pea       12
@@ -7070,7 +7489,7 @@ runBin_7:
 ; message("Error, file name must be provided!!\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_40.L
+       pea       @mgui_43.L
        jsr       (A3)
        add.w     #12,A7
 ; return;
@@ -7138,7 +7557,7 @@ runBin_17:
 ; message("Invalid file name length\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_41.L
+       pea       @mgui_44.L
        jsr       (A3)
        add.w     #12,A7
 ; return;
@@ -7146,7 +7565,7 @@ runBin_17:
 runBin_22:
 ; }
 ; strcat(vfilename, ".BIN");
-       pea       @mgui_42.L
+       pea       @mgui_45.L
        move.l    A2,-(A7)
        jsr       _strcat
        addq.w    #8,A7
@@ -7154,7 +7573,7 @@ runBin_22:
 runBin_20:
 ; }
 ; else if (strcmp(vdot, ".BIN") != 0)
-       pea       @mgui_42.L
+       pea       @mgui_45.L
        move.l    D4,-(A7)
        jsr       _strcmp
        addq.w    #8,A7
@@ -7164,7 +7583,7 @@ runBin_20:
 ; message("Only .BIN files are allowed\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_43.L
+       pea       @mgui_46.L
        jsr       (A3)
        add.w     #12,A7
 ; return;
@@ -7185,7 +7604,7 @@ runBin_26:
 ; else
 ; {
 ; strcpy(vfullpath, "/MGUI/PROGS/");
-       pea       @mgui_44.L
+       pea       @mgui_47.L
        move.l    A4,-(A7)
        jsr       _strcpy
        addq.w    #8,A7
@@ -7199,7 +7618,7 @@ runBin_27:
 ; vresp = message("Run selected file ?\0",(BTYES | BTNO), 0);
        clr.l     -(A7)
        pea       12
-       pea       @mgui_45.L
+       pea       @mgui_48.L
        jsr       (A3)
        add.w     #12,A7
        move.b    D0,-245(A6)
@@ -7223,7 +7642,7 @@ runBin_28:
 ; message("File not found...\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_46.L
+       pea       @mgui_49.L
        jsr       (A3)
        add.w     #12,A7
 ; return;
@@ -7250,7 +7669,7 @@ runBin_30:
 ; message("No memory to load .BIN\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_47.L
+       pea       @mgui_50.L
        jsr       (A3)
        add.w     #12,A7
 ; return;
@@ -7280,7 +7699,7 @@ runBin_34:
 ; message("Loading Error...\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_35.L
+       pea       @mgui_38.L
        jsr       (A3)
        add.w     #12,A7
 ; free(vEndExec);
@@ -7318,6 +7737,8 @@ _importFile:
 ; unsigned long vSizeTotalRec;
 ; unsigned short vChunkSize;
 ; MGUI_SAVESCR vsavescr;
+; vstring[0] = '\0';
+       clr.b     -228+0(A6)
 ; vSizeTotalRec = lstmGetSize();
        move.l    1178,A0
        jsr       (A0)
@@ -7336,7 +7757,7 @@ _importFile:
        pea       240
        pea       40
        pea       10
-       pea       @mgui_31.L
+       pea       @mgui_34.L
        jsr       _showWindow
        add.w     #24,A7
 ; writesxy(12,57,8,"File Name:",vcorwf,vcorwb);
@@ -7348,7 +7769,7 @@ _importFile:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_39.L
+       pea       @mgui_42.L
        pea       8
        pea       57
        pea       12
@@ -7417,7 +7838,7 @@ importFile_3:
 ; message("Error, file name must be provided!!\0", BTCLOSE, 0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_40.L
+       pea       @mgui_43.L
        jsr       _message
        add.w     #12,A7
 ; return;
@@ -7455,7 +7876,7 @@ importFile_14:
 ; vresp = message("Confirm serial Connected.\nImport File ?\0",(BTYES | BTNO), 0);
        clr.l     -(A7)
        pea       12
-       pea       @mgui_48.L
+       pea       @mgui_51.L
        jsr       _message
        add.w     #12,A7
        move.b    D0,-163(A6)
@@ -7482,7 +7903,7 @@ importFile_14:
        pea       240
        pea       40
        pea       10
-       pea       @mgui_49.L
+       pea       @mgui_52.L
        jsr       _showWindow
        add.w     #24,A7
 ; // Verifica se o arquivo existe
@@ -7503,7 +7924,7 @@ importFile_14:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_50.L
+       pea       @mgui_53.L
        pea       8
        pea       55
        pea       12
@@ -7526,7 +7947,7 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_51.L
+       pea       @mgui_54.L
        pea       8
        pea       55
        pea       12
@@ -7551,7 +7972,7 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_52.L
+       pea       @mgui_55.L
        pea       8
        pea       55
        pea       12
@@ -7583,7 +8004,7 @@ importFile_17:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_53.L
+       pea       @mgui_56.L
        pea       8
        pea       55
        pea       12
@@ -7617,7 +8038,7 @@ importFile_23:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_54.L
+       pea       @mgui_57.L
        pea       8
        pea       55
        pea       12
@@ -7745,7 +8166,7 @@ importFile_27:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_55.L
+       pea       @mgui_58.L
        pea       8
        pea       55
        pea       12
@@ -7770,7 +8191,7 @@ importFile_24:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_56.L
+       pea       @mgui_59.L
        pea       8
        pea       55
        pea       12
@@ -7789,7 +8210,7 @@ importFile_39:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_57.L
+       pea       @mgui_60.L
        pea       8
        pea       55
        pea       12
@@ -7832,7 +8253,7 @@ importFile_21:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_58.L
+       pea       @mgui_61.L
        pea       8
        pea       55
        pea       12
@@ -7853,7 +8274,7 @@ importFile_19:
        and.w     #255,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       pea       @mgui_59.L
+       pea       @mgui_62.L
        pea       8
        pea       55
        pea       12
@@ -7972,7 +8393,7 @@ _putImagePbmP4:
 ; cursor += 3;
        addq.l    #3,D2
 ; if (strcmp(tipo, "P4") != 0)
-       pea       @mgui_60.L
+       pea       @mgui_63.L
        move.l    A3,-(A7)
        jsr       _strcmp
        addq.w    #8,A7
@@ -7982,7 +8403,7 @@ _putImagePbmP4:
 ; message("Invalid or unsupported PBM format\nexpected P4",BTCLOSE,0);
        clr.l     -(A7)
        pea       64
-       pea       @mgui_61.L
+       pea       @mgui_64.L
        jsr       _message
        add.w     #12,A7
 ; return;
@@ -8412,122 +8833,128 @@ putImagePbmP4_19:
        dc.b      32,32,32,32,32,32,80,108,101,97,115,101,32,87
        dc.b      97,105,116,46,46,46,32,32,32,32,32,32,32,0
 @mgui_20:
-       dc.b      79,107,13,10,0
-@mgui_21:
-       dc.b      35,62,0
-@mgui_22:
-       dc.b      79,75,0
-@mgui_23:
        dc.b      83,84,65,82,84,0
+@mgui_21:
+       dc.b      67,79,76,79,82,95,70,0
+@mgui_22:
+       dc.b      67,79,76,79,82,95,66,0
+@mgui_23:
+       dc.b      67,79,76,79,82,95,66,50,0
 @mgui_24:
-       dc.b      67,76,79,83,69,0
+       dc.b      79,107,13,10,0
 @mgui_25:
-       dc.b      67,65,78,67,0
+       dc.b      35,62,0
 @mgui_26:
-       dc.b      89,69,83,0
+       dc.b      79,75,0
 @mgui_27:
-       dc.b      78,79,0
+       dc.b      67,76,79,83,69,0
 @mgui_28:
-       dc.b      72,69,76,80,0
+       dc.b      67,65,78,67,0
 @mgui_29:
+       dc.b      89,69,83,0
+@mgui_30:
+       dc.b      78,79,0
+@mgui_31:
+       dc.b      72,69,76,80,0
+@mgui_32:
        dc.b      68,111,32,121,111,117,32,119,97,110,116,32,116
        dc.b      111,32,101,120,105,116,32,63,0
-@mgui_30:
-       dc.b      70,105,108,101,115,0
-@mgui_31:
-       dc.b      73,109,112,111,114,116,32,70,105,108,101,0
-@mgui_32:
-       dc.b      65,98,111,117,116,0
 @mgui_33:
+       dc.b      70,105,108,101,115,0
+@mgui_34:
+       dc.b      73,109,112,111,114,116,32,70,105,108,101,0
+@mgui_35:
+       dc.b      65,98,111,117,116,0
+@mgui_36:
        dc.b      47,77,71,85,73,47,80,82,79,71,83,47,70,73,76
        dc.b      69,83,46,66,73,78,0
-@mgui_34:
+@mgui_37:
        dc.b      78,111,32,109,101,109,111,114,121,32,116,111
        dc.b      32,108,111,97,100,32,70,73,76,69,83,46,66,73
        dc.b      78,0
-@mgui_35:
+@mgui_38:
        dc.b      76,111,97,100,105,110,103,32,69,114,114,111
        dc.b      114,46,46,46,0
-@mgui_36:
+@mgui_39:
        dc.b      70,105,108,101,32,110,111,116,32,102,111,117
        dc.b      110,100,46,46,46,10,47,77,71,85,73,47,80,82
        dc.b      79,71,83,47,70,73,76,69,83,46,66,73,78,0
-@mgui_37:
+@mgui_40:
        dc.b      77,71,85,73,32,118,48,46,49,10,71,114,97,112
        dc.b      104,105,99,97,108,32,85,115,101,114,32,73,110
        dc.b      116,101,114,102,97,99,101,10,32,10,119,119,119
        dc.b      46,117,116,105,108,105,116,121,105,110,102,46
        dc.b      99,111,109,46,98,114,0
-@mgui_38:
+@mgui_41:
        dc.b      82,117,110,32,66,105,110,97,114,121,0
-@mgui_39:
+@mgui_42:
        dc.b      70,105,108,101,32,78,97,109,101,58,0
-@mgui_40:
+@mgui_43:
        dc.b      69,114,114,111,114,44,32,102,105,108,101,32
        dc.b      110,97,109,101,32,109,117,115,116,32,98,101
        dc.b      32,112,114,111,118,105,100,101,100,33,33,0
-@mgui_41:
+@mgui_44:
        dc.b      73,110,118,97,108,105,100,32,102,105,108,101
        dc.b      32,110,97,109,101,32,108,101,110,103,116,104
        dc.b      0
-@mgui_42:
+@mgui_45:
        dc.b      46,66,73,78,0
-@mgui_43:
+@mgui_46:
        dc.b      79,110,108,121,32,46,66,73,78,32,102,105,108
        dc.b      101,115,32,97,114,101,32,97,108,108,111,119
        dc.b      101,100,0
-@mgui_44:
+@mgui_47:
        dc.b      47,77,71,85,73,47,80,82,79,71,83,47,0
-@mgui_45:
+@mgui_48:
        dc.b      82,117,110,32,115,101,108,101,99,116,101,100
        dc.b      32,102,105,108,101,32,63,0
-@mgui_46:
+@mgui_49:
        dc.b      70,105,108,101,32,110,111,116,32,102,111,117
        dc.b      110,100,46,46,46,0
-@mgui_47:
+@mgui_50:
        dc.b      78,111,32,109,101,109,111,114,121,32,116,111
        dc.b      32,108,111,97,100,32,46,66,73,78,0
-@mgui_48:
+@mgui_51:
        dc.b      67,111,110,102,105,114,109,32,115,101,114,105
        dc.b      97,108,32,67,111,110,110,101,99,116,101,100
        dc.b      46,10,73,109,112,111,114,116,32,70,105,108,101
        dc.b      32,63,0
-@mgui_49:
+@mgui_52:
        dc.b      83,116,97,116,117,115,32,73,109,112,111,114
        dc.b      116,32,70,105,108,101,0
-@mgui_50:
+@mgui_53:
        dc.b      68,101,108,101,116,105,110,103,32,70,105,108
        dc.b      101,46,46,46,0
-@mgui_51:
+@mgui_54:
        dc.b      67,114,101,97,116,105,110,103,32,70,105,108
        dc.b      101,46,46,46,0
-@mgui_52:
+@mgui_55:
        dc.b      82,101,97,100,105,110,103,32,83,101,114,105
        dc.b      97,108,46,46,46,0
-@mgui_53:
+@mgui_56:
        dc.b      79,112,101,110,105,110,103,32,70,105,108,101
        dc.b      46,46,46,0
-@mgui_54:
-       dc.b      87,114,105,116,105,110,103,32,70,105,108,101
-       dc.b      46,46,46,0
-@mgui_55:
-       dc.b      67,108,111,115,105,110,103,32,70,105,108,101
-       dc.b      46,46,46,0
-@mgui_56:
-       dc.b      68,111,110,101,32,33,32,32,32,32,32,32,32,32
-       dc.b      32,0
 @mgui_57:
        dc.b      87,114,105,116,105,110,103,32,70,105,108,101
-       dc.b      32,69,114,114,111,114,32,33,0
+       dc.b      46,46,46,0
 @mgui_58:
+       dc.b      67,108,111,115,105,110,103,32,70,105,108,101
+       dc.b      46,46,46,0
+@mgui_59:
+       dc.b      68,111,110,101,32,33,32,32,32,32,32,32,32,32
+       dc.b      32,0
+@mgui_60:
+       dc.b      87,114,105,116,105,110,103,32,70,105,108,101
+       dc.b      32,69,114,114,111,114,32,33,0
+@mgui_61:
        dc.b      83,101,114,105,97,108,32,76,111,97,100,32,69
        dc.b      114,114,111,114,46,46,46,0
-@mgui_59:
+@mgui_62:
        dc.b      67,114,101,97,116,101,32,70,105,108,101,32,69
        dc.b      114,114,111,114,46,46,46,0
-@mgui_60:
+@mgui_63:
        dc.b      80,52,0
-@mgui_61:
+@mgui_64:
        dc.b      73,110,118,97,108,105,100,32,111,114,32,117
        dc.b      110,115,117,112,112,111,114,116,101,100,32,80
        dc.b      66,77,32,102,111,114,109,97,116,10,101,120,112
@@ -8539,6 +8966,9 @@ _vvdgd:
        xdef      _vvdgc
 _vvdgc:
        dc.l      4194371
+       xdef      _memPosConfig
+_memPosConfig:
+       dc.l      0
        xdef      _imgsMenuSys
 _imgsMenuSys:
        dc.l      0
@@ -8546,9 +8976,6 @@ _imgsMenuSys:
 _vIndicaDialog:
        dc.b      0
        section   bss
-       xdef      _memPosConfig
-_memPosConfig:
-       ds.b      1
        xdef      _vFinalOS
 _vFinalOS:
        ds.b      1
@@ -8679,6 +9106,7 @@ _StkMessage:
        xref      _malloc
        xref      _OSTimeDlyHMSM
        xref      _OSTaskDel
+       xref      _memset
        xref      _fsInfoFile
        xref      _strcat
        xref      _verro
@@ -8691,5 +9119,8 @@ _StkMessage:
        xref      ULDIV
        xref      _loadFile
        xref      _OSTaskResume
+       xref      _startBasic
+       xref      _startBasic1
        xref      _fsCreateFile
+       xref      _strncmp
        xref      _fsWriteFile

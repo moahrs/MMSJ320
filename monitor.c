@@ -32,6 +32,7 @@
 * 28/01/2025  1.3a    Moacir Jr.   Ajustes na leitura dos dados recebidos do Mouse
 * 12/04/2026  1.4a02  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
 * 20/04/2026  1.4a03  Moacir Jr.   Alterar loadso e runso to loados e runos
+* 24/04/2026  1.4a04  Moacir Jr.   Ajustes nas variaveis basic e prepara para LOADBAS
 *--------------------------------------------------------------------------------
 *
 * Mapa de Memoria
@@ -106,7 +107,7 @@
 #include "mmsj320mfp.h"
 #include "monitor.h"
 
-#define versionBios "1.4a03"
+#define versionBios "1.4a04"
 
 HEADER *_allocp;
 
@@ -165,7 +166,8 @@ void runSO(void);
 unsigned int carregaSO(void);
 void carregaOSDisk(void);
 void runSystemOper(void);
-
+unsigned int carregaBasic(void);
+void carregaBasDisk(void);
 void hideCursor(void);
 void showCursor(void);
 void modeVideo(unsigned char *pMode);
@@ -995,7 +997,7 @@ int processCmd(void)
         }
         else if (!strcmp(linhacomando,"BASIC") && iy == 5)
         {
-            if (*hasMmsjosLoaded)
+            if (!*hasMmsjosLoaded)
                 runBasic(linhaarg);
             else 
                 printText("OS loaded. Run Basic from OS !!!\r\n\0");
@@ -1019,6 +1021,15 @@ int processCmd(void)
         else if (!strcmp(linhacomando,"RUNOS") && iy == 5)
         {
             runSystemOper();
+        }
+        else if (!strcmp(linhacomando,"LOADBAS") && iy == 7)
+        {
+            carregaBasDisk();
+        }
+        else if (!strcmp(linhacomando,"RUNBAS") && iy == 6)
+        {
+            vEndLoad = 0x00870000;
+            runMem(vEndLoad);
         }
         else if (!strcmp(linhacomando,"DEBUG") && iy == 5)
         {
@@ -2421,6 +2432,127 @@ void carregaOSDisk(void)
     else {
         printText("Ok\r\n\0");
         *hasMmsjosLoaded = 1;
+    }
+}
+
+//-----------------------------------------------------------------------------
+unsigned int carregaBasic(void)
+{
+    unsigned char *xaddress = 0x00800000;
+    unsigned char vbyteprog[128], vbytes[4], dd, vByte = 0;
+    unsigned int ix, cc;
+    unsigned int vSizeFile;
+    unsigned char sqtdtam[11];
+    unsigned char vPosAnim = 0, vStep;
+    unsigned short vAntX = 0;
+
+    // Envia comando resetar e abortar tudo
+    fsSendByte('a', FS_CMD);
+
+    // Comando recebido ok ?
+    vByte = fsRecByte(FS_CMD);
+
+    if (vByte != ALL_OK)
+        return vByte;
+
+    // Envia comando
+    fsSendByte('b', FS_CMD);
+
+    // Comando recebido ok ?
+    vByte = fsRecByte(FS_CMD);
+
+    if (vByte != ALL_OK)
+        return vByte;
+
+    // Comando Executado ok ?
+    vByte = fsRecByte(FS_CMD);
+
+    if (vByte != ALL_OK)
+        return vByte;
+
+    printText(" ");
+
+    /*--------------*/
+    vAntX = videoCursorPosColX;
+    vStep = 0;
+    /*--------------*/
+
+    while (1)
+    {
+        // Verifica o tamanho recebido
+        vByte = fsRecByte(FS_CMD);
+        vSizeFile = vByte << 8;
+        vByte = fsRecByte(FS_CMD);
+        vSizeFile |= vByte;
+
+        /*--------------*/
+        vStep++;
+
+        if (vStep % 13 == 0)
+        {
+            if (vPosAnim == 3)
+            {
+                vPosAnim = 0;
+                videoCursorPosColX = vAntX;
+                printText("   ");
+                videoCursorPosColX = vAntX;
+            }
+            else
+            {
+                printChar('<',1);
+                vPosAnim++;
+            }
+        }
+        /*--------------*/
+
+        // Carrega Dados Recebidos
+        for (cc = 0; cc < vSizeFile ; cc++)
+        {
+            vByte = fsRecByte(FS_DATA);
+            *xaddress = vByte;
+            xaddress += 1;
+        }
+
+        if (vSizeFile < 512)
+            break;
+
+        fsSendByte('t', FS_CMD);    // Continua Enviado o Basic
+
+        // Comando recebido ok ?
+        vByte = fsRecByte(FS_CMD);
+
+        if (vByte != ALL_OK)
+            return vByte;
+
+        // Comando Executado ok ?
+        vByte = fsRecByte(FS_CMD);
+
+        if (vByte != ALL_OK)
+            return vByte;
+    }
+
+    videoCursorPosColX = vAntX;
+    printText("Done!");
+//    printChar(' ',0);
+
+    printText("\r\n\0");
+
+    return 0;
+}
+
+//-----------------------------------------------------------------------------
+void carregaBasDisk(void)
+{
+    unsigned int verro;
+
+    printText("Loading Basic. Please Wait...\0");
+
+    verro = carregaBasic();
+
+    if (verro)
+        printText("IO Error....\r\n\0");
+    else {
+        printText("Ok\r\n\0");
     }
 }
 

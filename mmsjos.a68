@@ -81,4 +81,4 @@ __ungetbuf:
            align
            org         $820000
 heap       equ         *               ; start of free memory
-heap_end   equ         $8BFFFF         ; end of free memory
+heap_end   equ         $86FFFF         ; end of free memory

@@ -23,6 +23,7 @@
 * 19/04/2026  2.0a03  Moacir Jr.   While e WEND. Ajustes gerais.
 * 20/04/2026  2.0a04  Moacir Jr.   Dual chamada, pelo monitor, e pelo mmsjos.
 * 22/04/2026  2.0a05  Moacir Jr.   Buffer video, hex, oct, bin e save e load no disco
+* 24/04/2026  2.0a06  Moacir Jr.   Colocacao do DRAW e ajustes gerais
 *--------------------------------------------------------------------------------
 * Variables Simples: start at 00800000
 *   --------------------------------------------------------
@@ -59,7 +60,7 @@
 #include "../mmsjosapi.h"
 #include "basic.h"
 
-#define versionBasic "2.0a05"
+#define versionBasic "2.0a06"
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
@@ -68,6 +69,7 @@
 
 #define SIMPLE_VAR_CACHE_SLOTS 8
 #define PARSER_STACK_SIZE 32
+#define PARSER_LEVELS 4
 #define PAINT_STACK_SIZE 4096
 #define MAX_WHILE_STACK   16
 #define BASIC_VDP_RAM_SIZE 0x4000
@@ -98,18 +100,22 @@ unsigned char *vvdgBASc = 0x00400043; // VDP TMS9118 Registers/Address Mode
 #define VDP_EDIT_CURSOR_CHAR   0xFE
 #define VDP_EDIT_BLINK_TICKS   3500
 
+#define PARSE_RETURN do { nivelParse--; return; } while (0)
+#define opTop parseOpTop[nivelAtual]
+#define valTop parseValTop[nivelAtual]
+
 int vdpEditCurX;
 int vdpEditCurY;
 
 char vdpEditLine[VDP_MAX_LINE];
-static unsigned char vdpEditCursorBackup = 0x00;
-static unsigned char vdpEditCursorVisible = 0;
-static unsigned short vdpEditBlinkCount = 0;
-static int vdpEditLineLen = 0;
-static int vdpEditCursorPos = 0;
-static int vdpEditLineStartX = 0;
-static int vdpEditLineStartY = 0;
-static int vdpEditLineEndY = 0;
+static unsigned char vdpEditCursorBackup;
+static unsigned char vdpEditCursorVisible;
+static unsigned short vdpEditBlinkCount;
+static int vdpEditLineLen;
+static int vdpEditCursorPos;
+static int vdpEditLineStartX;
+static int vdpEditLineStartY;
+static int vdpEditLineEndY;
 
 static int vdpEditFindNextInputRow(void);
 static void vdpEditCursorOff(void);
@@ -123,25 +129,31 @@ static unsigned int textNameTable = 0x0800;
 //--------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------
 
-static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
-static unsigned char *lastVarCacheAddr[SIMPLE_VAR_CACHE_SLOTS] = {0,0,0,0,0,0,0,0};
+static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS];
+static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS];
+static unsigned char *lastVarCacheAddr[SIMPLE_VAR_CACHE_SLOTS];
 static unsigned char paintStackX[PAINT_STACK_SIZE];
 static unsigned char paintStackY[PAINT_STACK_SIZE];
 static unsigned int paintPatternTable = 0x0000;
 static unsigned int paintColorTable = 0x2000;
 static unsigned char *paintVdpData = (unsigned char *)0x00400041;
-static unsigned char basicVdpBufferEnabled = 0;
+static unsigned char basicVdpBufferEnabled;
 static unsigned char *while_ptr_stack[MAX_WHILE_STACK];
-static int while_sp = 0;
+static int while_sp;
+static unsigned int spriteHandleCache[256];
+static unsigned char spriteSizeSelBas;
 unsigned char verro;
 
-/*static unsigned char valStack[32][50];
-static unsigned char opStack[PARSER_STACK_SIZE];
-static unsigned char opPrecStack[PARSER_STACK_SIZE];
-static char valTypeStack[PARSER_STACK_SIZE];
-static unsigned char temp[50];
-static int opTop = -1, valTop = -1;*/
+static unsigned char parseValStack[PARSER_LEVELS][PARSER_STACK_SIZE][50];
+static unsigned char parseOpStack[PARSER_LEVELS][PARSER_STACK_SIZE];
+static unsigned char parseOpPrecStack[PARSER_LEVELS][PARSER_STACK_SIZE];
+static char parseValTypeStack[PARSER_LEVELS][PARSER_STACK_SIZE];
+static unsigned char parseTemp[PARSER_LEVELS][50];
+static unsigned char parseTokenVarAtu[PARSER_LEVELS][4];
+static unsigned char parseTokenVarAtuLen[PARSER_LEVELS];
+static int parseOpTop[PARSER_LEVELS];
+static int parseValTop[PARSER_LEVELS];
+static char nivelParse = -1;
 
 static void invalidateFindVariableCache(void)
 {
@@ -341,9 +353,6 @@ static void basPaintSyncTables(void)
     vdp_get_cfg(&paintPatternTable, &paintColorTable);
 }
 
-static unsigned int spriteHandleCache[256] = {0};
-static unsigned char spriteSizeSelBas = 0;
-
 static void basSpriteResetCache(void)
 {
     memset(spriteHandleCache, 0x00, sizeof(spriteHandleCache));
@@ -374,6 +383,26 @@ static unsigned int basSpriteResolveHandle(unsigned char spriteNumber)
 
     handle = spriteHandleCache[spriteNumber];
     return handle;
+}
+
+static void setVariables(void)
+{
+    vMemTotalVdpBuffer = 16384;
+    vdpEditCursorBackup = 0x00;
+    vdpEditCursorVisible = 0;
+    vdpEditBlinkCount = 0;
+    vdpEditLineLen = 0;
+    vdpEditCursorPos = 0;
+    vdpEditLineStartX = 0;
+    vdpEditLineStartY = 0;
+    vdpEditLineEndY = 0;
+    while_sp = 0;
+    basicVdpBufferEnabled = 0;
+    spriteSizeSelBas = 0;
+    memset(spriteHandleCache, 0, sizeof(spriteHandleCache));
+    memset(lastVarCacheName0, 0, sizeof(lastVarCacheName0));
+    memset(lastVarCacheName1, 0, sizeof(lastVarCacheName1));
+    memset(lastVarCacheAddr, 0, sizeof(lastVarCacheAddr));  
 }
 
 //-----------------------------------------------------------------------------
@@ -448,7 +477,7 @@ void main(void)
         #endif
     }
 
-    vMemTotalVdpBuffer = 16384;
+    setVariables();
 
     if (!*startBasic || *startBasic == 1)
     {
@@ -2888,20 +2917,37 @@ void parseExpr(unsigned char *result) {
     char pendingUnary = 0; // 0: nenhum, '+': unário +, '-': unário -
     int currentPrec, topPrec;
     unsigned char sqtdtam[20];
-    unsigned char valStack[32][50];
-    unsigned char opStack[PARSER_STACK_SIZE];
-    unsigned char opPrecStack[PARSER_STACK_SIZE];
-    char valTypeStack[PARSER_STACK_SIZE];
-    unsigned char temp[50];
-    unsigned char tokenVarAtu[3];
-    unsigned char tokenVarAtuLen;
-    int opTop = -1, valTop = -1;
+    unsigned char nivelAtual;
+    unsigned char (*valStack)[50];
+    unsigned char *opStack;
+    unsigned char *opPrecStack;
+    char *valTypeStack;
+    unsigned char *temp;
+    unsigned char *tokenVarAtu;
+    unsigned char *tokenVarAtuLen;
+
+    if (nivelParse >= (PARSER_LEVELS - 1)) {
+        *vErroProc = 14;
+        return;
+    }
+
+    nivelParse++;
+    nivelAtual = (unsigned char)nivelParse;
+    valStack = parseValStack[nivelAtual];
+    opStack = parseOpStack[nivelAtual];
+    opPrecStack = parseOpPrecStack[nivelAtual];
+    valTypeStack = parseValTypeStack[nivelAtual];
+    temp = parseTemp[nivelAtual];
+    tokenVarAtu = parseTokenVarAtu[nivelAtual];
+    tokenVarAtuLen = &parseTokenVarAtuLen[nivelAtual];
+    parseOpTop[nivelAtual] = -1;
+    parseValTop[nivelAtual] = -1;
 
     nextToken();
-    if (*vErroProc) return;
+    if (*vErroProc) PARSE_RETURN;
     if (!*token && *token_type != QUOTE) {
         *vErroProc = 2;
-        return;
+        PARSE_RETURN;
     }
 
     while (1) {
@@ -2912,7 +2958,7 @@ void parseExpr(unsigned char *result) {
             if (tokenType == DELIMITER && (tokenChar == '+' || tokenChar == '-')) {
                 pendingUnary = tokenChar;
                 nextToken();
-                if (*vErroProc) return;
+                if (*vErroProc) PARSE_RETURN;
                 continue;
             }
 
@@ -2958,16 +3004,17 @@ writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n\0");
 }
 #endif
-                    tokenVarAtuLen = tokenLen;
+                    *tokenVarAtuLen = tokenLen;
                     tokenVarAtu[0] = token[0];
                     tokenVarAtu[1] = token[1];
                     tokenVarAtu[2] = token[2];
+                    tokenVarAtu[3] = 0x00;
                     vRet = find_var((char*)tokenVarAtu);
                     if (vRet == 0)
                     {
                         if (*vErroProc == 0)
                             *vErroProc = 4;
-                        return;
+                        PARSE_RETURN;
                     }
 
                     if (tokenLen < 3)
@@ -3004,13 +3051,13 @@ writeLongSerial("]\r\n\0");
 }
 #endif
                     nextToken();
-                    if (*vErroProc) return;
+                    if (*vErroProc) PARSE_RETURN;
                 }
                 else if (tokenType == QUOTE) {
                     valueType = '$';
                     strcpy((char*)temp, (char*)token);
                     nextToken();
-                    if (*vErroProc) return;
+                    if (*vErroProc) PARSE_RETURN;
                 }
                 else if (tokenType == NUMBER) {
 #ifdef BASIC_DEBUG_ON
@@ -3034,7 +3081,7 @@ writeLongSerial("Aqui 888.666.88\r\n\0");
 #endif
                         valueType = '#';
                         numberValue = floatStringToFpp(token);
-                        if (*vErroProc) return;
+                        if (*vErroProc) PARSE_RETURN;
                     }
                     else
                     {
@@ -3102,7 +3149,7 @@ writeLongSerial("]\r\n\0");
 #endif
 
                     nextToken();
-                    if (*vErroProc) return;
+                    if (*vErroProc) PARSE_RETURN;
 #ifdef BASIC_DEBUG_ON
 if (*debugOn)
 {
@@ -3148,7 +3195,7 @@ writeLongSerial(sqtdtam);
 writeLongSerial("]\r\n\0");
 }
 #endif
-                    if (*vErroProc) return;
+                    if (*vErroProc) PARSE_RETURN;
 
                     valueType = *value_type;
 
@@ -3164,7 +3211,7 @@ writeLongSerial("]\r\n\0");
                     }
 
                     nextToken();
-                    if (*vErroProc) return;
+                    if (*vErroProc) PARSE_RETURN;
                 }
 #ifdef BASIC_DEBUG_ON
 if (*debugOn)
@@ -3176,7 +3223,7 @@ writeLongSerial("Aqui 888.666.93\r\n\0");
                 if (pendingUnary) {
                     if (valueType == '$') {
                         *vErroProc = 16;
-                        return;
+                        PARSE_RETURN;
                     }
 
                     if (valueType == '#')
@@ -3195,7 +3242,7 @@ writeLongSerial("Aqui 888.666.94\r\n\0");
 
                 if (valTop + 1 >= PARSER_STACK_SIZE) {
                     *vErroProc = 14;
-                    return;
+                    PARSE_RETURN;
                 }
 #ifdef BASIC_DEBUG_ON
 if (*debugOn)
@@ -3280,7 +3327,7 @@ writeLongSerial("]\r\n\0");
                     if (pendingUnary == '-') {
                         if (valTop + 1 >= PARSER_STACK_SIZE) {
                             *vErroProc = 14;
-                            return;
+                            PARSE_RETURN;
                         }
 
                         valTop++;
@@ -3289,7 +3336,7 @@ writeLongSerial("]\r\n\0");
 
                         if (opTop + 1 >= PARSER_STACK_SIZE) {
                             *vErroProc = 14;
-                            return;
+                            PARSE_RETURN;
                         }
 
                         opTop++;
@@ -3302,7 +3349,7 @@ writeLongSerial("]\r\n\0");
 
                 if (opTop + 1 >= PARSER_STACK_SIZE) {
                     *vErroProc = 14;
-                    return;
+                    PARSE_RETURN;
                 }
 
                 opTop++;
@@ -3310,7 +3357,7 @@ writeLongSerial("]\r\n\0");
                 opPrecStack[opTop] = 0;
 
                 nextToken();
-                if (*vErroProc) return;
+                if (*vErroProc) PARSE_RETURN;
 
                 continue;
             }
@@ -3329,7 +3376,7 @@ writeLongSerial("]\r\n\0");
 
                 if (valTop < 1) {
                     *vErroProc = 14;
-                    return;
+                    PARSE_RETURN;
                 }
 
                 b = valStack[valTop];
@@ -3361,7 +3408,7 @@ writeLongSerial("]\r\n\0");
                 if (typeA != typeB) {
                     if (typeA == '$' || typeB == '$') {
                         *vErroProc = 16;
-                        return;
+                        PARSE_RETURN;
                     }
 
                     if (typeA == '#') {
@@ -3377,7 +3424,7 @@ writeLongSerial("]\r\n\0");
                 if (op == 0xF3 || op == 0xF4) {
                     if (typeA == '$' || typeB == '$') {
                         *vErroProc = 16;
-                        return;
+                        PARSE_RETURN;
                     }
 
                     if (op == 0xF3)
@@ -3406,7 +3453,7 @@ writeLongSerial("]\r\n\0");
                             strcat(a,b);
                         else  {
                             *vErroProc = 27;
-                            return;
+                            PARSE_RETURN;
                         }
                     }
 
@@ -3418,7 +3465,7 @@ writeLongSerial("]\r\n\0");
                 opTop--;
 
                 nextToken();
-                if (*vErroProc) return;
+                if (*vErroProc) PARSE_RETURN;
 
                 expectValue = 0;
                 continue;
@@ -3446,7 +3493,7 @@ writeLongSerial("]\r\n\0");
 
                 if (valTop < 1) {
                     *vErroProc = 14;
-                    return;
+                    PARSE_RETURN;
                 }
 
                 b = valStack[valTop];
@@ -3478,7 +3525,7 @@ writeLongSerial("]\r\n\0");
                 if (typeA != typeB) {
                     if (typeA == '$' || typeB == '$') {
                         *vErroProc = 16;
-                        return;
+                        PARSE_RETURN;
                     }
 
                     if (typeA == '#')
@@ -3495,7 +3542,7 @@ writeLongSerial("]\r\n\0");
                 if (op == 0xF3 || op == 0xF4) {
                     if (typeA == '$' || typeB == '$') {
                         *vErroProc = 16;
-                        return;
+                        PARSE_RETURN;
                     }
 
                     if (op == 0xF3)
@@ -3524,7 +3571,7 @@ writeLongSerial("]\r\n\0");
                             strcat(a,b);
                         else  {
                             *vErroProc = 27;
-                            return;
+                            PARSE_RETURN;
                         }
                     }
 
@@ -3534,7 +3581,7 @@ writeLongSerial("]\r\n\0");
 
             if (opTop + 1 >= PARSER_STACK_SIZE) {
                 *vErroProc = 14;
-                return;
+                PARSE_RETURN;
             }
 
             opTop++;
@@ -3542,7 +3589,7 @@ writeLongSerial("]\r\n\0");
             opPrecStack[opTop] = (unsigned char)currentPrec;
 
             nextToken();
-            if (*vErroProc) return;
+            if (*vErroProc) PARSE_RETURN;
 
             expectValue = 1;
 
@@ -3557,12 +3604,12 @@ writeLongSerial("]\r\n\0");
 
         if (op == '(') {
             *vErroProc = 15;
-            return;
+            PARSE_RETURN;
         }
 
         if (valTop < 1) {
             *vErroProc = 14;
-            return;
+            PARSE_RETURN;
         }
 
         b = valStack[valTop];
@@ -3575,7 +3622,7 @@ writeLongSerial("]\r\n\0");
         if (typeA != typeB) {
             if (typeA == '$' || typeB == '$') {
                 *vErroProc = 16;
-                return;
+                PARSE_RETURN;
             }
 
             if (typeA == '#') {
@@ -3591,7 +3638,7 @@ writeLongSerial("]\r\n\0");
         if (op == 0xF3 || op == 0xF4) {
             if (typeA == '$' || typeB == '$') {
                 *vErroProc = 16;
-                return;
+                PARSE_RETURN;
             }
 
             if (op == 0xF3)
@@ -3620,7 +3667,7 @@ writeLongSerial("]\r\n\0");
                     strcat(a,b);
                 else  {
                     *vErroProc = 27;
-                    return;
+                    PARSE_RETURN;
                 }
             }
 
@@ -3639,7 +3686,7 @@ writeLongSerial("]\r\n\0");
 
     if (valTop < 0) {
         *vErroProc = 14;
-        return;
+        PARSE_RETURN;
     }
 #ifdef BASIC_DEBUG_ON
 if (*debugOn)
@@ -3655,6 +3702,10 @@ writeLongSerial("Aqui 888.666.79\r\n\0");
     else
         *(unsigned int*)result = *(unsigned int*)valStack[valTop];
 
+    nivelParse--;
+#undef valTop
+#undef opTop
+#undef PARSE_RETURN
     return;
 }
 
@@ -4422,10 +4473,11 @@ void unaryReal(char o, int *r)
 unsigned char* find_var(char *s)
 {
     static unsigned char vTempPool[4][250];
-    static unsigned char vTempDepth = 0;
+    static unsigned char vTempDepth;
     unsigned char *vTemp;
     unsigned char vLen = 0;
 
+    vTempDepth = 0;
     vTemp = vTempPool[vTempDepth & 0x03];
     vTempDepth++;
 
@@ -5228,7 +5280,7 @@ writeLongSerial(sqtdtam);
     else
         vLista = pStartSimpVar;
 
-    if (1)  // (!vArray) // sem array por enquanto, para ajustar tamanho variavel no cache
+    if (1) // (!vArray) // sem array por enquanto, para ajustar tamanho variavel no cache
     {
         cacheName0Ptr = lastVarCacheName0;
         cacheName1Ptr = lastVarCacheName1;

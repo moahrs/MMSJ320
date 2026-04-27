@@ -30,13 +30,24 @@
 #include "monitorapi.h"
 #include "mgui.h"
 
+// Variaveis definidas em mmsj320api.h (incluido pelo mmsjos.c).
+// Declaradas aqui como extern para evitar multipla definicao.
+extern unsigned char *startBasic;
+extern unsigned long *startBasic0;
+extern unsigned long *startBasic1;
+extern unsigned long *startBasic2;
+extern unsigned long *startBasic3;
+extern unsigned long *startBasic4;
+extern unsigned long *startBasic5;
+extern unsigned char *paramBasic;
+
 #define versionMgui "0.7a03"
 #define __EM_OBRAS__ 1
 
 unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
 unsigned char *vvdgc = 0x00400043; // VDP TMS9118 Registers/Address Mode
 
-unsigned char memPosConfig; // Config file
+unsigned char *memPosConfig = 0x00; // Config file
 unsigned char *imgsMenuSys = 0x00; // Images PBM 16x16 each icone in order (64 Bytes Each)
 unsigned char vFinalOS; // Atualizar sempre que a compilacao passar desse valor
 unsigned char vcorwf; //
@@ -1115,17 +1126,87 @@ unsigned char read_status_reg_gui(void)
 }
 
 //-----------------------------------------------------------------------------
+// Config INI - Busca direta no buffer de memoria
+// Busca 'key' dentro de '[section]' em memPosConfig; copia o valor em vOutBuf como string.
+// Retorna vOutBuf em caso de sucesso, NULL se nao encontrado.
+// vOutMax: tamanho do vOutBuf incluindo '\0'
+//-----------------------------------------------------------------------------
+char *mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax)
+{
+    unsigned char slen = (unsigned char)strlen(section);
+    unsigned char klen = (unsigned char)strlen(key);
+    unsigned char *p = memPosConfig;
+    unsigned char i;
+    unsigned char inSection = 0;
+
+    if (!p || !section || !slen || !key || !klen || !vOutBuf || vOutMax == 0)
+        return (char *)0;
+
+    // Ignore UTF-8 BOM no inicio do arquivo, se existir.
+    if (p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF)
+        p += 3;
+
+    while (*p)
+    {
+        // Pula espacos e tabulacoes no inicio da linha
+        while (*p == ' ' || *p == '\t') p++;
+
+        // Verifica cabecalho de secao [NOME]
+        if (*p == '[')
+        {
+            unsigned char *q = p + 1;
+            inSection = (strncmp((char *)q, section, slen) == 0 && q[slen] == ']') ? 1 : 0;
+        }
+        else if (inSection)
+        {
+            // Verifica se a chave bate nessa linha
+            if (strncmp((char *)p, key, klen) == 0)
+            {
+                unsigned char *q = p + klen;
+                // Pula espacos antes do '='
+                while (*q == ' ' || *q == '\t') q++;
+                if (*q == '=')
+                {
+                    q++;
+                    // Pula espacos apos o '='
+                    while (*q == ' ' || *q == '\t') q++;
+
+                    i = 0;
+                    while (*q && *q != '\n' && *q != '\r' && i < (unsigned char)(vOutMax - 1))
+                        vOutBuf[i++] = (char)*q++;
+                    // Remove espacos no final
+                    while (i > 0 && (vOutBuf[i-1] == ' ' || vOutBuf[i-1] == '\t'))
+                        i--;
+                    vOutBuf[i] = '\0';
+                    return vOutBuf;
+                }
+            }
+        }
+
+        // Avanca ate o proximo fim de linha
+        while (*p && *p != '\n') p++;
+        if (*p == '\n') p++;
+    }
+
+    return (char *)0;
+}
+
+//-----------------------------------------------------------------------------
 void startMGI(void) {
     unsigned char vnomefile[12];
     unsigned char lc, ll, *ptr_ico, *ptr_prg, *ptr_pos;
     unsigned char* vLoadImage = 0x00;
+    unsigned long cfgSize;
     int percent;
     long ix;
     VDP_COLOR cores;
     VDP_COORD cursor;
     unsigned int error_code = OS_ERR_NONE;
+    char tmp[32];
 
     OSTaskSuspend(TASK_MMSJOS_MAIN);
+
+    *startBasic = 2;    // Inicia Basic vindo do MGUI sem mensagens e textos
 
     cursor = vdp_get_cursor();
     //cores = vdp_get_color();
@@ -1155,7 +1236,14 @@ void startMGI(void) {
     writesxy(105,150,1,"v"versionMgui,vcorwf,vcorwb);
 
     writesxy(86,170,1,"Loading Config",vcorwf,vcorwb);
-    loadFile("/MGUI/MGUI.CFG", memPosConfig);
+    memPosConfig = malloc(SIZE_LOAD_CFG_MEM + 1);
+    if (memPosConfig)
+    {
+        cfgSize = loadFile("/MGUI/MGUI.CFG", (unsigned short*)memPosConfig);
+        if (cfgSize > SIZE_LOAD_CFG_MEM)
+            cfgSize = SIZE_LOAD_CFG_MEM;
+        memPosConfig[cfgSize] = 0x00;
+    }
 
     writesxy(53,170,1,"Loading Icons ",vcorwf,vcorwb);
 
@@ -1175,12 +1263,18 @@ void startMGI(void) {
 
     for (ix = 0; ix < 99999; ix++);
 
-    vcorwf = VDP_WHITE;
-    vcorwb = VDP_TRANSPARENT;
-    vcorwb2 = VDP_BLACK;
+    memset(tmp, 0x00, sizeof(tmp));
+    if (mguiCfgGet("START", "COLOR_F", tmp, sizeof(tmp)))
+        vcorwf = atoi(tmp);
+    memset(tmp, 0x00, sizeof(tmp));
+    if (mguiCfgGet("START", "COLOR_B", tmp, sizeof(tmp)))
+        vcorwb = atoi(tmp);
+    memset(tmp, 0x00, sizeof(tmp));
+    if (mguiCfgGet("START", "COLOR_B2", tmp, sizeof(tmp)))
+        vcorwb2 = atoi(tmp);
 
-    vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
-    vdp_set_bdcolor(VDP_BLACK);
+    vdp_init(VDP_MODE_G2, vcorwb2, 0, 0);
+    vdp_set_bdcolor(vcorwb2);
 
     mouseX = 128;
     mouseY = 96;
@@ -1207,6 +1301,11 @@ void startMGI(void) {
     }
 
     free(imgsMenuSys);
+    if (memPosConfig)
+    {
+        free(memPosConfig);
+        memPosConfig = 0x00;
+    }
 
     vdp_init(VDP_MODE_TEXT, VDP_BLACK, 0, 0);
     vdp_textcolor(VDP_WHITE, VDP_BLACK);
@@ -1219,6 +1318,8 @@ void startMGI(void) {
     printText("#>");
 
     showCursor();
+
+    *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
 
     OSTaskResume(TASK_MMSJOS_MAIN);
 }
@@ -1871,6 +1972,7 @@ void menuTask(void *pData)
     unsigned short vx, vy, vposicony;
     unsigned char *vEndExec;
     unsigned long vsizefilemalloc;
+    unsigned char tmp[16];
 
     mx = 0;
     my = LINHAMENU;
@@ -1931,8 +2033,9 @@ void menuTask(void *pData)
                         if (vsizefilemalloc != ERRO_D_NOT_FOUND)
                         {
                             TrocaSpriteMouse(MOUSE_HOURGLASS);
-                            vEndExec = malloc(vsizefilemalloc);
-                            if (!vEndExec)
+                            vEndExec = 0x00870000; // malloc(vsizefilemalloc);
+                            *startBasic1 = malloc(2048);
+                            if (!vEndExec || !*startBasic1)
                             {
                                 TrocaSpriteMouse(MOUSE_POINTER);
                                 message("No memory to load FILES.BIN\0", BTCLOSE, 0);
@@ -1945,7 +2048,9 @@ void menuTask(void *pData)
                                     runFromMGUI(vEndExec);
                                 else {
                                     message("Loading Error...\0", BTCLOSE, 0);
-                                    free(vEndExec);
+                                    //free(vEndExec); // endereco fixo, nao aloca
+                                    free(*startBasic1);
+                                    *startBasic1 = 0;
                                 }
                             }
                         }
@@ -2100,6 +2205,8 @@ void importFile(void)
     unsigned long vSizeTotalRec;
     unsigned short vChunkSize;
     MGUI_SAVESCR vsavescr;
+
+    vstring[0] = '\0';
 
     vSizeTotalRec = lstmGetSize();
 

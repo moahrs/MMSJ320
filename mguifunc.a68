@@ -22,7 +22,7 @@ mgui_func_table:
             dc.l _showWindow
             dc.l _TrocaSpriteMouse
             dc.l _MostraIcone
-            dc.l _importFile
+            dc.l _mguiCfgGet
             dc.l _putImagePbmP4
             dc.l _setPosPressed
             dc.l _getMouseData
@@ -31,4 +31,3 @@ mgui_func_table:
             dc.l _fillin
             dc.l _getColorData
             dc.l _button
-            
