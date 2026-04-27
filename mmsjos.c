@@ -2391,8 +2391,8 @@ unsigned char fsPwdDir(unsigned char *vdirpath) {
         vdirpath[1] = '\0';
     }
     else {
-        vdirpath[0] = 'o';
-        vdirpath[1] = '\0';
+        memcpy(vdirpath, vdiratu, sizeof(vdiratu));
+        vdirpath[sizeof(vdiratu)] = '\0';
     }
 
 	return RETURN_OK;

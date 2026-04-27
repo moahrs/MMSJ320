@@ -23,39 +23,38 @@
 #include "mmsjosapi.h"
 #include "files.h"
 
-char *itoa(int value, char *str, int base);
-char *ltoa(long value, char *str, int base);
-
 //-----------------------------------------------------------------------------
 // Principal
 //-----------------------------------------------------------------------------
 void main(void)
 {
     unsigned char vcont, ix, iy, cc, dd, ee, cnum[20], *cfileptr, *cfilepos;
-    unsigned char ikk, vnomefile[128], vnomefilenew[15], avdm2, avdm, avdl, vopc, vresp;
+    unsigned char ikk, vnomefile[150], vnomefilenew[15], avdm2, avdm, avdl, vopc, vresp;
     unsigned long vtotbytes = 0;
     unsigned char vstring[64], vwb, my, corOpcFile, corOpcFileExec, corOpcDir, corDisable;
     unsigned long vSizeAloc = 0, izz;
     unsigned char extExec[4];
     char execProg[32];
+    unsigned char *vEndExec;
     unsigned char sqtdtam[10];
+    unsigned char vDirAtu[128];
     VDP_COLOR vdpcolor;
     MGUI_SAVESCR vsavescr;
     MGUI_MOUSE mouseData;
     MGUI_SAVESCR windowScr;
 
-    linhastatus = linhastatusDef;
+    /*linhastatus = linhastatusDef;
     carregaDir = carregaDirDef;
     listaDir = listaDirDef;
     SearchFile = SearchFileDef;
-    drawWindow = drawWindowDef;
-    myitoa = itoa;
-    myltoa = ltoa;
-    mytoupper = toupper;
-    mystrcpy = strcpy;
-    mystrcat = strcat;
-    mymemset = memset;
-    myvRetAlloc = vRetAlloc;
+    drawWindow = drawWindowDef;*/
+    /*itoa = itoa;
+    ltoa = ltoa;
+    toupper = toupper;
+    strcpy = strcpy;
+    strcat = strcat;
+    memset = memset;*/
+    //myvRetAlloc = vRetAlloc;
 
     // Reserva um tanto ja pra memoria de uso do programa de variaveis globais
     //vMemTotal = fsMalloc(1024);
@@ -83,7 +82,7 @@ void main(void)
     if (!dir)
         return;
 
-    mymemset(dir, 0x00, sizeof(FILES_DIR) * 32);
+    memset(dir, 0x00, sizeof(FILES_DIR) * 32);
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
 
@@ -269,11 +268,11 @@ void main(void)
 
                         if (vresp == BTYES)
                         {
-                            mystrcpy(vnomefile,dir[ee].Name);  // teste
+                            strcpy(vnomefile,dir[ee].Name);  // teste
                             if (dir[ee].Ext[0] != 0x00)
                             {
-                                mystrcat(vnomefile,".");
-                                mystrcat(vnomefile,dir[ee].Ext);
+                                strcat(vnomefile,".");
+                                strcat(vnomefile,dir[ee].Ext);
                             }
 
 
@@ -362,7 +361,7 @@ void main(void)
                             ix = 0;
                             while(vstring[ix])
                             {
-                                vnomefilenew[ix] = mytoupper(vstring[ix]);
+                                vnomefilenew[ix] = toupper(vstring[ix]);
                                 ix++;
                             }
 
@@ -371,17 +370,17 @@ void main(void)
                             switch (vopc)
                             {
                                 case 1:
-                                    mystrcpy(vnomefile,"Confirm\nRename File ?\n\0");
+                                    strcpy(vnomefile,"Confirm\nRename File ?\n\0");
                                     break;
                                 case 2:
-                                    mystrcpy(vnomefile,"Confirm\nCopy File ?\n\0");
+                                    strcpy(vnomefile,"Confirm\nCopy File ?\n\0");
                                     break;
                                 case 4:
-                                    mystrcpy(vnomefile,"Confirm\nCreate Directory ?\n\0");
+                                    strcpy(vnomefile,"Confirm\nCreate Directory ?\n\0");
                                     break;
                             }
 
-                            mystrcat(vnomefile, vstring);
+                            strcat(vnomefile, vstring);
 
                             vresp = message(vnomefile,(BTYES | BTNO), 0);
 
@@ -391,18 +390,18 @@ void main(void)
                                 {
                                     if (vopc == 1)
                                     {
-                                        mystrcpy(vnomefile,dir[ee].Name);
+                                        strcpy(vnomefile,dir[ee].Name);
                                     }
                                     else if (vopc == 2)
                                     {
-                                        mystrcpy(vnomefile,"CP ");
-                                        mystrcat(vnomefile,dir[ee].Name);
+                                        strcpy(vnomefile,"CP ");
+                                        strcat(vnomefile,dir[ee].Name);
                                     }
 
                                     if (dir[ee].Ext[0] != 0x00)
                                     {
-                                        mystrcat(vnomefile,".");
-                                        mystrcat(vnomefile,dir[ee].Ext);
+                                        strcat(vnomefile,".");
+                                        strcat(vnomefile,dir[ee].Ext);
                                     }
                                 }
 
@@ -414,8 +413,8 @@ void main(void)
                                         break;
                                     case 2:
                                         linhastatus(8, vnomefile);
-                                        mystrcat(vnomefile," ");
-                                        mystrcat(vnomefile,vnomefilenew);
+                                        strcat(vnomefile," ");
+                                        strcat(vnomefile,vnomefilenew);
                                         vresp = fsOsCommand(vnomefile);
                                         break;
                                     case 4:
@@ -458,12 +457,12 @@ void main(void)
                     {
                         FillRect(8,clinha[ee],8,8,vcorbg);
 
-                        mystrcpy(vnomefile,dir[ee].Name);
+                        strcpy(vnomefile,dir[ee].Name);
 
                         if (dir[ee].Ext[0] != 0x00)
                         {
-                            mystrcat(vnomefile,".");
-                            mystrcat(vnomefile,dir[ee].Ext);
+                            strcat(vnomefile,".");
+                            strcat(vnomefile,dir[ee].Ext);
                         }
 
                         linhastatus(5, vnomefile);
@@ -488,22 +487,37 @@ void main(void)
                     {
                         FillRect(8,clinha[ee],8,8,vcorbg);
 
+                        fsPwdDir(vDirAtu);
+
                         if (execProg[0]) {
-                            mystrcpy(vnomefile,dir[ee].Name);
-                            mystrcat(vnomefile,".");
-                            mystrcat(vnomefile,dir[ee].Ext);
+                            strcpy(vnomefile,vDirAtu);
+                            if (sizeof(vDirAtu) > 1)
+                                strcat(vnomefile,"/");
+    
+                            strcat(vnomefile,dir[ee].Name);
+                            strcat(vnomefile,".");
+                            strcat(vnomefile,dir[ee].Ext);
                         }
                         else {
-                            mystrcpy(vnomefile,execProg);
-                            mystrcat(vnomefile," ");
-                            mystrcat(vnomefile,dir[ee].Name);
-                            mystrcat(vnomefile,".");
-                            mystrcat(vnomefile,dir[ee].Ext);
+                            strcpy(vnomefile,execProg);
+
+                            strcpy(paramBasic,vDirAtu);
+                            if (sizeof(vDirAtu) > 1)
+                                strcat(vnomefile,"/");
+                                
+                            strcat(paramBasic,dir[ee].Name);
+                            strcat(paramBasic,".");
+                            strcat(paramBasic,dir[ee].Ext);
                         }
 
                         linhastatus(5, vnomefile);
 
-                        vresp = fsOsCommand(vnomefile);
+                        // Load File in Memory 0x00880000
+                        loadFile(vnomefile, (unsigned char *)0x00880000);
+
+                        // Run 0x00880000
+                        vEndExec = 0x00880000;  
+                        runFromMGUI(vEndExec);
 
                         vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
                         vdp_set_bdcolor(VDP_BLACK);
@@ -574,7 +588,7 @@ void main(void)
 }
 
 //--------------------------------------------------------------------------
-void drawWindowDef(void)
+void drawWindow(void)
 {
     // Cria a Janela
     showWindow("File Explorer v0.3a01\0", 0, 0, 255, 191, BTNONE);
@@ -589,18 +603,16 @@ void drawWindowDef(void)
     writesxy(200,20,8,"Attrb\0", vcorfg, vcorbg);
 
     // Carrega Diretorio
-writeLongSerial("Calling carregaDir()\r\n\0");
     carregaDir();
 
     // Lista Diretorio
-writeLongSerial("Calling listaDir()\r\n\0");
     listaDir();
 
     TrocaSpriteMouse(MOUSE_POINTER);
 }
 
 //--------------------------------------------------------------------------
-void linhastatusDef(unsigned char vtipomsgs, unsigned char * vmsgs)
+void linhastatus(unsigned char vtipomsgs, unsigned char * vmsgs)
 {
     FillRect(2,176,252,13,vcorbg);
     DrawRect(0,175,255,15,vcorfg);
@@ -646,7 +658,7 @@ void linhastatusDef(unsigned char vtipomsgs, unsigned char * vmsgs)
 }
 
 //--------------------------------------------------------------------------
-void carregaDirDef(void)
+void carregaDir(void)
 {
     unsigned char vcont, ikk, ix, iy, cc, dd, ee, cnum[20];
     unsigned char vnomefile[32], dsize;
@@ -716,8 +728,8 @@ void carregaDirDef(void)
 
                     // Dia
                     vqtdtam = vdirfiles.UpdateDate & 0x001F;
-                    mymemset(sqtdtam, 0x0, 10);
-                    myitoa(vqtdtam, sqtdtam, 10);
+                    memset(sqtdtam, 0x0, 10);
+                    itoa(vqtdtam, sqtdtam, 10);
 
                     if (vqtdtam < 10) {
                         ddir.Modify[4] = '0';
@@ -731,8 +743,8 @@ void carregaDirDef(void)
 
                     // Ano
                     vqtdtam = ((vdirfiles.UpdateDate & 0xFE00) >> 9) + 1980;
-                    mymemset(sqtdtam, 0x0, 10);
-                    myitoa(vqtdtam, sqtdtam, 10);
+                    memset(sqtdtam, 0x0, 10);
+                    itoa(vqtdtam, sqtdtam, 10);
 
                     ddir.Modify[7] = sqtdtam[0];
                     ddir.Modify[8] = sqtdtam[1];
@@ -762,8 +774,8 @@ void carregaDirDef(void)
                             cuntam = ' ';
 
                         // Transforma para decimal
-                        mymemset(sqtdtam, 0x0, 10);
-                        myitoa(vqtdtam, sqtdtam, 10);
+                        memset(sqtdtam, 0x0, 10);
+                        itoa(vqtdtam, sqtdtam, 10);
 
                         // Primeira Parte da Linha do dir, tamanho
                         for(ix = 0; ix <= 3; ix++) {
@@ -812,38 +824,16 @@ void carregaDirDef(void)
 
                     ddir.Attr[5] = '\0';
 
-writeLongSerial("To Load file: ");
-writeLongSerial(ddir.Name);
-writeSerial('|');
-writeLongSerial(ddir.Ext);
-writeSerial('|');
-writeLongSerial(ddir.Modify);
-writeSerial('|');
-writeLongSerial(ddir.Size);
-writeSerial('|');
-writeLongSerial(ddir.Attr);
-writeLongSerial("\r\n\0");
-
                     if (dFileCursor >= 32)
                         break;
 
-                    mystrcpy(dir[dFileCursor].Name, ddir.Name);
-                    mystrcpy(dir[dFileCursor].Ext, ddir.Ext);
-                    mystrcpy(dir[dFileCursor].Modify, ddir.Modify);
-                    mystrcpy(dir[dFileCursor].Size, ddir.Size);
-                    mystrcpy(dir[dFileCursor].Attr, ddir.Attr);
+                    strcpy(dir[dFileCursor].Name, ddir.Name);
+                    strcpy(dir[dFileCursor].Ext, ddir.Ext);
+                    strcpy(dir[dFileCursor].Modify, ddir.Modify);
+                    strcpy(dir[dFileCursor].Size, ddir.Size);
+                    strcpy(dir[dFileCursor].Attr, ddir.Attr);
                     dir[dFileCursor].Attr[5] = 0x00;
-writeLongSerial("Loaded file: ");
-writeLongSerial(dir[dFileCursor].Name);
-writeSerial('|');
-writeLongSerial(dir[dFileCursor].Ext);
-writeSerial('|');
-writeLongSerial(dir[dFileCursor].Modify);
-writeSerial('|');
-writeLongSerial(dir[dFileCursor].Size);
-writeSerial('|');
-writeLongSerial(dir[dFileCursor].Attr);
-writeLongSerial("\r\n\0");
+
                     //dir[dFileCursor] = ddir;
                     vPosDir = dFileCursor;
                     dFileCursor = dFileCursor + 1;
@@ -884,7 +874,7 @@ writeLongSerial("\r\n\0");
 }
 
 //--------------------------------------------------------------------------
-void listaDirDef(void)
+void listaDir(void)
 {
     unsigned short pposy, vretfs, dd, ww;
     unsigned char ee, cc,ix, cstring[10];
@@ -978,6 +968,6 @@ void listaDirDef(void)
 }
 
 //--------------------------------------------------------------------------
-void SearchFileDef(void)
+void SearchFile(void)
 {
 }

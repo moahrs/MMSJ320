@@ -6240,12 +6240,15 @@ _fsPwdDir:
 fsPwdDir_1:
 ; }
 ; else {
-; vdirpath[0] = 'o';
+; memcpy(vdirpath, vdiratu, sizeof(vdiratu));
+       pea       128
+       pea       _vdiratu.L
+       move.l    D2,-(A7)
+       jsr       _memcpy
+       add.w     #12,A7
+; vdirpath[sizeof(vdiratu)] = '\0';
        move.l    D2,A0
-       move.b    #111,(A0)
-; vdirpath[1] = '\0';
-       move.l    D2,A0
-       clr.b     1(A0)
+       clr.b     128(A0)
 fsPwdDir_2:
 ; }
 ; return RETURN_OK;

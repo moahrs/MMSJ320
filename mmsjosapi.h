@@ -52,7 +52,7 @@ typedef void (*PutIconeType)(unsigned int* vimage, unsigned short x, unsigned sh
 typedef void (*InvertRectType)(unsigned short xi, unsigned short yi, unsigned short pwidth, unsigned short pheight);
 typedef void (*SelRectType)(unsigned short x, unsigned short y, unsigned short pwidth, unsigned short pheight);
 typedef void (*PutImageType)(unsigned char* cimage, unsigned short x, unsigned short y);
-typedef void (*LoadIconLibType)(unsigned char* cfile);
+typedef void (*runFromMGUIType)(unsigned long vEnderExec);
 typedef unsigned char (*waitButtonType)(void);
 typedef unsigned char (*messageType)(char* bstr, unsigned char bbutton, unsigned short btime);
 typedef void (*drawButtonsnewType)(unsigned char *vbuttons, unsigned char *pbbutton, unsigned short xib, unsigned short yib);
@@ -115,7 +115,7 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define InvertRect ((InvertRectType *)(unsigned long)MGUI_FUNC_TABLE)[13] // Índice da função
 #define SelRect ((SelRectType *)(unsigned long)MGUI_FUNC_TABLE)[14] // Índice da função
 #define PutImage ((PutImageType *)(unsigned long)MGUI_FUNC_TABLE)[15] // Índice da função
-#define LoadIconLib ((LoadIconLibType *)(unsigned long)MGUI_FUNC_TABLE)[16] // Índice da função
+#define runFromMGUI ((runFromMGUIType *)(unsigned long)MGUI_FUNC_TABLE)[16] // Índice da função
 #define waitButton ((waitButtonType *)(unsigned long)MGUI_FUNC_TABLE)[17] // Índice da função
 #define message ((messageType *)(unsigned long)MGUI_FUNC_TABLE)[18] // Índice da função
 #define drawButtonsnew ((drawButtonsnewType *)(unsigned long)MGUI_FUNC_TABLE)[19] // Índice da função

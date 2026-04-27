@@ -7302,11 +7302,15 @@ menuTask_26:
        pea       @mgui_38.L
        jsr       (A5)
        add.w     #12,A7
-; //free(vEndExec);
-; free(startBasic1);
-       move.l    _startBasic1.L,-(A7)
+; //free(vEndExec); // endereco fixo, nao aloca
+; free(*startBasic1);
+       move.l    _startBasic1.L,A0
+       move.l    (A0),-(A7)
        jsr       _free
        addq.w    #4,A7
+; *startBasic1 = 0;
+       move.l    _startBasic1.L,A0
+       clr.l     (A0)
 menuTask_27:
        bra.s     menuTask_20
 menuTask_19:

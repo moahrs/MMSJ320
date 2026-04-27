@@ -26,17 +26,17 @@ unsigned char vcorbg;
 unsigned char vPosDir;
 
 // DEFINE FUNCOES
-void linhastatusDef(unsigned char vtipomsgs, unsigned char * vmsgs);
-void SearchFileDef(void);
-void carregaDirDef(void);
-void listaDirDef(void);
-void drawWindowDef(void);
+void linhastatus(unsigned char vtipomsgs, unsigned char * vmsgs);
+void SearchFile(void);
+void carregaDir(void);
+void listaDir(void);
+void drawWindow(void);
 
-void (*linhastatus)(unsigned char vtipomsgs, unsigned char * vmsgs);
+/*void (*linhastatus)(unsigned char vtipomsgs, unsigned char * vmsgs);
 void (*SearchFile)(void);
 void (*carregaDir)(void);
 void (*listaDir)(void);
-void (*drawWindow)(void);
+void (*drawWindow)(void);*/
 
 char * (*mystrcpy)(char *, char *);
 char * (*mystrcat)(char *, char *);

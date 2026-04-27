@@ -35,9 +35,11 @@
 #include "mmsj320api.h"
 #include "note.h"
 
+#ifdef USE_REALOCABLE_CODE
 char *itoa(int value, char *str, int base);
 char *ltoa(long value, char *str, int base);
-
+#endif
+    
 //-----------------------------------------------------------------------------
 // Principal
 //-----------------------------------------------------------------------------
@@ -53,16 +55,16 @@ void main(void)
     unsigned long voffset, vch;
     unsigned long vsizefile;
     unsigned short vReadSize;
-    buttonType pButton;
 
     // --- Atribuicao de ponteiros de funcao locais ---
+    #ifdef USE_REALOCABLE_CODE
     drawNote        = drawNoteDef;
     displayNotePage = displayNotePageDef;
     drawScrollBar   = drawScrollBarDef;
     nmystrcpy       = strcpy;
     nmymemset       = memset;
     nmyitoa         = itoa;
-    pButton         = button;
+    #endif
 
     // --- Inicializa variaveis ---
     getColorData(&vdpcolor);
@@ -271,14 +273,15 @@ void main(void)
 //-----------------------------------------------------------------------------
 // Desenha a janela completa (titulo, area de texto, botao, scrollbar)
 //-----------------------------------------------------------------------------
+#ifdef USE_REALOCABLE_CODE
 void drawNoteDef(void)
+#else
+void drawNote(void)
+#endif
 {
     unsigned char titleBuf[32];
     unsigned char *pParam;
     unsigned char ix;
-    buttonType pButton;
-
-    pButton = button;
 
     // Janela cheia
     showWindow("Note Viewer v0.1\0", 0, 0, 255, 191, BTNONE);
@@ -287,7 +290,7 @@ void drawNoteDef(void)
     DrawLine(0, NOTE_CLOSE_Y - 4, 255, NOTE_CLOSE_Y - 4, nvcorfg);
 
     // Botao Close
-    pButton("Close", NOTE_CLOSE_X, NOTE_CLOSE_Y, NOTE_CLOSE_W, NOTE_CLOSE_H, WINDISP);
+    button("Close", NOTE_CLOSE_X, NOTE_CLOSE_Y, NOTE_CLOSE_W, NOTE_CLOSE_H, WINDISP);
 
     // Se nao ha arquivo, exibe mensagem na area de texto
     if (!noteTextBuf || noteLineCount == 0)
@@ -304,7 +307,11 @@ void drawNoteDef(void)
 //-----------------------------------------------------------------------------
 // Exibe as linhas visiveis a partir de noteTopLine com offset noteHOffset
 //-----------------------------------------------------------------------------
+#ifdef USE_REALOCABLE_CODE
 void displayNotePageDef(void)
+#else
+void displayNotePage(void)
+#endif
 {
     unsigned char linebuf[42];  // NOTE_CHARS_LINE + 2 de margem
     unsigned char *p;
@@ -367,7 +374,11 @@ void displayNotePageDef(void)
 //-----------------------------------------------------------------------------
 // Desenha a barra de rolagem vertical com indicador de posicao (thumb)
 //-----------------------------------------------------------------------------
+#ifdef USE_REALOCABLE_CODE
 void drawScrollBarDef(void)
+#else
+void drawScrollBar(void)
+#endif
 {
     unsigned short thumbY, thumbH;
     unsigned short range;

@@ -14,8 +14,8 @@ mgui_func_table:
             dc.l _PutIcone
             dc.l _InvertRect
             dc.l _SelRect
-            dc.l _PutImage
-            dc.l _LoadIconLib
+            dc.l _fsPwdDir
+            dc.l _runFromMGUI
             dc.l _waitButton
             dc.l _message
             dc.l _drawButtonsnew

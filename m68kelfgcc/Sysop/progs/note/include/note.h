@@ -8,6 +8,8 @@
 // Botao    : y=178..188 (Close)
 // Scrollbar: x=246..253, y=15..164
 
+//#define USE_REALOCABLE_CODE
+
 #define NOTE_Y_TEXT      15      // Y de inicio da area de texto
 #define NOTE_LINE_H      10      // Altura de cada linha em pixels
 #define NOTE_VISIBLE     15      // Numero de linhas visiveis
@@ -36,6 +38,11 @@ unsigned char   nvcorfg;         // Cor do texto
 unsigned char   nvcorbg;         // Cor do fundo
 
 // Prototipos das funcoes locais (definicao real em note.c)
+#ifndef USE_REALOCABLE_CODE
+void drawNote(void);
+void displayNotePage(void);
+void drawScrollBar(void);
+#else
 void drawNoteDef(void);
 void displayNotePageDef(void);
 void drawScrollBarDef(void);
@@ -49,3 +56,4 @@ void (*drawScrollBar)(void);
 char * (*nmystrcpy)(char *, char *);
 void * (*nmymemset)(void *, int, int);
 char * (*nmyitoa)(int, char *, int);
+#endif
