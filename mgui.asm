@@ -40,11 +40,22 @@
 ; extern unsigned long *startBasic4;
 ; extern unsigned long *startBasic5;
 ; extern unsigned char *paramBasic;
+; typedef struct LIST_WINDOWS
+; {
+; int id;
+; unsigned long loadAddress;
+; char zOrder;
+; char active;
+; char keyTec;
+; } LIST_WINDOWS; 
+; extern unsigned char *mguiIdRequest;
+; extern unsigned long *mguiRunTask;
+; extern LIST_WINDOWS *mguiListWindows;
 ; #define versionMgui "0.7a03"
 ; #define __EM_OBRAS__ 1
 ; unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
 ; unsigned char *vvdgc = 0x00400043; // VDP TMS9118 Registers/Address Mode
-; unsigned char *memPosConfig = 0x00; // Config file
+; unsigned char *memPosConfig = 0x008EF800; // Config file
 ; unsigned char *imgsMenuSys = 0x00; // Images PBM 16x16 each icone in order (64 Bytes Each)
 ; unsigned char vFinalOS; // Atualizar sempre que a compilacao passar desse valor
 ; unsigned char vcorwf; //
@@ -3919,13 +3930,13 @@ _read_status_reg_gui:
 ; // Retorna vOutBuf em caso de sucesso, NULL se nao encontrado.
 ; // vOutMax: tamanho do vOutBuf incluindo '\0'
 ; //-----------------------------------------------------------------------------
-; char *mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax)
+; char mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax)
 ; {
        xdef      _mguiCfgGet
 _mguiCfgGet:
-       link      A6,#-4
+       link      A6,#-24
        movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4,-(A7)
-       move.l    16(A6),D5
+       move.l    16(A6),D6
        move.l    12(A6),A3
        move.l    8(A6),A4
 ; unsigned char slen = (unsigned char)strlen(section);
@@ -3937,12 +3948,13 @@ _mguiCfgGet:
        move.l    A3,-(A7)
        jsr       _strlen
        addq.w    #4,A7
-       move.b    D0,D6
+       move.b    D0,D5
 ; unsigned char *p = memPosConfig;
        move.l    _memPosConfig.L,D2
 ; unsigned char i;
 ; unsigned char inSection = 0;
-       clr.b     -1(A6)
+       clr.b     -21(A6)
+; unsigned char sqtdtam[20];
 ; if (!p || !section || !slen || !key || !klen || !vOutBuf || vOutMax == 0)
        tst.l     D2
        beq       mguiCfgGet_3
@@ -3959,7 +3971,7 @@ mguiCfgGet_5:
        bne.s     mguiCfgGet_3
        move.l    A3,D0
        beq.s     mguiCfgGet_3
-       tst.b     D6
+       tst.b     D5
        bne.s     mguiCfgGet_6
        moveq     #1,D0
        bra.s     mguiCfgGet_7
@@ -3968,13 +3980,13 @@ mguiCfgGet_6:
 mguiCfgGet_7:
        and.l     #255,D0
        bne.s     mguiCfgGet_3
-       tst.l     D5
+       tst.l     D6
        beq.s     mguiCfgGet_3
        move.b    23(A6),D0
        bne.s     mguiCfgGet_1
 mguiCfgGet_3:
-; return (char *)0;
-       clr.l     D0
+; return 0;
+       clr.b     D0
        bra       mguiCfgGet_8
 mguiCfgGet_1:
 ; // Ignore UTF-8 BOM no inicio do arquivo, se existir.
@@ -4018,12 +4030,50 @@ mguiCfgGet_17:
        addq.l    #1,D2
        bra       mguiCfgGet_14
 mguiCfgGet_16:
+; // Ignora linhas vazias e comentarios
+; if (*p == '\r' || *p == '\n' || *p == ';' || *p == '#')
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #13,D0
+       beq.s     mguiCfgGet_20
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #10,D0
+       beq.s     mguiCfgGet_20
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #59,D0
+       beq.s     mguiCfgGet_20
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #35,D0
+       bne.s     mguiCfgGet_18
+mguiCfgGet_20:
+; {
+; while (*p == '\r' || *p == '\n') p++;
+mguiCfgGet_21:
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #13,D0
+       beq.s     mguiCfgGet_24
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #10,D0
+       bne.s     mguiCfgGet_23
+mguiCfgGet_24:
+       addq.l    #1,D2
+       bra       mguiCfgGet_21
+mguiCfgGet_23:
+; continue;
+       bra       mguiCfgGet_56
+mguiCfgGet_18:
+; }
 ; // Verifica cabecalho de secao [NOME]
 ; if (*p == '[')
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #91,D0
-       bne       mguiCfgGet_18
+       bne       mguiCfgGet_25
 ; {
 ; unsigned char *q = p + 1;
        move.l    D2,D0
@@ -4037,169 +4087,197 @@ mguiCfgGet_16:
        jsr       _strncmp
        add.w     #12,A7
        tst.l     D0
-       bne.s     mguiCfgGet_20
+       bne.s     mguiCfgGet_27
        and.l     #255,D7
        move.b    0(A2,D7.L),D0
        cmp.b     #93,D0
-       bne.s     mguiCfgGet_20
+       bne.s     mguiCfgGet_27
        moveq     #1,D0
-       bra.s     mguiCfgGet_21
-mguiCfgGet_20:
+       bra.s     mguiCfgGet_28
+mguiCfgGet_27:
        clr.b     D0
-mguiCfgGet_21:
-       move.b    D0,-1(A6)
-       bra       mguiCfgGet_30
-mguiCfgGet_18:
+mguiCfgGet_28:
+       move.b    D0,-21(A6)
+       bra       mguiCfgGet_38
+mguiCfgGet_25:
 ; }
 ; else if (inSection)
-       tst.b     -1(A6)
-       beq       mguiCfgGet_30
+       tst.b     -21(A6)
+       beq       mguiCfgGet_38
 ; {
 ; // Verifica se a chave bate nessa linha
-; if (strncmp((char *)p, key, klen) == 0)
-       and.l     #255,D6
-       move.l    D6,-(A7)
+; if (strncmp((char *)p, key, klen) == 0 &&
+       and.l     #255,D5
+       move.l    D5,-(A7)
        move.l    A3,-(A7)
        move.l    D2,-(A7)
        jsr       _strncmp
        add.w     #12,A7
        tst.l     D0
-       bne       mguiCfgGet_30
+       bne       mguiCfgGet_38
+       move.l    D2,A0
+       and.l     #255,D5
+       move.b    0(A0,D5.L),D0
+       cmp.b     #32,D0
+       beq.s     mguiCfgGet_33
+       move.l    D2,A0
+       and.l     #255,D5
+       move.b    0(A0,D5.L),D0
+       cmp.b     #9,D0
+       beq.s     mguiCfgGet_33
+       move.l    D2,A0
+       and.l     #255,D5
+       move.b    0(A0,D5.L),D0
+       cmp.b     #61,D0
+       bne       mguiCfgGet_38
+mguiCfgGet_33:
+; (p[klen] == ' ' || p[klen] == '\t' || p[klen] == '='))
 ; {
 ; unsigned char *q = p + klen;
        move.l    D2,D0
-       and.l     #255,D6
-       add.l     D6,D0
+       and.l     #255,D5
+       add.l     D5,D0
        move.l    D0,D3
 ; // Pula espacos antes do '='
 ; while (*q == ' ' || *q == '\t') q++;
-mguiCfgGet_26:
+mguiCfgGet_34:
        move.l    D3,A0
        move.b    (A0),D0
        cmp.b     #32,D0
-       beq.s     mguiCfgGet_29
+       beq.s     mguiCfgGet_37
        move.l    D3,A0
        move.b    (A0),D0
        cmp.b     #9,D0
-       bne.s     mguiCfgGet_28
-mguiCfgGet_29:
+       bne.s     mguiCfgGet_36
+mguiCfgGet_37:
        addq.l    #1,D3
-       bra       mguiCfgGet_26
-mguiCfgGet_28:
+       bra       mguiCfgGet_34
+mguiCfgGet_36:
 ; if (*q == '=')
        move.l    D3,A0
        move.b    (A0),D0
        cmp.b     #61,D0
-       bne       mguiCfgGet_30
+       bne       mguiCfgGet_38
 ; {
 ; q++;
        addq.l    #1,D3
 ; // Pula espacos apos o '='
 ; while (*q == ' ' || *q == '\t') q++;
-mguiCfgGet_32:
+mguiCfgGet_40:
        move.l    D3,A0
        move.b    (A0),D0
        cmp.b     #32,D0
-       beq.s     mguiCfgGet_35
+       beq.s     mguiCfgGet_43
        move.l    D3,A0
        move.b    (A0),D0
        cmp.b     #9,D0
-       bne.s     mguiCfgGet_34
-mguiCfgGet_35:
+       bne.s     mguiCfgGet_42
+mguiCfgGet_43:
        addq.l    #1,D3
-       bra       mguiCfgGet_32
-mguiCfgGet_34:
+       bra       mguiCfgGet_40
+mguiCfgGet_42:
 ; i = 0;
        clr.b     D4
 ; while (*q && *q != '\n' && *q != '\r' && i < (unsigned char)(vOutMax - 1))
-mguiCfgGet_36:
+mguiCfgGet_44:
        move.l    D3,A0
        move.b    (A0),D0
        and.l     #255,D0
-       beq       mguiCfgGet_38
+       beq       mguiCfgGet_46
        move.l    D3,A0
        move.b    (A0),D0
        cmp.b     #10,D0
-       beq       mguiCfgGet_38
+       beq       mguiCfgGet_46
        move.l    D3,A0
        move.b    (A0),D0
        cmp.b     #13,D0
-       beq.s     mguiCfgGet_38
+       beq.s     mguiCfgGet_46
        move.b    23(A6),D0
        subq.b    #1,D0
        cmp.b     D0,D4
-       bhs.s     mguiCfgGet_38
+       bhs.s     mguiCfgGet_46
 ; vOutBuf[i++] = (char)*q++;
        move.l    D3,A0
        addq.l    #1,D3
-       move.l    D5,A1
+       move.l    D6,A1
        move.b    D4,D0
        addq.b    #1,D4
        and.l     #255,D0
        move.b    (A0),0(A1,D0.L)
-       bra       mguiCfgGet_36
-mguiCfgGet_38:
+       bra       mguiCfgGet_44
+mguiCfgGet_46:
 ; // Remove espacos no final
 ; while (i > 0 && (vOutBuf[i-1] == ' ' || vOutBuf[i-1] == '\t'))
-mguiCfgGet_39:
+mguiCfgGet_47:
        cmp.b     #0,D4
-       bls       mguiCfgGet_41
-       move.l    D5,A0
+       bls       mguiCfgGet_49
+       move.l    D6,A0
        and.l     #255,D4
        move.l    D4,D0
        subq.l    #1,D0
        move.b    0(A0,D0.L),D0
        cmp.b     #32,D0
-       beq.s     mguiCfgGet_42
-       move.l    D5,A0
+       beq.s     mguiCfgGet_50
+       move.l    D6,A0
        and.l     #255,D4
        move.l    D4,D0
        subq.l    #1,D0
        move.b    0(A0,D0.L),D0
        cmp.b     #9,D0
-       bne.s     mguiCfgGet_41
-mguiCfgGet_42:
+       bne.s     mguiCfgGet_49
+mguiCfgGet_50:
 ; i--;
        subq.b    #1,D4
-       bra       mguiCfgGet_39
-mguiCfgGet_41:
+       bra       mguiCfgGet_47
+mguiCfgGet_49:
 ; vOutBuf[i] = '\0';
-       move.l    D5,A0
+       move.l    D6,A0
        and.l     #255,D4
        clr.b     0(A0,D4.L)
-; return vOutBuf;
-       move.l    D5,D0
+; return 1;
+       moveq     #1,D0
        bra       mguiCfgGet_8
-mguiCfgGet_30:
+mguiCfgGet_38:
 ; }
 ; }
 ; }
-; // Avanca ate o proximo fim de linha
-; while (*p && *p != '\n') p++;
-mguiCfgGet_43:
+; // Avanca ate o proximo fim de linha (aceita CR, LF e CRLF)
+; while (*p && *p != '\n' && *p != '\r') p++;
+mguiCfgGet_51:
        move.l    D2,A0
        move.b    (A0),D0
        and.l     #255,D0
-       beq.s     mguiCfgGet_45
+       beq.s     mguiCfgGet_53
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #10,D0
-       beq.s     mguiCfgGet_45
+       beq.s     mguiCfgGet_53
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #13,D0
+       beq.s     mguiCfgGet_53
        addq.l    #1,D2
-       bra       mguiCfgGet_43
-mguiCfgGet_45:
-; if (*p == '\n') p++;
+       bra       mguiCfgGet_51
+mguiCfgGet_53:
+; while (*p == '\n' || *p == '\r') p++;
+mguiCfgGet_54:
        move.l    D2,A0
        move.b    (A0),D0
        cmp.b     #10,D0
-       bne.s     mguiCfgGet_46
+       beq.s     mguiCfgGet_57
+       move.l    D2,A0
+       move.b    (A0),D0
+       cmp.b     #13,D0
+       bne.s     mguiCfgGet_56
+mguiCfgGet_57:
        addq.l    #1,D2
-mguiCfgGet_46:
+       bra       mguiCfgGet_54
+mguiCfgGet_56:
        bra       mguiCfgGet_11
 mguiCfgGet_13:
 ; }
-; return (char *)0;
-       clr.l     D0
+; return 0;
+       clr.b     D0
 mguiCfgGet_8:
        movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4
        unlk      A6
@@ -4209,7 +4287,7 @@ mguiCfgGet_8:
 ; void startMGI(void) {
        xdef      _startMGI
 _startMGI:
-       link      A6,#-72
+       link      A6,#-76
        movem.l   D2/D3/D4/A2/A3/A4/A5,-(A7)
        lea       _vcorwb.L,A2
        lea       _vcorwf.L,A3
@@ -4218,7 +4296,7 @@ _startMGI:
 ; unsigned char vnomefile[12];
 ; unsigned char lc, ll, *ptr_ico, *ptr_prg, *ptr_pos;
 ; unsigned char* vLoadImage = 0x00;
-       clr.l     D2
+       clr.l     D3
 ; unsigned long cfgSize;
 ; int percent;
 ; long ix;
@@ -4226,6 +4304,7 @@ _startMGI:
 ; VDP_COORD cursor;
 ; unsigned int error_code = OS_ERR_NONE;
        clr.l     -36(A6)
+; int iy;
 ; char tmp[32];
 ; OSTaskSuspend(TASK_MMSJOS_MAIN);
        pea       10
@@ -4234,6 +4313,9 @@ _startMGI:
 ; *startBasic = 2;    // Inicia Basic vindo do MGUI sem mensagens e textos
        move.l    _startBasic.L,A0
        move.b    #2,(A0)
+; *mguiRunTask = 0x00;
+       move.l    _mguiRunTask.L,A0
+       clr.l     (A0)
 ; cursor = vdp_get_cursor();
        pea       -40(A6)
        move.l    1170,A1
@@ -4284,20 +4366,20 @@ _startMGI:
        pea       8192
        jsr       _malloc
        addq.w    #4,A7
-       move.l    D0,D2
+       move.l    D0,D3
 ; loadFile("/MGUI/IMAGES/UTILITY.PBM", (unsigned long*)vLoadImage);
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        pea       @mgui_1.L
        jsr       _loadFile
        addq.w    #8,A7
 ; putImagePbmP4((unsigned long*)vLoadImage, 8, 1);
        pea       1
        pea       8
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        jsr       _putImagePbmP4
        add.w     #12,A7
 ; free(vLoadImage);
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        jsr       _free
        addq.w    #4,A7
 ; writesxy(116,130,2,"MGUI",vcorwf,vcorwb);
@@ -4375,32 +4457,25 @@ _startMGI:
        pea       86
        jsr       (A4)
        add.w     #24,A7
-; memPosConfig = malloc(SIZE_LOAD_CFG_MEM + 1);
-       pea       513
-       jsr       _malloc
-       addq.w    #4,A7
-       move.l    D0,_memPosConfig.L
+; /*memPosConfig = malloc(SIZE_LOAD_CFG_MEM + 1);
 ; if (memPosConfig)
-       tst.l     _memPosConfig.L
-       beq.s     startMGI_1
-; {
+; {*/
 ; cfgSize = loadFile("/MGUI/MGUI.CFG", (unsigned short*)memPosConfig);
        move.l    _memPosConfig.L,-(A7)
        pea       @mgui_7.L
        jsr       _loadFile
        addq.w    #8,A7
-       move.l    D0,D3
+       move.l    D0,D4
 ; if (cfgSize > SIZE_LOAD_CFG_MEM)
-       cmp.l     #512,D3
-       bls.s     startMGI_3
+       cmp.l     #2048,D4
+       bls.s     startMGI_1
 ; cfgSize = SIZE_LOAD_CFG_MEM;
-       move.l    #512,D3
-startMGI_3:
+       move.l    #2048,D4
+startMGI_1:
 ; memPosConfig[cfgSize] = 0x00;
        move.l    _memPosConfig.L,A0
-       clr.b     0(A0,D3.L)
-startMGI_1:
-; }
+       clr.b     0(A0,D4.L)
+; /*}*/
 ; writesxy(53,170,1,"Loading Icons ",vcorwf,vcorwb);
        move.b    (A2),D1
        and.w     #255,D1
@@ -4544,14 +4619,7 @@ startMGI_1:
        pea       53
        jsr       (A4)
        add.w     #24,A7
-; for (ix = 0; ix < 99999; ix++);
-       clr.l     D4
-startMGI_5:
-       cmp.l     #99999,D4
-       bge.s     startMGI_7
-       addq.l    #1,D4
-       bra       startMGI_5
-startMGI_7:
+; //for (ix = 0; ix < 99999; ix++);
 ; memset(tmp, 0x00, sizeof(tmp));
        pea       32
        clr.l     -(A7)
@@ -4565,14 +4633,14 @@ startMGI_7:
        pea       @mgui_20.L
        jsr       _mguiCfgGet
        add.w     #16,A7
-       tst.l     D0
-       beq.s     startMGI_8
+       tst.b     D0
+       beq.s     startMGI_3
 ; vcorwf = atoi(tmp);
        move.l    A5,-(A7)
        jsr       _atoi
        addq.w    #4,A7
        move.b    D0,(A3)
-startMGI_8:
+startMGI_3:
 ; memset(tmp, 0x00, sizeof(tmp));
        pea       32
        clr.l     -(A7)
@@ -4586,14 +4654,14 @@ startMGI_8:
        pea       @mgui_20.L
        jsr       _mguiCfgGet
        add.w     #16,A7
-       tst.l     D0
-       beq.s     startMGI_10
+       tst.b     D0
+       beq.s     startMGI_5
 ; vcorwb = atoi(tmp);
        move.l    A5,-(A7)
        jsr       _atoi
        addq.w    #4,A7
        move.b    D0,(A2)
-startMGI_10:
+startMGI_5:
 ; memset(tmp, 0x00, sizeof(tmp));
        pea       32
        clr.l     -(A7)
@@ -4607,14 +4675,14 @@ startMGI_10:
        pea       @mgui_20.L
        jsr       _mguiCfgGet
        add.w     #16,A7
-       tst.l     D0
-       beq.s     startMGI_12
+       tst.b     D0
+       beq.s     startMGI_7
 ; vcorwb2 = atoi(tmp);
        move.l    A5,-(A7)
        jsr       _atoi
        addq.w    #4,A7
        move.b    D0,_vcorwb2.L
-startMGI_12:
+startMGI_7:
 ; vdp_init(VDP_MODE_G2, vcorwb2, 0, 0);
        clr.l     -(A7)
        clr.l     -(A7)
@@ -4660,6 +4728,48 @@ startMGI_12:
        jsr       (A0)
        add.w     #12,A7
        move.b    D0,_statusVdpSprite.L
+; for (iy = 0; iy <= 6; iy++)
+       clr.l     D2
+startMGI_9:
+       cmp.l     #6,D2
+       bgt       startMGI_11
+; {
+; mguiListWindows[iy].id = 0;
+       move.l    _mguiListWindows.L,A0
+       move.l    D2,D0
+       muls      #11,D0
+       clr.l     0(A0,D0.L)
+; mguiListWindows[iy].loadAddress = 0;
+       move.l    _mguiListWindows.L,A0
+       move.l    D2,D0
+       muls      #11,D0
+       add.l     D0,A0
+       clr.l     4(A0)
+; mguiListWindows[iy].zOrder = 0;
+       move.l    _mguiListWindows.L,A0
+       move.l    D2,D0
+       muls      #11,D0
+       add.l     D0,A0
+       clr.b     8(A0)
+; mguiListWindows[iy].active = 0;
+       move.l    _mguiListWindows.L,A0
+       move.l    D2,D0
+       muls      #11,D0
+       add.l     D0,A0
+       clr.b     9(A0)
+       addq.l    #1,D2
+       bra       startMGI_9
+startMGI_11:
+; }
+; mguiListWindows[6].id = 99;
+       move.l    _mguiListWindows.L,A0
+       move.l    #99,66(A0)
+; mguiListWindows[6].zOrder = 0;
+       move.l    _mguiListWindows.L,A0
+       clr.b     74(A0)
+; mguiListWindows[6].active = 1;
+       move.l    _mguiListWindows.L,A0
+       move.b    #1,75(A0)
 ; OSTaskCreate(mouseTask, OS_NULL, &StkMouse[STACKSIZEMOUSE], TASK_MGUI_MOUSE);
        pea       12
        lea       _StkMouse.L,A0
@@ -4673,23 +4783,23 @@ startMGI_12:
        clr.b     _vIndicaDialog.L
 ; // Inicia Controles de Tela (Mouse e Teclado)
 ; while(1)
-startMGI_14:
+startMGI_12:
 ; {
 ; if (vIndicaDialog)
        tst.b     _vIndicaDialog.L
-       beq.s     startMGI_17
+       beq.s     startMGI_15
 ; OSTaskSuspend(OS_PRIO_SELF);
        pea       255
        jsr       _OSTaskSuspend
        addq.w    #4,A7
-startMGI_17:
+startMGI_15:
 ; if (!editortela())
        jsr       _editortela
        tst.b     D0
-       bne.s     startMGI_19
+       bne.s     startMGI_17
 ; break;
-       bra.s     startMGI_16
-startMGI_19:
+       bra.s     startMGI_14
+startMGI_17:
 ; OSTimeDlyHMSM(0, 0, 0, 15);
        pea       15
        clr.l     -(A7)
@@ -4697,8 +4807,8 @@ startMGI_19:
        clr.l     -(A7)
        jsr       _OSTimeDlyHMSM
        add.w     #16,A7
-       bra       startMGI_14
-startMGI_16:
+       bra       startMGI_12
+startMGI_14:
 ; }
 ; free(imgsMenuSys);
        move.l    _imgsMenuSys.L,-(A7)
@@ -4706,7 +4816,7 @@ startMGI_16:
        addq.w    #4,A7
 ; if (memPosConfig)
        tst.l     _memPosConfig.L
-       beq.s     startMGI_21
+       beq.s     startMGI_19
 ; {
 ; free(memPosConfig);
        move.l    _memPosConfig.L,-(A7)
@@ -4714,7 +4824,7 @@ startMGI_16:
        addq.w    #4,A7
 ; memPosConfig = 0x00;
        clr.l     _memPosConfig.L
-startMGI_21:
+startMGI_19:
 ; }
 ; vdp_init(VDP_MODE_TEXT, VDP_BLACK, 0, 0);
        clr.l     -(A7)
@@ -5724,27 +5834,45 @@ editortela_1:
 ; }
 ; /**(vmfp + Reg_IERA) = 0x60;
 ; *(vmfp + Reg_IMRA) = 0x60;    */
+; // Verifica se tem algum prog pra executar pelo run
+; if (*mguiRunTask)
+       move.l    _mguiRunTask.L,A0
+       tst.l     (A0)
+       beq.s     editortela_3
+; runFromMGUI(*mguiRunTask);
+       move.l    _mguiRunTask.L,A0
+       move.l    (A0),-(A7)
+       jsr       _runFromMGUI
+       addq.w    #4,A7
+editortela_3:
+; // Verifica mouse e teclado
+; if (mguiListWindows[6].active)  // Mgui ativo
+       move.l    _mguiListWindows.L,A0
+       tst.b     75(A0)
+       beq.s     editortela_11
+; {
 ; if (readChar() == 0x1B)  // ESC
        move.l    1074,A0
        jsr       (A0)
        cmp.b     #27,D0
-       bne.s     editortela_3
+       bne.s     editortela_7
 ; vresp = 0x00;
        clr.b     D2
-editortela_3:
+editortela_7:
 ; if (mouseBtnPres == 0x01)  // Esquerdo
        move.b    _mouseBtnPres.L,D0
        cmp.b     #1,D0
-       bne.s     editortela_7
+       bne.s     editortela_11
 ; {
 ; if (vposty <= 22)
        move.w    _vposty.L,D0
        cmp.w     #22,D0
-       bhi.s     editortela_7
+       bhi.s     editortela_11
 ; vresp = new_menu();
        jsr       _new_menu
        move.b    D0,D2
-editortela_7:
+editortela_11:
+; }
 ; }
 ; return vresp;
        move.b    D2,D0
@@ -5920,8 +6048,31 @@ _setPosPressed:
        xdef      _getMouseData
 _getMouseData:
        link      A6,#0
-       move.l    D2,-(A7)
+       movem.l   D2/D3/A2,-(A7)
        move.l    8(A6),D2
+       lea       _mguiListWindows.L,A2
+; unsigned ix;
+; ix = *mguiIdRequest;
+       move.l    _mguiIdRequest.L,A0
+       move.b    (A0),D0
+       and.l     #255,D0
+       move.l    D0,D3
+; if (mguiListWindows[ix].active)
+       move.l    (A2),A0
+       move.l    D3,D0
+       muls      #11,D0
+       add.l     D0,A0
+       tst.b     9(A0)
+       beq       getMouseData_1
+; {
+; mguiListWindows[ix].keyTec = readChar();
+       move.l    1074,A0
+       jsr       (A0)
+       move.l    (A2),A0
+       move.l    D3,D1
+       muls      #11,D1
+       add.l     D1,A0
+       move.b    D0,10(A0)
 ; pmouseData->mouseButton = mouseBtnPres;
        move.l    D2,A0
        move.b    _mouseBtnPres.L,(A0)
@@ -5943,9 +6094,40 @@ _getMouseData:
 ; pmouseData->mouseY = mouseY;
        move.l    D2,A0
        move.b    _mouseY.L,3(A0)
-       move.l    (A7)+,D2
+       bra       getMouseData_2
+getMouseData_1:
+; }
+; else
+; {
+; mguiListWindows[ix].keyTec = 0x00;
+       move.l    (A2),A0
+       move.l    D3,D0
+       muls      #11,D0
+       add.l     D0,A0
+       clr.b     10(A0)
+; pmouseData->mouseButton = 0;
+       move.l    D2,A0
+       clr.b     (A0)
+; pmouseData->mouseBtnDouble = 0;
+       move.l    D2,A0
+       clr.b     1(A0)
+; pmouseData->vpostx = 0;
+       move.l    D2,A0
+       clr.b     4(A0)
+; pmouseData->vposty = 0;
+       move.l    D2,A0
+       clr.b     5(A0)
+; pmouseData->mouseX = 0;
+       move.l    D2,A0
+       clr.b     2(A0)
+; pmouseData->mouseY = 0;
+       move.l    D2,A0
+       clr.b     3(A0)
+getMouseData_2:
+       movem.l   (A7)+,D2/D3/A2
        unlk      A6
        rts
+; }
 ; }
 ; //-------------------------------------------------------------------------
 ; void getColorData(MGUI_COLOR *pColor)
@@ -7239,7 +7421,7 @@ menuTask_15:
        pea       2
        jsr       (A4)
        addq.w    #4,A7
-; vEndExec = 0x00870000; // malloc(vsizefilemalloc);
+; vEndExec = 0x00870000; // endereco fixo FILES
        move.l    #8847360,D4
 ; *startBasic1 = malloc(2048);
        pea       2048
@@ -7380,16 +7562,17 @@ menuTask_3:
 ; {
        xdef      _runBin
 _runBin:
-       link      A6,#-248
-       movem.l   D2/D3/D4/D5/D6/A2/A3/A4/A5,-(A7)
-       lea       -180(A6),A2
+       link      A6,#-252
+       movem.l   D2/D3/D4/D5/A2/A3/A4/A5,-(A7)
+       lea       -186(A6),A2
        lea       _message.L,A3
-       lea       -116(A6),A4
-       lea       -244(A6),A5
+       lea       -122(A6),A4
+       lea       -250(A6),A5
 ; unsigned short ix;
 ; unsigned char vwb, vresp;
 ; unsigned char vnamein[64], vfilename[64], vfullpath[96];
 ; unsigned char *vEndExec;
+; unsigned char vUseFixedAddr;
 ; unsigned long vsizefilemalloc;
 ; char *vdot;
 ; MGUI_SAVESCR vsavescr;
@@ -7625,9 +7808,9 @@ runBin_27:
        pea       @mgui_48.L
        jsr       (A3)
        add.w     #12,A7
-       move.b    D0,-245(A6)
+       move.b    D0,-251(A6)
 ; if (vresp != BTYES)
-       move.b    -245(A6),D0
+       move.b    -251(A6),D0
        cmp.b     #4,D0
        beq.s     runBin_28
 ; return;
@@ -7638,9 +7821,10 @@ runBin_28:
        move.l    A4,-(A7)
        jsr       _fsInfoFile
        addq.w    #8,A7
-       move.l    D0,D6
+       move.l    D0,-24(A6)
 ; if (vsizefilemalloc == ERRO_D_NOT_FOUND)
-       cmp.l     #-1,D6
+       move.l    -24(A6),D0
+       cmp.l     #-1,D0
        bne.s     runBin_30
 ; {
 ; message("File not found...\0", BTCLOSE, 0);
@@ -7657,14 +7841,30 @@ runBin_30:
        pea       2
        jsr       _TrocaSpriteMouse
        addq.w    #4,A7
-; vEndExec = malloc(vsizefilemalloc);
-       move.l    D6,-(A7)
-       jsr       _malloc
-       addq.w    #4,A7
-       move.l    D0,D3
+; vUseFixedAddr = 1;
+       move.b    #1,-25(A6)
+; if (!strcmp(vfullpath, "/MGUI/PROGS/FILES.BIN"))
+       pea       @mgui_36.L
+       move.l    A4,-(A7)
+       jsr       _strcmp
+       addq.w    #8,A7
+       tst.l     D0
+       bne.s     runBin_32
+; {
+; vEndExec = (unsigned char*)0x00870000;
+       move.l    #8847360,D3
+       bra.s     runBin_33
+runBin_32:
+; }
+; else
+; {
+; vEndExec = (unsigned char*)0x00880000;
+       move.l    #8912896,D3
+runBin_33:
+; }
 ; if (!vEndExec)
        tst.l     D3
-       bne.s     runBin_32
+       bne.s     runBin_34
 ; {
 ; TrocaSpriteMouse(MOUSE_POINTER);
        pea       1
@@ -7678,7 +7878,7 @@ runBin_30:
        add.w     #12,A7
 ; return;
        bra       runBin_9
-runBin_32:
+runBin_34:
 ; }
 ; loadFile(vfullpath, (unsigned long*)vEndExec);
        move.l    D3,-(A7)
@@ -7691,13 +7891,13 @@ runBin_32:
        addq.w    #4,A7
 ; if (!verro)
        tst.b     _verro.L
-       bne.s     runBin_34
+       bne.s     runBin_36
 ; runFromMGUI(vEndExec);
        move.l    D3,-(A7)
        jsr       _runFromMGUI
        addq.w    #4,A7
-       bra.s     runBin_35
-runBin_34:
+       bra.s     runBin_37
+runBin_36:
 ; else
 ; {
 ; message("Loading Error...\0", BTCLOSE, 0);
@@ -7706,15 +7906,11 @@ runBin_34:
        pea       @mgui_38.L
        jsr       (A3)
        add.w     #12,A7
-; free(vEndExec);
-       move.l    D3,-(A7)
-       jsr       _free
-       addq.w    #4,A7
-runBin_35:
+runBin_37:
 ; }
 ; return;
 runBin_9:
-       movem.l   (A7)+,D2/D3/D4/D5/D6/A2/A3/A4/A5
+       movem.l   (A7)+,D2/D3/D4/D5/A2/A3/A4/A5
        unlk      A6
        rts
 ; }
@@ -8972,7 +9168,7 @@ _vvdgc:
        dc.l      4194371
        xdef      _memPosConfig
 _memPosConfig:
-       dc.l      0
+       dc.l      9369600
        xdef      _imgsMenuSys
 _imgsMenuSys:
        dc.l      0
@@ -9102,6 +9298,7 @@ _StkMessage:
        xref      LMUL
        xref      _free
        xref      _atoi
+       xref      _mguiRunTask
        xref      _OSTaskSuspend
        xref      _strlen
        xref      _OSTCBTbl
@@ -9109,8 +9306,10 @@ _StkMessage:
        xref      _fsOpenFile
        xref      _malloc
        xref      _OSTimeDlyHMSM
+       xref      _mguiListWindows
        xref      _OSTaskDel
        xref      _memset
+       xref      _mguiIdRequest
        xref      _fsInfoFile
        xref      _strcat
        xref      _verro

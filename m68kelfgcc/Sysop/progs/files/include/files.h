@@ -24,6 +24,7 @@ unsigned char dFileCursor;
 unsigned char vcorfg;
 unsigned char vcorbg;
 unsigned char vPosDir;
+unsigned char windowsId;
 
 // DEFINE FUNCOES
 void linhastatus(unsigned char vtipomsgs, unsigned char * vmsgs);

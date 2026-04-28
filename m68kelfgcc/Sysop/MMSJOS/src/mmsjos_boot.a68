@@ -1,0 +1,83 @@
+; Bootstrap de entrada do MMSJOS para build m68k-elf
+; Conversao do mmsjos.a68 (IDE68K) para GNU as (MRI)
+
+           section     code
+
+           xdef      start
+           xdef      __exit
+           xdef      _exit
+           xdef      __heap
+           xdef      __heap_end
+
+           xref      __allocp
+           xref      _main
+
+start:
+             or.w      #$0700,SR
+             move.l    #_spritePointer,D1
+             move.l    D1,_mousePointer
+             move.l    #_spriteHourGlass,D1
+             move.l    D1,_mouseHourGlass
+             move.l    #_iconesMenu,D1
+             move.l    D1,_iconesMenuSys
+             clr.l     __allocp
+             bra       _main
+
+mmsjos_func_table:
+            dc.l _fsGetDirAtuData
+            dc.l _fsSetClusterDir
+            dc.l _fsGetClusterDir
+            dc.l _fsSectorWrite
+            dc.l _fsSectorRead
+            dc.l _fsFindDirPath
+            dc.l _fsOsCommand
+            dc.l _fsCreateFile
+            dc.l _fsOpenFile
+            dc.l _fsCloseFile
+            dc.l _fsInfoFile
+            dc.l _fsFree
+            dc.l _fsReadFile
+            dc.l _fsWriteFile
+            dc.l _fsDelFile
+            dc.l _fsRenameFile
+            dc.l _loadFile
+            dc.l _fsMakeDir
+            dc.l _fsChangeDir
+            dc.l _fsRemoveDir
+            dc.l _OSTimeDlyHMSM
+            dc.l _fsFindInDir
+            dc.l _fsMalloc
+            dc.l _fsFindNextCluster
+            dc.l _fsFindClusterFree
+            dc.l _OSTaskSuspend
+            dc.l _OSTaskResume
+
+__exit:
+_exit:
+           dc.w        0
+           jsr         _main
+
+_uCOSII_TICK:
+           dc.l _OSTickISR
+
+           section     const
+           align
+
+           section     data
+           align
+__heap:
+           dc.l      heap
+__heap_end:
+           dc.l      heap_end
+
+           section     bss
+           align
+           ds.w        512
+__stack:
+__ungetbuf:
+           ds.l        1
+
+           section     heap
+           align
+heap       equ         *
+heap_end   equ         $86FFFF

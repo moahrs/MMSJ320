@@ -26,10 +26,11 @@
 ; #include "mmsj320mfp.h"
 ; #include "mmsjos.h"
 ; #include "mgui.h"
+; #include "mguiapi.h"
 ; #include "monitor.h"
 ; #include "monitorapi.h"
 ; unsigned long runOSMemory;
-; #define MMSJ_HEAP_LIMIT 0x00870000UL
+; #define MMSJ_HEAP_LIMIT 0x0086FFFFUL
 ; FAT32_DIR vdir;
 ; DISK  vdisk;
 ; unsigned long vclusterdir;
@@ -70,7 +71,7 @@
 ; unsigned char fsWriteFile(char * vfilename, unsigned long voffset, unsigned char *buffer, unsigned char vsizebuffer);
 ; unsigned char fsDelFile(char * vfilename);
 ; unsigned char fsRenameFile(char * vfilename, char * vnewname);
-; void runFromOsCmd(void);
+; void runFromOsCmd(unsigned long vEnderExec);
 ; unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress);
 ; void catFile(unsigned char *parquivo);
 ; unsigned char fsLoadSerialToFile(char * vfilename);
@@ -130,9 +131,19 @@
 ; OS_STK StkTask06[STACKSIZEMGUI];
 ; static unsigned char basicTaskArg[64];
 ; OS_EVENT *shared_sem;
-; void inputTask(void *pdata);
-; void mguiTask(void *pdata);
-; void basicTask(void *pdata);
+; OS_EVENT *heap_sem;
+; #define TASK_INPUT_KBD    10
+; #define TASK_MGUI         11
+; #define TASK_BASIC        13
+; #define TASK_Prog01       25
+; #define TASK_Prog02       26
+; #define TASK_Prog03       27
+; #define TASK_Prog04       28
+; #define TASK_Prog05       29
+; #define TASK_Prog06       30
+; void inputTask(void *pdata);    // Prio: 10
+; void mguiTask(void *pdata);     // Prio: 11
+; void basicTask(void *pdata);    // Prio: 13
 ; void prog01Task(void *pdata);   // Prio: 25
 ; void prog02Task(void *pdata);   // Prio: 26
 ; void prog03Task(void *pdata);   // Prio: 27
@@ -518,7 +529,12 @@ _main:
        jsr       _OSSemCreate
        addq.w    #4,A7
        move.l    D0,_shared_sem.L
-; OSTaskCreate(inputTask, OS_NULL, &StkInput[STACKSIZE], 10);
+; heap_sem = OSSemCreate(1);
+       pea       1
+       jsr       _OSSemCreate
+       addq.w    #4,A7
+       move.l    D0,_heap_sem.L
+; OSTaskCreate(inputTask, OS_NULL, &StkInput[STACKSIZE], TASK_INPUT_KBD);
        pea       10
        lea       _StkInput.L,A0
        add.w     #2048,A0
@@ -718,41 +734,35 @@ _mguiTask:
 _basicTask:
        link      A6,#0
        movem.l   D2/D3/A2/A3,-(A7)
-       lea       _startBasic0.L,A2
-       lea       _paramBasic.L,A3
+       lea       _paramBasic.L,A2
+       lea       _startBasic0.L,A3
 ; unsigned char *linhaarg = (unsigned char*)pData;
        move.l    8(A6),D3
 ; unsigned short ix;
-; // Aloca espaços para o interpretador BASIC e executa ele
-; *startBasic0 = fsMalloc(212992); // 0x00034000 bytes para o Basic, que deve ser carregado a partir do endereco 0x00800000, para o Basic iniciar a execucao a partir desse endereco
-       pea       212992
-       jsr       _fsMalloc
-       addq.w    #4,A7
-       move.l    (A2),A0
-       move.l    D0,(A0)
+; // Area fixa para dados do BASIC: 0x00890000..0x008E0000
+; *startBasic0 = 0x00890000;
+       move.l    (A3),A0
+       move.l    #8978432,(A0)
 ; if (!*startBasic0)
-       move.l    (A2),A0
+       move.l    (A3),A0
        tst.l     (A0)
        bne.s     basicTask_1
 ; {
-; if (*startBasic0) fsFree(*startBasic0);
-       move.l    (A2),A0
-       tst.l     (A0)
-       beq.s     basicTask_3
-       move.l    (A2),A0
-       move.l    (A0),-(A7)
-       jsr       _fsFree
-       addq.w    #4,A7
-basicTask_3:
 ; *startBasic0 = 0;
-       move.l    (A2),A0
+       move.l    (A3),A0
        clr.l     (A0)
 ; // Erro
+; if (*startBasic == 1)
+       move.l    _startBasic.L,A0
+       move.b    (A0),D0
+       cmp.b     #1,D0
+       bne.s     basicTask_3
 ; printText("No memory to run Basic...\r\n\0");
        pea       @mmsjos_31.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
+basicTask_3:
        bra       basicTask_2
 basicTask_1:
 ; }
@@ -762,7 +772,7 @@ basicTask_1:
 ; memcpy(paramBasic, linhaarg, 64);
        pea       64
        move.l    D3,-(A7)
-       move.l    (A3),-(A7)
+       move.l    (A2),-(A7)
        jsr       _memcpy
        add.w     #12,A7
 ; if (*linhaarg)
@@ -787,14 +797,14 @@ basicTask_7:
        move.l    D1,-(A7)
        jsr       _toupper
        addq.w    #4,A7
-       move.l    (A3),A0
+       move.l    (A2),A0
        and.l     #65535,D2
        move.b    D0,0(A0,D2.L)
        addq.w    #1,D2
        bra       basicTask_7
 basicTask_9:
 ; *(paramBasic + ix) = 0x00;
-       move.l    (A3),A0
+       move.l    (A2),A0
        and.l     #65535,D2
        clr.b     0(A0,D2.L)
        bra.s     basicTask_6
@@ -802,31 +812,26 @@ basicTask_5:
 ; }
 ; else
 ; *paramBasic = 0x00;
-       move.l    (A3),A0
+       move.l    (A2),A0
        clr.b     (A0)
 basicTask_6:
 ; // Run Basic
 ; while(1)
 ; {
-; runOSMemory = 0x00020000; // Testes = 0x00870000, Producao = 0x00020000
-       move.l    #131072,_runOSMemory.L
-; runFromOsCmd();
+; runFromOsCmd(0x00020000); // Testes = 0x00870000, Producao = 0x00020000
+       pea       131072
        jsr       _runFromOsCmd
+       addq.w    #4,A7
 ; break;
 ; }
-; fsFree(*startBasic0);
-       move.l    (A2),A0
-       move.l    (A0),-(A7)
-       jsr       _fsFree
-       addq.w    #4,A7
 ; *startBasic0 = 0;
-       move.l    (A2),A0
+       move.l    (A3),A0
        clr.l     (A0)
 ; *startBasic = 0;
        move.l    _startBasic.L,A0
        clr.b     (A0)
 ; *paramBasic = 0;
-       move.l    (A3),A0
+       move.l    (A2),A0
        clr.b     (A0)
 basicTask_2:
 ; }
@@ -844,26 +849,65 @@ basicTask_2:
        xdef      _prog01Task
 _prog01Task:
        link      A6,#0
-       move.l    D2,-(A7)
+       movem.l   D2/D3,-(A7)
 ; unsigned long vAddrExec = (unsigned long*)pdata;
-       move.l    8(A6),D2
-; runOSMemory = vAddrExec;
-       move.l    D2,_runOSMemory.L
+       move.l    8(A6),D3
+; unsigned char ix;
+; if (vAddrExec)
+       tst.l     D3
+       beq.s     prog01Task_6
+; {
 ; while(1)
 ; {
-; runFromOsCmd();
+; runFromOsCmd(vAddrExec);
+       move.l    D3,-(A7)
        jsr       _runFromOsCmd
+       addq.w    #4,A7
 ; break;
 ; }
+; if (vAddrExec <= MMSJ_HEAP_LIMIT)
+       cmp.l     #8847359,D3
+       bhi.s     prog01Task_6
 ; free(vAddrExec);
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        jsr       _free
        addq.w    #4,A7
+prog01Task_6:
+; }
+; for(ix = 0; ix < 6; ix++)
+       clr.b     D2
+prog01Task_8:
+       cmp.b     #6,D2
+       bhs.s     prog01Task_10
+; {
+; if (mguiListWindows[ix].id == TASK_Prog01)
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       move.l    0(A0,D0.L),D0
+       cmp.l     #25,D0
+       bne.s     prog01Task_11
+; {
+; mguiListWindows[ix].id = 0;
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       clr.l     0(A0,D0.L)
+; break;
+       bra.s     prog01Task_10
+prog01Task_11:
+       addq.b    #1,D2
+       bra       prog01Task_8
+prog01Task_10:
+; }
+; }
 ; OSTaskDel(OS_PRIO_SELF);
        pea       255
        jsr       _OSTaskDel
        addq.w    #4,A7
-       move.l    (A7)+,D2
+       movem.l   (A7)+,D2/D3
        unlk      A6
        rts
 ; }
@@ -873,26 +917,65 @@ _prog01Task:
        xdef      _prog02Task
 _prog02Task:
        link      A6,#0
-       move.l    D2,-(A7)
+       movem.l   D2/D3,-(A7)
 ; unsigned long vAddrExec = (unsigned long*)pdata;
-       move.l    8(A6),D2
-; runOSMemory = vAddrExec;
-       move.l    D2,_runOSMemory.L
+       move.l    8(A6),D3
+; unsigned char ix;
+; if (vAddrExec)
+       tst.l     D3
+       beq.s     prog02Task_6
+; {
 ; while(1)
 ; {
-; runFromOsCmd();
+; runFromOsCmd(vAddrExec);
+       move.l    D3,-(A7)
        jsr       _runFromOsCmd
+       addq.w    #4,A7
 ; break;
 ; }
+; if (vAddrExec <= MMSJ_HEAP_LIMIT)
+       cmp.l     #8847359,D3
+       bhi.s     prog02Task_6
 ; free(vAddrExec);
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        jsr       _free
        addq.w    #4,A7
+prog02Task_6:
+; }
+; for(ix = 0; ix < 6; ix++)
+       clr.b     D2
+prog02Task_8:
+       cmp.b     #6,D2
+       bhs.s     prog02Task_10
+; {
+; if (mguiListWindows[ix].id == TASK_Prog02)
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       move.l    0(A0,D0.L),D0
+       cmp.l     #26,D0
+       bne.s     prog02Task_11
+; {
+; mguiListWindows[ix].id = 0;
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       clr.l     0(A0,D0.L)
+; break;
+       bra.s     prog02Task_10
+prog02Task_11:
+       addq.b    #1,D2
+       bra       prog02Task_8
+prog02Task_10:
+; }
+; }
 ; OSTaskDel(OS_PRIO_SELF);
        pea       255
        jsr       _OSTaskDel
        addq.w    #4,A7
-       move.l    (A7)+,D2
+       movem.l   (A7)+,D2/D3
        unlk      A6
        rts
 ; }
@@ -902,26 +985,65 @@ _prog02Task:
        xdef      _prog03Task
 _prog03Task:
        link      A6,#0
-       move.l    D2,-(A7)
+       movem.l   D2/D3,-(A7)
 ; unsigned long vAddrExec = (unsigned long*)pdata;
-       move.l    8(A6),D2
-; runOSMemory = vAddrExec;
-       move.l    D2,_runOSMemory.L
+       move.l    8(A6),D3
+; unsigned char ix;
+; if (vAddrExec)
+       tst.l     D3
+       beq.s     prog03Task_6
+; {
 ; while(1)
 ; {
-; runFromOsCmd();
+; runFromOsCmd(vAddrExec);
+       move.l    D3,-(A7)
        jsr       _runFromOsCmd
+       addq.w    #4,A7
 ; break;
 ; }
+; if (vAddrExec <= MMSJ_HEAP_LIMIT)
+       cmp.l     #8847359,D3
+       bhi.s     prog03Task_6
 ; free(vAddrExec);
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        jsr       _free
        addq.w    #4,A7
+prog03Task_6:
+; }
+; for(ix = 0; ix < 6; ix++)
+       clr.b     D2
+prog03Task_8:
+       cmp.b     #6,D2
+       bhs.s     prog03Task_10
+; {
+; if (mguiListWindows[ix].id == TASK_Prog03)
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       move.l    0(A0,D0.L),D0
+       cmp.l     #27,D0
+       bne.s     prog03Task_11
+; {
+; mguiListWindows[ix].id = 0;
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       clr.l     0(A0,D0.L)
+; break;
+       bra.s     prog03Task_10
+prog03Task_11:
+       addq.b    #1,D2
+       bra       prog03Task_8
+prog03Task_10:
+; }
+; }
 ; OSTaskDel(OS_PRIO_SELF);
        pea       255
        jsr       _OSTaskDel
        addq.w    #4,A7
-       move.l    (A7)+,D2
+       movem.l   (A7)+,D2/D3
        unlk      A6
        rts
 ; }
@@ -931,26 +1053,65 @@ _prog03Task:
        xdef      _prog04Task
 _prog04Task:
        link      A6,#0
-       move.l    D2,-(A7)
+       movem.l   D2/D3,-(A7)
 ; unsigned long vAddrExec = (unsigned long*)pdata;
-       move.l    8(A6),D2
-; runOSMemory = vAddrExec;
-       move.l    D2,_runOSMemory.L
+       move.l    8(A6),D3
+; unsigned char ix;
+; if (vAddrExec)
+       tst.l     D3
+       beq.s     prog04Task_6
+; {
 ; while(1)
 ; {
-; runFromOsCmd();
+; runFromOsCmd(vAddrExec);
+       move.l    D3,-(A7)
        jsr       _runFromOsCmd
+       addq.w    #4,A7
 ; break;
 ; }
+; if (vAddrExec <= MMSJ_HEAP_LIMIT)
+       cmp.l     #8847359,D3
+       bhi.s     prog04Task_6
 ; free(vAddrExec);
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        jsr       _free
        addq.w    #4,A7
+prog04Task_6:
+; }
+; for(ix = 0; ix < 6; ix++)
+       clr.b     D2
+prog04Task_8:
+       cmp.b     #6,D2
+       bhs.s     prog04Task_10
+; {
+; if (mguiListWindows[ix].id == TASK_Prog04)
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       move.l    0(A0,D0.L),D0
+       cmp.l     #28,D0
+       bne.s     prog04Task_11
+; {
+; mguiListWindows[ix].id = 0;
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       clr.l     0(A0,D0.L)
+; break;
+       bra.s     prog04Task_10
+prog04Task_11:
+       addq.b    #1,D2
+       bra       prog04Task_8
+prog04Task_10:
+; }
+; }
 ; OSTaskDel(OS_PRIO_SELF);
        pea       255
        jsr       _OSTaskDel
        addq.w    #4,A7
-       move.l    (A7)+,D2
+       movem.l   (A7)+,D2/D3
        unlk      A6
        rts
 ; }
@@ -960,26 +1121,65 @@ _prog04Task:
        xdef      _prog05Task
 _prog05Task:
        link      A6,#0
-       move.l    D2,-(A7)
+       movem.l   D2/D3,-(A7)
 ; unsigned long vAddrExec = (unsigned long*)pdata;
-       move.l    8(A6),D2
-; runOSMemory = vAddrExec;
-       move.l    D2,_runOSMemory.L
+       move.l    8(A6),D3
+; unsigned char ix;
+; if (vAddrExec)
+       tst.l     D3
+       beq.s     prog05Task_6
+; {
 ; while(1)
 ; {
-; runFromOsCmd();
+; runFromOsCmd(vAddrExec);
+       move.l    D3,-(A7)
        jsr       _runFromOsCmd
+       addq.w    #4,A7
 ; break;
 ; }
+; if (vAddrExec <= MMSJ_HEAP_LIMIT)
+       cmp.l     #8847359,D3
+       bhi.s     prog05Task_6
 ; free(vAddrExec);
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        jsr       _free
        addq.w    #4,A7
+prog05Task_6:
+; }
+; for(ix = 0; ix < 6; ix++)
+       clr.b     D2
+prog05Task_8:
+       cmp.b     #6,D2
+       bhs.s     prog05Task_10
+; {
+; if (mguiListWindows[ix].id == TASK_Prog05)
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       move.l    0(A0,D0.L),D0
+       cmp.l     #29,D0
+       bne.s     prog05Task_11
+; {
+; mguiListWindows[ix].id = 0;
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       clr.l     0(A0,D0.L)
+; break;
+       bra.s     prog05Task_10
+prog05Task_11:
+       addq.b    #1,D2
+       bra       prog05Task_8
+prog05Task_10:
+; }
+; }
 ; OSTaskDel(OS_PRIO_SELF);
        pea       255
        jsr       _OSTaskDel
        addq.w    #4,A7
-       move.l    (A7)+,D2
+       movem.l   (A7)+,D2/D3
        unlk      A6
        rts
 ; }
@@ -989,26 +1189,65 @@ _prog05Task:
        xdef      _prog06Task
 _prog06Task:
        link      A6,#0
-       move.l    D2,-(A7)
+       movem.l   D2/D3,-(A7)
 ; unsigned long vAddrExec = (unsigned long*)pdata;
-       move.l    8(A6),D2
-; runOSMemory = vAddrExec;
-       move.l    D2,_runOSMemory.L
+       move.l    8(A6),D3
+; unsigned char ix;
+; if (vAddrExec)
+       tst.l     D3
+       beq.s     prog06Task_6
+; {
 ; while(1)
 ; {
-; runFromOsCmd();
+; runFromOsCmd(vAddrExec);
+       move.l    D3,-(A7)
        jsr       _runFromOsCmd
+       addq.w    #4,A7
 ; break;
 ; }
+; if (vAddrExec <= MMSJ_HEAP_LIMIT)
+       cmp.l     #8847359,D3
+       bhi.s     prog06Task_6
 ; free(vAddrExec);
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        jsr       _free
        addq.w    #4,A7
+prog06Task_6:
+; }
+; for(ix = 0; ix < 6; ix++)
+       clr.b     D2
+prog06Task_8:
+       cmp.b     #6,D2
+       bhs.s     prog06Task_10
+; {
+; if (mguiListWindows[ix].id == TASK_Prog06)
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       move.l    0(A0,D0.L),D0
+       cmp.l     #30,D0
+       bne.s     prog06Task_11
+; {
+; mguiListWindows[ix].id = 0;
+       move.l    _mguiListWindows.L,A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #11,D0
+       clr.l     0(A0,D0.L)
+; break;
+       bra.s     prog06Task_10
+prog06Task_11:
+       addq.b    #1,D2
+       bra       prog06Task_8
+prog06Task_10:
+; }
+; }
 ; OSTaskDel(OS_PRIO_SELF);
        pea       255
        jsr       _OSTaskDel
        addq.w    #4,A7
-       move.l    (A7)+,D2
+       movem.l   (A7)+,D2/D3
        unlk      A6
        rts
 ; }
@@ -1029,7 +1268,7 @@ _fsOsCommand:
        lea       _vbuf.L,A0
        move.l    A0,-480(A6)
 ; unsigned short varg = 0;
-       clr.w     D3
+       clr.w     D5
 ; unsigned short ix, iy, iz, ikk, isrc;
 ; unsigned short vbytepic = 0, vrecfim;
        clr.w     -302(A6)
@@ -1048,7 +1287,7 @@ _fsOsCommand:
        clr.b     -3(A6)
        clr.b     -1(A6)
 ; vretfat = RETURN_OK;
-       clr.l     D5
+       clr.l     D4
 ; // Se veio parametro pela linha de parametro, usa esse
 ; if (linhaParametro[0] != '\0')
        move.l    D7,A0
@@ -1069,7 +1308,7 @@ fsOsCommand_1:
 ; ix = 0;
        clr.w     D2
 ; iy = 0;
-       clr.w     D4
+       clr.w     D3
 ; while (*blin != 0)
 fsOsCommand_3:
        move.l    -480(A6),A0
@@ -1077,7 +1316,7 @@ fsOsCommand_3:
        beq       fsOsCommand_5
 ; {
 ; if (!varg && *blin == 0x20)
-       tst.w     D3
+       tst.w     D5
        bne.s     fsOsCommand_8
        moveq     #1,D0
        bra.s     fsOsCommand_9
@@ -1092,12 +1331,12 @@ fsOsCommand_9:
        bne.s     fsOsCommand_6
 ; {
 ; varg = 0x01;
-       moveq     #1,D3
+       moveq     #1,D5
 ; linhacomando[ix] = '\0';
        and.l     #65535,D2
        clr.b     0(A2,D2.L)
 ; iy = ix;
-       move.w    D2,D4
+       move.w    D2,D3
 ; ix = 0;
        clr.w     D2
        bra       fsOsCommand_7
@@ -1106,7 +1345,7 @@ fsOsCommand_6:
 ; else
 ; {
 ; if (!varg)
-       tst.w     D3
+       tst.w     D5
        bne.s     fsOsCommand_10
 ; linhacomando[ix] = toupper(*blin);
        move.l    -480(A6),A0
@@ -1142,14 +1381,14 @@ fsOsCommand_7:
 fsOsCommand_5:
 ; }
 ; if (!varg)
-       tst.w     D3
+       tst.w     D5
        bne.s     fsOsCommand_12
 ; {
 ; linhacomando[ix] = '\0';
        and.l     #65535,D2
        clr.b     0(A2,D2.L)
 ; iy = ix;
-       move.w    D2,D4
+       move.w    D2,D3
        bra       fsOsCommand_13
 fsOsCommand_12:
 ; }
@@ -1178,7 +1417,7 @@ fsOsCommand_12:
 ; iz = 0;
        clr.w     -308(A6)
 ; varg = 0;
-       clr.w     D3
+       clr.w     D5
 ; while (ikk < ix)
 fsOsCommand_14:
        cmp.w     -306(A6),D2
@@ -1193,7 +1432,7 @@ fsOsCommand_14:
        bne.s     fsOsCommand_17
 ; {
 ; if (!varg && isrc > 0)
-       tst.w     D3
+       tst.w     D5
        bne.s     fsOsCommand_21
        moveq     #1,D0
        bra.s     fsOsCommand_22
@@ -1206,7 +1445,7 @@ fsOsCommand_22:
        cmp.w     #0,D0
        bls.s     fsOsCommand_19
 ; varg = 1;
-       moveq     #1,D3
+       moveq     #1,D5
 fsOsCommand_19:
        bra       fsOsCommand_27
 fsOsCommand_17:
@@ -1214,7 +1453,7 @@ fsOsCommand_17:
 ; else
 ; {
 ; if (!varg)
-       tst.w     D3
+       tst.w     D5
        bne.s     fsOsCommand_23
 ; {
 ; if (isrc < (sizeof(vparam) - 1))
@@ -1284,7 +1523,7 @@ fsOsCommand_29:
 ; // Processar e definir o que fazer
 ; if (linhacomando[0] != 0)
        move.b    (A2),D0
-       beq       fsOsCommand_312
+       beq       fsOsCommand_290
 ; {
 ; if (!strcmp(linhacomando,"CLS") && iy == 3)
        pea       @mmsjos_32.L
@@ -1293,13 +1532,13 @@ fsOsCommand_29:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_33
-       cmp.w     #3,D4
+       cmp.w     #3,D3
        bne.s     fsOsCommand_33
 ; {
 ; clearScr();
        move.l    1054,A0
        jsr       (A0)
-       bra       fsOsCommand_312
+       bra       fsOsCommand_290
 fsOsCommand_33:
 ; }
 ; else if (!strcmp(linhacomando,"CLEAR") && iy == 5)
@@ -1309,13 +1548,13 @@ fsOsCommand_33:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_35
-       cmp.w     #5,D4
+       cmp.w     #5,D3
        bne.s     fsOsCommand_35
 ; {
 ; clearScr();
        move.l    1054,A0
        jsr       (A0)
-       bra       fsOsCommand_312
+       bra       fsOsCommand_290
 fsOsCommand_35:
 ; }
 ; else if (!strcmp(linhacomando,"QUIT") && iy == 4)
@@ -1325,7 +1564,7 @@ fsOsCommand_35:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_37
-       cmp.w     #4,D4
+       cmp.w     #4,D3
        bne.s     fsOsCommand_37
 ; {
 ; return 99;
@@ -1340,7 +1579,7 @@ fsOsCommand_37:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_40
-       cmp.w     #3,D4
+       cmp.w     #3,D3
        bne.s     fsOsCommand_40
 ; {
 ; fsVer();
@@ -1350,7 +1589,7 @@ fsOsCommand_37:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       bra       fsOsCommand_312
+       bra       fsOsCommand_290
 fsOsCommand_40:
 ; }
 ; else if (!strcmp(linhacomando,"MGUI") && iy == 4)
@@ -1360,10 +1599,10 @@ fsOsCommand_40:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_42
-       cmp.w     #4,D4
+       cmp.w     #4,D3
        bne.s     fsOsCommand_42
 ; {
-; OSTaskCreate(mguiTask, OS_NULL, &StkMgui[STACKSIZEMGUI], 11);
+; OSTaskCreate(mguiTask, OS_NULL, &StkMgui[STACKSIZEMGUI], TASK_MGUI);
        pea       11
        lea       _StkMgui.L,A0
        add.w     #4096,A0
@@ -1372,7 +1611,7 @@ fsOsCommand_40:
        pea       _mguiTask.L
        jsr       _OSTaskCreate
        add.w     #16,A7
-       bra       fsOsCommand_312
+       bra       fsOsCommand_290
 fsOsCommand_42:
 ; }
 ; else if (!strcmp(linhacomando,"PWD") && iy == 3)
@@ -1382,7 +1621,7 @@ fsOsCommand_42:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_44
-       cmp.w     #3,D4
+       cmp.w     #3,D3
        bne.s     fsOsCommand_44
 ; {
 ; printText(vdiratu);
@@ -1395,11 +1634,11 @@ fsOsCommand_42:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       bra       fsOsCommand_312
+       bra       fsOsCommand_290
 fsOsCommand_44:
 ; }
 ; else if (iy == 2 && (!strcmp(linhacomando,"LS") ||
-       cmp.w     #2,D4
+       cmp.w     #2,D3
        bne       fsOsCommand_46
        pea       @mmsjos_38.L
        move.l    A2,-(A7)
@@ -1483,7 +1722,7 @@ fsOsCommand_51:
 ; vclusterdir = vretpath.ClusterDir;
        move.l    _vretpath+14.L,_vclusterdir.L
 ; iy = 0;
-       clr.w     D4
+       clr.w     D3
 ; iz = 0;
        clr.w     -308(A6)
 ; for (ix = 0; ix < 12; ix++)
@@ -1493,7 +1732,7 @@ fsOsCommand_57:
        bhs       fsOsCommand_59
 ; {
 ; if (iy)
-       tst.w     D4
+       tst.w     D3
        beq.s     fsOsCommand_60
 ; iz++;
        addq.w    #1,-308(A6)
@@ -1526,7 +1765,7 @@ fsOsCommand_64:
        cmp.b     #46,D0
        bne.s     fsOsCommand_67
 ; iy = 1;
-       moveq     #1,D4
+       moveq     #1,D3
 fsOsCommand_67:
        addq.w    #1,D2
        bra       fsOsCommand_57
@@ -1574,7 +1813,7 @@ fsOsCommand_50:
        tst.l     D0
        beq.s     fsOsCommand_71
 ; vretfat = ERRO_B_NOT_FOUND;
-       move.l    #255,D5
+       move.l    #255,D4
 fsOsCommand_71:
        bra       fsOsCommand_75
 fsOsCommand_69:
@@ -1633,15 +1872,15 @@ fsOsCommand_78:
 ; ix++;
        addq.w    #1,D2
 ; for (iy = 0; iy <= 2; iy++)
-       clr.w     D4
+       clr.w     D3
 fsOsCommand_84:
-       cmp.w     #2,D4
+       cmp.w     #2,D3
        bhi       fsOsCommand_86
 ; {
 ; vparam[ix] = vdir.Ext[iy];
-       and.l     #65535,D4
+       and.l     #65535,D3
        lea       _vdir.L,A0
-       add.l     D4,A0
+       add.l     D3,A0
        and.l     #65535,D2
        move.b    8(A0),0(A4,D2.L)
 ; if (vparam[ix] == 0x20 || vparam[ix] == 0x00)
@@ -1663,7 +1902,7 @@ fsOsCommand_87:
 ; }
 ; ix++;
        addq.w    #1,D2
-       addq.w    #1,D4
+       addq.w    #1,D3
        bra       fsOsCommand_84
 fsOsCommand_86:
 ; }
@@ -1824,7 +2063,7 @@ fsOsCommand_110:
        moveq     #4,D0
        ext.w     D0
        sub.w     D2,D0
-       move.w    D0,D4
+       move.w    D0,D3
 ; for(ix = 0; ix <= 3; ix++)
        clr.w     D2
 fsOsCommand_113:
@@ -1832,18 +2071,18 @@ fsOsCommand_113:
        bhi       fsOsCommand_115
 ; {
 ; if (iy <= ix)
-       cmp.w     D2,D4
+       cmp.w     D2,D3
        bhi.s     fsOsCommand_116
 ; {
 ; ikk = ix - iy;
        move.w    D2,D0
-       sub.w     D4,D0
+       sub.w     D3,D0
        move.w    D0,-306(A6)
 ; vbuffer[ix] = sqtdtam[ix - iy];
        and.l     #65535,D2
        move.l    D2,D0
-       and.l     #65535,D4
-       sub.l     D4,D0
+       and.l     #65535,D3
+       sub.l     D3,D0
        lea       -292(A6),A0
        and.l     #65535,D2
        move.b    0(A0,D0.L),0(A3,D2.L)
@@ -1992,30 +2231,30 @@ fsOsCommand_122:
 ; ix = 18;
        moveq     #18,D2
 ; varg = 0;
-       clr.w     D3
+       clr.w     D5
 ; while (vdir.Name[varg] != 0x20 && vdir.Name[varg] != 0x00 && varg <= 7)
 fsOsCommand_123:
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
-       move.b    0(A0,D3.L),D0
+       move.b    0(A0,D5.L),D0
        cmp.b     #32,D0
        beq.s     fsOsCommand_125
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
-       move.b    0(A0,D3.L),D0
+       move.b    0(A0,D5.L),D0
        beq.s     fsOsCommand_125
-       cmp.w     #7,D3
+       cmp.w     #7,D5
        bhi.s     fsOsCommand_125
 ; {
 ; vbuffer[ix] = vdir.Name[varg];
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
        and.l     #65535,D2
-       move.b    0(A0,D3.L),0(A3,D2.L)
+       move.b    0(A0,D5.L),0(A3,D2.L)
 ; ix++;
        addq.w    #1,D2
 ; varg++;
-       addq.w    #1,D3
+       addq.w    #1,D5
        bra       fsOsCommand_123
 fsOsCommand_125:
 ; }
@@ -2025,38 +2264,38 @@ fsOsCommand_125:
 ; ix++;
        addq.w    #1,D2
 ; varg = 0;
-       clr.w     D3
+       clr.w     D5
 ; while (vdir.Ext[varg] != 0x20 && vdir.Ext[varg] != 0x00 && varg <= 2)
 fsOsCommand_126:
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
-       add.l     D3,A0
+       add.l     D5,A0
        move.b    8(A0),D0
        cmp.b     #32,D0
        beq.s     fsOsCommand_128
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
-       add.l     D3,A0
+       add.l     D5,A0
        move.b    8(A0),D0
        beq.s     fsOsCommand_128
-       cmp.w     #2,D3
+       cmp.w     #2,D5
        bhi.s     fsOsCommand_128
 ; {
 ; vbuffer[ix] = vdir.Ext[varg];
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
-       add.l     D3,A0
+       add.l     D5,A0
        and.l     #65535,D2
        move.b    8(A0),0(A3,D2.L)
 ; ix++;
        addq.w    #1,D2
 ; varg++;
-       addq.w    #1,D3
+       addq.w    #1,D5
        bra       fsOsCommand_126
 fsOsCommand_128:
 ; }
 ; if (varg == 0)
-       tst.w     D3
+       tst.w     D5
        bne.s     fsOsCommand_129
 ; {
 ; ix--;
@@ -2139,52 +2378,52 @@ fsOsCommand_95:
 ; ix = 18;
        moveq     #18,D2
 ; varg = 0;
-       clr.w     D3
+       clr.w     D5
 ; while (vdir.Name[varg] != 0x00 && varg <= 7)
 fsOsCommand_136:
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
-       move.b    0(A0,D3.L),D0
+       move.b    0(A0,D5.L),D0
        beq.s     fsOsCommand_138
-       cmp.w     #7,D3
+       cmp.w     #7,D5
        bhi.s     fsOsCommand_138
 ; {
 ; vlinha[ix] = vdir.Name[varg];
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
        and.l     #65535,D2
        lea       -348(A6),A1
-       move.b    0(A0,D3.L),0(A1,D2.L)
+       move.b    0(A0,D5.L),0(A1,D2.L)
 ; ix++;
        addq.w    #1,D2
 ; varg++;
-       addq.w    #1,D3
+       addq.w    #1,D5
        bra       fsOsCommand_136
 fsOsCommand_138:
 ; }
 ; varg = 0;
-       clr.w     D3
+       clr.w     D5
 ; while (vdir.Ext[varg] != 0x00 && varg <= 2)
 fsOsCommand_139:
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
-       add.l     D3,A0
+       add.l     D5,A0
        move.b    8(A0),D0
        beq.s     fsOsCommand_141
-       cmp.w     #2,D3
+       cmp.w     #2,D5
        bhi.s     fsOsCommand_141
 ; {
 ; vlinha[ix] = vdir.Ext[varg];
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       _vdir.L,A0
-       add.l     D3,A0
+       add.l     D5,A0
        and.l     #65535,D2
        lea       -348(A6),A1
        move.b    8(A0),0(A1,D2.L)
 ; ix++;
        addq.w    #1,D2
 ; varg++;
-       addq.w    #1,D3
+       addq.w    #1,D5
        bra       fsOsCommand_139
 fsOsCommand_141:
 ; }
@@ -2208,7 +2447,7 @@ fsOsCommand_96:
 fsOsCommand_92:
 ; }
 ; vretfat = RETURN_OK;
-       clr.l     D5
+       clr.l     D4
 ; // Verifica se Tem mais arquivos no diretorio
 ; if (fsFindInDir(vparam, TYPE_NEXT_ENTRY) >= ERRO_D_START)
        pea       9
@@ -2239,7 +2478,7 @@ fsOsCommand_90:
        bne       fsOsCommand_144
 ; {
 ; vretfat = RETURN_OK;
-       clr.l     D5
+       clr.l     D4
 ; logcopyok = 1;
        move.b    #1,-133(A6)
 ; // Verifica se Tem mais arquivos no diretorio antes de deletar
@@ -2311,15 +2550,15 @@ fsOsCommand_150:
 ; ix++;
        addq.w    #1,D2
 ; for (iy = 0; iy <= 2; iy++)
-       clr.w     D4
+       clr.w     D3
 fsOsCommand_156:
-       cmp.w     #2,D4
+       cmp.w     #2,D3
        bhi       fsOsCommand_158
 ; {
 ; vparam2[ix] = vdir.Ext[iy];
-       and.l     #65535,D4
+       and.l     #65535,D3
        lea       _vdir.L,A0
-       add.l     D4,A0
+       add.l     D3,A0
        and.l     #65535,D2
        lea       -248(A6),A1
        move.b    8(A0),0(A1,D2.L)
@@ -2345,7 +2584,7 @@ fsOsCommand_159:
 ; }
 ; ix++;
        addq.w    #1,D2
-       addq.w    #1,D4
+       addq.w    #1,D3
        bra       fsOsCommand_156
 fsOsCommand_158:
 ; }
@@ -2390,11 +2629,11 @@ fsOsCommand_166:
        jsr       _fsDelFile
        addq.w    #4,A7
        and.l     #255,D0
-       move.l    D0,D5
+       move.l    D0,D4
 fsOsCommand_164:
 ; }
 ; if (vretfat != RETURN_OK)
-       tst.l     D5
+       tst.l     D4
        beq.s     fsOsCommand_168
 ; break;
        bra       fsOsCommand_75
@@ -2409,7 +2648,7 @@ fsOsCommand_162:
        jsr       _fsDelFile
        addq.w    #4,A7
        and.l     #255,D0
-       move.l    D0,D5
+       move.l    D0,D4
 ; break;
        bra       fsOsCommand_75
 fsOsCommand_163:
@@ -2443,7 +2682,7 @@ fsOsCommand_170:
        blo.s     fsOsCommand_174
 ; {
 ; vretfat = ERRO_B_NOT_FOUND;
-       move.l    #255,D5
+       move.l    #255,D4
 ; break;
        bra       fsOsCommand_75
 fsOsCommand_174:
@@ -2463,7 +2702,7 @@ fsOsCommand_144:
 ; ikk = 0;
        clr.w     -306(A6)
 ; vretfat = RETURN_OK;
-       clr.l     D5
+       clr.l     D4
 ; logcopyok = 1;
        move.b    #1,-133(A6)
 ; if (logwildcard)
@@ -2521,7 +2760,7 @@ fsOsCommand_184:
        beq.s     fsOsCommand_186
 ; {
 ; vretfat = ERRO_B_NOT_FOUND;
-       move.l    #255,D5
+       move.l    #255,D4
        bra       fsOsCommand_198
 fsOsCommand_186:
 ; }
@@ -2542,7 +2781,7 @@ fsOsCommand_186:
        tst.l     D0
        bne.s     fsOsCommand_188
 ; vretfat = ERRO_B_INVALID_NAME;
-       move.l    #228,D5
+       move.l    #228,D4
        bra       fsOsCommand_198
 fsOsCommand_188:
 ; else
@@ -2589,11 +2828,11 @@ fsOsCommand_191:
        tst.b     D0
        beq.s     fsOsCommand_194
 ; vretfat = ERRO_B_APAGAR_ARQUIVO;
-       move.l    #231,D5
+       move.l    #231,D4
 fsOsCommand_194:
 ; }
 ; if (vretfat == RETURN_OK)
-       tst.l     D5
+       tst.l     D4
        bne.s     fsOsCommand_198
 ; {
 ; if (fsCreateFile(vparam5) != RETURN_OK)
@@ -2603,7 +2842,7 @@ fsOsCommand_194:
        tst.b     D0
        beq.s     fsOsCommand_198
 ; vretfat = ERRO_B_CREATE_FILE;
-       move.l    #230,D5
+       move.l    #230,D4
 fsOsCommand_198:
 ; }
 ; //memcpy(vdirdst, vdir, sizeof(FAT32_DIR));
@@ -2611,7 +2850,7 @@ fsOsCommand_198:
 ; }
 ; while (vretfat == RETURN_OK)
 fsOsCommand_200:
-       tst.l     D5
+       tst.l     D4
        bne       fsOsCommand_202
 ; {
 ; vclusterdir = vclusterdirsrc;
@@ -2648,7 +2887,7 @@ fsOsCommand_200:
        beq.s     fsOsCommand_205
 ; {
 ; vretfat = ERRO_B_WRITE_FILE;
-       move.l    #237,D5
+       move.l    #237,D4
 ; break;
        bra.s     fsOsCommand_202
 fsOsCommand_205:
@@ -2667,7 +2906,7 @@ fsOsCommand_204:
 fsOsCommand_202:
 ; }
 ; if (vretfat != RETURN_OK)
-       tst.l     D5
+       tst.l     D4
        beq.s     fsOsCommand_207
 ; {
 ; // Falhou no meio da copia: remove temporario e preserva destino antigo.
@@ -2698,11 +2937,11 @@ fsOsCommand_207:
        tst.b     D0
        beq.s     fsOsCommand_211
 ; vretfat = ERRO_B_APAGAR_ARQUIVO;
-       move.l    #231,D5
+       move.l    #231,D4
 fsOsCommand_211:
 ; }
 ; if (vretfat == RETURN_OK)
-       tst.l     D5
+       tst.l     D4
        bne.s     fsOsCommand_215
 ; {
 ; if (fsRenameFile(vparam5, vparam4) != RETURN_OK)
@@ -2718,12 +2957,12 @@ fsOsCommand_211:
        jsr       _fsDelFile
        addq.w    #4,A7
 ; vretfat = ERRO_B_CREATE_FILE;
-       move.l    #230,D5
+       move.l    #230,D4
 fsOsCommand_215:
 ; }
 ; }
 ; if (vretfat != RETURN_OK)
-       tst.l     D5
+       tst.l     D4
        beq.s     fsOsCommand_217
 ; break;
        bra       fsOsCommand_75
@@ -2769,7 +3008,7 @@ fsOsCommand_75:
 ; vclusterdir = vclusterdiratu;
        move.l    -156(A6),_vclusterdir.L
 ; if (vretfat != RETURN_OK)
-       tst.l     D5
+       tst.l     D4
        beq.s     fsOsCommand_227
 ; {
 ; if (linhaParametro[0] == '\0')
@@ -2778,8 +3017,8 @@ fsOsCommand_75:
        bne.s     fsOsCommand_227
 ; {
 ; printDiskError(vretfat);
-       and.l     #255,D5
-       move.l    D5,-(A7)
+       and.l     #255,D4
+       move.l    D4,-(A7)
        jsr       _printDiskError
        addq.w    #4,A7
 ; printText("\r\n\0");
@@ -2788,7 +3027,7 @@ fsOsCommand_75:
        jsr       (A0)
        addq.w    #4,A7
 fsOsCommand_227:
-       bra       fsOsCommand_312
+       bra       fsOsCommand_290
 fsOsCommand_46:
 ; }
 ; }
@@ -2802,7 +3041,7 @@ fsOsCommand_46:
        addq.w    #8,A7
        tst.l     D0
        bne       fsOsCommand_229
-       cmp.w     #3,D4
+       cmp.w     #3,D3
        bne       fsOsCommand_229
 ; {
 ; if (fsFindDirPath(vparam, FIND_PATH_PART) == FIND_PATH_RET_ERROR)
@@ -2825,7 +3064,7 @@ fsOsCommand_46:
        addq.w    #4,A7
 fsOsCommand_233:
 ; vretfat = ERRO_B_NOT_FOUND;
-       move.l    #255,D5
+       move.l    #255,D4
        bra.s     fsOsCommand_236
 fsOsCommand_231:
 ; }
@@ -2838,7 +3077,7 @@ fsOsCommand_231:
        tst.l     D0
        bne.s     fsOsCommand_235
 ; vretfat = ERRO_B_INVALID_NAME;
-       move.l    #228,D5
+       move.l    #228,D4
        bra.s     fsOsCommand_236
 fsOsCommand_235:
 ; else
@@ -2851,7 +3090,7 @@ fsOsCommand_235:
        jsr       _fsRenameFile
        addq.w    #8,A7
        and.l     #255,D0
-       move.l    D0,D5
+       move.l    D0,D4
 fsOsCommand_236:
 ; }
 ; }
@@ -2867,7 +3106,7 @@ fsOsCommand_229:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_237
-       cmp.w     #2,D4
+       cmp.w     #2,D3
        bne.s     fsOsCommand_237
 ; {
 ; vretfat = fsMakeDir(linhaarg);
@@ -2875,7 +3114,7 @@ fsOsCommand_229:
        jsr       _fsMakeDir
        addq.w    #4,A7
        and.l     #255,D0
-       move.l    D0,D5
+       move.l    D0,D4
        bra       fsOsCommand_262
 fsOsCommand_237:
 ; }
@@ -2886,7 +3125,7 @@ fsOsCommand_237:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_239
-       cmp.w     #2,D4
+       cmp.w     #2,D3
        bne.s     fsOsCommand_239
 ; {
 ; vretfat = fsChangeDir(linhaarg);
@@ -2894,7 +3133,7 @@ fsOsCommand_237:
        jsr       _fsChangeDir
        addq.w    #4,A7
        and.l     #255,D0
-       move.l    D0,D5
+       move.l    D0,D4
        bra       fsOsCommand_262
 fsOsCommand_239:
 ; }
@@ -2905,7 +3144,7 @@ fsOsCommand_239:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_241
-       cmp.w     #2,D4
+       cmp.w     #2,D3
        bne.s     fsOsCommand_241
 ; {
 ; vretfat = fsRemoveDir(linhaarg);
@@ -2913,7 +3152,7 @@ fsOsCommand_239:
        jsr       _fsRemoveDir
        addq.w    #4,A7
        and.l     #255,D0
-       move.l    D0,D5
+       move.l    D0,D4
        bra       fsOsCommand_262
 fsOsCommand_241:
 ; }
@@ -2924,7 +3163,7 @@ fsOsCommand_241:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_243
-       cmp.w     #4,D4
+       cmp.w     #4,D3
        bne.s     fsOsCommand_243
 ; {
 ; vretfat = fsLoadSerialToFile(linhaarg);  // Carrega da Serial para o Arquivo
@@ -2932,7 +3171,7 @@ fsOsCommand_241:
        jsr       _fsLoadSerialToFile
        addq.w    #4,A7
        and.l     #255,D0
-       move.l    D0,D5
+       move.l    D0,D4
        bra       fsOsCommand_262
 fsOsCommand_243:
 ; }
@@ -2943,7 +3182,7 @@ fsOsCommand_243:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_245
-       cmp.w     #4,D4
+       cmp.w     #4,D3
        bne.s     fsOsCommand_245
 ; {
 ; vretfat = fsLoadSerialToRun(linhaarg);  // Carrega da Serial para o Arquivo
@@ -2951,7 +3190,7 @@ fsOsCommand_243:
        jsr       _fsLoadSerialToRun
        addq.w    #4,A7
        and.l     #255,D0
-       move.l    D0,D5
+       move.l    D0,D4
        bra       fsOsCommand_262
 fsOsCommand_245:
 ; }
@@ -2962,7 +3201,7 @@ fsOsCommand_245:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_247
-       cmp.w     #4,D4
+       cmp.w     #4,D3
        bne.s     fsOsCommand_247
 ; {
 ; // TBD
@@ -2976,7 +3215,7 @@ fsOsCommand_247:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_249
-       cmp.w     #4,D4
+       cmp.w     #4,D3
        bne.s     fsOsCommand_249
 ; {
 ; // TBD
@@ -2990,7 +3229,7 @@ fsOsCommand_249:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_251
-       cmp.w     #6,D4
+       cmp.w     #6,D3
        bne.s     fsOsCommand_251
 ; {
 ; vretfat = fsFormat(0x5678, linhaarg);
@@ -2999,7 +3238,7 @@ fsOsCommand_249:
        jsr       _fsFormat
        addq.w    #8,A7
        and.l     #255,D0
-       move.l    D0,D5
+       move.l    D0,D4
        bra       fsOsCommand_262
 fsOsCommand_251:
 ; }
@@ -3010,7 +3249,7 @@ fsOsCommand_251:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_253
-       cmp.w     #4,D4
+       cmp.w     #4,D3
        bne.s     fsOsCommand_253
 ; {
 ; // A definir
@@ -3026,7 +3265,7 @@ fsOsCommand_253:
        addq.w    #8,A7
        tst.l     D0
        bne.s     fsOsCommand_255
-       cmp.w     #3,D4
+       cmp.w     #3,D3
        bne.s     fsOsCommand_255
 ; {
 ; catFile(linhaarg);
@@ -3045,9 +3284,24 @@ fsOsCommand_255:
        addq.w    #8,A7
        tst.l     D0
        bne       fsOsCommand_257
-       cmp.w     #5,D4
+       cmp.w     #5,D3
        bne       fsOsCommand_257
 ; {
+; writeLongSerial("Starting Basic with parameter: \0");
+       pea       @mmsjos_57.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial(linhaarg);
+       pea       -546(A6)
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; writeLongSerial("\r\n\0");
+       pea       @mmsjos_1.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; memset(basicTaskArg, 0x00, sizeof(basicTaskArg));
        pea       64
        clr.l     -(A7)
@@ -3064,8 +3318,13 @@ fsOsCommand_255:
        jsr       _memcpy
        add.w     #12,A7
 fsOsCommand_259:
-; OSTaskCreate(basicTask, (void *)basicTaskArg, &StkBasic[STACKSIZEBASIC], 11);
-       pea       11
+; writeLongSerial("Executing Basic\r\n\0");
+       pea       @mmsjos_58.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; OSTaskCreate(basicTask, (void *)basicTaskArg, &StkBasic[STACKSIZEBASIC], TASK_BASIC);
+       pea       13
        lea       _StkBasic.L,A0
        add.l     #65536,A0
        move.l    A0,-(A7)
@@ -3073,6 +3332,11 @@ fsOsCommand_259:
        pea       _basicTask.L
        jsr       _OSTaskCreate
        add.w     #16,A7
+; writeLongSerial("Ended Basic\r\n\0");
+       pea       @mmsjos_59.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
        bra       fsOsCommand_262
 fsOsCommand_257:
 ; }
@@ -3080,7 +3344,7 @@ fsOsCommand_257:
 ; {
 ; // Verifica se tem Arquivo com esse nome na pasta atual no disco
 ; ix = iy;
-       move.w    D4,D2
+       move.w    D3,D2
 ; linhacomando[ix] = '.';
        and.l     #65535,D2
        move.b    #46,0(A2,D2.L)
@@ -3109,42 +3373,14 @@ fsOsCommand_257:
        move.l    A2,-(A7)
        jsr       _fsFindInDir
        addq.w    #8,A7
-       move.l    D0,D5
+       move.l    D0,D4
 ; if (vretfat <= ERRO_D_START)
-       cmp.l     #-16,D5
+       cmp.l     #-16,D4
        bhi       fsOsCommand_261
 ; {
-; // Se tiver, carrega em 0x00810000 e executa
-; vsizefilemalloc = fsInfoFile(linhacomando, INFO_SIZE);
-       pea       1
-       move.l    A2,-(A7)
-       jsr       _fsInfoFile
-       addq.w    #8,A7
-       move.l    D0,-144(A6)
-; vEnderExec = malloc(vsizefilemalloc);
-       move.l    -144(A6),-(A7)
-       jsr       _malloc
-       addq.w    #4,A7
-       move.l    D0,-140(A6)
-; if (!vEnderExec)
-       tst.l     -140(A6)
-       bne.s     fsOsCommand_263
-; {
-; if (linhaParametro[0] == '\0')
-       move.l    D7,A0
-       move.b    (A0),D0
-       bne.s     fsOsCommand_265
-; printText("No memory to load file...\r\n\0");
-       pea       @mmsjos_57.L
-       move.l    1058,A0
-       jsr       (A0)
-       addq.w    #4,A7
-fsOsCommand_265:
-       bra       fsOsCommand_269
-fsOsCommand_263:
-; }
-; else
-; {
+; // Slot fixo para apps gerais: 0x00880000
+; vEnderExec = 0x00880000;
+       move.l    #8912896,-140(A6)
 ; itoa(vEnderExec,sqtdtam,16);
        pea       16
        pea       -292(A6)
@@ -3152,7 +3388,7 @@ fsOsCommand_263:
        jsr       _itoa
        add.w     #12,A7
 ; printText("Loading File in \0");
-       pea       @mmsjos_58.L
+       pea       @mmsjos_60.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3162,7 +3398,7 @@ fsOsCommand_263:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("h\r\n\0");
-       pea       @mmsjos_59.L
+       pea       @mmsjos_61.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3173,36 +3409,25 @@ fsOsCommand_263:
        addq.w    #8,A7
 ; if (!verro)
        tst.b     _verro.L
-       bne.s     fsOsCommand_267
-; {
-; runOSMemory = vEnderExec;
-       move.l    -140(A6),_runOSMemory.L
-; runFromOsCmd();
-       jsr       _runFromOsCmd
-; free(vEnderExec);
+       bne.s     fsOsCommand_263
+; runFromOsCmd(vEnderExec);
        move.l    -140(A6),-(A7)
-       jsr       _free
+       jsr       _runFromOsCmd
        addq.w    #4,A7
-       bra.s     fsOsCommand_269
-fsOsCommand_267:
-; }
+       bra.s     fsOsCommand_265
+fsOsCommand_263:
 ; else
 ; {
-; free(vEnderExec);
-       move.l    -140(A6),-(A7)
-       jsr       _free
-       addq.w    #4,A7
 ; if (linhaParametro[0] == '\0')
        move.l    D7,A0
        move.b    (A0),D0
-       bne.s     fsOsCommand_269
+       bne.s     fsOsCommand_265
 ; printText("Loading File Error...\r\n\0");
-       pea       @mmsjos_60.L
+       pea       @mmsjos_62.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-fsOsCommand_269:
-; }
+fsOsCommand_265:
 ; }
 ; ix = 255;
        move.w    #255,D2
@@ -3215,13 +3440,13 @@ fsOsCommand_261:
 ; if (linhaParametro[0] == '\0')
        move.l    D7,A0
        move.b    (A0),D0
-       bne.s     fsOsCommand_271
+       bne.s     fsOsCommand_267
 ; printText("Invalid Command or File Name\r\n\0");
-       pea       @mmsjos_61.L
+       pea       @mmsjos_63.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-fsOsCommand_271:
+fsOsCommand_267:
 ; ix = 255;
        move.w    #255,D2
 fsOsCommand_262:
@@ -3229,65 +3454,65 @@ fsOsCommand_262:
 ; }
 ; if (ix != 255)
        cmp.w     #255,D2
-       beq       fsOsCommand_312
+       beq       fsOsCommand_290
 ; {
 ; if (vpicret)
        tst.b     -157(A6)
-       beq       fsOsCommand_275
+       beq       fsOsCommand_271
 ; {
 ; for (varg = 0; varg < ix; varg++)
-       clr.w     D3
-fsOsCommand_277:
-       cmp.w     D2,D3
-       bhs.s     fsOsCommand_279
+       clr.w     D5
+fsOsCommand_273:
+       cmp.w     D2,D5
+       bhs.s     fsOsCommand_275
 ; fsSendByte(linhaarg[varg], FS_DATA);
        pea       1
-       and.l     #65535,D3
+       and.l     #65535,D5
        lea       -546(A6),A0
-       move.b    0(A0,D3.L),D1
+       move.b    0(A0,D5.L),D1
        and.l     #255,D1
        move.l    D1,-(A7)
        jsr       _fsSendByte
        addq.w    #8,A7
-       addq.w    #1,D3
-       bra       fsOsCommand_277
-fsOsCommand_279:
+       addq.w    #1,D5
+       bra       fsOsCommand_273
+fsOsCommand_275:
 ; vbytepic = fsRecByte(FS_DATA);
        pea       1
        jsr       _fsRecByte
        addq.w    #4,A7
        and.w     #255,D0
        move.w    D0,-302(A6)
-fsOsCommand_275:
+fsOsCommand_271:
 ; }
 ; if (((vpicret) && (vbytepic != RETURN_OK)) || ((!vpicret) && (vretfat != RETURN_OK)))
        move.b    -157(A6),D0
        and.l     #255,D0
-       beq.s     fsOsCommand_283
+       beq.s     fsOsCommand_279
        move.w    -302(A6),D0
-       bne.s     fsOsCommand_282
-fsOsCommand_283:
+       bne.s     fsOsCommand_278
+fsOsCommand_279:
        tst.b     -157(A6)
-       bne.s     fsOsCommand_284
+       bne.s     fsOsCommand_280
        moveq     #1,D0
-       bra.s     fsOsCommand_285
-fsOsCommand_284:
+       bra.s     fsOsCommand_281
+fsOsCommand_280:
        clr.l     D0
-fsOsCommand_285:
+fsOsCommand_281:
        and.l     #255,D0
-       beq.s     fsOsCommand_280
-       tst.l     D5
-       beq.s     fsOsCommand_280
-fsOsCommand_282:
+       beq.s     fsOsCommand_276
+       tst.l     D4
+       beq.s     fsOsCommand_276
+fsOsCommand_278:
 ; {
 ; if (linhaParametro[0] == '\0')
        move.l    D7,A0
        move.b    (A0),D0
-       bne.s     fsOsCommand_286
+       bne.s     fsOsCommand_282
 ; {
 ; printDiskError(vretfat);
-       and.l     #255,D5
-       move.l    D5,-(A7)
+       and.l     #255,D4
+       move.l    D4,-(A7)
        jsr       _printDiskError
        addq.w    #4,A7
 ; printText("\r\n\0");
@@ -3295,138 +3520,20 @@ fsOsCommand_282:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-fsOsCommand_286:
-       bra       fsOsCommand_312
-fsOsCommand_280:
+fsOsCommand_282:
+       bra       fsOsCommand_290
+fsOsCommand_276:
 ; }
 ; }
 ; else
 ; {
-; if (!strcmp(linhacomando,"CD"))
-       pea       @mmsjos_47.L
-       move.l    A2,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-       tst.l     D0
-       bne       fsOsCommand_288
-; {
-; if (linhaarg[0] == '.' && linhaarg[1] == '.')
-       move.b    -546+0(A6),D0
-       cmp.b     #46,D0
-       bne       fsOsCommand_290
-       move.b    -546+1(A6),D0
-       cmp.b     #46,D0
-       bne       fsOsCommand_290
-; {
-; while (vdiratu[vdiratuidx] != '/')
-fsOsCommand_292:
-       move.w    _vdiratuidx.L,D0
-       and.l     #65535,D0
-       lea       _vdiratu.L,A0
-       move.b    0(A0,D0.L),D0
-       cmp.b     #47,D0
-       beq.s     fsOsCommand_294
-; {
-; vdiratu[vdiratuidx--] = '\0';
-       move.w    _vdiratuidx.L,D0
-       subq.w    #1,_vdiratuidx.L
-       and.l     #65535,D0
-       lea       _vdiratu.L,A0
-       clr.b     0(A0,D0.L)
-       bra       fsOsCommand_292
-fsOsCommand_294:
-; }
-; if (vdiratuidx > 127)
-       move.w    _vdiratuidx.L,D0
-       cmp.w     #127,D0
-       bls.s     fsOsCommand_295
-; vdiratu[vdiratuidx--] = '\0';
-       move.w    _vdiratuidx.L,D0
-       subq.w    #1,_vdiratuidx.L
-       and.l     #65535,D0
-       lea       _vdiratu.L,A0
-       clr.b     0(A0,D0.L)
-       bra.s     fsOsCommand_296
-fsOsCommand_295:
-; else
-; vdiratuidx++;
-       addq.w    #1,_vdiratuidx.L
-fsOsCommand_296:
-       bra       fsOsCommand_299
-fsOsCommand_290:
-; }
-; else if(linhaarg[0] == '/')
-       move.b    -546+0(A6),D0
-       cmp.b     #47,D0
-       bne.s     fsOsCommand_297
-; {
-; vdiratuidx = 1;
-       move.w    #1,_vdiratuidx.L
-; vdiratu[0] = '/';
-       move.b    #47,_vdiratu.L
-; vdiratu[vdiratuidx] = '\0';
-       move.w    _vdiratuidx.L,D0
-       and.l     #65535,D0
-       lea       _vdiratu.L,A0
-       clr.b     0(A0,D0.L)
-       bra       fsOsCommand_299
-fsOsCommand_297:
-; }
-; else if(linhaarg[0] != '.')
-       move.b    -546+0(A6),D0
-       cmp.b     #46,D0
-       beq       fsOsCommand_299
-; {
-; vdiratuidx--;
-       subq.w    #1,_vdiratuidx.L
-; if (vdiratu[vdiratuidx++] != '/')
-       move.w    _vdiratuidx.L,D0
-       addq.w    #1,_vdiratuidx.L
-       and.l     #65535,D0
-       lea       _vdiratu.L,A0
-       move.b    0(A0,D0.L),D0
-       cmp.b     #47,D0
-       beq.s     fsOsCommand_301
-; vdiratu[vdiratuidx++] = '/';
-       move.w    _vdiratuidx.L,D0
-       addq.w    #1,_vdiratuidx.L
-       and.l     #65535,D0
-       lea       _vdiratu.L,A0
-       move.b    #47,0(A0,D0.L)
-fsOsCommand_301:
-; for (varg = 0; varg < ix; varg++)
-       clr.w     D3
-fsOsCommand_303:
-       cmp.w     D2,D3
-       bhs.s     fsOsCommand_305
-; vdiratu[vdiratuidx++] = linhaarg[varg];
-       and.l     #65535,D3
-       lea       -546(A6),A0
-       move.w    _vdiratuidx.L,D0
-       addq.w    #1,_vdiratuidx.L
-       and.l     #65535,D0
-       lea       _vdiratu.L,A1
-       move.b    0(A0,D3.L),0(A1,D0.L)
-       addq.w    #1,D3
-       bra       fsOsCommand_303
-fsOsCommand_305:
-; vdiratu[vdiratuidx] = '\0';
-       move.w    _vdiratuidx.L,D0
-       and.l     #65535,D0
-       lea       _vdiratu.L,A0
-       clr.b     0(A0,D0.L)
-fsOsCommand_299:
-       bra       fsOsCommand_312
-fsOsCommand_288:
-; }
-; }
-; else if (!strcmp(linhacomando,"DATE"))
+; if (!strcmp(linhacomando,"DATE"))
        pea       @mmsjos_51.L
        move.l    A2,-(A7)
        jsr       (A5)
        addq.w    #8,A7
        tst.l     D0
-       bne       fsOsCommand_306
+       bne       fsOsCommand_284
 ; {
 ; /*for(ix = 0; ix <= 9; ix++)
 ; {
@@ -3438,7 +3545,7 @@ fsOsCommand_288:
        lea       -348(A6),A0
        clr.b     0(A0,D2.L)
 ; printText("  Date is \0");
-       pea       @mmsjos_62.L
+       pea       @mmsjos_64.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3452,8 +3559,8 @@ fsOsCommand_288:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       bra       fsOsCommand_312
-fsOsCommand_306:
+       bra       fsOsCommand_290
+fsOsCommand_284:
 ; }
 ; else if (!strcmp(linhacomando,"TIME"))
        pea       @mmsjos_52.L
@@ -3461,7 +3568,7 @@ fsOsCommand_306:
        jsr       (A5)
        addq.w    #8,A7
        tst.l     D0
-       bne       fsOsCommand_308
+       bne       fsOsCommand_286
 ; {
 ; /*for(ix = 0; ix <= 7; ix++)
 ; {
@@ -3473,7 +3580,7 @@ fsOsCommand_306:
        lea       -348(A6),A0
        clr.b     0(A0,D2.L)
 ; printText("  Time is \0");
-       pea       @mmsjos_63.L
+       pea       @mmsjos_65.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -3487,8 +3594,8 @@ fsOsCommand_306:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-       bra.s     fsOsCommand_312
-fsOsCommand_308:
+       bra.s     fsOsCommand_290
+fsOsCommand_286:
 ; }
 ; else if (!strcmp(linhacomando,"FORMAT"))
        pea       @mmsjos_53.L
@@ -3496,25 +3603,25 @@ fsOsCommand_308:
        jsr       (A5)
        addq.w    #8,A7
        tst.l     D0
-       bne.s     fsOsCommand_312
+       bne.s     fsOsCommand_290
 ; {
 ; if (linhaParametro[0] == '\0')
        move.l    D7,A0
        move.b    (A0),D0
-       bne.s     fsOsCommand_312
+       bne.s     fsOsCommand_290
 ; printText("Format disk was successfully\r\n\0");
-       pea       @mmsjos_64.L
+       pea       @mmsjos_66.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-fsOsCommand_312:
+fsOsCommand_290:
 ; }
 ; }
 ; }
 ; }
 ; }
 ; return vretfat;
-       move.l    D5,D0
+       move.l    D4,D0
 fsOsCommand_39:
        movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
        unlk      A6
@@ -3526,17 +3633,45 @@ fsOsCommand_39:
        xdef      _runFromMGUI
 _runFromMGUI:
        link      A6,#-88
-       movem.l   D2/D3/A2,-(A7)
-       move.l    8(A6),D2
+       movem.l   D2/D3/A2/A3,-(A7)
+       move.l    8(A6),D3
        lea       _OSTaskCreate.L,A2
+       lea       _mguiListWindows.L,A3
 ; unsigned int ix;
 ; OS_TCB dataTask;
+; *mguiRunTask = 0x00;
+       move.l    _mguiRunTask.L,A0
+       clr.l     (A0)
+; writeLongSerial("Aqui 0\r\n\0");                        
+       pea       @mmsjos_67.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; for (ix = 0; ix <= 6; ix++)
+       clr.l     D2
+runFromMGUI_1:
+       cmp.l     #6,D2
+       bhi.s     runFromMGUI_3
+; mguiListWindows[ix].active = 0;
+       move.l    (A3),A0
+       move.l    D2,D0
+       muls      #11,D0
+       add.l     D0,A0
+       clr.b     9(A0)
+       addq.l    #1,D2
+       bra       runFromMGUI_1
+runFromMGUI_3:
+; writeLongSerial("Aqui 1\r\n\0");                        
+       pea       @mmsjos_68.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; // Verifica qual task esta liberada
 ; for (ix = 0; ix < 6; ix++)
-       clr.l     D3
-runFromMGUI_1:
-       cmp.l     #6,D3
-       bhs.s     runFromMGUI_3
+       clr.l     D2
+runFromMGUI_4:
+       cmp.l     #6,D2
+       bhs.s     runFromMGUI_6
 ; {
 ; // Se nao existir essa task, usa ela
 ; if (OSTaskQuery((25 + ix), &dataTask) != OS_ERR_NONE)
@@ -3544,122 +3679,184 @@ runFromMGUI_1:
        moveq     #25,D1
        ext.w     D1
        ext.l     D1
-       add.l     D3,D1
+       add.l     D2,D1
        and.l     #255,D1
        move.l    D1,-(A7)
        jsr       _OSTaskQuery
        addq.w    #8,A7
        tst.b     D0
-       beq.s     runFromMGUI_4
+       beq.s     runFromMGUI_7
 ; break;
-       bra.s     runFromMGUI_3
-runFromMGUI_4:
-       addq.l    #1,D3
-       bra       runFromMGUI_1
-runFromMGUI_3:
+       bra.s     runFromMGUI_6
+runFromMGUI_7:
+       addq.l    #1,D2
+       bra       runFromMGUI_4
+runFromMGUI_6:
 ; }
+; writeLongSerial("Aqui 2\r\n\0");                        
+       pea       @mmsjos_69.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; // Cria Janela
+; if (ix < 6)
+       cmp.l     #6,D2
+       bhs       runFromMGUI_9
+; {
+; writeLongSerial("Aqui 3\r\n\0");                        
+       pea       @mmsjos_70.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; mguiListWindows[ix].id = ix + TASK_Prog01;
+       move.l    D2,D0
+       add.l     #25,D0
+       move.l    (A3),A0
+       move.l    D2,D1
+       muls      #11,D1
+       move.l    D0,0(A0,D1.L)
+; writeLongSerial("Aqui 4\r\n\0");                        
+       pea       @mmsjos_71.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; mguiListWindows[ix].loadAddress = vEnderExec;
+       move.l    (A3),A0
+       move.l    D2,D0
+       muls      #11,D0
+       add.l     D0,A0
+       move.l    D3,4(A0)
+; writeLongSerial("Aqui 5\r\n\0");                        
+       pea       @mmsjos_72.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; mguiListWindows[ix].zOrder = 0;
+       move.l    (A3),A0
+       move.l    D2,D0
+       muls      #11,D0
+       add.l     D0,A0
+       clr.b     8(A0)
+; writeLongSerial("Aqui 6\r\n\0");                        
+       pea       @mmsjos_73.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; mguiListWindows[ix].active = 1;
+       move.l    (A3),A0
+       move.l    D2,D0
+       muls      #11,D0
+       add.l     D0,A0
+       move.b    #1,9(A0)
+runFromMGUI_9:
+; }
+; writeLongSerial("Aqui 7\r\n\0");                        
+       pea       @mmsjos_74.L
+       move.l    1158,A0
+       jsr       (A0)
+       addq.w    #4,A7
 ; // Cria a task
 ; switch (ix)
-       move.l    D3,D0
+       move.l    D2,D0
        cmp.l     #6,D0
-       bhs       runFromMGUI_6
+       bhs       runFromMGUI_11
        asl.l     #1,D0
-       move.w    runFromMGUI_8(PC,D0.L),D0
-       jmp       runFromMGUI_8(PC,D0.W)
-runFromMGUI_8:
-       dc.w      runFromMGUI_9-runFromMGUI_8
-       dc.w      runFromMGUI_10-runFromMGUI_8
-       dc.w      runFromMGUI_11-runFromMGUI_8
-       dc.w      runFromMGUI_12-runFromMGUI_8
-       dc.w      runFromMGUI_13-runFromMGUI_8
-       dc.w      runFromMGUI_14-runFromMGUI_8
-runFromMGUI_9:
+       move.w    runFromMGUI_13(PC,D0.L),D0
+       jmp       runFromMGUI_13(PC,D0.W)
+runFromMGUI_13:
+       dc.w      runFromMGUI_14-runFromMGUI_13
+       dc.w      runFromMGUI_15-runFromMGUI_13
+       dc.w      runFromMGUI_16-runFromMGUI_13
+       dc.w      runFromMGUI_17-runFromMGUI_13
+       dc.w      runFromMGUI_18-runFromMGUI_13
+       dc.w      runFromMGUI_19-runFromMGUI_13
+runFromMGUI_14:
 ; {
 ; case 0:
-; OSTaskCreate(prog01Task, (void *)vEnderExec, &StkTask01[STACKSIZEMGUI], 25);
+; OSTaskCreate(prog01Task, (void *)vEnderExec, &StkTask01[STACKSIZEMGUI], TASK_Prog01);
        pea       25
        lea       _StkTask01.L,A0
        add.w     #4096,A0
        move.l    A0,-(A7)
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        pea       _prog01Task.L
        jsr       (A2)
        add.w     #16,A7
 ; break;
-       bra       runFromMGUI_7
-runFromMGUI_10:
+       bra       runFromMGUI_12
+runFromMGUI_15:
 ; case 1:
-; OSTaskCreate(prog02Task, (void *)vEnderExec, &StkTask02[STACKSIZEMGUI], 26);
+; OSTaskCreate(prog02Task, (void *)vEnderExec, &StkTask02[STACKSIZEMGUI], TASK_Prog02);
        pea       26
        lea       _StkTask02.L,A0
        add.w     #4096,A0
        move.l    A0,-(A7)
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        pea       _prog02Task.L
        jsr       (A2)
        add.w     #16,A7
 ; break;
-       bra       runFromMGUI_7
-runFromMGUI_11:
+       bra       runFromMGUI_12
+runFromMGUI_16:
 ; case 2:
-; OSTaskCreate(prog03Task, (void *)vEnderExec, &StkTask03[STACKSIZEMGUI], 27);
+; OSTaskCreate(prog03Task, (void *)vEnderExec, &StkTask03[STACKSIZEMGUI], TASK_Prog03);
        pea       27
        lea       _StkTask03.L,A0
        add.w     #4096,A0
        move.l    A0,-(A7)
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        pea       _prog03Task.L
        jsr       (A2)
        add.w     #16,A7
 ; break;
-       bra       runFromMGUI_7
-runFromMGUI_12:
+       bra       runFromMGUI_12
+runFromMGUI_17:
 ; case 3:
-; OSTaskCreate(prog04Task, (void *)vEnderExec, &StkTask04[STACKSIZEMGUI], 28);
+; OSTaskCreate(prog04Task, (void *)vEnderExec, &StkTask04[STACKSIZEMGUI], TASK_Prog04);
        pea       28
        lea       _StkTask04.L,A0
        add.w     #4096,A0
        move.l    A0,-(A7)
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        pea       _prog04Task.L
        jsr       (A2)
        add.w     #16,A7
 ; break;
-       bra       runFromMGUI_7
-runFromMGUI_13:
+       bra       runFromMGUI_12
+runFromMGUI_18:
 ; case 4:
-; OSTaskCreate(prog05Task, (void *)vEnderExec, &StkTask05[STACKSIZEMGUI], 20);
-       pea       20
+; OSTaskCreate(prog05Task, (void *)vEnderExec, &StkTask05[STACKSIZEMGUI], TASK_Prog05);
+       pea       29
        lea       _StkTask05.L,A0
        add.w     #4096,A0
        move.l    A0,-(A7)
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        pea       _prog05Task.L
        jsr       (A2)
        add.w     #16,A7
 ; break;
-       bra.s     runFromMGUI_7
-runFromMGUI_14:
+       bra.s     runFromMGUI_12
+runFromMGUI_19:
 ; case 5:
-; OSTaskCreate(prog06Task, (void *)vEnderExec, &StkTask06[STACKSIZEMGUI], 30);
+; OSTaskCreate(prog06Task, (void *)vEnderExec, &StkTask06[STACKSIZEMGUI], TASK_Prog06);
        pea       30
        lea       _StkTask06.L,A0
        add.w     #4096,A0
        move.l    A0,-(A7)
-       move.l    D2,-(A7)
+       move.l    D3,-(A7)
        pea       _prog06Task.L
        jsr       (A2)
        add.w     #16,A7
 ; break;
-       bra       runFromMGUI_7
-runFromMGUI_6:
+       bra       runFromMGUI_12
+runFromMGUI_11:
 ; default:
 ; break;
-runFromMGUI_7:
+runFromMGUI_12:
 ; }
 ; // Se for um programa de execucao exclusiva, suspende o SO
 ; if (0)
-       movem.l   (A7)+,D2/D3/A2
+       movem.l   (A7)+,D2/D3/A2/A3
        unlk      A6
        rts
 ; {
@@ -4698,7 +4895,7 @@ _fsLoadSerialToFile:
        bne.s     fsLoadSerialToFile_1
 ; {
 ; printText("No memory to receive file.\r\n\0");
-       pea       @mmsjos_65.L
+       pea       @mmsjos_75.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4712,7 +4909,7 @@ fsLoadSerialToFile_1:
        bne.s     fsLoadSerialToFile_4
 ; {
 ; printText("Error, file name must be provided!!\r\n\0");
-       pea       @mmsjos_66.L
+       pea       @mmsjos_76.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4785,7 +4982,7 @@ fsLoadSerialToFile_10:
        move.l    D0,D6
 ; // Abre Arquivo
 ; printText("Opening File...\r\n\0");
-       pea       @mmsjos_67.L
+       pea       @mmsjos_77.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -4807,7 +5004,7 @@ fsLoadSerialToFile_14:
 ; }
 ; // Grava no Arquivo
 ; printText("Writing File...\r\n\0");
-       pea       @mmsjos_68.L
+       pea       @mmsjos_78.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5034,14 +5231,14 @@ fsLoadSerialToFile_29:
        move.l    1118,A0
        jsr       (A0)
        addq.w    #8,A7
-; // Fecha Arquivo
+; // Fecha Arquivo e atualiza metadata de escrita
 ; printText("\r\nClosing File...\r\n\0");
-       pea       @mmsjos_69.L
+       pea       @mmsjos_79.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-; fsCloseFile(vfilename, 0);
-       clr.l     -(A7)
+; fsCloseFile(vfilename, 1);
+       pea       1
        move.l    D4,-(A7)
        jsr       _fsCloseFile
        addq.w    #8,A7
@@ -5055,7 +5252,7 @@ fsLoadSerialToFile_12:
 ; else
 ; {
 ; printText("Serial Load Error...");
-       pea       @mmsjos_70.L
+       pea       @mmsjos_80.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5108,7 +5305,7 @@ _fsLoadSerialToRun:
        jsr       _itoa
        add.w     #12,A7
 ; printText("Running at \0");
-       pea       @mmsjos_71.L
+       pea       @mmsjos_81.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5118,14 +5315,14 @@ _fsLoadSerialToRun:
        jsr       (A0)
        addq.w    #4,A7
 ; printText("h\r\n\0");
-       pea       @mmsjos_59.L
+       pea       @mmsjos_61.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-; runOSMemory = vEnderExec;
-       move.l    D2,_runOSMemory.L
-; runFromOsCmd();
+; runFromOsCmd(vEnderExec);
+       move.l    D2,-(A7)
        jsr       _runFromOsCmd
+       addq.w    #4,A7
 ; free(vEnderExec);
        move.l    D2,-(A7)
        jsr       _free
@@ -5136,7 +5333,7 @@ fsLoadSerialToRun_1:
 ; else
 ; {
 ; printText("Serial Load Error...");
-       pea       @mmsjos_70.L
+       pea       @mmsjos_80.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -5453,28 +5650,29 @@ fsRWFile_3:
 ; {
        xdef      _fsReadFile
 _fsReadFile:
-       link      A6,#-20
+       link      A6,#-24
        movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
        move.l    12(A6),D2
        lea       _vdisk.L,A2
-       move.w    22(A6),D7
-       and.l     #65535,D7
+       move.w    22(A6),D6
+       and.l     #65535,D6
 ; unsigned short ix, iy, vsizebf = 0;
-       clr.w     D5
-; unsigned short vsize, vsetor = 0, vsizeant = 0;
-       move.w    #0,A5
        move.w    #0,A4
+; unsigned short vsize, vsetor = 0, vsizeant = 0;
+       clr.w     -24(A6)
+       move.w    #0,A3
 ; unsigned short voffsec, vtemp, ikk, ikj;
 ; unsigned long vclusterini;
+; unsigned long vbytesleft;
 ; unsigned char sqtdtam[10];
 ; vclusterini = fsFindInDir(vfilename, TYPE_FILE);
        pea       2
        move.l    8(A6),-(A7)
        jsr       _fsFindInDir
        addq.w    #8,A7
-       move.l    D0,-14(A6)
+       move.l    D0,-18(A6)
 ; if (vclusterini >= ERRO_D_START)
-       move.l    -14(A6),D0
+       move.l    -18(A6),D0
        cmp.l     #-16,D0
        blo.s     fsReadFile_1
 ; return 0;	// Erro na abertura/Arquivo nao existe
@@ -5489,6 +5687,18 @@ fsReadFile_1:
        clr.w     D0
        bra       fsReadFile_3
 fsReadFile_4:
+; vbytesleft = vdir.Size - voffset;
+       move.l    _vdir+26.L,D0
+       sub.l     D2,D0
+       move.l    D0,-14(A6)
+; if (vsizebuffer > vbytesleft)
+       and.l     #65535,D6
+       cmp.l     -14(A6),D6
+       bls.s     fsReadFile_6
+; vsizebuffer = (unsigned short)vbytesleft;
+       move.l    -14(A6),D0
+       move.w    D0,D6
+fsReadFile_6:
 ; // Verifica se offset vai precisar gravar mais de 1 setor (entre 2 setores)
 ; vtemp = voffset / vdisk.sectorSize;
        move.w    22(A2),D0
@@ -5498,25 +5708,22 @@ fsReadFile_4:
        jsr       ULDIV
        move.l    (A7),D0
        addq.w    #8,A7
-       move.w    D0,A3
+       move.w    D0,D7
 ; voffsec = (voffset - (vdisk.sectorSize * (vtemp)));
        move.l    D2,D0
        move.w    22(A2),D1
-       move.l    D0,-(A7)
-       move.w    A3,D0
-       mulu.w    D0,D1
-       move.l    (A7)+,D0
+       mulu.w    D7,D1
        and.l     #65535,D1
        sub.l     D1,D0
        move.w    D0,D4
 ; if ((voffsec + vsizebuffer) > vdisk.sectorSize)
        move.w    D4,D0
-       add.w     D7,D0
+       add.w     D6,D0
        cmp.w     22(A2),D0
-       bls.s     fsReadFile_6
+       bls.s     fsReadFile_8
 ; vsetor = 1;
-       move.w    #1,A5
-fsReadFile_6:
+       move.w    #1,-24(A6)
+fsReadFile_8:
 ; /*itoa(vsetor, sqtdtam, 10);
 ; printText(sqtdtam, *vcorf, *vcorb);
 ; printText(".\n\0");*/
@@ -5533,11 +5740,11 @@ fsReadFile_6:
 ; printText(sqtdtam, *vcorf, *vcorb);
 ; printText(".\n\0");*/
 ; for (ix = 0; ix <= vsetor; ix++) {
-       clr.w     -20(A6)
-fsReadFile_8:
+       move.w    #0,A5
+fsReadFile_10:
        move.w    A5,D0
-       cmp.w     -20(A6),D0
-       blo       fsReadFile_10
+       cmp.w     -24(A6),D0
+       bhi       fsReadFile_12
 ; vtemp = voffset / vdisk.sectorSize;
        move.w    22(A2),D0
        and.l     #65535,D0
@@ -5546,14 +5753,11 @@ fsReadFile_8:
        jsr       ULDIV
        move.l    (A7),D0
        addq.w    #8,A7
-       move.w    D0,A3
+       move.w    D0,D7
 ; voffsec = (voffset - (vdisk.sectorSize * (vtemp)));
        move.l    D2,D0
        move.w    22(A2),D1
-       move.l    D0,-(A7)
-       move.w    A3,D0
-       mulu.w    D0,D1
-       move.l    (A7)+,D0
+       mulu.w    D7,D1
        and.l     #65535,D1
        sub.l     D1,D0
        move.w    D0,D4
@@ -5562,92 +5766,75 @@ fsReadFile_8:
        pea       1
        pea       _gDataBuffer.L
        move.l    D2,-(A7)
-       move.l    -14(A6),-(A7)
+       move.l    -18(A6),-(A7)
        jsr       _fsRWFile
        add.w     #16,A7
        tst.b     D0
-       beq.s     fsReadFile_11
+       beq.s     fsReadFile_13
 ; return vsizebf;
-       move.w    D5,D0
+       move.w    A4,D0
        bra       fsReadFile_3
-fsReadFile_11:
+fsReadFile_13:
 ; // Verifica tamanho a ser gravado
 ; if ((voffsec + vsizebuffer) <= vdisk.sectorSize)
        move.w    D4,D0
-       add.w     D7,D0
+       add.w     D6,D0
        cmp.w     22(A2),D0
-       bhi.s     fsReadFile_13
+       bhi.s     fsReadFile_15
 ; vsize = vsizebuffer - vsizeant;
-       move.w    D7,D0
-       sub.w     A4,D0
+       move.w    D6,D0
+       sub.w     A3,D0
        move.w    D0,D3
-       bra.s     fsReadFile_14
-fsReadFile_13:
+       bra.s     fsReadFile_16
+fsReadFile_15:
 ; else
 ; vsize = vdisk.sectorSize - voffsec;
        move.w    22(A2),D0
        sub.w     D4,D0
        move.w    D0,D3
-fsReadFile_14:
+fsReadFile_16:
 ; vsizebf += vsize;
-       add.w     D3,D5
-; if (vsizebf > (vdir.Size - voffset))
-       and.l     #65535,D5
-       move.l    _vdir+26.L,D0
-       sub.l     D2,D0
-       cmp.l     D0,D5
-       bls.s     fsReadFile_15
-; vsizebf = vdir.Size - voffset;
-       move.l    _vdir+26.L,D0
-       sub.l     D2,D0
-       move.w    D0,D5
-fsReadFile_15:
+       add.w     D3,A4
 ; /*itoa(vsize, sqtdtam, 10);
 ; printText(sqtdtam, *vcorf, *vcorb);
 ; printText(".\n\0");*/
-; if (vsetor == 0)
-       move.w    A5,D0
-       bne.s     fsReadFile_17
-; vsize = vsizebuffer;
-       move.w    D7,D3
-fsReadFile_17:
 ; // Retorna os dados no buffer
 ; for (iy = 0; iy < vsize; iy++) {
-       clr.w     D6
-fsReadFile_19:
-       cmp.w     D3,D6
-       bhs.s     fsReadFile_21
+       clr.w     D5
+fsReadFile_17:
+       cmp.w     D3,D5
+       bhs.s     fsReadFile_19
 ; ikk = vsizeant + iy;
-       move.w    A4,D0
-       add.w     D6,D0
-       move.w    D0,-18(A6)
+       move.w    A3,D0
+       add.w     D5,D0
+       move.w    D0,-22(A6)
 ; ikj = voffsec + iy;
        move.w    D4,D0
-       add.w     D6,D0
-       move.w    D0,-16(A6)
+       add.w     D5,D0
+       move.w    D0,-20(A6)
 ; buffer[ikk] = gDataBuffer[ikj];
-       move.w    -16(A6),D0
+       move.w    -20(A6),D0
        and.l     #65535,D0
        lea       _gDataBuffer.L,A0
        move.l    16(A6),A1
-       move.w    -18(A6),D1
+       move.w    -22(A6),D1
        and.l     #65535,D1
        move.b    0(A0,D0.L),0(A1,D1.L)
-       addq.w    #1,D6
-       bra       fsReadFile_19
-fsReadFile_21:
+       addq.w    #1,D5
+       bra       fsReadFile_17
+fsReadFile_19:
 ; }
 ; vsizeant = vsize;
-       move.w    D3,A4
+       move.w    D3,A3
 ; voffset += vsize;
        and.l     #65535,D3
        add.l     D3,D2
-       addq.w    #1,-20(A6)
-       bra       fsReadFile_8
-fsReadFile_10:
+       addq.w    #1,A5
+       bra       fsReadFile_10
+fsReadFile_12:
 ; }
 ; return vsizebf;
-       move.w    D5,D0
+       move.w    A4,D0
 fsReadFile_3:
        movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
        unlk      A6
@@ -5660,7 +5847,7 @@ fsReadFile_3:
 ; {
        xdef      _fsWriteFile
 _fsWriteFile:
-       link      A6,#-8
+       link      A6,#-12
        movem.l   D2/D3/D4/D5/D6/D7/A2/A3/A4/A5,-(A7)
        move.l    12(A6),D2
        lea       _vdisk.L,A2
@@ -5668,11 +5855,14 @@ _fsWriteFile:
        and.w     #255,D6
        lea       _gDataBuffer.L,A5
 ; unsigned char vsetor = 0, ix, iy;
-       clr.b     -6(A6)
+       clr.b     -10(A6)
 ; unsigned short vsize, vsizeant = 0;
        move.w    #0,A4
 ; unsigned short voffsec, vtemp, ikk, ikj;
 ; unsigned long vclusterini;
+; unsigned long vstartoff;
+; vstartoff = voffset;
+       move.l    D2,-4(A6)
 ; vclusterini = fsFindInDir(vfilename, TYPE_FILE);
        pea       2
        move.l    8(A6),-(A7)
@@ -5711,13 +5901,13 @@ fsWriteFile_1:
        cmp.w     22(A2),D0
        bls.s     fsWriteFile_4
 ; vsetor = 1;
-       move.b    #1,-6(A6)
+       move.b    #1,-10(A6)
 fsWriteFile_4:
 ; for (ix = 0; ix <= vsetor; ix++) {
-       clr.b     -5(A6)
+       clr.b     -9(A6)
 fsWriteFile_6:
-       move.b    -5(A6),D0
-       cmp.b     -6(A6),D0
+       move.b    -9(A6),D0
+       cmp.b     -10(A6),D0
        bhi       fsWriteFile_8
 ; vtemp = voffset / vdisk.sectorSize;
        move.w    22(A2),D0
@@ -5782,17 +5972,17 @@ fsWriteFile_13:
        move.b    D4,D0
        and.w     #255,D0
        add.w     D3,D0
-       move.w    D0,-4(A6)
+       move.w    D0,-8(A6)
 ; ikj = vsizeant + iy;
        move.w    A4,D0
        and.w     #255,D4
        add.w     D4,D0
-       move.w    D0,-2(A6)
+       move.w    D0,-6(A6)
 ; gDataBuffer[ikk] = buffer[ikj];
        move.l    16(A6),A0
-       move.w    -2(A6),D0
+       move.w    -6(A6),D0
        and.l     #65535,D0
-       move.w    -4(A6),D1
+       move.w    -8(A6),D1
        and.l     #65535,D1
        move.b    0(A0,D0.L),0(A5,D1.L)
        addq.b    #1,D4
@@ -5818,25 +6008,25 @@ fsWriteFile_16:
 ; vsizeant = vsize;
        move.w    D5,A4
 ; if (vsetor == 1)
-       move.b    -6(A6),D0
+       move.b    -10(A6),D0
        cmp.b     #1,D0
        bne.s     fsWriteFile_18
 ; voffset += vsize;
        and.l     #65535,D5
        add.l     D5,D2
 fsWriteFile_18:
-       addq.b    #1,-5(A6)
+       addq.b    #1,-9(A6)
        bra       fsWriteFile_6
 fsWriteFile_8:
 ; }
-; if ((voffset + vsizebuffer) > vdir.Size) {
-       move.l    D2,D0
+; if ((vstartoff + vsizebuffer) > vdir.Size) {
+       move.l    -4(A6),D0
        and.l     #255,D6
        add.l     D6,D0
        cmp.l     _vdir+26.L,D0
        bls.s     fsWriteFile_22
-; vdir.Size = voffset + vsizebuffer;
-       move.l    D2,D0
+; vdir.Size = vstartoff + vsizebuffer;
+       move.l    -4(A6),D0
        and.l     #255,D6
        add.l     D6,D0
        move.l    D0,_vdir+26.L
@@ -6102,8 +6292,12 @@ fsFindDirPath_19:
        xdef      _fsChangeDir
 _fsChangeDir:
        link      A6,#0
-       move.l    D2,-(A7)
+       movem.l   D2/D3/D4/D5/A2/A3,-(A7)
+       lea       _vdiratu.L,A2
+       move.l    8(A6),D3
+       lea       _strlen.L,A3
 ; unsigned long vclusterdirnew;
+; unsigned short vlen, ix;
 ; // Troca o diretorio conforme especificado
 ; /*if (vdirname[0] == '/' && vdirname[1] == '\0')
 ; vclusterdirnew = vdisk.root;
@@ -6111,7 +6305,7 @@ _fsChangeDir:
 ; {*/
 ; if (fsFindDirPath(vdirname, FIND_PATH_LAST) == FIND_PATH_RET_ERROR)
        pea       1
-       move.l    8(A6),-(A7)
+       move.l    D3,-(A7)
        jsr       _fsFindDirPath
        addq.w    #8,A7
        and.w     #255,D0
@@ -6119,20 +6313,240 @@ _fsChangeDir:
        bne.s     fsChangeDir_1
 ; return ERRO_B_DIR_NOT_FOUND;
        move.b    #229,D0
-       bra.s     fsChangeDir_3
+       bra       fsChangeDir_3
 fsChangeDir_1:
 ; vclusterdirnew = vretpath.ClusterDir;
-       move.l    _vretpath+14.L,D2
+       move.l    _vretpath+14.L,D5
 ; //}
 ; // Coloca o novo diretorio como atual
 ; vclusterdir = vclusterdirnew;
-       move.l    D2,_vclusterdir.L
+       move.l    D5,_vclusterdir.L
 ; vretpath.ClusterDirAtu = vclusterdirnew;
-       move.l    D2,_vretpath+18.L
+       move.l    D5,_vretpath+18.L
+; if (vdirname[0] == '/' || vclusterdir == vdisk.root)
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #47,D0
+       beq.s     fsChangeDir_6
+       move.l    _vclusterdir.L,D0
+       cmp.l     _vdisk+8.L,D0
+       bne       fsChangeDir_4
+fsChangeDir_6:
+; {
+; if (vdirname[0] == '/' && vdirname[1] != '\0')
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #47,D0
+       bne       fsChangeDir_7
+       move.l    D3,A0
+       move.b    1(A0),D0
+       beq       fsChangeDir_7
+; {
+; for (ix = 0; ix < (sizeof(vdiratu) - 1) && vdirname[ix] != '\0'; ix++)
+       clr.w     D4
+fsChangeDir_9:
+       and.l     #65535,D4
+       cmp.l     #127,D4
+       bhs.s     fsChangeDir_11
+       move.l    D3,A0
+       and.l     #65535,D4
+       move.b    0(A0,D4.L),D0
+       beq.s     fsChangeDir_11
+; vdiratu[ix] = vdirname[ix];
+       move.l    D3,A0
+       and.l     #65535,D4
+       and.l     #65535,D4
+       move.b    0(A0,D4.L),0(A2,D4.L)
+       addq.w    #1,D4
+       bra       fsChangeDir_9
+fsChangeDir_11:
+; vdiratu[ix] = '\0';
+       and.l     #65535,D4
+       clr.b     0(A2,D4.L)
+; vlen = strlen(vdiratu);
+       move.l    A2,-(A7)
+       jsr       (A3)
+       addq.w    #4,A7
+       move.w    D0,D2
+; if (vlen > 1 && vdiratu[vlen - 1] == '/')
+       cmp.w     #1,D2
+       bls.s     fsChangeDir_12
+       and.l     #65535,D2
+       move.l    D2,D0
+       subq.l    #1,D0
+       move.b    0(A2,D0.L),D0
+       cmp.b     #47,D0
+       bne.s     fsChangeDir_12
+; vdiratu[vlen - 1] = '\0';
+       and.l     #65535,D2
+       move.l    D2,D0
+       subq.l    #1,D0
+       clr.b     0(A2,D0.L)
+fsChangeDir_12:
+       bra.s     fsChangeDir_8
+fsChangeDir_7:
+; }
+; else
+; {
+; vdiratu[0] = '/';
+       move.b    #47,(A2)
+; vdiratu[1] = '\0';
+       clr.b     1(A2)
+fsChangeDir_8:
+       bra       fsChangeDir_25
+fsChangeDir_4:
+; }
+; }
+; else if (vdirname[0] == '.' && vdirname[1] == '.' && vdirname[2] == '\0')
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #46,D0
+       bne       fsChangeDir_14
+       move.l    D3,A0
+       move.b    1(A0),D0
+       cmp.b     #46,D0
+       bne       fsChangeDir_14
+       move.l    D3,A0
+       move.b    2(A0),D0
+       bne       fsChangeDir_14
+; {
+; vlen = strlen(vdiratu);
+       move.l    A2,-(A7)
+       jsr       (A3)
+       addq.w    #4,A7
+       move.w    D0,D2
+; if (vlen > 1)
+       cmp.w     #1,D2
+       bls       fsChangeDir_23
+; {
+; if (vdiratu[vlen - 1] == '/')
+       and.l     #65535,D2
+       move.l    D2,D0
+       subq.l    #1,D0
+       move.b    0(A2,D0.L),D0
+       cmp.b     #47,D0
+       bne.s     fsChangeDir_18
+; {
+; vlen--;
+       subq.w    #1,D2
+; vdiratu[vlen] = '\0';
+       and.l     #65535,D2
+       clr.b     0(A2,D2.L)
+fsChangeDir_18:
+; }
+; while (vlen > 1 && vdiratu[vlen - 1] != '/')
+fsChangeDir_20:
+       cmp.w     #1,D2
+       bls.s     fsChangeDir_22
+       and.l     #65535,D2
+       move.l    D2,D0
+       subq.l    #1,D0
+       move.b    0(A2,D0.L),D0
+       cmp.b     #47,D0
+       beq.s     fsChangeDir_22
+; {
+; vlen--;
+       subq.w    #1,D2
+; vdiratu[vlen] = '\0';
+       and.l     #65535,D2
+       clr.b     0(A2,D2.L)
+       bra       fsChangeDir_20
+fsChangeDir_22:
+; }
+; if (vlen > 1 && vdiratu[vlen - 1] == '/')
+       cmp.w     #1,D2
+       bls.s     fsChangeDir_23
+       and.l     #65535,D2
+       move.l    D2,D0
+       subq.l    #1,D0
+       move.b    0(A2,D0.L),D0
+       cmp.b     #47,D0
+       bne.s     fsChangeDir_23
+; vdiratu[vlen - 1] = '\0';
+       and.l     #65535,D2
+       move.l    D2,D0
+       subq.l    #1,D0
+       clr.b     0(A2,D0.L)
+fsChangeDir_23:
+       bra       fsChangeDir_25
+fsChangeDir_14:
+; }
+; }
+; else if (!(vdirname[0] == '.' && vdirname[1] == '\0'))
+       move.l    D3,A0
+       move.b    (A0),D0
+       cmp.b     #46,D0
+       bne.s     fsChangeDir_27
+       move.l    D3,A0
+       move.b    1(A0),D0
+       beq       fsChangeDir_25
+fsChangeDir_27:
+; {
+; vlen = strlen(vdiratu);
+       move.l    A2,-(A7)
+       jsr       (A3)
+       addq.w    #4,A7
+       move.w    D0,D2
+; if (vlen > 1 && vdiratu[vlen - 1] != '/')
+       cmp.w     #1,D2
+       bls.s     fsChangeDir_28
+       and.l     #65535,D2
+       move.l    D2,D0
+       subq.l    #1,D0
+       move.b    0(A2,D0.L),D0
+       cmp.b     #47,D0
+       beq.s     fsChangeDir_28
+; {
+; strcat((char *)vdiratu, "/");
+       pea       @mmsjos_27.L
+       move.l    A2,-(A7)
+       jsr       _strcat
+       addq.w    #8,A7
+; vlen = strlen(vdiratu);
+       move.l    A2,-(A7)
+       jsr       (A3)
+       addq.w    #4,A7
+       move.w    D0,D2
+fsChangeDir_28:
+; }
+; ix = 0;
+       clr.w     D4
+; while (vdirname[ix] != '\0' && vlen < (sizeof(vdiratu) - 1))
+fsChangeDir_30:
+       move.l    D3,A0
+       and.l     #65535,D4
+       move.b    0(A0,D4.L),D0
+       beq.s     fsChangeDir_32
+       and.l     #65535,D2
+       cmp.l     #127,D2
+       bhs.s     fsChangeDir_32
+; {
+; vdiratu[vlen] = vdirname[ix];
+       move.l    D3,A0
+       and.l     #65535,D4
+       and.l     #65535,D2
+       move.b    0(A0,D4.L),0(A2,D2.L)
+; vlen++;
+       addq.w    #1,D2
+; ix++;
+       addq.w    #1,D4
+       bra       fsChangeDir_30
+fsChangeDir_32:
+; }
+; vdiratu[vlen] = '\0';
+       and.l     #65535,D2
+       clr.b     0(A2,D2.L)
+fsChangeDir_25:
+; }
+; vdiratuidx = strlen(vdiratu);
+       move.l    A2,-(A7)
+       jsr       (A3)
+       addq.w    #4,A7
+       move.w    D0,_vdiratuidx.L
 ; return RETURN_OK;
        clr.b     D0
 fsChangeDir_3:
-       move.l    (A7)+,D2
+       movem.l   (A7)+,D2/D3/D4/D5/A2/A3
        unlk      A6
        rts
 ; }
@@ -6246,9 +6660,9 @@ fsPwdDir_1:
        move.l    D2,-(A7)
        jsr       _memcpy
        add.w     #12,A7
-; vdirpath[sizeof(vdiratu)] = '\0';
+; vdirpath[sizeof(vdiratu) - 1] = '\0';
        move.l    D2,A0
-       clr.b     128(A0)
+       clr.b     127(A0)
 fsPwdDir_2:
 ; }
 ; return RETURN_OK;
@@ -8502,9 +8916,9 @@ fsFindClusterFree_12:
        bra       fsFindClusterFree_1
 fsFindClusterFree_3:
 ; }
-; if (cc > vdisk.fatsize)
+; if (cc >= vdisk.fatsize)
        cmp.l     24(A3),D4
-       bls.s     fsFindClusterFree_14
+       blo.s     fsFindClusterFree_14
 ; vclusterfree = ERRO_D_DISK_FULL;
        moveq     #-12,D6
        bra       fsFindClusterFree_18
@@ -9582,7 +9996,7 @@ _catFile:
        bne.s     catFile_1
 ; {
 ; printText("Loading file error...\r\n\0");
-       pea       @mmsjos_72.L
+       pea       @mmsjos_82.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -9604,7 +10018,7 @@ catFile_1:
 ; vclusterdir = vclusterdiratu;
        move.l    D4,(A4)
 ; printText("Loading file error...\r\n\0");
-       pea       @mmsjos_72.L
+       pea       @mmsjos_82.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -9643,7 +10057,7 @@ catFile_11:
        cmp.b     #13,D0
        bne.s     catFile_14
 ; printText("\r\0");
-       pea       @mmsjos_73.L
+       pea       @mmsjos_83.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
@@ -10149,7 +10563,7 @@ _isValidFilename:
        clr.l     D4
        clr.l     D6
 ; strcpy(valid_chars,"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$&'()@^_`{}~");
-       pea       @mmsjos_74.L
+       pea       @mmsjos_84.L
        pea       -74(A6)
        jsr       _strcpy
        addq.w    #8,A7
@@ -10526,40 +10940,71 @@ contains_wildcards_7:
 ; {
        xdef      _fsMalloc
 _fsMalloc:
-       link      A6,#0
-       move.l    D2,-(A7)
+       link      A6,#-4
+       movem.l   D2/D3/A2,-(A7)
+       lea       _heap_sem.L,A2
+       move.l    8(A6),D3
 ; unsigned long mMemDef;
-; mMemDef = (unsigned long)malloc(vMemSize);
-       move.l    8(A6),-(A7)
-       jsr       _malloc
-       addq.w    #4,A7
-       move.l    D0,D2
-; if (!mMemDef)
-       tst.l     D2
+; unsigned int error_code = OS_ERR_NONE;
+       clr.l     -4(A6)
+; if (!vMemSize)
+       tst.l     D3
        bne.s     fsMalloc_1
 ; return 0;
        clr.l     D0
-       bra.s     fsMalloc_3
+       bra       fsMalloc_3
 fsMalloc_1:
-; if ((mMemDef + vMemSize) > MMSJ_HEAP_LIMIT)
+; if (heap_sem)
+       tst.l     (A2)
+       beq.s     fsMalloc_4
+; OSSemPend(heap_sem, 0, &error_code);
+       pea       -4(A6)
+       clr.l     -(A7)
+       move.l    (A2),-(A7)
+       jsr       _OSSemPend
+       add.w     #12,A7
+fsMalloc_4:
+; mMemDef = (unsigned long)malloc(vMemSize);
+       move.l    D3,-(A7)
+       jsr       _malloc
+       addq.w    #4,A7
+       move.l    D0,D2
+; if (mMemDef && ((mMemDef + vMemSize - 1) > MMSJ_HEAP_LIMIT))
+       tst.l     D2
+       beq.s     fsMalloc_6
        move.l    D2,D0
-       add.l     8(A6),D0
-       cmp.l     #8847360,D0
-       bls.s     fsMalloc_4
+       add.l     D3,D0
+       subq.l    #1,D0
+       cmp.l     #8847359,D0
+       bls.s     fsMalloc_8
+       moveq     #1,D0
+       bra.s     fsMalloc_9
+fsMalloc_8:
+       clr.l     D0
+fsMalloc_9:
+       tst.l     D0
+       beq.s     fsMalloc_6
 ; {
 ; free((void *)mMemDef);
        move.l    D2,-(A7)
        jsr       _free
        addq.w    #4,A7
-; return 0;
-       clr.l     D0
-       bra.s     fsMalloc_3
-fsMalloc_4:
+; mMemDef = 0;
+       clr.l     D2
+fsMalloc_6:
 ; }
+; if (heap_sem)
+       tst.l     (A2)
+       beq.s     fsMalloc_10
+; OSSemPost(heap_sem);
+       move.l    (A2),-(A7)
+       jsr       _OSSemPost
+       addq.w    #4,A7
+fsMalloc_10:
 ; return mMemDef;
        move.l    D2,D0
 fsMalloc_3:
-       move.l    (A7)+,D2
+       movem.l   (A7)+,D2/D3/A2
        unlk      A6
        rts
 ; }
@@ -10568,11 +11013,40 @@ fsMalloc_3:
 ; {
        xdef      _fsFree
 _fsFree:
-       link      A6,#0
-; free(vAddress);
+       link      A6,#-4
+       move.l    A2,-(A7)
+       lea       _heap_sem.L,A2
+; unsigned int error_code = OS_ERR_NONE;
+       clr.l     -4(A6)
+; if (!vAddress)
+       tst.l     8(A6)
+       bne.s     fsFree_1
+; return;
+       bra.s     fsFree_6
+fsFree_1:
+; if (heap_sem)
+       tst.l     (A2)
+       beq.s     fsFree_4
+; OSSemPend(heap_sem, 0, &error_code);
+       pea       -4(A6)
+       clr.l     -(A7)
+       move.l    (A2),-(A7)
+       jsr       _OSSemPend
+       add.w     #12,A7
+fsFree_4:
+; free((void *)vAddress);
        move.l    8(A6),-(A7)
        jsr       _free
        addq.w    #4,A7
+; if (heap_sem)
+       tst.l     (A2)
+       beq.s     fsFree_6
+; OSSemPost(heap_sem);
+       move.l    (A2),-(A7)
+       jsr       _OSSemPost
+       addq.w    #4,A7
+fsFree_6:
+       move.l    (A7)+,A2
        unlk      A6
        rts
 ; }
@@ -10762,58 +11236,80 @@ _fsGetMfp:
 @mmsjos_56:
        dc.b      66,65,83,73,67,0
 @mmsjos_57:
-       dc.b      78,111,32,109,101,109,111,114,121,32,116,111
-       dc.b      32,108,111,97,100,32,102,105,108,101,46,46,46
-       dc.b      13,10,0
+       dc.b      83,116,97,114,116,105,110,103,32,66,97,115,105
+       dc.b      99,32,119,105,116,104,32,112,97,114,97,109,101
+       dc.b      116,101,114,58,32,0
 @mmsjos_58:
-       dc.b      76,111,97,100,105,110,103,32,70,105,108,101
-       dc.b      32,105,110,32,0
+       dc.b      69,120,101,99,117,116,105,110,103,32,66,97,115
+       dc.b      105,99,13,10,0
 @mmsjos_59:
-       dc.b      104,13,10,0
+       dc.b      69,110,100,101,100,32,66,97,115,105,99,13,10
+       dc.b      0
 @mmsjos_60:
        dc.b      76,111,97,100,105,110,103,32,70,105,108,101
-       dc.b      32,69,114,114,111,114,46,46,46,13,10,0
+       dc.b      32,105,110,32,0
 @mmsjos_61:
+       dc.b      104,13,10,0
+@mmsjos_62:
+       dc.b      76,111,97,100,105,110,103,32,70,105,108,101
+       dc.b      32,69,114,114,111,114,46,46,46,13,10,0
+@mmsjos_63:
        dc.b      73,110,118,97,108,105,100,32,67,111,109,109
        dc.b      97,110,100,32,111,114,32,70,105,108,101,32,78
        dc.b      97,109,101,13,10,0
-@mmsjos_62:
-       dc.b      32,32,68,97,116,101,32,105,115,32,0
-@mmsjos_63:
-       dc.b      32,32,84,105,109,101,32,105,115,32,0
 @mmsjos_64:
+       dc.b      32,32,68,97,116,101,32,105,115,32,0
+@mmsjos_65:
+       dc.b      32,32,84,105,109,101,32,105,115,32,0
+@mmsjos_66:
        dc.b      70,111,114,109,97,116,32,100,105,115,107,32
        dc.b      119,97,115,32,115,117,99,99,101,115,115,102
        dc.b      117,108,108,121,13,10,0
-@mmsjos_65:
+@mmsjos_67:
+       dc.b      65,113,117,105,32,48,13,10,0
+@mmsjos_68:
+       dc.b      65,113,117,105,32,49,13,10,0
+@mmsjos_69:
+       dc.b      65,113,117,105,32,50,13,10,0
+@mmsjos_70:
+       dc.b      65,113,117,105,32,51,13,10,0
+@mmsjos_71:
+       dc.b      65,113,117,105,32,52,13,10,0
+@mmsjos_72:
+       dc.b      65,113,117,105,32,53,13,10,0
+@mmsjos_73:
+       dc.b      65,113,117,105,32,54,13,10,0
+@mmsjos_74:
+       dc.b      65,113,117,105,32,55,13,10,0
+@mmsjos_75:
        dc.b      78,111,32,109,101,109,111,114,121,32,116,111
        dc.b      32,114,101,99,101,105,118,101,32,102,105,108
        dc.b      101,46,13,10,0
-@mmsjos_66:
+@mmsjos_76:
        dc.b      69,114,114,111,114,44,32,102,105,108,101,32
        dc.b      110,97,109,101,32,109,117,115,116,32,98,101
        dc.b      32,112,114,111,118,105,100,101,100,33,33,13
        dc.b      10,0
-@mmsjos_67:
+@mmsjos_77:
        dc.b      79,112,101,110,105,110,103,32,70,105,108,101
        dc.b      46,46,46,13,10,0
-@mmsjos_68:
+@mmsjos_78:
        dc.b      87,114,105,116,105,110,103,32,70,105,108,101
        dc.b      46,46,46,13,10,0
-@mmsjos_69:
+@mmsjos_79:
        dc.b      13,10,67,108,111,115,105,110,103,32,70,105,108
        dc.b      101,46,46,46,13,10,0
-@mmsjos_70:
+@mmsjos_80:
        dc.b      83,101,114,105,97,108,32,76,111,97,100,32,69
        dc.b      114,114,111,114,46,46,46,0
-@mmsjos_71:
+@mmsjos_81:
        dc.b      82,117,110,110,105,110,103,32,97,116,32,0
-@mmsjos_72:
+@mmsjos_82:
        dc.b      76,111,97,100,105,110,103,32,102,105,108,101
        dc.b      32,101,114,114,111,114,46,46,46,13,10,0
-@mmsjos_73:
+@mmsjos_83:
        dc.b      13,0
-@mmsjos_74:
+@mmsjos_84:
        dc.b      65,66,67,68,69,70,71,72,73,74,75,76,77,78,79
        dc.b      80,81,82,83,84,85,86,87,88,89,90,48,49,50,51
        dc.b      52,53,54,55,56,57,33,35,36,38,39,40,41,64,94
@@ -10885,6 +11381,15 @@ _paramBasic:
        xdef      _reserved
 _reserved:
        dc.l      6354876
+       xdef      _mguiIdRequest
+_mguiIdRequest:
+       dc.l      9240576
+       xdef      _mguiRunTask
+_mguiRunTask:
+       dc.l      9240578
+       xdef      _mguiListWindows
+_mguiListWindows:
+       dc.l      9240584
        xdef      _vmesc
 _vmesc:
        dc.b      74,97,110,70,101,98,77,97,114,65,112,114,77
@@ -10965,6 +11470,9 @@ _StkTask06:
        xdef      _shared_sem
 _shared_sem:
        ds.b      4
+       xdef      _heap_sem
+_heap_sem:
+       ds.b      4
        xref      _memcpy
        xref      _strcpy
        xref      _itoa
@@ -10982,6 +11490,7 @@ _shared_sem:
        xref      _OSTaskDel
        xref      _memset
        xref      _OSInit
+       xref      _strcat
        xref      _OSStart
        xref      _OSSemPost
        xref      _OSTaskCreate

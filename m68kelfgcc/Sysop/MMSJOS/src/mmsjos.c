@@ -112,7 +112,7 @@ unsigned char matches_wildcard(const char *pattern, const char *filename);
 unsigned char contains_wildcards(const char *pattern);
 
 #ifdef __SO_ST_MFP__
-void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char TypeSet = 1);
+void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char TypeSet);
 unsigned int fsGetMfp(unsigned int Config);
 #endif
 

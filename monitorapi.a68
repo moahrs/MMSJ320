@@ -41,5 +41,5 @@ __ungetbuf:
            ds.l        1               ; ungetbuffer for stdio functions
            section     heap
            align
-           org         $870000
+           org         $8F0000
 heap       equ         *               ; start of free memory

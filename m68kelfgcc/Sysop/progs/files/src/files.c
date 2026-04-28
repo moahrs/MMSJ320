@@ -19,6 +19,7 @@
 #include "monitor.h"
 #include "mmsjos.h"
 #include "mgui.h"
+#include "mguiapi.h"
 #include "monitorapi.h"
 #include "mmsjosapi.h"
 #include "files.h"
@@ -31,17 +32,30 @@ void main(void)
     unsigned char vcont, ix, iy, cc, dd, ee, cnum[20], *cfileptr, *cfilepos;
     unsigned char ikk, vnomefile[150], vnomefilenew[15], avdm2, avdm, avdl, vopc, vresp;
     unsigned long vtotbytes = 0;
+    unsigned long vsizefile = 0;
     unsigned char vstring[64], vwb, my, corOpcFile, corOpcFileExec, corOpcDir, corDisable;
     unsigned long vSizeAloc = 0, izz;
     unsigned char extExec[4];
-    char execProg[32];
+    char execProg[128];
     unsigned char *vEndExec;
     unsigned char sqtdtam[10];
     unsigned char vDirAtu[128];
+    unsigned char vtmpparam[128];
+    unsigned char vtamstr[16];
     VDP_COLOR vdpcolor;
     MGUI_SAVESCR vsavescr;
     MGUI_MOUSE mouseData;
     MGUI_SAVESCR windowScr;
+
+    // Define o ID do window
+    for(ix = 0; ix < 6; ix++)
+    {
+        if (mguiListWindows[ix].loadAddress == 0x00870000)
+        {
+            windowsId = ix;
+            break;
+        }
+    }
 
     /*linhastatus = linhastatusDef;
     carregaDir = carregaDirDef;
@@ -97,6 +111,7 @@ void main(void)
 
         while (1)
         {
+            *mguiIdRequest = windowsId;
             getMouseData(&mouseData);
 
             if (mouseData.mouseButton == 0x02 || mouseData.mouseBtnDouble == 0x01)  // Direito ou DoubleClick Esquerdo
@@ -170,7 +185,12 @@ void main(void)
                             writesxy(33,my+2,8,"Delete",vcorfg,vcorbg);
                             writesxy(33,my+10,8,"Rename",vcorfg,vcorbg);
                             writesxy(33,my+18,8,"Copy",vcorfg,vcorbg);
-                            writesxy(33,my+26,8,"Execute",corOpcFileExec,vcorbg);
+
+                            if (!execProg[0])
+                                writesxy(33,my+26,8,"Execute",corOpcFileExec,vcorbg);
+                            else
+                                writesxy(33,my+26,8,"Open",corOpcFileExec,vcorbg);
+
                         }
                         else
                         {
@@ -250,7 +270,7 @@ void main(void)
                         {
                             if (corOpcDir == vcorfg)   // Se for dir, entra na pasta
                                 vopc = 3;
-                            else if (corOpcFileExec == vcorfg) // Se for .BIN executa
+                            else if (corOpcFileExec == vcorfg) // Se for .BIN ou execprog executa
                                 vopc = 6;
                         }
                     }
@@ -489,9 +509,9 @@ void main(void)
 
                         fsPwdDir(vDirAtu);
 
-                        if (execProg[0]) {
+                        if (!execProg[0]) {
                             strcpy(vnomefile,vDirAtu);
-                            if (sizeof(vDirAtu) > 1)
+                            if (strlen(vDirAtu) > 1)
                                 strcat(vnomefile,"/");
     
                             strcat(vnomefile,dir[ee].Name);
@@ -501,28 +521,58 @@ void main(void)
                         else {
                             strcpy(vnomefile,execProg);
 
-                            strcpy(paramBasic,vDirAtu);
-                            if (sizeof(vDirAtu) > 1)
-                                strcat(vnomefile,"/");
-                                
-                            strcat(paramBasic,dir[ee].Name);
-                            strcat(paramBasic,".");
-                            strcat(paramBasic,dir[ee].Ext);
+                            if (!strcmp(execProg, "BASIC"))
+                            {
+                                strcat(vnomefile," ");
+                                strcat(vnomefile,dir[ee].Name);
+                                strcat(vnomefile,".");
+                                strcat(vnomefile,dir[ee].Ext);
+                            }
+                            else
+                            {
+                                strcpy(paramBasic,vDirAtu);
+                                if (strlen(vDirAtu) > 1)
+                                    strcat(paramBasic,"/");
+
+                                strcat(paramBasic,dir[ee].Name);
+                                strcat(paramBasic,".");
+                                strcat(paramBasic,dir[ee].Ext);
+                            }
                         }
 
                         linhastatus(5, vnomefile);
 
-                        // Load File in Memory 0x00880000
-                        loadFile(vnomefile, (unsigned char *)0x00880000);
+                        if (!strcmp(execProg, "BASIC"))
+                        {
+                            fsOsCommand(vnomefile);
+                        }
+                        else
+                        {
+                            // Load File in fixed memory slot 0x00880000
+                            vsizefile = loadFile(vnomefile, (unsigned char *)0x00880000);
 
-                        // Run 0x00880000
-                        vEndExec = 0x00880000;  
-                        runFromMGUI(vEndExec);
+                            // Passa o tamanho do BIN carregado para o programa
+                            if (vsizefile > 0)
+                            {
+                                strcpy(vtmpparam, paramBasic);
+                                strcpy(paramBasic, vtmpparam);
+                                strcat(paramBasic, ",");
+                                ltoa(vsizefile, (char*)vtamstr, 10);
+                                strcat(paramBasic, (char*)vtamstr);
+                            }
 
-                        vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
+                            // Run 0x00880000
+                            while (*mguiRunTask); // Espera o MGUI liberar a execução do programa
+                            *mguiRunTask = 0x00880000;
+
+                            /*vEndExec = 0x00880000;
+                            runFromMGUI(vEndExec);*/
+                        }
+
+                        /*vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
                         vdp_set_bdcolor(VDP_BLACK);
 
-                        drawWindow();
+                        drawWindow();*/
 
                         linhastatus(0, "\0");
 

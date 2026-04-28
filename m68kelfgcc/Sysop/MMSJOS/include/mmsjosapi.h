@@ -114,7 +114,7 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define PutIcone ((PutIconeType *)(unsigned long)MGUI_FUNC_TABLE)[12] // Índice da função
 #define InvertRect ((InvertRectType *)(unsigned long)MGUI_FUNC_TABLE)[13] // Índice da função
 #define SelRect ((SelRectType *)(unsigned long)MGUI_FUNC_TABLE)[14] // Índice da função
-#define fsPwdDir ((fsPwdDirType *)(unsigned long)MGUI_FUNC_TABLE)[15] // Índice da função
+#define PutImage ((PutImageType *)(unsigned long)MGUI_FUNC_TABLE)[15] // Índice da função
 #define runFromMGUI ((runFromMGUIType *)(unsigned long)MGUI_FUNC_TABLE)[16] // Índice da função
 #define waitButton ((waitButtonType *)(unsigned long)MGUI_FUNC_TABLE)[17] // Índice da função
 #define message ((messageType *)(unsigned long)MGUI_FUNC_TABLE)[18] // Índice da função

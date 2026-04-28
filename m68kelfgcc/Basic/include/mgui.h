@@ -96,7 +96,7 @@ extern unsigned char bgcolorMgui;
 
 #define SIZE_LOAD_IMAGE_MEM 8192    // Max PBM file format for 256x192 area
 #define SIZE_LOAD_ICONS_MEM 8192    // 128 incons 64 bytes
-#define SIZE_LOAD_CFG_MEM    512    // Max config file size (+1 byte for terminator)
+#define SIZE_LOAD_CFG_MEM    2048   // Max config file size (+1 byte for terminator)
 
 #define TASK_MGUI_TELA    11
 #define TASK_MGUI_MOUSE   12

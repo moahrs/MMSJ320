@@ -157,7 +157,7 @@ void MostraIcone(unsigned short xi, unsigned short yi, unsigned char vicone, uns
 void runFromMguiCmd(void);
 void runBin(void);
 void importFile(void);
-void putImagePbmP4(unsigned long* memoria, unsigned short ix, unsigned short iy);
+void putImagePbmP4(unsigned char* memoria, unsigned short ix, unsigned short iy);
 
 // -------------------------------------------------------------------------------
 // Elementos

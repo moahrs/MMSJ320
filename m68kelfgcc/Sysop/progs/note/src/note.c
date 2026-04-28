@@ -30,6 +30,7 @@
 #include "monitor.h"
 #include "mmsjos.h"
 #include "mgui.h"
+#include "mguiapi.h"
 #include "monitorapi.h"
 #include "mmsjosapi.h"
 #include "mmsj320api.h"
@@ -39,7 +40,19 @@
 char *itoa(int value, char *str, int base);
 char *ltoa(long value, char *str, int base);
 #endif
-    
+
+#define NOTE_MAX_FILE_SIZE 32768UL
+#define NOTE_LOAD_ADDR     0x00880000UL
+#define NOTE_WORK_GAP      256UL
+
+static unsigned char noteCfgColor[16];
+static unsigned long noteLineStorage[NOTE_MAX_LINES];
+
+static unsigned long noteAlign4(unsigned long value)
+{
+    return (value + 3UL) & 0xFFFFFFFCUL;
+}
+
 //-----------------------------------------------------------------------------
 // Principal
 //-----------------------------------------------------------------------------
@@ -51,16 +64,31 @@ void main(void)
     unsigned char vcont, vtec;
     unsigned short clickLine;
     unsigned short range;
-    unsigned long vMemLines;
     unsigned long voffset, vch;
     unsigned long vsizefile;
+    unsigned long vprogsize;
+    unsigned long vworkbase;
     unsigned short vReadSize;
+    unsigned char vParamName[128];
+    unsigned char *vComma;
+    unsigned char ix;
+
+    // Define o ID do window
+    for(ix = 0; ix < 6; ix++)
+    {
+        if (mguiListWindows[ix].loadAddress == 0x00880000)
+        {
+            windowsId = ix;
+            break;
+        }
+    }
 
     // --- Atribuicao de ponteiros de funcao locais ---
     #ifdef USE_REALOCABLE_CODE
     drawNote        = drawNoteDef;
     displayNotePage = displayNotePageDef;
-    drawScrollBar   = drawScrollBarDef;
+    drawScrollBarV  = drawScrollBarVDef;
+    drawScrollBarH  = drawScrollBarHDef;    
     nmystrcpy       = strcpy;
     nmymemset       = memset;
     nmyitoa         = itoa;
@@ -71,58 +99,85 @@ void main(void)
     nvcorfg = vdpcolor.fg;
     nvcorbg = vdpcolor.bg;
 
+    memset(noteCfgColor, 0x00, sizeof(noteCfgColor));
+    if (mguiCfgGet("START", "COLOR_F", noteCfgColor, sizeof(noteCfgColor)))
+        nvcorfg = (unsigned char)atoi((char*)noteCfgColor);
+    memset(noteCfgColor, 0x00, sizeof(noteCfgColor));
+    if (mguiCfgGet("START", "COLOR_B", noteCfgColor, sizeof(noteCfgColor)))
+        nvcorbg = (unsigned char)atoi((char*)noteCfgColor);
+
+    if (nvcorfg == nvcorbg)
+        nvcorfg = VDP_WHITE;
+
     noteTopLine   = 0;
     noteHOffset   = 0;
     noteLineCount = 0;
-    noteTextBuf   = 0;
-    noteLines     = 0;
     noteBufSize   = 0;
+    vprogsize     = 0;
+
+    memset(vParamName, 0x00, sizeof(vParamName));
+    if (*paramBasic != 0x00)
+        strcpy((char*)vParamName, (char*)paramBasic);
+
+    vComma = (unsigned char *)strrchr((char*)vParamName, ',');
+    if (vComma)
+    {
+        *vComma = 0x00;
+        vprogsize = atol((char*)(vComma + 1));
+
+        vComma = (unsigned char *)strchr((char*)vParamName, ',');
+        if (vComma)
+            *vComma = 0x00;
+    }
+
+    vworkbase = noteAlign4(NOTE_LOAD_ADDR + vprogsize + NOTE_WORK_GAP);
+    noteTextBuf = (unsigned char *)vworkbase;
+    noteLines = noteLineStorage;
+
+    memset(noteTextBuf, 0x00, NOTE_MAX_FILE_SIZE + 1);
+    memset((unsigned char *)noteLines, 0x00, sizeof(noteLineStorage));
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
     SaveScreenNew(&windowScr, 0, 0, 255, 191);
 
     // --- Carrega o arquivo indicado em paramBasic ---
-    if (*paramBasic != 0x00)
+    if (*vParamName != 0x00)
     {
-        vsizefile = fsInfoFile(paramBasic, INFO_SIZE);
+        vsizefile = fsInfoFile(vParamName, INFO_SIZE);
 
         if (vsizefile > 0 && vsizefile != ERRO_D_NOT_FOUND)
         {
-            // Limita a 32KB para seguranca
-            if (vsizefile > 32768)
-                vsizefile = 32768;
+            if (vsizefile > NOTE_MAX_FILE_SIZE)
+                vsizefile = NOTE_MAX_FILE_SIZE;
 
             noteBufSize = vsizefile;
 
-            noteTextBuf = fsMalloc(noteBufSize + 1);
+            vsizefile = loadFile(vParamName, (unsigned char *)noteTextBuf);
+            if (vsizefile > 0 && vsizefile <= NOTE_MAX_FILE_SIZE)
+                noteBufSize = vsizefile;
 
-            if (noteTextBuf)
+            // Le o arquivo em blocos de 512 bytes
+/*            voffset = 0;
+            while (voffset < noteBufSize)
             {
-                // Le o arquivo em blocos de 512 bytes
-                voffset = 0;
-                while (voffset < noteBufSize)
-                {
-                    vReadSize = 512;
-                    if (voffset + vReadSize > noteBufSize)
-                        vReadSize = (unsigned short)(noteBufSize - voffset);
+                vReadSize = 512;
+                if (voffset + vReadSize > noteBufSize)
+                    vReadSize = (unsigned short)(noteBufSize - voffset);
 
-                    fsReadFile(paramBasic, voffset, noteTextBuf + voffset, vReadSize);
-                    voffset = voffset + vReadSize;
-                }
+                fsReadFile(vParamName, voffset, noteTextBuf + voffset, vReadSize);
+                voffset = voffset + vReadSize;
+            }*/
 
-                // Garante terminador nulo
-                *(noteTextBuf + noteBufSize) = 0x00;
-            }
+            // Garante terminador nulo
+            *(noteTextBuf + noteBufSize) = 0x00;
         }
     }
-
-    // --- Aloca array de indices de linhas ---
-    vMemLines = fsMalloc(NOTE_MAX_LINES * 4);   // 4 bytes por unsigned long no M68K
-    noteLines = vMemLines;
 
     // --- Indexa as linhas do arquivo ---
     if (noteTextBuf && noteLines && noteBufSize > 0)
     {
+        calcNoteMaxLineLen(noteBufSize);
+
         // Primeira linha comeca no offset 0
         noteLines[0] = 0;
         noteLineCount = 1;
@@ -172,8 +227,9 @@ void main(void)
 
         while (1)
         {
+            *mguiIdRequest = windowsId;
             getMouseData(&mouseData);
-            vtec = readChar();
+            vtec = mguiListWindows[windowsId].keyTec;
 
             // --- Tratamento de Teclado ---
             if (vtec == 0x1B)               // ESC: fecha
@@ -181,37 +237,39 @@ void main(void)
                 vcont = 0;
                 break;
             }
-            else if (vtec == 0x11)          // Cursor Cima: rola 1 linha para cima
+            else if (vtec == 0x18)          // Cursor Cima: rola 1 linha para cima
             {
                 if (noteTopLine > 0)
                 {
                     noteTopLine--;
                     displayNotePage();
-                    drawScrollBar();
+                    drawScrollBarV();
                 }
             }
-            else if (vtec == 0x13)          // Cursor Baixo: rola 1 linha para baixo
+            else if (vtec == 0x20)          // Cursor Baixo: rola 1 linha para baixo
             {
                 if (noteLineCount > NOTE_VISIBLE &&
                     noteTopLine < noteLineCount - NOTE_VISIBLE)
                 {
                     noteTopLine++;
                     displayNotePage();
-                    drawScrollBar();
+                    drawScrollBarV();
                 }
             }
-            else if (vtec == 0x12)          // Cursor Esquerda: rola 1 coluna para esquerda
+            else if (vtec == 0x17)          // Cursor Esquerda: rola 1 coluna para esquerda
             {
                 if (noteHOffset > 0)
                 {
                     noteHOffset--;
                     displayNotePage();
+                    drawScrollBarH();
                 }
             }
-            else if (vtec == 0x14)          // Cursor Direita: rola 1 coluna para direita
+            else if (vtec == 0x19)          // Cursor Direita: rola 1 coluna para direita
             {
                 noteHOffset++;
                 displayNotePage();
+                drawScrollBarH();
             }
 
             // --- Tratamento de Mouse ---
@@ -245,7 +303,28 @@ void main(void)
 
                     noteTopLine = clickLine;
                     displayNotePage();
-                    drawScrollBar();
+                    drawScrollBarV();
+                }
+
+                // Clique na barra de rolagem horizontal
+                if (mouseData.vpostx >= NOTE_SCRL_H_X &&
+                    mouseData.vpostx <= NOTE_SCRL_H_X + NOTE_SCRL_H_W &&
+                    mouseData.vposty >= NOTE_SCRL_H_Y &&
+                    mouseData.vposty <= NOTE_SCRL_H_Y + NOTE_SCRL_H_H &&
+                    noteMaxLineLen > NOTE_CHARS_LINE)
+                {
+                    // Mapeia a posicao do click para o numero de coluna
+                    range = noteMaxLineLen - NOTE_CHARS_LINE;
+                    clickLine = (unsigned short)(
+                        (unsigned long)(mouseData.vpostx - NOTE_SCRL_H_X) * range / NOTE_SCRL_H_W
+                    );
+
+                    if (clickLine >= noteMaxLineLen - NOTE_CHARS_LINE)
+                        clickLine = noteMaxLineLen - NOTE_CHARS_LINE - 1;
+
+                    noteHOffset = clickLine;
+                    displayNotePage();
+                    drawScrollBarH();
                 }
             }
 
@@ -258,12 +337,6 @@ void main(void)
 
     // --- Encerra ---
     TrocaSpriteMouse(MOUSE_HOURGLASS);
-
-    if (noteLines)
-        fsFree((unsigned long)noteLines);
-
-    if (noteTextBuf)
-        fsFree((unsigned long)noteTextBuf);
 
     RestoreScreen(windowScr);
 
@@ -301,7 +374,8 @@ void drawNote(void)
 
     // Exibe conteudo e scrollbar
     displayNotePage();
-    drawScrollBar();
+    drawScrollBarV();
+    drawScrollBarH();
 }
 
 //-----------------------------------------------------------------------------
@@ -316,25 +390,47 @@ void displayNotePage(void)
     unsigned char linebuf[42];  // NOTE_CHARS_LINE + 2 de margem
     unsigned char *p;
     unsigned char vch;
-    unsigned short line, col, ly;
+    unsigned short line, col, ly, ix;
     unsigned long lpos;
-
-    // Limpa area de texto (sem tocar a scrollbar)
-    FillRect(0, NOTE_Y_TEXT, NOTE_SCRL_X - 1, NOTE_VISIBLE * NOTE_LINE_H, nvcorbg);
 
     if (!noteTextBuf || noteLineCount == 0)
         return;
+
+    noteMaxLineLen = 0;
 
     for (line = 0; line < NOTE_VISIBLE; line++)
     {
         ly = NOTE_Y_TEXT + (line * NOTE_LINE_H);
 
+        // Preenche linha inteira com espacos para sobrescrever lixo residual
+        for (ix = 0; ix < NOTE_CHARS_LINE; ix++)
+            linebuf[ix] = 0x20;
+        linebuf[NOTE_CHARS_LINE] = 0x00;
+
         if ((noteTopLine + line) >= noteLineCount)
-            break;
+        {
+            writesxy(NOTE_TEXT_X, ly, 8, linebuf, nvcorfg, nvcorbg);
+            continue;
+        }
 
         // Ponteiro para inicio desta linha no buffer
         lpos = noteLines[noteTopLine + line];
         p    = noteTextBuf + lpos;
+
+        // Calcula tamanho REAL da linha
+        col = 0;
+        while (1)
+        {
+            vch = p[col];
+
+            if (!vch || vch == 0x0A || vch == 0x0D)
+                break;
+
+            col++;
+        }
+
+        if (col > noteMaxLineLen)
+            noteMaxLineLen = col;
 
         // Avanca noteHOffset colunas (scroll horizontal)
         col = 0;
@@ -361,13 +457,12 @@ void displayNotePage(void)
                 vch = 0x20;             // Nao imprimivel -> espaco
 
             linebuf[col] = vch;
+
             col++;
             p++;
         }
-        linebuf[col] = 0x00;
 
-        if (col > 0)
-            writesxy(NOTE_TEXT_X, ly, 8, linebuf, nvcorfg, nvcorbg);
+        writesxy(NOTE_TEXT_X, ly, 8, linebuf, nvcorfg, nvcorbg);
     }
 }
 
@@ -375,42 +470,160 @@ void displayNotePage(void)
 // Desenha a barra de rolagem vertical com indicador de posicao (thumb)
 //-----------------------------------------------------------------------------
 #ifdef USE_REALOCABLE_CODE
-void drawScrollBarDef(void)
+void drawScrollBarVDef(void)
 #else
-void drawScrollBar(void)
+void drawScrollBarV(void)
 #endif
 {
     unsigned short thumbY, thumbH;
     unsigned short range;
     unsigned long ltmp;
+    unsigned int noteVisibleAux = NOTE_VISIBLE;
+    unsigned int noteScrlHAux = NOTE_SCRL_H;
+    unsigned int noteScrlWAux = NOTE_SCRL_W;
+    unsigned int noteScrlXAux = NOTE_SCRL_X;
+    unsigned int noteScrlYAux = NOTE_SCRL_Y;    
+    unsigned char sqtdtam[10];
 
     // Trilha da barra de rolagem
-    FillRect(NOTE_SCRL_X, NOTE_SCRL_Y, NOTE_SCRL_W, NOTE_SCRL_H, nvcorbg);
-    DrawRect(NOTE_SCRL_X, NOTE_SCRL_Y, NOTE_SCRL_W, NOTE_SCRL_H, nvcorfg);
+    FillRect(noteScrlXAux, noteScrlYAux, noteScrlWAux, noteScrlHAux, nvcorbg);
+    DrawRect(noteScrlXAux, noteScrlYAux, noteScrlWAux, noteScrlHAux, nvcorfg);
 
     // Sem scrollbar se todo o conteudo e visivel
-    if (noteLineCount <= NOTE_VISIBLE)
+    if (noteLineCount <= noteVisibleAux)
         return;
 
-    range = noteLineCount - NOTE_VISIBLE;
+    range = noteLineCount - noteVisibleAux;
+    if (range == 0 || noteLineCount == 0)
+        return;
+
+    if (noteTopLine > range)
+        noteTopLine = range;
 
     // --- Calcula altura do thumb ---
-    thumbH = NOTE_VISIBLE * NOTE_SCRL_H / noteLineCount;
+    thumbH = (noteVisibleAux * noteScrlHAux) / noteLineCount;
     if (thumbH < 8)
         thumbH = 8;
-    if (thumbH > NOTE_SCRL_H)
-        thumbH = NOTE_SCRL_H;
+    if (thumbH > noteScrlHAux)
+        thumbH = noteScrlHAux;
 
     // --- Calcula posicao Y do thumb ---
     ltmp   = noteTopLine;
-    ltmp   = ltmp * (NOTE_SCRL_H - thumbH);
+    ltmp   = ltmp * (noteScrlHAux - thumbH);
     ltmp   = ltmp / range;
-    thumbY = NOTE_SCRL_Y + (unsigned short)ltmp;
+    thumbY = noteScrlYAux + (unsigned short)ltmp;
 
     // Garante que nao ultrapassa o limite da trilha
-    if (thumbY + thumbH > NOTE_SCRL_Y + NOTE_SCRL_H)
-        thumbY = NOTE_SCRL_Y + NOTE_SCRL_H - thumbH;
+    if (thumbY + thumbH > noteScrlYAux + noteScrlHAux)
+        thumbY = noteScrlYAux + noteScrlHAux - thumbH;
 
     // Desenha o thumb
-    FillRect(NOTE_SCRL_X + 1, thumbY, NOTE_SCRL_W - 2, thumbH, nvcorfg);
+    FillRect(noteScrlXAux + 1, thumbY, noteScrlWAux - 2, thumbH, nvcorfg);
+}
+
+//-----------------------------------------------------------------------------
+// Desenha a barra de rolagem horizontal com indicador de posicao (thumb)
+//-----------------------------------------------------------------------------
+#ifdef USE_REALOCABLE_CODE
+void drawScrollBarHDef(void)
+#else
+void drawScrollBarH(void)
+#endif
+{
+    unsigned short thumbX;
+    unsigned short thumbW;
+    unsigned short range;
+    unsigned long ltmp;
+
+    unsigned int noteVisibleAux;
+    unsigned int noteScrlHAux;
+    unsigned int noteScrlWAux;
+    unsigned int noteScrlXAux;
+    unsigned int noteScrlYAux;
+
+    noteVisibleAux = NOTE_CHARS_LINE;
+
+    noteScrlHAux = NOTE_SCRL_H_H;
+    noteScrlWAux = NOTE_SCRL_H_W;
+    noteScrlXAux = NOTE_SCRL_H_X;
+    noteScrlYAux = NOTE_SCRL_H_Y;
+
+    FillRect(noteScrlXAux, noteScrlYAux, noteScrlWAux, noteScrlHAux, nvcorbg);
+    DrawRect(noteScrlXAux, noteScrlYAux, noteScrlWAux, noteScrlHAux, nvcorfg);
+
+    if (noteMaxLineLen <= noteVisibleAux)
+    {
+        noteHOffset = 0;
+        return;
+    }
+
+    range = noteMaxLineLen - noteVisibleAux;
+
+    if (noteHOffset > range)
+        noteHOffset = range;
+
+    thumbW = (noteVisibleAux * noteScrlWAux) / noteMaxLineLen;
+
+    if (thumbW < 8)
+        thumbW = 8;
+
+    if (thumbW > noteScrlWAux)
+        thumbW = noteScrlWAux;
+
+    ltmp = noteHOffset;
+    ltmp = ltmp * (noteScrlWAux - thumbW);
+    ltmp = ltmp / range;
+
+    thumbX = noteScrlXAux + (unsigned short)ltmp;
+
+    if (thumbX + thumbW > noteScrlXAux + noteScrlWAux)
+        thumbX = noteScrlXAux + noteScrlWAux - thumbW;
+
+    FillRect(thumbX, noteScrlYAux + 1, thumbW, noteScrlHAux - 2, nvcorfg);
+}
+
+//-----------------------------------------------------------------------------
+// Calcula linha mais longa do arquivo (em caracteres) para determinar
+//necessidade de scroll horizontal
+//-----------------------------------------------------------------------------
+void calcNoteMaxLineLen(unsigned long fileSize)
+{
+    unsigned long i;
+    unsigned short col;
+    unsigned char vch;
+
+    noteMaxLineLen = 0;
+    col = 0;
+
+    for (i = 0; i < fileSize; i++)
+    {
+        vch = noteTextBuf[i];
+
+        if (vch == 0x0D || vch == 0x0A || vch == 0x00)
+        {
+            if (col > noteMaxLineLen)
+                noteMaxLineLen = col;
+
+            col = 0;
+
+            /*
+               Se arquivo for CRLF, pula o LF depois do CR
+            */
+            if (vch == 0x0D && (i + 1) < fileSize)
+            {
+                if (noteTextBuf[i + 1] == 0x0A)
+                    i++;
+            }
+        }
+        else
+        {
+            col++;
+        }
+    }
+
+    /*
+       Última linha pode não terminar com CR/LF
+    */
+    if (col > noteMaxLineLen)
+        noteMaxLineLen = col;
 }

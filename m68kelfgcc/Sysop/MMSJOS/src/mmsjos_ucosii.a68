@@ -1,0 +1,5 @@
+mmsjos_ucosii_table:
+            dc.l _OSQPost
+            dc.l _OSQPend
+            dc.l _OSQCreate
+            dc.l _OSQDel

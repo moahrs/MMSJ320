@@ -32,7 +32,7 @@ SECTIONS
 
     __stack = 0x00619000;
     __ungetbuf = __stack;
-    heap = 0x008F0000;
+    heap = 0x00840000;
 
-    .heap 0x008F0000 (NOLOAD) : { *(.heap) } :data
+    .heap 0x00840000 (NOLOAD) : { *(.heap) } :data
 }

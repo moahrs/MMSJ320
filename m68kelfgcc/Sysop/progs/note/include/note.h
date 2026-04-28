@@ -22,6 +22,11 @@
 #define NOTE_SCRL_H     150      // Altura da trilha da barra de rolagem
 #define NOTE_SCRL_W       7      // Largura da barra de rolagem
 
+#define NOTE_SCRL_H_X       2      // X inicial da barra de rolagem
+#define NOTE_SCRL_H_Y     167      // Y inicial da barra de rolagem
+#define NOTE_SCRL_H_H       6      // Altura da trilha da barra de rolagem
+#define NOTE_SCRL_H_W     244      // Largura da barra de rolagem
+
 #define NOTE_CLOSE_X    100      // X do botao Close
 #define NOTE_CLOSE_Y    178      // Y do botao Close
 #define NOTE_CLOSE_W     56      // Largura do botao Close
@@ -32,25 +37,31 @@ unsigned char  *noteTextBuf;     // Buffer com o conteudo do arquivo
 unsigned long   noteBufSize;     // Tamanho do arquivo em bytes
 unsigned long  *noteLines;       // Array (dinamico) de offsets de inicio de cada linha
 unsigned short  noteLineCount;   // Total de linhas no arquivo
+unsigned short  noteMaxLineLen;  // Tamanho da linha mais longa (para scroll horizontal)
 unsigned short  noteTopLine;     // Linha do topo da tela (scroll vertical)
 unsigned short  noteHOffset;     // Offset horizontal (scroll horizontal)
 unsigned char   nvcorfg;         // Cor do texto
 unsigned char   nvcorbg;         // Cor do fundo
+unsigned char windowsId;
 
 // Prototipos das funcoes locais (definicao real em note.c)
 #ifndef USE_REALOCABLE_CODE
 void drawNote(void);
 void displayNotePage(void);
-void drawScrollBar(void);
+void drawScrollBarV(void);
+void drawScrollBarH(void);
+void calcNoteMaxLineLen(unsigned long fileSize);
 #else
 void drawNoteDef(void);
 void displayNotePageDef(void);
-void drawScrollBarDef(void);
+void drawScrollBarVDef(void);
+void drawScrollBarHDef(void);
 
 // Ponteiros de funcao locais (padrao IDE68K)
 void (*drawNote)(void);
 void (*displayNotePage)(void);
-void (*drawScrollBar)(void);
+void (*drawScrollBarV)(void);
+void (*drawScrollBarH)(void);
 
 // Ponteiros para funcoes da stdlib (chamadas via ponteiro para evitar problemas IDE68K)
 char * (*nmystrcpy)(char *, char *);

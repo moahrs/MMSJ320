@@ -96,7 +96,7 @@ extern unsigned char bgcolorMgui;
 
 #define SIZE_LOAD_IMAGE_MEM 8192    // Max PBM file format for 256x192 area
 #define SIZE_LOAD_ICONS_MEM 8192    // 128 incons 64 bytes
-#define SIZE_LOAD_CFG_MEM    512    // Max config file size (+1 byte for terminator)
+#define SIZE_LOAD_CFG_MEM    2048   // Max config file size (+1 byte for terminator)
 
 #define TASK_MGUI_TELA    11
 #define TASK_MGUI_MOUSE   12
@@ -108,7 +108,7 @@ extern unsigned char bgcolorMgui;
 // Retorna vOutBuf em caso de sucesso, NULL se nao encontrado.
 // Para usar como int: atoi(mguiCfgGet(buf, "SEC", "KEY", tmp, sizeof(tmp)))
 // -------------------------------------------------------------------------------
-char *mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax);
+char mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax);
 
 // -------------------------------------------------------------------------------
 // Funcoes Graficas
@@ -157,7 +157,7 @@ void MostraIcone(unsigned short xi, unsigned short yi, unsigned char vicone, uns
 void runFromMguiCmd(void);
 void runBin(void);
 void importFile(void);
-void putImagePbmP4(unsigned long* memoria, unsigned short ix, unsigned short iy);
+void putImagePbmP4(unsigned char* memoria, unsigned short ix, unsigned short iy);
 
 // -------------------------------------------------------------------------------
 // Elementos
