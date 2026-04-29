@@ -61,6 +61,9 @@ void main(void)
             *vComma = 0x00;
     }
 
+    strcpy(edFileName, (char*)vParamName);
+    edDirty = 0;
+
     vworkbase = noteAlign4(0x00880000 + vprogsize + 256);
 
     if (vParamName[0] == 0x00)
@@ -95,6 +98,8 @@ void main(void)
     edCurCol = 0;
     edVScroll = 0;
     edHScroll = 0;
+    textToFind[0] = 0;
+    textToChange[0] = 0;
 
     edBuildLines();
 
@@ -106,11 +111,56 @@ void main(void)
 }
 
 //-------------------------------------------------------------------
+int edGetCursorOffset(void)
+{
+    return (int)((edLinePtr[edCurLine] + edCurCol) - edFileBuf);
+}
+
+//-------------------------------------------------------------------
+int edInsertChar(char c)
+{
+    int i;
+    int pos;
+
+    if (edFileSize >= EDIT_MAX_FILE - 2)
+        return -1;
+
+    pos = edGetCursorOffset();
+
+    for (i = edFileSize; i >= pos; i--)
+        edFileBuf[i + 1] = edFileBuf[i];
+
+    edFileBuf[pos] = c;
+    edFileSize++;
+    edDirty = 1;
+
+    edBuildLines();
+    edCurCol++;
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
 void edPrintSpaces(int qtd)
 {
     int i;
 
     for (i = 0; i < qtd; i++)
+        printChar(' ', 1);
+}
+
+//-------------------------------------------------------------------
+void edClearToEndLine(int used)
+{
+    int i;
+
+    if (used < 0)
+        used = 0;
+
+    if (used > EDIT_COLS)
+        used = EDIT_COLS;
+
+    for (i = used; i < EDIT_COLS; i++)
         printChar(' ', 1);
 }
 
@@ -128,10 +178,15 @@ void edDrawLine(int y)
 //-------------------------------------------------------------------
 void edDrawHeader(char *filename)
 {
+    int used;
+
     vdp_set_cursor(0, EDIT_TOP_MENU);
+
     printText(" EDIT  ");
     printText(filename);
-    edPrintSpaces(EDIT_COLS);
+
+    used = 7 + strlen(filename);
+    edClearToEndLine(used);
 
     edDrawLine(EDIT_TOP_LINE);
 }
@@ -162,25 +217,28 @@ void edDrawStatus(void)
     strcat(buf, "  H:");
     itoa(edHScroll, numbuf, 10);
     strcat(buf, numbuf);
-    strcat(buf, "  ESC=sair");
+    if (textToFind[0] != 0)
+        strcat(buf, "  ^Y=Next");
 
     printText(buf);
-    edPrintSpaces(EDIT_COLS);
+    edClearToEndLine(strlen(buf));    
 }
 
 //-------------------------------------------------------------------
 int edLineLen(int line)
 {
     char *p;
+    char *end;
     int len;
 
     if (line < 0 || line >= edNumLines)
         return 0;
 
     p = edLinePtr[line];
+    end = edFileBuf + edFileSize;
     len = 0;
 
-    while (*p != 0 && *p != 13 && *p != 10)
+    while (p < end && *p != 13 && *p != 10 && *p != 0)
     {
         len++;
         p++;
@@ -193,36 +251,46 @@ int edLineLen(int line)
 void edBuildLines(void)
 {
     char *p;
+    char *end;
 
     edNumLines = 0;
     p = edFileBuf;
+    end = edFileBuf + edFileSize;
+
+    if (edFileSize <= 0)
+    {
+        edLinePtr[0] = edFileBuf;
+        edNumLines = 1;
+        return;
+    }
 
     edLinePtr[edNumLines] = p;
     edNumLines++;
 
-    while (*p != 0 && edNumLines < EDIT_MAX_LINES)
+    while (p < end && edNumLines < EDIT_MAX_LINES)
     {
         if (*p == 13)
         {
-            *p = 0;
             p++;
 
-            if (*p == 10)
-            {
-                *p = 0;
+            if (p < end && *p == 10)
                 p++;
-            }
 
-            edLinePtr[edNumLines] = p;
-            edNumLines++;
+            if (p < end)
+            {
+                edLinePtr[edNumLines] = p;
+                edNumLines++;
+            }
         }
         else if (*p == 10)
         {
-            *p = 0;
             p++;
 
-            edLinePtr[edNumLines] = p;
-            edNumLines++;
+            if (p < end)
+            {
+                edLinePtr[edNumLines] = p;
+                edNumLines++;
+            }
         }
         else
         {
@@ -262,7 +330,7 @@ void edDrawText(void)
 
             for (x = 0; x < EDIT_COLS; x++)
             {
-                if (*p != 0)
+                if if (p < edFileBuf + edFileSize && *p != 0 && *p != 13 && *p != 10)
                 {
                     if (*p == 9)
                         printChar(' ', 1);   /* TAB simples */
@@ -387,6 +455,118 @@ void edMoveDown(void)
 }
 
 //-------------------------------------------------------------------
+int edBackspace(void)
+{
+    int i;
+    int pos;
+
+    if (edCurLine == 0 && edCurCol == 0)
+        return 0;
+
+    edMoveLeft();
+
+    pos = edGetCursorOffset();
+
+    for (i = pos; i < edFileSize; i++)
+        edFileBuf[i] = edFileBuf[i + 1];
+
+    edFileSize--;
+    edDirty = 1;
+
+    edBuildLines();
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+int edDelete(void)
+{
+    int i;
+    int pos;
+
+    pos = edGetCursorOffset();
+
+    if (pos >= edFileSize)
+        return 0;
+
+    for (i = pos; i < edFileSize; i++)
+        edFileBuf[i] = edFileBuf[i + 1];
+
+    edFileSize--;
+    edDirty = 1;
+
+    edBuildLines();
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+int edInsertEnter(void)
+{
+    edInsertChar(13);   /* CR */
+
+    /* opcional: LF também */
+    edInsertChar(10);
+
+    edCurCol = 0;
+    edCurLine++;
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+void edDrawCommandHelp(void)
+{
+    edDrawLine(4);
+
+    if (edCmdModeK)
+    {
+        vdp_set_cursor(0, 0);
+        printText("------- File -------|----- Block ------");
+
+        edClearLine(1);
+        vdp_set_cursor(0, 1);
+        printText("  S=Save  A=Save As |  B=Begin   K=End ");
+
+        edClearLine(2);
+        vdp_set_cursor(0, 2);
+        printText("  O=Open            |  C=Copy   V=Move ");
+
+        edClearLine(3);
+        vdp_set_cursor(0, 3);
+        printText("  X=Exit            |  D=Delete    ");
+    }
+    if (edCmdModeQ)
+    {
+        vdp_set_cursor(16, 0);
+        printText(" Search ");
+
+        edClearLine(1);
+        vdp_set_cursor(0, 1);
+        printText("  F Find");
+
+        edClearLine(2);
+        vdp_set_cursor(0, 2);
+        printText("  R Replace");
+
+        edClearLine(3);
+        vdp_set_cursor(0, 3);
+        printText("  G Goto Line");
+    }
+
+    edDrawLine(4);
+}
+
+//-------------------------------------------------------------------
+void edRestoreNormalTop(char *filename)
+{
+    edDrawHeader(filename);
+    edDrawText();
+    edDrawStatus();
+    edDrawCursor(1);
+}
+
+//-------------------------------------------------------------------
 void edLoop(char *filename)
 {
     int key;
@@ -396,6 +576,7 @@ void edLoop(char *filename)
     int oldCol;
     unsigned int cursorOn;
     unsigned int tick;
+    int changedText;
 
     clearScr();
 
@@ -414,6 +595,115 @@ void edLoop(char *filename)
         {
             edDrawCursor(0);   /* restaura char antes de mover */
             cursorOn = 0;
+            changedText = 0;
+
+            /* =========================
+            BLOCO WORDSTAR (^K ^Q)
+            ========================= */
+            if (edCmdModeK)
+            {
+                if (key == 'S' || key == 's')
+                    edSaveFile();
+
+                else if (key == 'O' || key == 'o')
+                    edOpenFile();
+
+                else if (key == 'X' || key == 'x')
+                {
+                    if (edCanExit())
+                        break;
+                }
+                else if (key == KEY_ESC)
+                {
+                    edCmdModeK = 0;
+                    edHelpMode = 0;
+                    edRestoreNormalTop(filename);
+                    continue;                }
+                else {
+                    // Nenhuma tecla util foi usada, continua esperando
+                    continue;   
+                }
+
+                edCmdModeK = 0;
+
+                edDrawHeader(filename);
+                edDrawText();
+                edDrawStatus();
+
+                cursorOn = 1;
+                edDrawCursor(1);
+
+                edHelpMode = 0;
+
+                edRestoreNormalTop(filename);
+
+                continue;   /* IMPORTANTÍSSIMO */
+            }
+            else if (edCmdModeQ)
+            {
+                /*if (key == 'S' || key == 's')
+                    edSaveFile();
+
+                else if (key == 'O' || key == 'o')
+                    edOpenFile();
+
+                else if (key == 'X' || key == 'x')
+                {
+                    if (edCanExit())
+                        break;
+                }
+                else*/ if (key == KEY_ESC)
+                {
+                    edCmdModeQ = 0;
+                    edHelpMode = 0;
+                    edRestoreNormalTop(filename);
+                    continue;                }
+                else {
+                    // Nenhuma tecla util foi usada, continua esperando
+                    continue;   
+                }
+
+                edCmdModeQ = 0;
+
+                edDrawHeader(filename);
+                edDrawText();
+                edDrawStatus();
+
+                cursorOn = 1;
+                edDrawCursor(1);
+
+                edHelpMode = 0;
+
+                edRestoreNormalTop(filename);
+
+                continue;   /* IMPORTANTÍSSIMO */
+            }
+
+            if (key == KEY_CTRL_K)
+            {
+                edCmdModeK = 1;
+                edSetMessage("^K...");
+                edDrawStatus();
+
+                cursorOn = 1;
+                edDrawCursor(1);
+
+                edHelpMode = 1;
+                edDrawCommandHelp();
+
+                continue;   /* IMPORTANTÍSSIMO */
+            }
+            else if (key == KEY_CTRL_Q)
+            {
+                edCmdModeQ = 1;
+                edSetMessage("^Q...");
+                edDrawStatus();
+
+                cursorOn = 1;
+                edDrawCursor(1);
+
+                continue;   /* IMPORTANTÍSSIMO */
+            }
 
             if (key == KEY_ESC)
                 break;
@@ -431,10 +721,30 @@ void edLoop(char *filename)
                 edMoveUp();
             else if (key == KEY_DOWN)
                 edMoveDown();
+            else if (key == KEY_BACKSPACE)
+            {
+                edBackspace();
+                changedText = 1;
+            }
+            else if (key == KEY_DELETE)
+            {
+                edDelete();
+                changedText = 1;
+            }
+            else if (key == KEY_ENTER)
+            {
+                edInsertEnter();
+                changedText = 1;
+            }
+            else if (key >= 32 && key <= 126)
+            {
+                edInsertChar((char)key);
+                changedText = 1;
+            }  
 
             edAdjustScroll();
 
-            if (oldV != edVScroll || oldH != edHScroll)
+            if (changedText || oldV != edVScroll || oldH != edHScroll)
             {
                 edDrawText();
             }
@@ -525,4 +835,42 @@ void edDrawCursor(int show)
     }
 
     vdp_set_cursor(sx, sy);
+}
+
+//-------------------------------------------------------------------
+int edSaveFile(void)
+{
+    /*
+       Aqui depois entra sua saveFile().
+       Exemplo futuro:
+       ret = saveFile(edFileName, edFileBuf, edFileSize);
+    */
+
+    edDirty = 0;
+    return 0;
+}
+
+//-------------------------------------------------------------------
+int edOpenFile(void)
+{
+    /*
+       Preparado para depois chamar seu fillin/MGUI.
+       Por enquanto nao faz nada.
+    */
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+int edCanExit(void)
+{
+    if (!edDirty)
+        return 1;
+
+    /*
+       Depois aqui entra pergunta:
+       "Arquivo alterado. Sair sem salvar? S/N"
+    */
+
+    return 0;
 }

@@ -26,8 +26,21 @@
 #define CURSOR_CHAR  254
 #define CURSOR_DELAY 8000
 
+#define KEY_CTRL_K  11  // Funcoes de Arquivo e bloco
+#define KEY_CTRL_Q  19  // Funcoes de Pesquisa e rapidas
+#define ED_HELP_LINES 5
+
+int edHelpMode;   /* 0=normal, 1=^K, 2=^Q */
+
+int edCmdModeK;
+int edCmdModeQ;
+int edDirty;
+char edFileName[128];
+
 char *edFileBuf;
 char *edLinePtr[EDIT_MAX_LINES];
+char textToFind[128];
+char textToChange[128];
 
 int edNumLines;
 int edCurLine;
@@ -36,6 +49,8 @@ int edVScroll;
 int edHScroll;
 int edFileSize;
 
+void edDrawCommandHelp(void);
+void edRestoreNormalTop(char *filename);
 void edLoop(char *filename);
 void edAdjustScroll(void); 
 void edPrintSpaces(int qtd);
@@ -50,8 +65,17 @@ void edMoveLeft(void);
 void edMoveRight(void);
 void edMoveUp(void);
 void edMoveDown(void);
+int edBackspace(void);
+int edDelete(void);
+int edInsertEnter(void);
 char edGetCharAtCursor(void);
 void edDrawCursor(int show);
+int edGetCursorOffset(void);
+int edInsertChar(char c);
+void edClearToEndLine(int used);
+int edSaveFile(void);
+int edOpenFile(void);
+int edCanExit(void);
 
 //void vdp_set_cursor(int x, int y);      /* use a sua rotina real */
 //void ClearScr(void);         /* use a sua rotina real */
