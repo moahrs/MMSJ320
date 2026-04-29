@@ -9,7 +9,7 @@ MAP = mmsjos.map
 LST = mmsjos.lst
 TEXT_ORIGIN ?= 0x00800000
 
-CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -fleading-underscore -I../include -Iinclude -I../uCOSII -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
+CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -fleading-underscore -I../include -I../uCOSII -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
 ASFLAGS_MRI = -m68000 -M --register-prefix-optional --bitwise-or
 LDFLAGS = -T linker_mmsjos.ld -nostdlib -Wl,--defsym=__TEXT_ORIGIN=$(TEXT_ORIGIN)
 LDLIBS = -lgcc

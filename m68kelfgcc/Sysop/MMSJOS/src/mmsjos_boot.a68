@@ -54,7 +54,7 @@ mmsjos_func_table:
 
 __exit:
 _exit:
-           dc.w        0
+;           dc.w        0
            jsr         _main
 
 _uCOSII_TICK:

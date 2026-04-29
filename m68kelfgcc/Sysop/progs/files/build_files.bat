@@ -61,5 +61,6 @@ exit /b 0
 echo.
 echo Artefatos gerados:
 dir files.elf files.bin files.map files.lst
-
+copy /Y files.bin D:\PROJETOS\MMSJ320\HD_ATU\MGUI\PROGS\FILES.BIN
+copy /Y files.bin F:\MGUI\PROGS\FILES.BIN
 exit /b 0

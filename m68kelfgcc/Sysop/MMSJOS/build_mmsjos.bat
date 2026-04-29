@@ -60,5 +60,7 @@ exit /b 0
 echo.
 echo Artefatos gerados:
 dir mmsjos.elf mmsjos.bin mmsjos.map mmsjos.lst
-
+copy /Y mmsjos.bin MMSJOS.SYS
+copy /Y MMSJOS.SYS d:\PROJETOS\MMSJ320\HD_ATU
+copy /Y MMSJOS.SYS F:\
 exit /b 0

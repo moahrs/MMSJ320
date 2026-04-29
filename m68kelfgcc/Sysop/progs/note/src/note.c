@@ -11,10 +11,10 @@
 * Uso: chamar com paramBasic = nome do arquivo a abrir
 *
 * Teclas:
-*   Cursor Cima    (0x11) : Rola texto para cima  1 linha
-*   Cursor Baixo   (0x13) : Rola texto para baixo 1 linha
-*   Cursor Esquerda(0x12) : Rola texto para esquerda 1 coluna
-*   Cursor Direita (0x14) : Rola texto para direita  1 coluna
+*   Cursor Cima    (0x18) : Rola texto para cima  1 linha
+*   Cursor Baixo   (0x20) : Rola texto para baixo 1 linha
+*   Cursor Esquerda(0x17) : Rola texto para esquerda 1 coluna
+*   Cursor Direita (0x19) : Rola texto para direita  1 coluna
 *   ESC            (0x1B) : Fecha o visualizador
 *
 * Mouse:
@@ -338,7 +338,7 @@ void main(void)
     // --- Encerra ---
     TrocaSpriteMouse(MOUSE_HOURGLASS);
 
-    RestoreScreen(windowScr);
+    RestoreScreen(&windowScr);
 
     TrocaSpriteMouse(MOUSE_POINTER);
 }

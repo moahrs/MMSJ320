@@ -14,12 +14,19 @@
 * 13/04/2026  1.0a03  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
 *                                  Ajustes no cat, fat, rd, rm e prompt
 * 20/04/2026  1.0a04  Moacir Jr.   Ajustes chamar basic com malloc e passagem de parametros
+* 28/04/2026  1.0a05  Moacir Jr.   Convertido para m68k-elf-gcc e retirada do malloc/realloc/free
 ********************************************************************************/
+//#define USE_MALLOC 0
 
 #include <ucos_ii.h>
 #include <ctype.h>
 #include <string.h>
+#ifdef USE_MALLOC
 #include <malloc.h>
+#endif
+#ifndef USE_MALLOC
+#define ADDR_LOAD_FILE 0x00840000
+#endif
 #include <stdlib.h>
 #include "mmsj320api.h"
 #include "mmsj320vdp.h"
@@ -128,10 +135,10 @@ void memInit(void);
 
 HEADER *_allocp;
 
-#define versionMMSJOS "1.0a04"
+#define versionMMSJOS "1.0a05"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 
-#define STACKSIZE  1024
+#define STACKSIZE  8192
 #define STACKSIZEMGUI  2048
 #define STACKSIZEBASIC  32768
 
@@ -244,6 +251,8 @@ void main(void)
 {
     unsigned char vRetInput;
     int vRetProcCmd;
+    INT8U osErr;
+    unsigned char sOsErr[10];
 
     *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
 
@@ -265,14 +274,29 @@ void main(void)
 
     showCursor();
 
-    *(vmfp + Reg_IERA) |= 0x01; // Timer B 10ms - Tick OS
-    *(vmfp + Reg_IMRA) |= 0x01; // Timer B 10ms - Tick OS
-
     // Cria duas Tasks
     OSInit();
-    shared_sem = OSSemCreate(0);
+    shared_sem = OSSemCreate(1);
     heap_sem = OSSemCreate(1);
-    OSTaskCreate(inputTask, OS_NULL, &StkInput[STACKSIZE], TASK_INPUT_KBD);
+
+    if (!shared_sem || !heap_sem)
+    {
+        printText("uC/OS-II semaphore init error\r\n\0");
+        for (;;) { }
+    }
+
+    osErr = OSTaskCreate(inputTask, OS_NULL, &StkInput[STACKSIZE - 1], TASK_INPUT_KBD);
+    if (osErr != OS_ERR_NONE)
+    {
+        printText("uC/OS-II task create error: \0");
+        itoa(osErr, sOsErr, 10);
+        printText(sOsErr);
+        printText("\r\n\0");
+        for (;;) { }
+    }
+
+    *(vmfp + Reg_IERA) |= 0x01; // Timer B 10ms - Tick OS
+    *(vmfp + Reg_IMRA) |= 0x01; // Timer B 10ms - Tick OS
     OSStart();
 }
 
@@ -287,7 +311,7 @@ void inputTask(void *pdata)
 
     while (1)
     {
-        OSSemPend(&shared_sem, 0, &error_code);
+        OSSemPend(shared_sem, 0, &error_code);
 
         vtec = readChar();
 
@@ -342,7 +366,7 @@ void inputTask(void *pdata)
 
         vtecant = vtec;
 
-        OSSemPost(&shared_sem);
+        OSSemPost(shared_sem);
 
         OSTimeDlyHMSM(0, 0, 0, 15);
     }
@@ -407,10 +431,32 @@ void basicTask(void *pData)
 }
 
 //-----------------------------------------------------------------------------
+void verifyWindows(char pTask)
+{
+    unsigned char winActives;
+    unsigned char ix;
+
+    winActives = 0;
+    for(ix = 0; ix < 6; ix++)
+    {
+        if (mguiListWindows[ix].id == pTask)
+        {
+            mguiListWindows[ix].id = 0;
+            mguiListWindows[ix].active = 0;
+        }
+
+        if (mguiListWindows[ix].active)
+            winActives++;
+    }
+    
+    if (!winActives)
+        mguiListWindows[6].active = 1;
+}
+
+//-----------------------------------------------------------------------------
 void prog01Task(void *pdata)
 {
     unsigned long vAddrExec = (unsigned long*)pdata;
-    unsigned char ix;
 
     if (vAddrExec)
     {
@@ -424,15 +470,8 @@ void prog01Task(void *pdata)
             free(vAddrExec);
     }
 
-    for(ix = 0; ix < 6; ix++)
-    {
-        if (mguiListWindows[ix].id == TASK_Prog01)
-        {
-            mguiListWindows[ix].id = 0;
-            break;
-        }
-    }
-    
+    verifyWindows(TASK_Prog01);
+
     OSTaskDel(OS_PRIO_SELF);
 }
 
@@ -440,7 +479,6 @@ void prog01Task(void *pdata)
 void prog02Task(void *pdata)
 {
     unsigned long vAddrExec = (unsigned long*)pdata;
-    unsigned char ix;
 
     if (vAddrExec)
     {
@@ -455,14 +493,7 @@ void prog02Task(void *pdata)
             free(vAddrExec);
     }
 
-    for(ix = 0; ix < 6; ix++)
-    {
-        if (mguiListWindows[ix].id == TASK_Prog02)
-        {
-            mguiListWindows[ix].id = 0;
-            break;
-        }
-    }
+    verifyWindows(TASK_Prog02);
 
     OSTaskDel(OS_PRIO_SELF);
 }
@@ -471,7 +502,6 @@ void prog02Task(void *pdata)
 void prog03Task(void *pdata)
 {
     unsigned long vAddrExec = (unsigned long*)pdata;
-    unsigned char ix;
 
     if (vAddrExec)
     {
@@ -485,14 +515,7 @@ void prog03Task(void *pdata)
             free(vAddrExec);
     }
 
-    for(ix = 0; ix < 6; ix++)
-    {
-        if (mguiListWindows[ix].id == TASK_Prog03)
-        {
-            mguiListWindows[ix].id = 0;
-            break;
-        }
-    }
+    verifyWindows(TASK_Prog03);
 
     OSTaskDel(OS_PRIO_SELF);
 }
@@ -501,7 +524,6 @@ void prog03Task(void *pdata)
 void prog04Task(void *pdata)
 {
     unsigned long vAddrExec = (unsigned long*)pdata;
-    unsigned char ix;
 
     if (vAddrExec)
     {
@@ -515,14 +537,7 @@ void prog04Task(void *pdata)
             free(vAddrExec);
     }
 
-    for(ix = 0; ix < 6; ix++)
-    {
-        if (mguiListWindows[ix].id == TASK_Prog04)
-        {
-            mguiListWindows[ix].id = 0;
-            break;
-        }
-    }
+    verifyWindows(TASK_Prog04);
 
     OSTaskDel(OS_PRIO_SELF);
 }
@@ -531,7 +546,6 @@ void prog04Task(void *pdata)
 void prog05Task(void *pdata)
 {
     unsigned long vAddrExec = (unsigned long*)pdata;
-    unsigned char ix;
 
     if (vAddrExec)
     {
@@ -545,14 +559,7 @@ void prog05Task(void *pdata)
             free(vAddrExec);
     }
 
-    for(ix = 0; ix < 6; ix++)
-    {
-        if (mguiListWindows[ix].id == TASK_Prog05)
-        {
-            mguiListWindows[ix].id = 0;
-            break;
-        }
-    }
+    verifyWindows(TASK_Prog05);
 
     OSTaskDel(OS_PRIO_SELF);
 }
@@ -561,7 +568,6 @@ void prog05Task(void *pdata)
 void prog06Task(void *pdata)
 {
     unsigned long vAddrExec = (unsigned long*)pdata;
-    unsigned char ix;
 
     if (vAddrExec)
     {
@@ -575,14 +581,7 @@ void prog06Task(void *pdata)
             free(vAddrExec);
     }
 
-    for(ix = 0; ix < 6; ix++)
-    {
-        if (mguiListWindows[ix].id == TASK_Prog06)
-        {
-            mguiListWindows[ix].id = 0;
-            break;
-        }
-    }
+    verifyWindows(TASK_Prog06);
 
     OSTaskDel(OS_PRIO_SELF);
 }
@@ -691,6 +690,14 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
 
     vpicret = 0;
 
+/*writeLongSerial("Aqui 150\r\n\0");
+writeLongSerial("Comando: ");  
+writeLongSerial(linhacomando);
+writeLongSerial("\r\n\0");
+writeLongSerial("Arg: ");
+writeLongSerial(linhaarg);
+writeLongSerial("\r\n\0");*/
+
     // Processar e definir o que fazer
     if (linhacomando[0] != 0)
     {
@@ -713,7 +720,7 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
         }
         else if (!strcmp(linhacomando,"MGUI") && iy == 4)
         {
-            OSTaskCreate(mguiTask, OS_NULL, &StkMgui[STACKSIZEMGUI], TASK_MGUI);
+            OSTaskCreate(mguiTask, OS_NULL, &StkMgui[STACKSIZEMGUI - 1], TASK_MGUI);
         }
         else if (!strcmp(linhacomando,"PWD") && iy == 3)
         {
@@ -1300,16 +1307,11 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
             }
             else if (!strcmp(linhacomando,"BASIC") && iy == 5)
             {
-writeLongSerial("Starting Basic with parameter: \0");
-writeLongSerial(linhaarg);
-writeLongSerial("\r\n\0");
                 memset(basicTaskArg, 0x00, sizeof(basicTaskArg));
                 if (linhaarg[0] != 0x00)
                     memcpy(basicTaskArg, linhaarg, sizeof(basicTaskArg) - 1);
-writeLongSerial("Executing Basic\r\n\0");
 
-                OSTaskCreate(basicTask, (void *)basicTaskArg, &StkBasic[STACKSIZEBASIC], TASK_BASIC);
-writeLongSerial("Ended Basic\r\n\0");
+                OSTaskCreate(basicTask, (void *)basicTaskArg, &StkBasic[STACKSIZEBASIC - 1], TASK_BASIC);
             }
             else
             {
@@ -1417,13 +1419,10 @@ writeLongSerial("Ended Basic\r\n\0");
 //-----------------------------------------------------------------------------
 void runFromMGUI(unsigned long vEnderExec)
 {
-    unsigned int ix;
+    unsigned int ix, iy;
     OS_TCB dataTask;
 
     *mguiRunTask = 0x00;
-
-    for (ix = 0; ix <= 6; ix++)
-        mguiListWindows[ix].active = 0;
 
     // Verifica qual task esta liberada
     for (ix = 0; ix < 6; ix++)
@@ -1436,6 +1435,11 @@ void runFromMGUI(unsigned long vEnderExec)
     // Cria Janela
     if (ix < 6)
     {
+        // Desativa todas as janelas para evitar conflito de id
+        for (iy = 0; iy <= 6; iy++)
+            mguiListWindows[iy].active = 0;
+
+        // Ativa a janela que sera chamada
         mguiListWindows[ix].id = ix + TASK_Prog01;
         mguiListWindows[ix].loadAddress = vEnderExec;
         mguiListWindows[ix].zOrder = 0;
@@ -1446,22 +1450,22 @@ void runFromMGUI(unsigned long vEnderExec)
     switch (ix)
     {
         case 0:
-            OSTaskCreate(prog01Task, (void *)vEnderExec, &StkTask01[STACKSIZEMGUI], TASK_Prog01);
+            OSTaskCreate(prog01Task, (void *)vEnderExec, &StkTask01[STACKSIZEMGUI - 1], TASK_Prog01);
             break;
         case 1:
-            OSTaskCreate(prog02Task, (void *)vEnderExec, &StkTask02[STACKSIZEMGUI], TASK_Prog02);
+            OSTaskCreate(prog02Task, (void *)vEnderExec, &StkTask02[STACKSIZEMGUI - 1], TASK_Prog02);
             break;
         case 2:
-            OSTaskCreate(prog03Task, (void *)vEnderExec, &StkTask03[STACKSIZEMGUI], TASK_Prog03);
+            OSTaskCreate(prog03Task, (void *)vEnderExec, &StkTask03[STACKSIZEMGUI - 1], TASK_Prog03);
             break;
         case 3:
-            OSTaskCreate(prog04Task, (void *)vEnderExec, &StkTask04[STACKSIZEMGUI], TASK_Prog04);
+            OSTaskCreate(prog04Task, (void *)vEnderExec, &StkTask04[STACKSIZEMGUI - 1], TASK_Prog04);
             break;
         case 4:
-            OSTaskCreate(prog05Task, (void *)vEnderExec, &StkTask05[STACKSIZEMGUI], TASK_Prog05);
+            OSTaskCreate(prog05Task, (void *)vEnderExec, &StkTask05[STACKSIZEMGUI - 1], TASK_Prog05);
             break;
         case 5:
-            OSTaskCreate(prog06Task, (void *)vEnderExec, &StkTask06[STACKSIZEMGUI], TASK_Prog06);
+            OSTaskCreate(prog06Task, (void *)vEnderExec, &StkTask06[STACKSIZEMGUI - 1], TASK_Prog06);
             break;
         default:
             break;
@@ -1503,6 +1507,9 @@ void memInit(void)
 //-----------------------------------------------------------------------------
 int fsSendByte(unsigned char vByte, unsigned char pType)
 {
+    asm volatile ("nop");
+    asm volatile ("nop");
+
     if (pType == 0)
         *vdskc = vByte;
     else if (pType == 1)
@@ -1517,6 +1524,10 @@ int fsSendByte(unsigned char vByte, unsigned char pType)
 unsigned char fsRecByte(unsigned char pType)
 {
     unsigned char vByte;
+    unsigned int ix;
+
+    asm volatile ("nop");
+    asm volatile ("nop");
 
     if (pType == 0)
         vByte = *vdskc;
@@ -1866,7 +1877,12 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
     vSizeTotalRec = 0;
 
-    xaddress = malloc(STOF_RX_BUFFER_SIZE);
+    #ifdef USE_MALLOC
+        xaddress = malloc(STOF_RX_BUFFER_SIZE);
+    #else
+        xaddress = (unsigned char *)ADDR_LOAD_FILE; // 128Kb Endereco fixo
+    #endif
+
     xaddressStart = xaddress;
 
     if (!xaddress)
@@ -1938,7 +1954,7 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
         printText("\r\n\0");
 
-        vcursor = vdp_get_cursor();
+        vcursor = vdp_get_cursor_safe();
 
         vmovposyatu = vcursor.y;
 
@@ -2000,7 +2016,11 @@ unsigned char fsLoadSerialToRun(char * vfilename)
     int iy;
     unsigned char *vEnderExec;
 
-    vEnderExec = malloc(1024);
+    #ifdef USE_MALLOC
+        vEnderExec = malloc(1024);
+    #else
+        vEnderExec = (unsigned char*)ADDR_LOAD_FILE;
+    #endif
 
     // Recebe os dados via Serial
     if (!loadSerialToMem2(vEnderExec, 1))
@@ -2022,15 +2042,19 @@ unsigned char fsLoadSerialToRun(char * vfilename)
     return RETURN_OK;
 }
 
+/* Sector swap buffer fora da stack para nao estourar a task stack em fsRWFile */
+static unsigned char vSectorSwap[MEDIA_SECTOR_SIZE];
+
 //-------------------------------------------------------------------------
 // Rotina para escrever/ler no disco
 //-------------------------------------------------------------------------
 unsigned char fsRWFile(unsigned long vclusterini, unsigned long voffset, unsigned char *buffer, unsigned char vtype)
 {
 	unsigned long vdata, vclusternew, vfat;
-	unsigned short vpos, vsecfat, voffsec, voffclus, vtemp1, vtemp2, ikk, ikj;
-    unsigned char vSectorSwap[MEDIA_SECTOR_SIZE];
+	unsigned long voffsec, voffclus;
+	unsigned short vpos, vsecfat, vtemp1, vtemp2, ikk, ikj;
     unsigned short vSwapSize;
+    unsigned char sqtdtam[10];
 
     vSwapSize = vdisk.sectorSize;
     if (vSwapSize > MEDIA_SECTOR_SIZE)
@@ -2584,7 +2608,8 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 {
 	unsigned long vfat, vdata, vclusterfile, vclusterdirnew, vclusteratual, vtemp1, vtemp2;
 	unsigned char fnameName[9], fnameExt[4];
-	unsigned short im, ix, iy, iz, vpos, vsecfat, ventrydir, ixold;
+    unsigned short im, ix, iy, iz, vpos, ventrydir, ixold;
+    unsigned long vsecfat;
 	unsigned short vdirdate, vdirtime, ikk, ikj, vtemp, vbytepic;
 	unsigned char vcomp, iw, ds1307[7], iww, vtempt[5], vlinha[5];
     unsigned char sqtdtam[10];
@@ -2991,11 +3016,11 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 			ventrydir++;
 			vdata++;
 		}
-
 		// Se conseguiu concluir a operacao solicitada, sai do loop
 		if (vclusterfile < ERRO_D_START || vdata == LAST_CLUSTER_FAT32)
 			break;
 		else {
+//writeLongSerial("Aqui 28.0\r\n\0");
 			// Posiciona na FAT, o endereco da pasta atual
 			vsecfat = vclusterdirnew / 128;
 			vfat = vdisk.fat + vsecfat;
@@ -3014,7 +3039,13 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
             ikk = vpos;
 			vclusterdirnew |= (unsigned long)gDataBuffer[ikk];
 
+            /* FAT32 entries use only 28 bits and EOC is in range 0x0FFFFFF8..0x0FFFFFFF */
+            vclusterdirnew &= 0x0FFFFFFF;
+            if (vclusterdirnew >= 0x0FFFFFF8)
+                vclusterdirnew = LAST_CLUSTER_FAT32;
+
 			if (vclusterdirnew != LAST_CLUSTER_FAT32) {
+
 				// Devolve a proxima posicao para procura/uso
             	vtemp1 = ((vclusterdirnew - 2) * vdisk.SecPerClus);
                 	vtemp2 = vdisk.data;
@@ -3130,7 +3161,8 @@ unsigned char fsUpdateDir()
 unsigned long fsFindNextCluster(unsigned long vclusteratual, unsigned char vtype)
 {
 	unsigned long vfat, vclusternew;
-	unsigned short vpos, vsecfat, ikk;
+    unsigned short vpos, ikk;
+    unsigned long vsecfat;
 
 	vsecfat = vclusteratual / 128;
 	vfat = vdisk.fat + vsecfat;
@@ -3146,6 +3178,11 @@ unsigned long fsFindNextCluster(unsigned long vclusteratual, unsigned char vtype
 	ikk = vpos + 1;
 	vclusternew |= (unsigned long)gDataBuffer[ikk] << 8;
 	vclusternew |= (unsigned long)gDataBuffer[vpos];
+
+    /* FAT32 entries use only 28 bits and EOC is in range 0x0FFFFFF8..0x0FFFFFFF */
+    vclusternew &= 0x0FFFFFFF;
+    if (vclusternew >= 0x0FFFFFF8)
+        vclusternew = LAST_CLUSTER_FAT32;
 
 	if (vtype != NEXT_FIND) {
 		if (vtype == NEXT_FREE) {
@@ -3603,7 +3640,6 @@ void catFile(unsigned char *parquivo) {
     unsigned char vbuffer[128];
 
     voffset = 0;
-
     if (fsFindDirPath(parquivo, FIND_PATH_PART) == FIND_PATH_RET_ERROR)
     {
         printText("Loading file error...\r\n\0");
@@ -3932,25 +3968,30 @@ unsigned char contains_wildcards(const char *pattern)
 unsigned long fsMalloc(unsigned long vMemSize)
 {
     unsigned long mMemDef;
-    unsigned int error_code = OS_ERR_NONE;
 
-    if (!vMemSize)
-        return 0;
+    #ifdef USE_MALLOC    
+        unsigned int error_code = OS_ERR_NONE;
 
-    if (heap_sem)
-        OSSemPend(heap_sem, 0, &error_code);
+        if (!vMemSize)
+            return 0;
 
-    mMemDef = (unsigned long)malloc(vMemSize);
+        if (heap_sem)
+            OSSemPend(heap_sem, 0, &error_code);
 
-    if (mMemDef && ((mMemDef + vMemSize - 1) > MMSJ_HEAP_LIMIT))
-    {
-        free((void *)mMemDef);
+        mMemDef = (unsigned long)malloc(vMemSize);
+
+        if (mMemDef && ((mMemDef + vMemSize - 1) > MMSJ_HEAP_LIMIT))
+        {
+            free((void *)mMemDef);
+            mMemDef = 0;
+        }
+
+        if (heap_sem)
+            OSSemPost(heap_sem);
+    #else
         mMemDef = 0;
-    }
-
-    if (heap_sem)
-        OSSemPost(heap_sem);
-
+    #endif
+    
     return mMemDef;
 }
 

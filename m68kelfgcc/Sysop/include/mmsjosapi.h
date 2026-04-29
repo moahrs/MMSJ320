@@ -3,7 +3,7 @@
 
 // Function Shared Definitions
 #define MMSJOS_FUNC_TABLE    0x00800034
-#define MGUI_FUNC_TABLE      0x00803AC0
+#define MGUI_FUNC_TABLE      0x00803B24
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);
@@ -40,7 +40,7 @@ typedef void (*writesxyType)(unsigned short x, unsigned short y, unsigned char s
 typedef void (*writecxyType)(unsigned char sizef, unsigned char pbyte, unsigned short pcolor, unsigned short pbcolor);
 typedef void (*locatexyType)(unsigned short xx, unsigned short yy);
 typedef void (*SaveScreenNewType)(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi, unsigned short pwidth, unsigned short pheight);
-typedef void (*RestoreScreenType)(MGUI_SAVESCR vEnderSave);
+typedef void (*RestoreScreenType)(MGUI_SAVESCR *mguiSave);
 typedef void (*SetDotType)(unsigned short x, unsigned short y, unsigned short color);
 typedef void (*SetByteType)(unsigned short ix, unsigned short iy, unsigned char pByte, unsigned short pfcolor, unsigned short pbcolor);
 typedef void (*FillRectType)(unsigned char xi, unsigned char yi, unsigned short pwidth, unsigned char pheight, unsigned char pcor);

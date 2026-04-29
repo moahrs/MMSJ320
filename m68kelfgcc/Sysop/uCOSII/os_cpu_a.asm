@@ -302,7 +302,11 @@ OSIntExit68K_1:
 ; Notes       : 1) You MUST increment 'OSIntNesting' and NOT call OSIntEnter()
 ;               2) You MUST save ALL the CPU registers as shown below
 ;               3) You MUST JUMP to OSIntExit68K() instead of call the function.
+;
+; Location    : 0x8001D4 (update monitor.c ISR vector table if needed)
 ;********************************************************************************************************
+
+        SECTION   code
 
 _OSTickISR:
         OR.W      #$0700,SR                     ; Disable ALL interrupts

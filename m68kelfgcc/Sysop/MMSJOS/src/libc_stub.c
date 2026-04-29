@@ -1,7 +1,55 @@
 #include <stddef.h>
 
-static unsigned char heap_buffer[128 * 1024];
-static size_t heap_used;
+/* -----------------------------------------------------------------------
+ * Heap em endereço fixo 0x00828000, seguro após .text/.data/.rodata.
+ * Tamanho: 0x00048000 = 288KB
+ * ----------------------------------------------------------------------- */
+#define HEAP_START  ((char *)0x00828000UL)
+#define HEAP_END    ((char *)0x0086FFFFUL)
+
+/* Bloco de cabeçalho para lista encadeada de alocação */
+typedef struct blk_hdr {
+    size_t           size;  /* tamanho do payload em bytes               */
+    int              free;  /* 1 = livre, 0 = ocupado                    */
+    struct blk_hdr  *next;  /* próximo bloco ou NULL                     */
+} blk_hdr_t;
+
+#define BLK_HDR_SZ  (sizeof(blk_hdr_t))
+
+static blk_hdr_t *heap_head = (blk_hdr_t *)0;  /* inicializado na 1ª chamada */
+
+static void heap_init(void)
+{
+    heap_head = (blk_hdr_t *)HEAP_START;
+    heap_head->size = (size_t)(HEAP_END - HEAP_START) - BLK_HDR_SZ;
+    heap_head->free = 1;
+    heap_head->next = (blk_hdr_t *)0;
+}
+
+/* Funde blocos livres adjacentes para evitar fragmentação */
+static void heap_coalesce(void)
+{
+    blk_hdr_t *cur = heap_head;
+    while (cur && cur->next) {
+        if (cur->free && cur->next->free) {
+            cur->size += BLK_HDR_SZ + cur->next->size;
+            cur->next  = cur->next->next;
+        } else {
+            cur = cur->next;
+        }
+    }
+}
+
+static int heap_ptr_in_range(const void *ptr)
+{
+    const char *p = (const char *)ptr;
+    const char *heap_first_payload = HEAP_START + BLK_HDR_SZ;
+    const char *heap_limit = HEAP_END + 1; /* fim exclusivo */
+
+    if (!ptr) return 0;
+    if (p < heap_first_payload || p >= heap_limit) return 0;
+    return 1;
+}
 
 void *memcpy(void *dest, const void *src, size_t n) {
     unsigned char *d = (unsigned char *)dest;
@@ -178,27 +226,65 @@ int toupper(int c) {
 }
 
 void *malloc(size_t size) {
-    size_t align = 4;
-    size_t aligned_size = (size + (align - 1)) & ~(align - 1);
-    if (aligned_size == 0 || heap_used + aligned_size > sizeof(heap_buffer)) return NULL;
-    {
-        void *ptr = &heap_buffer[heap_used];
-        heap_used += aligned_size;
-        return ptr;
+    blk_hdr_t *cur;
+    blk_hdr_t *best = (blk_hdr_t *)0;
+
+    if (size == 0) return (void *)0;
+
+    /* alinha para 4 bytes */
+    size = (size + 3u) & ~3u;
+
+    if (!heap_head) heap_init();
+
+    /* first-fit: procura bloco livre suficiente */
+    for (cur = heap_head; cur; cur = cur->next) {
+        if (cur->free && cur->size >= size) {
+            best = cur;
+            break;
+        }
     }
+    if (!best) return (void *)0;
+
+    /* divide o bloco se sobrar espaço para pelo menos mais um header + 4 bytes */
+    if (best->size >= size + BLK_HDR_SZ + 4u) {
+        blk_hdr_t *split = (blk_hdr_t *)((char *)(best + 1) + size);
+        split->size = best->size - size - BLK_HDR_SZ;
+        split->free = 1;
+        split->next = best->next;
+        best->next  = split;
+        best->size  = size;
+    }
+    best->free = 0;
+    return (void *)(best + 1);
 }
 
 void free(void *ptr) {
-    (void)ptr;
+    blk_hdr_t *blk;
+    if (!ptr) return;
+    if (!heap_ptr_in_range(ptr)) return;
+    blk = ((blk_hdr_t *)ptr) - 1;
+    if ((char *)blk < HEAP_START || (char *)blk >= (HEAP_END + 1)) return;
+    blk->free = 1;
+    heap_coalesce();
 }
 
 void *realloc(void *ptr, size_t size) {
-    if (ptr == NULL) return malloc(size);
-    {
-        void *new_ptr = malloc(size);
-        if (new_ptr == NULL) return NULL;
-        return new_ptr;
-    }
+    blk_hdr_t *blk;
+    void *new_ptr;
+    size_t copy_size;
+
+    if (!ptr)  return malloc(size);
+    if (!size) { free(ptr); return (void *)0; }
+
+    blk = ((blk_hdr_t *)ptr) - 1;
+    if (blk->size >= ((size + 3u) & ~3u)) return ptr;  /* já cabe */
+
+    new_ptr = malloc(size);
+    if (!new_ptr) return (void *)0;
+    copy_size = blk->size < size ? blk->size : size;
+    __builtin_memcpy(new_ptr, ptr, copy_size);
+    free(ptr);
+    return new_ptr;
 }
 
 const char _ctype_[257] = {

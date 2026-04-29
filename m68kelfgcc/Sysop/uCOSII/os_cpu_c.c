@@ -121,6 +121,7 @@ OS_STK *OSTaskStkInit(void (*task)(void *pd), void *pdata, OS_STK *ptos, INT16U 
 void *OSVectGet(INT8U vect)
 {
     void *addr;
+    OS_CPU_SR  cpu_sr = 0u;
 
     OS_ENTER_CRITICAL();
     addr = (void *)(*(INT32U *)((INT16U)vect * 4));
@@ -144,6 +145,7 @@ void *OSVectGet(INT8U vect)
 void OSVectSet(INT8U vect, void (*addr)(void))
 {
     INT32U *pvect;
+    OS_CPU_SR  cpu_sr = 0u;
 
     pvect = (INT32U *)((INT16U)vect * 4);
     OS_ENTER_CRITICAL();

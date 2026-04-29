@@ -61,7 +61,15 @@ typedef unsigned short OS_STK;                   /* Each stack entry is 16-bit w
 *             leaving the critical section.
 *********************************************************************************************************
 */
-#define  OS_CRITICAL_METHOD    2
+/* Method #3: Save/restore SR to a local C variable (cpu_sr).
+ * This is the correct method for GCC because the compiler does not know
+ * that method #2's inline asm changes SP, causing SP-relative local
+ * variable accesses to be off by 2 bytes inside critical sections.
+ * os_core.c already declares 'OS_CPU_SR cpu_sr = 0u;' in every function
+ * that uses these macros, so method #3 works without any source changes.  */
+typedef  unsigned short  OS_CPU_SR;
+
+#define  OS_CRITICAL_METHOD    3
 
 #if      OS_CRITICAL_METHOD == 1
 #define  OS_ENTER_CRITICAL()  __asm__ volatile ("ori.w #0x0700,%%sr" ::: "memory")
@@ -71,6 +79,11 @@ typedef unsigned short OS_STK;                   /* Each stack entry is 16-bit w
 #if      OS_CRITICAL_METHOD == 2
 #define  OS_ENTER_CRITICAL()  __asm__ volatile ("move.w %%sr,-(%%sp)\n\tori.w #0x0700,%%sr" ::: "memory")
 #define  OS_EXIT_CRITICAL()   __asm__ volatile ("move.w (%%sp)+,%%sr" ::: "memory")
+#endif
+
+#if      OS_CRITICAL_METHOD == 3
+#define  OS_ENTER_CRITICAL()  __asm__ volatile ("move.w %%sr,%0\n\tori.w #0x0700,%%sr" : "=d"(cpu_sr) :: "memory")
+#define  OS_EXIT_CRITICAL()   __asm__ volatile ("move.w %0,%%sr" :: "d"(cpu_sr) : "memory")
 #endif
 
 #define  CPU_INT_DIS()        __asm__ volatile ("ori.w #0x0700,%%sr" ::: "memory")

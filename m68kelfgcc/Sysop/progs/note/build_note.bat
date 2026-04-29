@@ -61,5 +61,6 @@ exit /b 0
 echo.
 echo Artefatos gerados:
 dir note.elf note.bin note.map note.lst
-
+copy /Y note.bin D:\PROJETOS\MMSJ320\HD_ATU\MGUI\PROGS\NOTE.BIN
+copy /Y note.bin F:\MGUI\PROGS\NOTE.BIN
 exit /b 0

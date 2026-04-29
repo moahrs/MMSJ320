@@ -18,10 +18,25 @@
 *--------------------------------------------------------------------------------
 *
 *********************************************************************************/
+//#define USE_MALLOC
 #include <ucos_ii.h>
 #include <ctype.h>
 #include <string.h>
+#ifdef USE_MALLOC
 #include <malloc.h>
+#endif
+#ifndef USE_MALLOC
+// 128KB Save Screen - 0x0083FFFF
+#define ADDR_SAVE_SCR   0x00820000 
+// 128KB Load Files Diversos - 0x0085FFFF
+#define ADDR_LOAD_FILE  0x00840000
+// 64KB Diversos - 0x0086FFFF
+#define ADDR_LOAD_ICONS 0x00860000
+// 64KB Load Files.bin - 0x0087FFFF
+#define ADDR_EXEC_FILES 0x00870000
+// 256KB Load App's - 0x008CFFFF
+#define ADDR_EXEC_PROG  0x00880000
+#endif
 #include <stdlib.h>
 #include "mmsj320vdp.h"
 #include "mmsj320mfp.h"
@@ -40,6 +55,9 @@ extern unsigned long *startBasic3;
 extern unsigned long *startBasic4;
 extern unsigned long *startBasic5;
 extern unsigned char *paramBasic;
+
+SaveScreenSlot ssSlots[SS_MAX_BLOCKS];
+unsigned int ssNextId = 1;
 
 typedef struct LIST_WINDOWS
 {
@@ -144,7 +162,7 @@ void vdp_set_cursor_pos_gui(unsigned char direction)
     unsigned char pMoveIdX = 6, pMoveIdY = 8;
     VDP_COORD vcursor;
 
-    vcursor = vdp_get_cursor();
+    vcursor = vdp_get_cursor_safe();
 
     switch (direction)
     {
@@ -176,7 +194,7 @@ void vdp_write_gui(unsigned char chr)
     unsigned char lineChar, pixel, color;
     VDP_COORD cursor;
 
-    cursor = vdp_get_cursor();
+    cursor = vdp_get_cursor_safe();
 
     name_offset = cursor.y * (cursor.maxx + 1) + cursor.x; // Position in name table
     pattern_offset = name_offset << 3;
@@ -263,7 +281,6 @@ void vdp_write_gui(unsigned char chr)
     }
 
     cursor.y = vAntY;
-
     vdp_set_cursor(cursor.x, cursor.y);
 }
 
@@ -315,14 +332,29 @@ void locatexy(unsigned short xx, unsigned short yy) {
 }
 
 //-----------------------------------------------------------------------------
+int ss_alloc_slot(void)
+{
+    int i;
+
+    for (i = 0; i < SS_MAX_BLOCKS; i++)
+    {
+        if (!ssSlots[i].used)
+            return i;
+    }
+
+    return -1;
+}
+
 void SaveScreenNew(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi, unsigned short pwidth, unsigned short pheight)
 {
     unsigned short xf, yf, xiant;
     unsigned int ix, iy, vsizetotal;
+    unsigned int bytes_per_row, total_rows;
     unsigned int offset, posX, posY, modY, saveOffSet, saveOffSetAnt;
     unsigned char *saverPat;
     unsigned char *saverCor;
-
+    int slot;
+    
     // Manter leitura rapida de 8 pixels (1 pixel por Byte)
     xiant = xi;
 
@@ -342,15 +374,60 @@ void SaveScreenNew(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi,
 
     if (yf > 191)
         yf = 191;
+        
+    if (xf < xi || yf < yi)
+    {
+        mguiSave->id = -1;
+        return;
+    }
 
-    vsizetotal = (((pwidth + 1) / 8) * (pheight + 1));
+    bytes_per_row = (((unsigned int)xf - (unsigned int)xi) / 8u) + 1u;
+    total_rows = ((unsigned int)yf - (unsigned int)yi) + 1u;
+    vsizetotal = bytes_per_row * total_rows;
 
-    saverPat = malloc(vsizetotal);
-    saverCor = malloc(vsizetotal);
+    #ifdef USE_MALLOC
+        saverPat = malloc(vsizetotal);
+        saverCor = malloc(vsizetotal);
+    #else
+        slot = ss_alloc_slot();
+
+        if (slot < 0)
+            return 0;   /* sem espaço */
+
+        saverPat = ADDR_SAVE_SCR + ((unsigned long)slot * SS_BLOCK_SIZE);
+        saverCor = saverPat + SS_PAT_SIZE;
+
+        ssSlots[slot].used    = 1;
+        ssSlots[slot].id      = ssNextId++;
+        ssSlots[slot].addrPat = saverPat;
+        ssSlots[slot].addrCol = saverCor;
+
+        mguiSave->id = ssSlots[slot].id;
+        mguiSave->xi = xi;
+        mguiSave->yi = yi;
+        mguiSave->xf = xf;
+        mguiSave->yf = yf;
+    #endif
+
+    #ifdef USE_MALLOC
+        if (!saverPat || !saverCor)
+        {
+            if (saverPat) free(saverPat);
+            if (saverCor) free(saverCor);
+            mguiSave->pat = 0;
+            mguiSave->cor = 0;
+            mguiSave->size = 0;
+            mguiSave->xi = xi;
+            mguiSave->yi = yi;
+            mguiSave->xf = xf;
+            mguiSave->yf = yf;
+            return;
+        }
+    #endif
 
     saveOffSet = 0;
 
-    for (iy = yi; iy < yf; iy++)
+    for (iy = yi; iy <= yf; iy++)
     {
         ix = xi;
         saveOffSetAnt = saveOffSet;
@@ -388,13 +465,15 @@ void SaveScreenNew(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi,
         }
     }
 
-    mguiSave->pat = saverPat;
-    mguiSave->cor = saverCor;
-    mguiSave->size = vsizetotal;
-    mguiSave->xi = xi;
-    mguiSave->yi = yi;
-    mguiSave->xf = xf;
-    mguiSave->yf = yf;
+    #ifdef USE_MALLOC
+        mguiSave->pat = saverPat;
+        mguiSave->cor = saverCor;
+        mguiSave->size = vsizetotal;
+        mguiSave->xi = xi;
+        mguiSave->yi = yi;
+        mguiSave->xf = xf;
+        mguiSave->yf = yf;
+    #endif
 }
 
 //-----------------------------------------------------------------------------
@@ -408,7 +487,20 @@ MGUI_SAVESCR SaveScreen(unsigned short xi, unsigned short yi, unsigned short pwi
 }
 
 //-----------------------------------------------------------------------------
-void RestoreScreen(MGUI_SAVESCR pEnderSave) {
+int ss_find_slot(unsigned int id)
+{
+    int i;
+
+    for (i = 0; i < SS_MAX_BLOCKS; i++)
+    {
+        if (ssSlots[i].used && ssSlots[i].id == id)
+            return i;
+    }
+
+    return -1;
+}
+
+void RestoreScreen(MGUI_SAVESCR *mguiSave) {
     unsigned short xi,yi,xf, yf;
     unsigned int ix, iy;
     unsigned int offset, posX, posY, modY, saveOffSet, saveOffSetAnt;
@@ -416,18 +508,33 @@ void RestoreScreen(MGUI_SAVESCR pEnderSave) {
     unsigned char color;
     unsigned char *saverPat;
     unsigned char *saverCor;
+    int slot;
 
-    saverPat = pEnderSave.pat;
-    saverCor = pEnderSave.cor;
+    slot = ss_find_slot(mguiSave->id);
 
-    xi = pEnderSave.xi;
-    xf = pEnderSave.xf;
-    yi = pEnderSave.yi;
-    yf = pEnderSave.yf;
+    if (slot < 0)
+        return;   /* slot não encontrado */ 
+
+    #ifdef USE_MALLOC
+        saverPat = mguiSave->pat;
+        saverCor = mguiSave->cor;
+        
+        if (!saverPat || !saverCor || mguiSave->size == 0)
+            return;
+    #else
+        saverPat = ssSlots[slot].addrPat;
+        saverCor = ssSlots[slot].addrCol;    
+        ssSlots[slot].used = 0; /* libera slot */
+    #endif
+
+    xi = mguiSave->xi;
+    xf = mguiSave->xf;
+    yi = mguiSave->yi;
+    yf = mguiSave->yf;
 
     saveOffSet = 0;
 
-    for (iy = yi; iy < yf; iy++)
+    for (iy = yi; iy <= yf; iy++)
     {
         ix = xi;
         while (ix <= xf)
@@ -450,38 +557,10 @@ void RestoreScreen(MGUI_SAVESCR pEnderSave) {
         }
     }
 
-    free(pEnderSave.cor);
-    free(pEnderSave.pat);
-
-/*
-    for (iy = yi; iy <= yf; iy++)
-    {
-        ix = xi;
-        posX = (int)(8 * (ix / 8));
-        posY = (int)(256 * (iy / 8));
-        modY = (int)(iy % 8);
-        offset = posX + modY + posY;
-
-        setWriteAddress(mgui_pattern_table + offset);
-        saveOffSetAnt = saveOffSet;
-        while (ix <= xf)
-        {
-            pixel = *(saverPat + saveOffSet++);
-            *vvdgd = (pixel);
-            ix += 8;
-        }
-
-        ix = xi;
-        setWriteAddress(mgui_color_table + offset);
-        saveOffSet = saveOffSetAnt;
-        while (ix <= xf)
-        {
-            color = *(saverCor + saveOffSet++);
-            *vvdgd = (color);
-            ix += 8;
-        }
-    }
-*/
+    #ifdef USE_MALLOC    
+        free(mguiSave->cor);
+        free(mguiSave->pat);
+    #endif
 }
 
 //-----------------------------------------------------------------------------
@@ -1222,6 +1301,7 @@ void startMGI(void) {
     unsigned long cfgSize;
     int percent;
     long ix;
+    char errorMalloc;
     VDP_COLOR cores;
     VDP_COORD cursor;
     unsigned int error_code = OS_ERR_NONE;
@@ -1233,8 +1313,11 @@ void startMGI(void) {
     *startBasic = 2;    // Inicia Basic vindo do MGUI sem mensagens e textos
     *mguiRunTask = 0x00;
 
-    cursor = vdp_get_cursor();
-    //cores = vdp_get_color();
+    // Limpar slots de SaveScreen
+    for (iy = 0; iy < SS_MAX_BLOCKS; iy++)
+        ssSlots[iy].used = 0;
+
+    cursor = vdp_get_cursor_safe();
     mguiVideoFontes = getVideoFontes();
 
     vxgmax = cursor.maxx;
@@ -1248,12 +1331,28 @@ void startMGI(void) {
 
     fgcolorMgui = VDP_WHITE; // cores.fg;
     bgcolorMgui = VDP_DARK_BLUE; // cores.bg;
+    
+    errorMalloc = 0;
 
     vdp_get_cfg(&mgui_pattern_table, &mgui_color_table);
-    vLoadImage = malloc(SIZE_LOAD_IMAGE_MEM);
-    loadFile("/MGUI/IMAGES/UTILITY.PBM", (unsigned long*)vLoadImage);
-    putImagePbmP4((unsigned long*)vLoadImage, 8, 1);
-    free(vLoadImage);
+    #ifdef USE_MALLOC
+        vLoadImage = malloc(SIZE_LOAD_IMAGE_MEM);
+    #else
+        vLoadImage = (unsigned char*)ADDR_LOAD_FILE;   // Endereco fixo para carregar a imagem, nao vem de malloc. 
+    #endif
+    if (vLoadImage)
+    {
+        loadFile("/MGUI/IMAGES/UTILITY.PBM", (unsigned long*)vLoadImage);
+        putImagePbmP4((unsigned long*)vLoadImage, 8, 1);
+        #ifdef USE_MALLOC
+            free(vLoadImage);
+        #endif
+    }
+    else 
+    {
+        errorMalloc = 1;
+        vLoadImage = 0;
+    }
 
     writesxy(116,130,2,"MGUI",vcorwf,vcorwb);
     writesxy(71,140,1,"Graphical",vcorwf,vcorwb);
@@ -1261,87 +1360,95 @@ void startMGI(void) {
     writesxy(105,150,1,"v"versionMgui,vcorwf,vcorwb);
 
     writesxy(86,170,1,"Loading Config",vcorwf,vcorwb);
-    /*memPosConfig = malloc(SIZE_LOAD_CFG_MEM + 1);
-    if (memPosConfig)
-    {*/
-        cfgSize = loadFile("/MGUI/MGUI.CFG", (unsigned short*)memPosConfig);
-        if (cfgSize > SIZE_LOAD_CFG_MEM)
-            cfgSize = SIZE_LOAD_CFG_MEM;
-        memPosConfig[cfgSize] = 0x00;
-    /*}*/
+    cfgSize = loadFile("/MGUI/MGUI.CFG", (unsigned short*)memPosConfig);
+    if (cfgSize > SIZE_LOAD_CFG_MEM)
+        cfgSize = SIZE_LOAD_CFG_MEM;
+    memPosConfig[cfgSize] = 0x00;
 
     writesxy(53,170,1,"Loading Icons ",vcorwf,vcorwb);
 
-    imgsMenuSys = malloc(SIZE_LOAD_ICONS_MEM);
+    #ifdef USE_MALLOC
+        imgsMenuSys = malloc(SIZE_LOAD_ICONS_MEM);
+    #else
+        imgsMenuSys = (unsigned char*)ADDR_LOAD_ICONS;   // Endereco fixo para carregar as imagens, nao vem de malloc.
+    #endif
 
-    writesxy(137,170,1,"ICOFOLD.PBM",vcorwf,vcorwb);
-    loadFile("/MGUI/IMAGES/ICOFOLD.PBM", imgsMenuSys);
-    writesxy(137,170,1,"ICORUN.PBM ",vcorwf,vcorwb);
-    loadFile("/MGUI/IMAGES/ICORUN.PBM", (imgsMenuSys + 64));
-    writesxy(137,170,1,"ICOOS.PBM  ",vcorwf,vcorwb);
-    loadFile("/MGUI/IMAGES/ICOOS.PBM", (imgsMenuSys + 128));
-    writesxy(137,170,1,"ICOSET.PBM ",vcorwf,vcorwb);
-    loadFile("/MGUI/IMAGES/ICOSET.PBM", (imgsMenuSys + 192));
-    writesxy(137,170,1,"ICOOFF.PBM ",vcorwf,vcorwb);
-    loadFile("/MGUI/IMAGES/ICOOFF.PBM", (imgsMenuSys + 256));
+    if (imgsMenuSys)
+    {
+        writesxy(137,170,1,"ICOFOLD.PBM",vcorwf,vcorwb);
+        loadFile("/MGUI/IMAGES/ICOFOLD.PBM", imgsMenuSys);
+        writesxy(137,170,1,"ICORUN.PBM ",vcorwf,vcorwb);
+        loadFile("/MGUI/IMAGES/ICORUN.PBM", (imgsMenuSys + 64));
+        writesxy(137,170,1,"ICOOS.PBM  ",vcorwf,vcorwb);
+        loadFile("/MGUI/IMAGES/ICOOS.PBM", (imgsMenuSys + 128));
+        writesxy(137,170,1,"ICOSET.PBM ",vcorwf,vcorwb);
+        loadFile("/MGUI/IMAGES/ICOSET.PBM", (imgsMenuSys + 192));
+        writesxy(137,170,1,"ICOOFF.PBM ",vcorwf,vcorwb);
+        loadFile("/MGUI/IMAGES/ICOOFF.PBM", (imgsMenuSys + 256));
+    }
+    else
+    {
+        errorMalloc = 1;
+        imgsMenuSys = 0;
+    }
+
     writesxy(53,170,1,"      Please Wait...       ",vcorwf,vcorwb);
 
-    //for (ix = 0; ix < 99999; ix++);
-
-    memset(tmp, 0x00, sizeof(tmp));
-    if (mguiCfgGet("START", "COLOR_F", tmp, sizeof(tmp)))
-        vcorwf = atoi(tmp);
-    memset(tmp, 0x00, sizeof(tmp));
-    if (mguiCfgGet("START", "COLOR_B", tmp, sizeof(tmp)))
-        vcorwb = atoi(tmp);
-    memset(tmp, 0x00, sizeof(tmp));
-    if (mguiCfgGet("START", "COLOR_B2", tmp, sizeof(tmp)))
-        vcorwb2 = atoi(tmp);
-
-    vdp_init(VDP_MODE_G2, vcorwb2, 0, 0);
-    vdp_set_bdcolor(vcorwb2);
-
-    mouseX = 128;
-    mouseY = 96;
-    redrawMain();
-
-    TrocaSpriteMouse(MOUSE_POINTER);
-    spthdlmouse = vdp_sprite_init(0, 0, VDP_DARK_RED);
-    statusVdpSprite = vdp_sprite_set_position(spthdlmouse, mouseX, mouseY);
-    
-    for (iy = 0; iy <= 6; iy++)
+    if (!errorMalloc)
     {
-        mguiListWindows[iy].id = 0;
-        mguiListWindows[iy].loadAddress = 0;
-        mguiListWindows[iy].zOrder = 0;
-        mguiListWindows[iy].active = 0;
-    }
+        memset(tmp, 0x00, sizeof(tmp));
+        if (mguiCfgGet("START", "COLOR_F", tmp, sizeof(tmp)))
+            vcorwf = atoi(tmp);
+        memset(tmp, 0x00, sizeof(tmp));
+        if (mguiCfgGet("START", "COLOR_B", tmp, sizeof(tmp)))
+            vcorwb = atoi(tmp);
+        memset(tmp, 0x00, sizeof(tmp));
+        if (mguiCfgGet("START", "COLOR_B2", tmp, sizeof(tmp)))
+            vcorwb2 = atoi(tmp);
 
-    mguiListWindows[6].id = 99;
-    mguiListWindows[6].zOrder = 0;
-    mguiListWindows[6].active = 1;
+        vdp_init(VDP_MODE_G2, vcorwb2, 0, 0);
+        vdp_set_bdcolor(vcorwb2);
 
-    OSTaskCreate(mouseTask, OS_NULL, &StkMouse[STACKSIZEMOUSE], TASK_MGUI_MOUSE);
+        mouseX = 128;
+        mouseY = 96;
+        redrawMain();
 
-    vIndicaDialog = 0;
+        TrocaSpriteMouse(MOUSE_POINTER);
+        spthdlmouse = vdp_sprite_init(0, 0, VDP_DARK_RED);
+        statusVdpSprite = vdp_sprite_set_position(spthdlmouse, mouseX, mouseY);
+        
+        for (iy = 0; iy <= 6; iy++)
+        {
+            mguiListWindows[iy].id = 0;
+            mguiListWindows[iy].loadAddress = 0;
+            mguiListWindows[iy].zOrder = 0;
+            mguiListWindows[iy].active = 0;
+        }
 
-    // Inicia Controles de Tela (Mouse e Teclado)
-    while(1)
-    {
-        if (vIndicaDialog)
-            OSTaskSuspend(OS_PRIO_SELF);
+        mguiListWindows[6].id = 99;
+        mguiListWindows[6].zOrder = 0;
+        mguiListWindows[6].active = 1;
 
-        if (!editortela())
-            break;
+        OSTaskCreate(mouseTask, OS_NULL, &StkMouse[STACKSIZEMOUSE], TASK_MGUI_MOUSE);
 
-        OSTimeDlyHMSM(0, 0, 0, 15);
-    }
+        vIndicaDialog = 0;
 
-    free(imgsMenuSys);
-    if (memPosConfig)
-    {
-        free(memPosConfig);
-        memPosConfig = 0x00;
+        // Inicia Controles de Tela (Mouse e Teclado)
+        while(1)
+        {
+            if (vIndicaDialog)
+                OSTaskSuspend(OS_PRIO_SELF);
+
+            if (!editortela())
+                break;
+
+            OSTimeDlyHMSM(0, 0, 0, 15);
+        }
+
+        #ifdef USE_MALLOC
+            free(imgsMenuSys);
+        #endif
+        /* memPosConfig usa buffer fixo (0x008EF800), nao vem de malloc. */
     }
 
     vdp_init(VDP_MODE_TEXT, VDP_BLACK, 0, 0);
@@ -1350,6 +1457,9 @@ void startMGI(void) {
     clearScr();
 
     OSTaskDel(TASK_MGUI_MOUSE);
+
+    if (errorMalloc)
+        printText("Error allocating memory. Process aborted.\r\n\0");
 
     printText("Ok\r\n\0");
     printText("#>");
@@ -1557,7 +1667,7 @@ void desenhaMenu(void)
     unsigned int vx, vy;
     VDP_COORD cursor;
 
-    cursor = vdp_get_cursor();
+    cursor = vdp_get_cursor_safe();
 
     vx = COLMENU;
     vy = LINMENU;
@@ -1744,14 +1854,14 @@ unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime)
 	unsigned char qtdnl, maxlenstr;
 	unsigned char qtdcstr[8], poscstr[8], cc, dd, vbty = 0;
 	unsigned char *bstrptr;
-    unsigned char slinha[7][26];
     VDP_COORD cursor;
+    unsigned char slinha[7][26];
     MGUI_SAVESCR vsavescr;
     unsigned char vbuttonmess[16];
     unsigned int error_code = OS_ERR_NONE;
     OS_TCB *ptcb;
 
-    cursor = vdp_get_cursor();
+    cursor = vdp_get_cursor_safe();
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
 
@@ -1867,7 +1977,7 @@ unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime)
         for (cc = 0; cc <= btime; cc++);
     }
 
-    RestoreScreen(vsavescr);
+    RestoreScreen(&vsavescr);
 
     TrocaSpriteMouse(MOUSE_POINTER);
 
@@ -2096,26 +2206,17 @@ void menuTask(void *pData)
                         if (vsizefilemalloc != ERRO_D_NOT_FOUND)
                         {
                             TrocaSpriteMouse(MOUSE_HOURGLASS);
-                            vEndExec = 0x00870000; // endereco fixo FILES
-                            *startBasic1 = malloc(2048);
-                            if (!vEndExec || !*startBasic1)
-                            {
-                                TrocaSpriteMouse(MOUSE_POINTER);
-                                message("No memory to load FILES.BIN\0", BTCLOSE, 0);
-                            }
+                            vEndExec = (unsigned char*)ADDR_EXEC_FILES; // endereco fixo FILES
+                            loadFile("/MGUI/PROGS/FILES.BIN", (unsigned long*)vEndExec);
+                            paramBasic[0] = '\0';
+                            strcpy(paramBasic, ",");
+                            ltoa(vsizefilemalloc, tmp, 10);
+                            strcat(paramBasic, tmp);
+                            TrocaSpriteMouse(MOUSE_POINTER);
+                            if (!verro)
+                                runFromMGUI(vEndExec);
                             else
-                            {
-                                loadFile("/MGUI/PROGS/FILES.BIN", (unsigned long*)vEndExec);
-                                TrocaSpriteMouse(MOUSE_POINTER);
-                                if (!verro)
-                                    runFromMGUI(vEndExec);
-                                else {
-                                    message("Loading Error...\0", BTCLOSE, 0);
-                                    //free(vEndExec); // endereco fixo, nao aloca
-                                    free(*startBasic1);
-                                    *startBasic1 = 0;
-                                }
-                            }
+                                message("Loading Error...\0", BTCLOSE, 0);
                         }
                         else
                             message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);
@@ -2136,7 +2237,7 @@ void menuTask(void *pData)
         OSTimeDlyHMSM(0, 0, 0, 50);
     }
 
-    RestoreScreen(endSaveMenu);
+    RestoreScreen(&endSaveMenu);
 
     OSTaskDel(OS_PRIO_SELF);
 }
@@ -2175,7 +2276,7 @@ void runBin(void)
         OSTimeDlyHMSM(0, 0, 0, 30);
     }
 
-    RestoreScreen(vsavescr);
+    RestoreScreen(&vsavescr);
 
     if (vwb != BTOK)
         return;
@@ -2237,11 +2338,11 @@ void runBin(void)
     vUseFixedAddr = 1;
     if (!strcmp(vfullpath, "/MGUI/PROGS/FILES.BIN"))
     {
-        vEndExec = (unsigned char*)0x00870000;
+        vEndExec = (unsigned char*)ADDR_EXEC_FILES;
     }
     else
     {
-        vEndExec = (unsigned char*)0x00880000;
+        vEndExec = (unsigned char*)ADDR_EXEC_PROG;
     }
 
     if (!vEndExec)
@@ -2302,7 +2403,7 @@ void importFile(void)
         OSTimeDlyHMSM(0, 0, 0, 30);
     }
 
-    RestoreScreen(vsavescr);
+    RestoreScreen(&vsavescr);
 
     if (vwb == BTOK)
     {
@@ -2343,7 +2444,11 @@ void importFile(void)
                 // Recebe os dados via Serial
                 writesxy(12,55,8,"Reading Serial...",vcorwf,vcorwb);
 
-                xaddress = malloc(256UL * 1024UL); // Aloca 256KB para receber o arquivo via serial
+                #ifdef USE_MALLOC
+                    xaddress = malloc(128UL * 1024UL); // Aloca 128KB para receber o arquivo via serial
+                #else
+                    xaddress = (unsigned char*)ADDR_LOAD_FILE; // Endereço fixo
+                #endif
                 xaddressStart = xaddress;
 
                 if (!loadSerialToMem2(xaddressStart, 0))
@@ -2354,7 +2459,9 @@ void importFile(void)
                     vErro = fsOpenFile(vfilename);
                     if (vErro != RETURN_OK)
                     {
-                        free(xaddressStart);
+                        #ifdef USE_MALLOC                        
+                            free(xaddressStart);
+                        #endif
                     }
                     else
                     {
@@ -2390,7 +2497,9 @@ void importFile(void)
                             vErro = fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize);
                             if (vErro != RETURN_OK)
                             {
-                                free(xaddressStart);
+                                #ifdef USE_MALLOC
+                                    free(xaddressStart);
+                                #endif
                                 break;
                             }
                         }
@@ -2433,7 +2542,7 @@ void importFile(void)
                 OSTimeDlyHMSM(0, 0, 0, 30);
             }
 
-            RestoreScreen(vsavescr);
+            RestoreScreen(&vsavescr);
         }
     }
 

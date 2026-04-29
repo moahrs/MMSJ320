@@ -87,3 +87,41 @@ typedef unsigned char (* loadSerialToMem2Type)(unsigned char *pEnder, unsigned c
 #define getVideoFontes ((getVideoFontesType *)(unsigned long)MONITOR_FUNC_TABLE)[38] // Índice da função
 #define readMouse ((readMouseType *)(unsigned long)MONITOR_FUNC_TABLE)[39] // Índice da função
 #define loadSerialToMem2 ((loadSerialToMem2Type *)(unsigned long)MONITOR_FUNC_TABLE)[40] // Índice da função
+
+/*
+ * ABI-safe wrappers para funcoes que retornam struct no monitor (CC68K/PCC style).
+ * O monitor recebe ponteiro de retorno oculto; estes wrappers mantem compatibilidade
+ * ao compilar com m68k-elf-gcc.
+ */
+typedef void (*vdp_sprite_get_attributes_rawType)(Sprite_attributes *out, unsigned int addr);
+typedef void (*vdp_sprite_get_position_rawType)(Sprite_attributes *out, unsigned int addr);
+typedef void (*vdp_get_cursor_rawType)(VDP_COORD *out);
+typedef void (*vdp_get_color_rawType)(VDP_COLOR *out);
+
+static __inline__ Sprite_attributes vdp_sprite_get_attributes_safe(unsigned int addr)
+{
+	Sprite_attributes out;
+	((vdp_sprite_get_attributes_rawType *)(unsigned long)MONITOR_FUNC_TABLE)[23](&out, addr);
+	return out;
+}
+
+static __inline__ Sprite_attributes vdp_sprite_get_position_safe(unsigned int addr)
+{
+	Sprite_attributes out;
+	((vdp_sprite_get_position_rawType *)(unsigned long)MONITOR_FUNC_TABLE)[24](&out, addr);
+	return out;
+}
+
+static __inline__ VDP_COORD vdp_get_cursor_safe(void)
+{
+	VDP_COORD out;
+	((vdp_get_cursor_rawType *)(unsigned long)MONITOR_FUNC_TABLE)[30](&out);
+	return out;
+}
+
+static __inline__ VDP_COLOR vdp_get_color_safe(void)
+{
+	VDP_COLOR out;
+	((vdp_get_color_rawType *)(unsigned long)MONITOR_FUNC_TABLE)[31](&out);
+	return out;
+}

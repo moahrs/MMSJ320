@@ -24,6 +24,11 @@
 #include "mmsjosapi.h"
 #include "files.h"
 
+static unsigned long noteAlign4(unsigned long value)
+{
+    return (value + 3UL) & 0xFFFFFFFCUL;
+}
+
 //-----------------------------------------------------------------------------
 // Principal
 //-----------------------------------------------------------------------------
@@ -42,6 +47,9 @@ void main(void)
     unsigned char vDirAtu[128];
     unsigned char vtmpparam[128];
     unsigned char vtamstr[16];
+    unsigned long vworkbase;
+    unsigned char *vComma;
+    unsigned long vprogsize;
     VDP_COLOR vdpcolor;
     MGUI_SAVESCR vsavescr;
     MGUI_MOUSE mouseData;
@@ -57,44 +65,27 @@ void main(void)
         }
     }
 
-    /*linhastatus = linhastatusDef;
-    carregaDir = carregaDirDef;
-    listaDir = listaDirDef;
-    SearchFile = SearchFileDef;
-    drawWindow = drawWindowDef;*/
-    /*itoa = itoa;
-    ltoa = ltoa;
-    toupper = toupper;
-    strcpy = strcpy;
-    strcat = strcat;
-    memset = memset;*/
-    //myvRetAlloc = vRetAlloc;
-
-    // Reserva um tanto ja pra memoria de uso do programa de variaveis globais
-    //vMemTotal = fsMalloc(1024);
-
-    // Define o endereço de cada variavel global dentro desse espaço
-    /*vpos = vMemTotal;
-    vposold = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vpos));
-    dFileCursor = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vposold));
-    vcorfg = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(dFileCursor));
-    vcorbg = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vcorfg));
-    clinha = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(vcorbg));
-    dfile = myvRetAlloc(vMemTotal, &vSizeAloc, sizeof(clinha) * 32); // 32 linhas de clinha*/
-
     // Pega as cores atuais
     getColorData(&vdpcolor);
     vcorfg = vdpcolor.fg;
     vcorbg = vdpcolor.bg;
 
+    vComma = (unsigned char *)strrchr((char*)paramBasic, ',');
+    if (vComma)
+    {
+        *vComma = 0x00;
+        vprogsize = atol((char*)(vComma + 1));
+    }
+
+    vworkbase = noteAlign4(0x00870000 + vprogsize + 256);
+    dir = (FILES_DIR *)vworkbase;
+    if (!dir)
+        return;
+
     vcont = 1;
     vpos = 0;
     vposold = 0xFF;
     vnomefile[0] = 0x00;
-
-    dir = (FILES_DIR *)*startBasic1;
-    if (!dir)
-        return;
 
     memset(dir, 0x00, sizeof(FILES_DIR) * 32);
 
@@ -262,7 +253,7 @@ void main(void)
                             OSTimeDlyHMSM(0, 0, 0, 100);
                         }
 
-                        RestoreScreen(vsavescr);
+                        RestoreScreen(&vsavescr);
                     }
                     else
                     {
@@ -375,7 +366,7 @@ void main(void)
                             OSTimeDlyHMSM(0, 0, 0, 100);
                         }
 
-                        RestoreScreen(vsavescr);
+                        RestoreScreen(&vsavescr);
 
                         if (vwb == BTOK) {
                             ix = 0;
@@ -544,10 +535,12 @@ void main(void)
 
                         if (!strcmp(execProg, "BASIC"))
                         {
+                            execProg[0] = 0;
                             fsOsCommand(vnomefile);
                         }
                         else
                         {
+                            execProg[0] = 0;
                             // Load File in fixed memory slot 0x00880000
                             vsizefile = loadFile(vnomefile, (unsigned char *)0x00880000);
 
@@ -562,17 +555,17 @@ void main(void)
                             }
 
                             // Run 0x00880000
-                            while (*mguiRunTask); // Espera o MGUI liberar a execução do programa
-                            *mguiRunTask = 0x00880000;
+                            /*while (*mguiRunTask); // Espera o MGUI liberar a execução do programa
+                            *mguiRunTask = 0x00880000;*/
 
-                            /*vEndExec = 0x00880000;
-                            runFromMGUI(vEndExec);*/
+                            vEndExec = 0x00880000;
+                            runFromMGUI(vEndExec);
                         }
 
-                        /*vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
+                        vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
                         vdp_set_bdcolor(VDP_BLACK);
 
-                        drawWindow();*/
+                        drawWindow();
 
                         linhastatus(0, "\0");
 
@@ -630,7 +623,7 @@ void main(void)
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
 
-    RestoreScreen(windowScr);
+    RestoreScreen(&windowScr);
 
     TrocaSpriteMouse(MOUSE_POINTER);
 
