@@ -17,18 +17,18 @@ Base: parser real dos arquivos `monitor.c` e `mmsjos.c`.
 | `CLS` | `CLS` | Limpa a tela. | `CLS` |  |
 | `CLEAR` | `CLEAR` | Limpa a tela (equivalente a `CLS`). | `CLEAR` |  |
 | `VER` | `VER` | Mostra a versão da BIOS/Monitor. | `VER` |  |
-| `LOAD` | `LOAD [endereco_hex]` | Recebe programa pela serial e carrega na memória. | `LOAD 00810000` | Sem endereço usa padrão interno. |
-| `LOAD2` | `LOAD2 [endereco_hex]` | Variante da carga serial (segunda rotina). | `LOAD2 00810000` |  |
-| `RUN` | `RUN [endereco_hex]` | Executa código em memória. | `RUN 00810000` | Sem argumento usa `00810000h`. |
-| `BASIC` | `BASIC [argumento]` | Entra no BASIC/chama `runBasic` com argumento. | `BASIC` | Aceite exato do argumento ainda precisa validação prática. |
-| `MODE` | `MODE <modo>` | Altera modo de vídeo (`modeVideo`). | `MODE <modo>` | Valores válidos não documentados no parser. |
+| `LOAD` | `LOAD [endereco_hex]` | Recebe programa pela serial, protocolo xmodem 128, e carrega na memória. | `LOAD 00810000` | Sem endereço usa padrão interno, 00850000h. |
+| `LOAD2` | `LOAD2 [endereco_hex]` | Recebe programa pela serial, protocolo xmodem 1k CRC, e carrega na memória. | `LOAD2 00810000` | Sem endereço usa padrão interno, 00850000h. |
+| `RUN` | `RUN <endereco_hex>` | Executa código em memória. | `RUN 00810000` | Sem argumento usa `00810000h`. |
+| `BASIC` | `BASIC` | Entra no BASIC/chama `runBasic`. | `BASIC` |  |
+| `MODE` | `MODE <modo>` | a definir | `MODE <modo>` | a definir |
 | `POKE` | `POKE <endereco_hex> <valor_hex>` | Escreve valor em endereço de memória. | `POKE 00600000 FF` |  |
 | `LOADSO` | `LOADSO` | Carrega o sistema operacional do disco. | `LOADSO` |  |
 | `RUNSO` | `RUNSO` | Executa o sistema operacional previamente carregado. | `RUNSO` |  |
 | `DEBUG` | `DEBUG` | Alterna modo de depuração (on/off). | `DEBUG` |  |
-| `DUMP` | `DUMP <endereco_hex> <quantidade> <colunas>` | Dump de memória em formato geral. | `DUMP 006020A0 128 16` |  |
+| `DUMP` | `DUMP <endereco_hex> <quantidade> <colunas>` | Dump de memória em formato geral. | `DUMP 006020A0 128` |  |
 | `DUMPS` | `DUMPS <endereco_hex> <quantidade>` | Dump de memória para serial. | `DUMPS 006020A0 128` |  |
-| `DUMPW` | `DUMPW <endereco_hex> <quantidade> <colunas>` | Dump de memória em formato de janela. | `DUMPW 006020A0 128 16` |  |
+| `DUMPW` | `DUMPW <endereco_hex> <quantidade>` | Dump de memória em formato de janela. | `DUMPW 006020A0 128` |  |
 
 ## MMSJOS
 
@@ -48,19 +48,19 @@ Base: parser real dos arquivos `monitor.c` e `mmsjos.c`.
 | `MD` | `MD <diretorio>` | Cria diretório. | `MD PROJETOS` |  |
 | `CD` | `CD <diretorio>` | Muda diretório atual. | `CD /MGUI` | Trata também `..` e `/`. |
 | `RD` | `RD <diretorio>` | Remove diretório. | `RD TEMP` |  |
-| `STOF` | `STOF <arquivo>` | Recebe via serial e grava em arquivo. | `STOF TESTE.BIN` |  |
-| `STOR` | `STOR <endereço memoria>` | Recebe via serial e executa via rotina do SO. | `STOR TESTE.BIN` | Fluxo exato depende de `fsLoadSerialToRun`. |
+| `STOF` | `STOF <arquivo>` | Recebe via serial, protocolo xmodem 1k CRC, e grava em arquivo. | `STOF TESTE.BIN` |  |
+| `STOR` | `STOR <endereço memoria>` | Recebe via serial, protocolo xmodem 1k CRC, e executa via rotina do SO. | `STOR 00870000` |  |
 | `DATE` | `DATE [parametros]` | Comando reservado. | `DATE` | `TBD` |
 | `TIME` | `TIME [parametros]` | Comando reservado. | `TIME` | `TBD` |
 | `FORMAT` | `FORMAT <rotulo_ou_parametro>` | Formata unidade com `fsFormat(0x5678, argumento)`. | `FORMAT DISCO` | Significado exato do argumento ainda precisa confirmação. |
-| `MODE` | `MODE <parametros>` | Comando previsto no parser. | `MODE <parametros>` | Marcado como “A definir” (`TBD`). |
+| `MODE` | `MODE <parametros>` | Comando reservado | `MODE <parametros>` | `TBD` |
 | `CAT` | `CAT <arquivo>` | Mostra conteúdo de arquivo. | `CAT LEIAME.TXT` |  |
 
 ## Execução implícita de .BIN (MMSJOS)
 
 | Sintaxe | O que faz | Exemplo | Observações |
 |---|---|---|---|
-| `<programa>` | Se não for comando interno, o MMSJOS procura `<programa>.BIN`, carrega em memória e executa. | `FILES` | Internamente transforma para `<comando>.BIN` antes da busca. |
+| `<programa>` | Se não for comando interno, o MMSJOS procura `<programa>.BIN`, carrega em memória, 00880000h e executa. | `EDIT` | Internamente transforma para `<comando>.BIN` antes da busca. |
 
 ## Notas de uso
 
