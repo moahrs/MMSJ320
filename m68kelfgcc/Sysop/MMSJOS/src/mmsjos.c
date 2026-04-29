@@ -600,6 +600,7 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
     unsigned long vretfat, vclusterdiratu, vclusterdirsrc, vclusterdirdst, vsizefilemalloc;
     unsigned char *vEnderExec;
     long vqtdtam;
+    unsigned long vsizeProg;
     unsigned char izzzz, logpath = 0, logcopyok;
     char cTemp[128];
     unsigned char vposTemp = 0, vrettype, logwildcard = 0;
@@ -1336,7 +1337,11 @@ writeLongSerial("\r\n\0");*/
                     printText("Loading File in \0");
                     printText(sqtdtam);
                     printText("h\r\n\0");
-                    loadFile(linhacomando, (unsigned long*)vEnderExec);
+                    vsizeProg = loadFile(linhacomando, (unsigned long*)vEnderExec);
+                    strcpy(paramBasic, linhaarg);
+                    strcat(paramBasic, ",");
+                    ltoa(vsizeProg, sqtdtam, 10);
+                    strcat(paramBasic, sqtdtam);
                     if (!verro)
                         runFromOsCmd(vEnderExec);
                     else
