@@ -517,7 +517,7 @@ int edInsertEnter(void)
 //-------------------------------------------------------------------
 void edDrawCommandHelp(void)
 {
-    edDrawLine(4);
+    edDrawLine(0);
 
     if (edCmdModeK)
     {
