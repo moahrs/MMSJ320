@@ -478,7 +478,7 @@ void initKeyMapABNT2(void)
     setKeyMap(0x5C, ']', '}');
     setKeyMap(0x8B, '\\', '|');
     setKeyMap(0x5D, '´', '`');
-    setKeyMap(0x5B, 0x80, 0x87);  // cedilha
+    setKeyMap(0x5B, 0x87, 0x80);  // cedilha
     setKeyMap(0x3A, '~', '^');
     setKeyMap(0x3A, '~', '^');
     setKeyMap(0x3A, '~', '^');
