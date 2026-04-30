@@ -22,6 +22,10 @@
 #define KEY_LEFT    18
 #define KEY_RIGHT   20
 
+#define KEY_BACKSPACE 8
+#define KEY_DELETE    127
+#define KEY_ENTER     13
+
 #define KEY_NONE     0
 #define CURSOR_CHAR  254
 #define CURSOR_DELAY 8000
@@ -41,6 +45,7 @@ char *edFileBuf;
 char *edLinePtr[EDIT_MAX_LINES];
 char textToFind[128];
 char textToChange[128];
+char edMessage[80];
 
 int edNumLines;
 int edCurLine;
@@ -76,6 +81,8 @@ void edClearToEndLine(int used);
 int edSaveFile(void);
 int edOpenFile(void);
 int edCanExit(void);
+void edSetMessage(char *msg);
+void edClearLine(int y);
 
 //void vdp_set_cursor(int x, int y);      /* use a sua rotina real */
 //void ClearScr(void);         /* use a sua rotina real */

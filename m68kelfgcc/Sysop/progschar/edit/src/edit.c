@@ -221,7 +221,15 @@ void edDrawStatus(void)
         strcat(buf, "  ^Y=Next");
 
     printText(buf);
-    edClearToEndLine(strlen(buf));    
+
+    /* espaço entre status e mensagem */
+    printText("  ");
+
+    /* mensagem dinâmica */
+    printText(edMessage);
+
+    edClearToEndLine(strlen(buf) + 2 + strlen(edMessage));
+    //edClearToEndLine(strlen(buf));    
 }
 
 //-------------------------------------------------------------------
@@ -330,7 +338,7 @@ void edDrawText(void)
 
             for (x = 0; x < EDIT_COLS; x++)
             {
-                if if (p < edFileBuf + edFileSize && *p != 0 && *p != 13 && *p != 10)
+                if (p < edFileBuf + edFileSize && *p != 0 && *p != 13 && *p != 10)
                 {
                     if (*p == 9)
                         printChar(' ', 1);   /* TAB simples */
@@ -873,4 +881,22 @@ int edCanExit(void)
     */
 
     return 0;
+}
+
+//-------------------------------------------------------------------
+void edSetMessage(char *msg)
+{
+    strncpy(edMessage, msg, sizeof(edMessage) - 1);
+    edMessage[sizeof(edMessage) - 1] = 0;
+}
+
+//-------------------------------------------------------------------
+void edClearLine(int y)
+{
+    int i;
+
+    vdp_set_cursor(0, y);
+
+    for (i = 0; i < EDIT_COLS; i++)
+        printChar(' ', 1);
 }
