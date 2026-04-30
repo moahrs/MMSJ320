@@ -366,7 +366,16 @@ void keyboardTask(void *pdata)
 
     while (1)
     {
-        keytec = readChar();
+        keytec = 0x00;
+        
+        if (mmsjKeyGet(&k))
+        {
+            if (k.flags != 0x00) // CTRL/ALT/Etc
+            {
+            }
+            else
+                keytec = k.ascii;
+        }
 
         if (keytec != 0x00)
         {

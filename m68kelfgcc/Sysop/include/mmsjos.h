@@ -239,6 +239,26 @@ extern MEM_ALOC vMemAloc;
 
 #define TASK_MMSJOS_MAIN    10
 
+#define KEY_ESC     27
+#define KEY_ENTER   13
+
+#define KEY_UP      17
+#define KEY_DOWN    19
+#define KEY_LEFT    18
+#define KEY_RIGHT   20
+
+#define KEY_BACKSPACE 8
+#define KEY_DELETE    127
+#define KEY_ENTER     13
+
+#define KEY_NONE     0
+
+#define KEY_CTRL        0xA1
+#define KEY_ALT         0xC0
+#define KEY_CTRL_SHIFT  0xD0
+#define KEY_ALT_SHIFT   0xC8
+#define KEY_CTRL_ALT    0xA8
+
 extern const unsigned char strValidChars[];
 
 extern const unsigned char vmesc[12][3];

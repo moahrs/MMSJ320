@@ -14,30 +14,9 @@
 #define EDIT_MAX_FILE     65536
 #define EDIT_MAX_LINES    1024
 
-#define KEY_ESC     27
-#define KEY_ENTER   13
-
-#define KEY_UP      17
-#define KEY_DOWN    19
-#define KEY_LEFT    18
-#define KEY_RIGHT   20
-
-#define KEY_BACKSPACE 8
-#define KEY_DELETE    127
-#define KEY_ENTER     13
-
-#define KEY_NONE     0
 #define CURSOR_CHAR  254
 #define CURSOR_DELAY 8000
 
-#define KEY_CTRL        0xA1
-#define KEY_ALT         0xC0
-#define KEY_CTRL_SHIFT  0xD0
-#define KEY_ALT_SHIFT   0xC8
-#define KEY_CTRL_ALT    0xA8
-
-#define KEY_CTRL_K  11  // Funcoes de Arquivo e bloco
-#define KEY_CTRL_Q  19  // Funcoes de Pesquisa e rapidas
 #define ED_HELP_LINES 5
 
 int edHelpMode;   /* 0=normal, 1=^K, 2=^Q */
