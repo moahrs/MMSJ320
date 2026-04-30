@@ -30,6 +30,12 @@
 #define CURSOR_CHAR  254
 #define CURSOR_DELAY 8000
 
+#define KEY_CTRL        0xA1
+#define KEY_ALT         0xC0
+#define KEY_CTRL_SHIFT  0xD0
+#define KEY_ALT_SHIFT   0xC8
+#define KEY_CTRL_ALT    0xA8
+
 #define KEY_CTRL_K  11  // Funcoes de Arquivo e bloco
 #define KEY_CTRL_Q  19  // Funcoes de Pesquisa e rapidas
 #define ED_HELP_LINES 5

@@ -46,7 +46,7 @@ mmsjos_func_table:
             dc.l _fsRemoveDir
             dc.l _OSTimeDlyHMSM
             dc.l _fsFindInDir
-            dc.l _fsMalloc
+            dc.l _mmsjKeyGet
             dc.l _fsFindNextCluster
             dc.l _fsFindClusterFree
             dc.l _OSTaskSuspend

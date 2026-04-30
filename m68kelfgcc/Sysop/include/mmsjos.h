@@ -243,6 +243,23 @@ extern const unsigned char strValidChars[];
 
 extern const unsigned char vmesc[12][3];
 
+#define KEYBUF_SIZE 32
+
+typedef struct
+{
+    unsigned char flags;
+    unsigned char code;
+    unsigned char  ascii;
+    unsigned int   raw;
+} MMSJ_KEYEVENT;
+
+static MMSJ_KEYEVENT keyBuf[KEYBUF_SIZE];
+static volatile unsigned char keyHead = 0;
+static volatile unsigned char keyTail = 0;
+
+//--- KeyBOardTAsks Functions
+extern int mmsjKeyGet(MMSJ_KEYEVENT *k);
+
 //--- FAT16 Functions
 extern unsigned long fsInit(void);
 extern void fsVer(void);

@@ -54,6 +54,11 @@ RET_PATH vretpath;
 RET_PATH vretpath2;
 MEM_ALOC vMemAloc;
 
+//--- KeyBOardTAsks Functions
+int mmsjKeyHit(void);
+int mmsjKeyPost(MMSJ_KEYEVENT *k);
+int mmsjKeyGet(MMSJ_KEYEVENT *k);
+
 //--- FAT16 Functions
 unsigned long fsInit(void);
 void fsVer(void);
@@ -314,23 +319,73 @@ void main(void)
 }
 
 //-----------------------------------------------------------------------------
+int mmsjKeyPost(MMSJ_KEYEVENT *k)
+{
+    unsigned char next;
+
+    next = keyHead + 1;
+    if (next >= KEYBUF_SIZE)
+        next = 0;
+
+    /* buffer cheio */
+    if (next == keyTail)
+        return 0;
+
+    keyBuf[keyHead] = *k;
+    keyHead = next;
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+int mmsjKeyGet(MMSJ_KEYEVENT *k)
+{
+    if (keyHead == keyTail)
+        return 0;
+
+    *k = keyBuf[keyTail];
+
+    keyTail++;
+    if (keyTail >= KEYBUF_SIZE)
+        keyTail = 0;
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+int mmsjKeyHit(void)
+{
+    return (keyHead != keyTail);
+}
+
+//-----------------------------------------------------------------------------
 void keyboardTask(void *pdata)
 {
     char keytec;
-    int keyBuf;
+    MMSJ_KEYEVENT k;
 
     while (1)
     {
         keytec = readChar();
 
-        if (keytec == 0xEF) // CTRL/ALT/SHIFT + Tecla de Função
+        if (keytec != 0x00)
         {
-            keytec = readChar();
-            keyBuf = (keytec << 8) | readChar();
-        }
-        else // Char Normal Printavel ASCII ou Control (Backspace, Enter, etc)
-        {
-            keytec = readChar();
+            if (keytec == 0xEF) // CTRL/ALT/SHIFT + Tecla
+            {
+                k.flags = readchar();
+                k.code = readchar();
+                k.ascii = k.code;
+                k.raw = (k.flags << 8) | k.code;
+            }
+            else // Char Normal Printavel ASCII ou Control (Backspace, Enter, etc)
+            {
+                k.flags = 0x00;
+                k.code = keytec;
+                k.ascii = keytec;
+                k.raw = k.code & 0xFF;
+            }
+
+            mmsjKeyPost(&k);
         }
 
         OSTimeDlyHMSM(0, 0, 0, 15);

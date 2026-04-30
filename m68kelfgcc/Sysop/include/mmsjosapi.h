@@ -28,7 +28,7 @@ typedef unsigned char (*fsChangeDirType)(char * vdirname);
 typedef unsigned char (*fsRemoveDirType)(char * vdirname);
 typedef unsigned char (*fsPwdDirType)(unsigned char *vdirpath);
 typedef unsigned long (*fsFindInDirType)(char * vname, unsigned char vtype);
-typedef unsigned long (*fsMallocType)(unsigned long vMemSize);
+typedef unsigned long (*mmsjKeyGetType)(MMSJ_KEYEVENT *k);
 typedef unsigned long (*fsFindNextClusterType)(unsigned long vclusteratual, unsigned char vtype);
 typedef unsigned long (*fsFindClusterFreeType)(unsigned char vtype);
 typedef unsigned char (*OSTimeDlyHMSMType)(unsigned char hours, unsigned char minutes, unsigned char seconds, unsigned int ms);
@@ -92,7 +92,7 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define fsRemoveDir ((fsRemoveDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[19] // Índice da função
 #define OSTimeDlyHMSM ((OSTimeDlyHMSMType *)(unsigned long)MMSJOS_FUNC_TABLE)[20] // Índice da função
 #define fsFindInDir ((fsFindInDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[21] // Índice da função
-#define fsMalloc ((fsMallocType *)(unsigned long)MMSJOS_FUNC_TABLE)[22] // Índice da função
+#define mmsjKeyGet ((mmsjKeyGetType *)(unsigned long)MMSJOS_FUNC_TABLE)[22] // Índice da função
 #define fsFindNextCluster ((fsFindNextClusterType *)(unsigned long)MMSJOS_FUNC_TABLE)[23] // Índice da função
 #define fsFindClusterFree ((fsFindClusterFreeType *)(unsigned long)MMSJOS_FUNC_TABLE)[24] // Índice da função
 #define OSTaskSuspend ((OSTaskSuspendType *)(unsigned long)MMSJOS_FUNC_TABLE)[25] // Índice da função

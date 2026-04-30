@@ -589,6 +589,7 @@ void edLoop(char *filename)
     unsigned int cursorOn;
     unsigned int tick;
     int changedText;
+    MMSJ_KEYEVENT k;
 
     clearScr();
 
@@ -601,99 +602,13 @@ void edLoop(char *filename)
     
     while (1)
     {
-        key = readChar();
-
-        if (key != KEY_NONE)
+        key = KEY_NONE;
+        
+        if (mmsjKeyGet(&k))
         {
-            edDrawCursor(0);   /* restaura char antes de mover */
-            cursorOn = 0;
-            changedText = 0;
-
-            /* =========================
-            BLOCO WORDSTAR (^K ^Q)
-            ========================= */
-            if (edCmdModeK)
+            if ((k.flags & KEYF_CTRL) && k.code == 'K')
             {
-                if (key == 'S' || key == 's')
-                    edSaveFile();
-
-                else if (key == 'O' || key == 'o')
-                    edOpenFile();
-
-                else if (key == 'X' || key == 'x')
-                {
-                    if (edCanExit())
-                        break;
-                }
-                else if (key == KEY_ESC)
-                {
-                    edCmdModeK = 0;
-                    edHelpMode = 0;
-                    edRestoreNormalTop(filename);
-                    continue;                }
-                else {
-                    // Nenhuma tecla util foi usada, continua esperando
-                    continue;   
-                }
-
-                edCmdModeK = 0;
-
-                edDrawHeader(filename);
-                edDrawText();
-                edDrawStatus();
-
-                cursorOn = 1;
-                edDrawCursor(1);
-
-                edHelpMode = 0;
-
-                edRestoreNormalTop(filename);
-
-                continue;   /* IMPORTANTÍSSIMO */
-            }
-            else if (edCmdModeQ)
-            {
-                /*if (key == 'S' || key == 's')
-                    edSaveFile();
-
-                else if (key == 'O' || key == 'o')
-                    edOpenFile();
-
-                else if (key == 'X' || key == 'x')
-                {
-                    if (edCanExit())
-                        break;
-                }
-                else*/ if (key == KEY_ESC)
-                {
-                    edCmdModeQ = 0;
-                    edHelpMode = 0;
-                    edRestoreNormalTop(filename);
-                    continue;                }
-                else {
-                    // Nenhuma tecla util foi usada, continua esperando
-                    continue;   
-                }
-
-                edCmdModeQ = 0;
-
-                edDrawHeader(filename);
-                edDrawText();
-                edDrawStatus();
-
-                cursorOn = 1;
-                edDrawCursor(1);
-
-                edHelpMode = 0;
-
-                edRestoreNormalTop(filename);
-
-                continue;   /* IMPORTANTÍSSIMO */
-            }
-
-            if (key == KEY_CTRL_K)
-            {
-                edCmdModeK = 1;
+                edCmdModeK = 1
                 edSetMessage("^K...");
                 edDrawStatus();
 
@@ -705,14 +620,95 @@ void edLoop(char *filename)
 
                 continue;   /* IMPORTANTÍSSIMO */
             }
-            else if (key == KEY_CTRL_Q)
+            else if ((k.flags & KEYF_CTRL) && k.code == 'Q')
             {
-                edCmdModeQ = 1;
+                edCmdModeQ = 1
                 edSetMessage("^Q...");
                 edDrawStatus();
 
                 cursorOn = 1;
                 edDrawCursor(1);
+
+                continue;   /* IMPORTANTÍSSIMO */
+            }
+            else if (k.flags == KEY_NONE)
+                key = k.ascii;
+        }
+
+        if (key != KEY_NONE)
+        {
+            edDrawCursor(0);   /* restaura char antes de mover */
+            cursorOn = 0;
+            changedText = 0;
+
+            /* =========================
+            BLOCO WORDSTAR (^K ^Q)
+            ========================= */
+            if (edCmdModeK || edCmdModeQ)
+            {
+                if (edCmdModeK)
+                {
+                    if (key == 'S' || key == 's')
+                    {
+                        edSaveFile();
+                    }
+                    else if (key == 'O' || key == 'o')
+                    {
+                        edOpenFile();
+                    }
+                    else if (key == 'X' || key == 'x')
+                    {
+                        if (edCanExit())
+                            break;
+                    }
+                    else if (key == KEY_ESC)
+                    {
+                        edCmdModeK = 0;
+                        edHelpMode = 0;
+                        edRestoreNormalTop(filename);
+                        continue;                }
+                    else {
+                        // Nenhuma tecla util foi usada, continua esperando
+                        continue;   
+                    }
+
+                    edCmdModeK = 0;
+                }
+                else if (edCmdModeQ)
+                {
+                    if (key == 'F' || key == 'f')
+                    {
+                    }
+                    else if (key == 'R' || key == 'r')
+                    {
+                    }
+                    else if (key == 'G' || key == 'g')
+                    {
+                    }
+                    else if (key == KEY_ESC)
+                    {
+                        edCmdModeQ = 0;
+                        edHelpMode = 0;
+                        edRestoreNormalTop(filename);
+                        continue;                }
+                    else {
+                        // Nenhuma tecla util foi usada, continua esperando
+                        continue;   
+                    }
+
+                    edCmdModeQ = 0;
+                }
+
+                edDrawHeader(filename);
+                edDrawText();
+                edDrawStatus();
+
+                cursorOn = 1;
+                edDrawCursor(1);
+
+                edHelpMode = 0;
+
+                edRestoreNormalTop(filename);
 
                 continue;   /* IMPORTANTÍSSIMO */
             }
