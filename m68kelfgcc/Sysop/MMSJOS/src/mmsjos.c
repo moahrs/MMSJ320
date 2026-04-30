@@ -366,16 +366,7 @@ void keyboardTask(void *pdata)
 
     while (1)
     {
-        keytec = 0x00;
-        
-        if (mmsjKeyGet(&k))
-        {
-            if (k.flags != 0x00) // CTRL/ALT/Etc
-            {
-            }
-            else
-                keytec = k.ascii;
-        }
+        keytec = readChar();
 
         if (keytec != 0x00)
         {
@@ -414,7 +405,16 @@ void inputTask(void *pdata)
     {
         OSSemPend(shared_sem, 0, &error_code);
 
-        vtec = readChar();
+        vtec = 0x00;
+        
+        if (mmsjKeyGet(&k))
+        {
+            if (k.flags != 0x00) // CTRL/ALT/Etc
+            {
+            }
+            else
+                vtec = k.ascii;
+        }
 
         if (vtec)
         {
