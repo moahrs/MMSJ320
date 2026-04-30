@@ -142,6 +142,7 @@ HEADER *_allocp;
 #define STACKSIZEMGUI  2048
 #define STACKSIZEBASIC  32768
 
+OS_STK StkKbd[STACKSIZE];
 OS_STK StkInput[STACKSIZE];
 OS_STK StkMgui[STACKSIZEMGUI];
 OS_STK StkBasic[STACKSIZEBASIC];
@@ -156,6 +157,7 @@ static unsigned char basicTaskArg[64];
 OS_EVENT *shared_sem;
 OS_EVENT *heap_sem;
 
+#define TASK_KBD_MAP       9
 #define TASK_INPUT_KBD    10
 #define TASK_MGUI         11
 #define TASK_BASIC        13
@@ -166,6 +168,7 @@ OS_EVENT *heap_sem;
 #define TASK_Prog05       29
 #define TASK_Prog06       30
 
+void keyboardTask(void *pdata); // Prio: 09
 void inputTask(void *pdata);    // Prio: 10
 void mguiTask(void *pdata);     // Prio: 11
 void basicTask(void *pdata);    // Prio: 13
@@ -285,10 +288,20 @@ void main(void)
         for (;;) { }
     }
 
+    osErr = OSTaskCreate(keyboardTask, OS_NULL, &StkKbd[STACKSIZE - 1], TASK_KBD_MAP);
+    if (osErr != OS_ERR_NONE)
+    {
+        printText("uC/OS-II task create error keytask: \0");
+        itoa(osErr, sOsErr, 10);
+        printText(sOsErr);
+        printText("\r\n\0");
+        for (;;) { }
+    }
+
     osErr = OSTaskCreate(inputTask, OS_NULL, &StkInput[STACKSIZE - 1], TASK_INPUT_KBD);
     if (osErr != OS_ERR_NONE)
     {
-        printText("uC/OS-II task create error: \0");
+        printText("uC/OS-II task create error inputtask: \0");
         itoa(osErr, sOsErr, 10);
         printText(sOsErr);
         printText("\r\n\0");
@@ -298,6 +311,30 @@ void main(void)
     *(vmfp + Reg_IERA) |= 0x01; // Timer B 10ms - Tick OS
     *(vmfp + Reg_IMRA) |= 0x01; // Timer B 10ms - Tick OS
     OSStart();
+}
+
+//-----------------------------------------------------------------------------
+void keyboardTask(void *pdata)
+{
+    char keytec;
+    int keyBuf;
+
+    while (1)
+    {
+        keytec = readChar();
+
+        if (keytec == 0xEF) // CTRL/ALT/SHIFT + Tecla de Função
+        {
+            keytec = readChar();
+            keyBuf = (keytec << 8) | readChar();
+        }
+        else // Char Normal Printavel ASCII ou Control (Backspace, Enter, etc)
+        {
+            keytec = readChar();
+        }
+
+        OSTimeDlyHMSM(0, 0, 0, 15);
+    }
 }
 
 //-----------------------------------------------------------------------------

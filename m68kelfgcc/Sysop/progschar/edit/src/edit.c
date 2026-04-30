@@ -46,6 +46,8 @@ void main(void)
     unsigned char *vComma;
     unsigned char ix;
 
+    OSTaskSuspend(TASK_MMSJOS_MAIN);
+
     memset(vParamName, 0x00, sizeof(vParamName));
     if (*paramBasic != 0x00)
         strcpy((char*)vParamName, (char*)paramBasic);
@@ -106,6 +108,8 @@ void main(void)
     edLoop((char*)vParamName);
 
     clearScr();
+
+    OSTaskResume(TASK_MMSJOS_MAIN)
 
     return;
 }
