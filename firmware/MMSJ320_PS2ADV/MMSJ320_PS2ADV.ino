@@ -37,6 +37,8 @@ TKeyMap keyMapABNT2[256];
 #define PS2_BREAK    0x0200
 #define PS2_FUNCTION 0x0100
 
+#define PS2_KEY_MASK 0x01FF
+
 #define PS2_BREAK    0x0200
 #define PS2_KEYUP    0x8000   /* se tua lib usar outro nome, ajusta */
 #define PS2_RELEASE  0x8000
@@ -517,6 +519,10 @@ unsigned int ps2ToAsciiABNT2(unsigned int k)
 
     if (ch == 0)
         return 0;
+
+    /* F1-F12 puro */
+    if ((k & PS2_FUNCTION) && ch >= 0x61 && ch <= 0x6C)
+        return k & 0x01FF;
 
     shift = (k & PS2_SHIFT) != 0;
     caps  = (k & PS2_CAPS)  != 0;
