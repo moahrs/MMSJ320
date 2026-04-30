@@ -606,10 +606,20 @@ void edLoop(char *filename)
         
         if (mmsjKeyGet(&k))
         {
-            if ((k.flags & KEYF_CTRL) && k.code == 'K')
+            
+            if (k.flags & KEYF_CTRL)
             {
-                edCmdModeK = 1
-                edSetMessage("^K...");
+                if (k.code == 'K')
+                {
+                    edCmdModeK = 1
+                    edSetMessage("^K...");
+                }
+                else (k.code == 'Q')
+                {
+                    edCmdModeQ = 1
+                    edSetMessage("^Q...");
+                }
+
                 edDrawStatus();
 
                 cursorOn = 1;
@@ -618,18 +628,7 @@ void edLoop(char *filename)
                 edHelpMode = 1;
                 edDrawCommandHelp();
 
-                continue;   /* IMPORTANTÍSSIMO */
-            }
-            else if ((k.flags & KEYF_CTRL) && k.code == 'Q')
-            {
-                edCmdModeQ = 1
-                edSetMessage("^Q...");
-                edDrawStatus();
-
-                cursorOn = 1;
-                edDrawCursor(1);
-
-                continue;   /* IMPORTANTÍSSIMO */
+                continue;
             }
             else if (k.flags == KEY_NONE)
                 key = k.ascii;
