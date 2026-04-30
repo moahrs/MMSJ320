@@ -400,7 +400,8 @@ void inputTask(void *pdata)
     int countCursor = 0;
     unsigned char vbufptr = 0;
     unsigned int error_code = OS_ERR_NONE;
-
+    MMSJ_KEYEVENT k;
+    
     while (1)
     {
         OSSemPend(shared_sem, 0, &error_code);

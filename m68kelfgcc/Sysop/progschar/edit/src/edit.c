@@ -109,7 +109,7 @@ void main(void)
 
     clearScr();
 
-    OSTaskResume(TASK_MMSJOS_MAIN)
+    OSTaskResume(TASK_MMSJOS_MAIN);
 
     return;
 }
@@ -607,19 +607,19 @@ void edLoop(char *filename)
         if (mmsjKeyGet(&k))
         {
             
-            if (k.flags & KEYF_CTRL)
+            if (k.flags & KEY_CTRL)
             {
                 if (k.code == 'K')  // Files & Block
                 {
-                    edCmdModeK = 1
+                    edCmdModeK = 1;
                     //edSetMessage("^K...");
                 }
-                else (k.code == 'Q')    // Search
+                else if (k.code == 'Q')    // Search
                 {
-                    edCmdModeQ = 1
+                    edCmdModeQ = 1;
                     //edSetMessage("^Q...");
                 }
-                else (k.code == 'Y')    // Find Next
+                else if (k.code == 'Y')    // Find Next
                 {                    
                     // procura proxima ocorrencia da palavra
                     edCmdModeY = 1;
@@ -675,6 +675,7 @@ void edLoop(char *filename)
                     {
                         edCmdModeK = 0;
                         edHelpMode = 0;
+                    }
                     else {
                         // Nenhuma tecla util foi usada, continua esperando
                         continue;   
