@@ -533,8 +533,8 @@ void edDrawCommandHelp(void)
 
     if (edCmdModeK)
     {
-        vdp_set_cursor(0, 0);
-        printText("------- File -------|----- Block ------");
+        vdp_set_cursor(13, 0);
+        printText(" File / Block ");
 
         edClearLine(1);
         vdp_set_cursor(0, 1);
@@ -542,7 +542,7 @@ void edDrawCommandHelp(void)
 
         edClearLine(2);
         vdp_set_cursor(0, 2);
-        printText("  O=Open            |  C=Copy   V=Move ");
+        printText("  O=Open            |  C=Copy    V=Move");
 
         edClearLine(3);
         vdp_set_cursor(0, 3);
@@ -609,15 +609,21 @@ void edLoop(char *filename)
             
             if (k.flags & KEYF_CTRL)
             {
-                if (k.code == 'K')
+                if (k.code == 'K')  // Files & Block
                 {
                     edCmdModeK = 1
-                    edSetMessage("^K...");
+                    //edSetMessage("^K...");
                 }
-                else (k.code == 'Q')
+                else (k.code == 'Q')    // Search
                 {
                     edCmdModeQ = 1
-                    edSetMessage("^Q...");
+                    //edSetMessage("^Q...");
+                }
+                else (k.code == 'Y')    // Find Next
+                {                    
+                    // procura proxima ocorrencia da palavra
+                    edCmdModeY = 1;
+                    key = 'Y';
                 }
 
                 edDrawStatus();
@@ -628,7 +634,8 @@ void edLoop(char *filename)
                 edHelpMode = 1;
                 edDrawCommandHelp();
 
-                continue;
+                if (!edCmdModeY)
+                    continue;
             }
             else if (k.flags == KEY_NONE)
                 key = k.ascii;
@@ -643,19 +650,23 @@ void edLoop(char *filename)
             /* =========================
             BLOCO WORDSTAR (^K ^Q)
             ========================= */
-            if (edCmdModeK || edCmdModeQ)
+            if (edCmdModeK || edCmdModeQ || edCmdModeY)
             {
                 if (edCmdModeK)
                 {
-                    if (key == 'S' || key == 's')
+                    if (key == 'S' || key == 's')   // Save
                     {
                         edSaveFile();
                     }
-                    else if (key == 'O' || key == 'o')
+                    if (key == 'A' || key == 'a')   // Save As
+                    {
+                        edSaveFileAs();
+                    }
+                    else if (key == 'O' || key == 'o')  // Open
                     {
                         edOpenFile();
                     }
-                    else if (key == 'X' || key == 'x')
+                    else if (key == 'X' || key == 'x')  // Exit
                     {
                         if (edCanExit())
                             break;
@@ -664,8 +675,6 @@ void edLoop(char *filename)
                     {
                         edCmdModeK = 0;
                         edHelpMode = 0;
-                        edRestoreNormalTop(filename);
-                        continue;                }
                     else {
                         // Nenhuma tecla util foi usada, continua esperando
                         continue;   
@@ -675,27 +684,30 @@ void edLoop(char *filename)
                 }
                 else if (edCmdModeQ)
                 {
-                    if (key == 'F' || key == 'f')
+                    if (key == 'F' || key == 'f')   // Find
                     {
                     }
-                    else if (key == 'R' || key == 'r')
+                    else if (key == 'R' || key == 'r')  // Replace
                     {
                     }
-                    else if (key == 'G' || key == 'g')
+                    else if (key == 'G' || key == 'g')  // Goto Line
                     {
                     }
                     else if (key == KEY_ESC)
                     {
                         edCmdModeQ = 0;
                         edHelpMode = 0;
-                        edRestoreNormalTop(filename);
-                        continue;                }
+                    }
                     else {
                         // Nenhuma tecla util foi usada, continua esperando
                         continue;   
                     }
 
                     edCmdModeQ = 0;
+                }
+                else if (edCmdModeY)
+                {
+                    // procura proxima ocorrencia da palavra
                 }
 
                 edDrawHeader(filename);
@@ -842,6 +854,19 @@ void edDrawCursor(int show)
     }
 
     vdp_set_cursor(sx, sy);
+}
+
+//-------------------------------------------------------------------
+int edSaveFileAs(void)
+{
+    /*
+       Aqui depois entra sua saveFile().
+       Exemplo futuro:
+       ret = saveFile(edFileName, edFileBuf, edFileSize);
+    */
+
+    edDirty = 0;
+    return 0;
 }
 
 //-------------------------------------------------------------------

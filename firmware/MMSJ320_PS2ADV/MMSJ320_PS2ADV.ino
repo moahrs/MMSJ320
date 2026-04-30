@@ -478,7 +478,7 @@ void initKeyMapABNT2(void)
     setKeyMap(0x5C, ']', '}');
     setKeyMap(0x8B, '\\', '|');
     setKeyMap(0x5D, '´', '`');
-    setKeyMap(0x5B, 0x00, 0x00);
+    setKeyMap(0x5B, 0x80, 0x87);  // cedilha
     setKeyMap(0x3A, '~', '^');
     setKeyMap(0x3A, '~', '^');
     setKeyMap(0x3A, '~', '^');
@@ -488,9 +488,12 @@ void initKeyMapABNT2(void)
     setKeyMap(0x1B, 27, 27); /* ESC */
     setKeyMap(0x1C, 8, 8);   /* BACKSPACE */
     setKeyMap(0x1A, 127, 127);   /* DELETE */
+    setKeyMap(0x19, 0x11, 0x11);   /* INSERT */
     setKeyMap(0x1D, 9, 9);   /* TAB */
-    setKeyMap(0x11, 2, 3);   /* HOME */
-    setKeyMap(0x12, 2, 3);   /* END */
+    setKeyMap(0x11, 2, 2);   /* HOME */
+    setKeyMap(0x13, 0x12, 0x12);   /* PgUp */
+    setKeyMap(0x14, 0x13, 0x13);   /* PgDn */
+    setKeyMap(0x12, 3, 3);   /* END */
 
     setKeyMap(0x17, 17, 17);   /* UP */
     setKeyMap(0x18, 19, 19);   /* DOWN */

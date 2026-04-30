@@ -23,6 +23,7 @@ int edHelpMode;   /* 0=normal, 1=^K, 2=^Q */
 
 int edCmdModeK;
 int edCmdModeQ;
+int edCmdModeY;
 int edDirty;
 char edFileName[128];
 

@@ -279,6 +279,7 @@ static volatile unsigned char keyTail = 0;
 
 //--- KeyBOardTAsks Functions
 extern int mmsjKeyGet(MMSJ_KEYEVENT *k);
+extern int mmsjKeyHit(void);
 
 //--- FAT16 Functions
 extern unsigned long fsInit(void);
