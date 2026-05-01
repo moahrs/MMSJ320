@@ -145,7 +145,8 @@ digitalWrite(OUT_RED2,LOW);
   delay(1000);
   initKeyMapABNT2();  
   keyboard.begin(KbdData, KbdClk);
-
+  keyboard.setNoRepeat( 1 );
+  
   if (hasmouseaux)
     attachInterrupt(digitalPinToInterrupt(MseClk), ps2mseinterrupt, FALLING);
 

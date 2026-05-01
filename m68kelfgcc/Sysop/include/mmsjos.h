@@ -253,9 +253,9 @@ extern MEM_ALOC vMemAloc;
 
 #define KEY_NONE     0
 
-#define KEY_CTRL        0xA1
-#define KEY_ALT         0xC0
-#define KEY_CTRL_SHIFT  0xD0
+#define KEY_CTRL        0xA0
+#define KEY_ALT         0x88
+#define KEY_CTRL_SHIFT  0xE0
 #define KEY_ALT_SHIFT   0xC8
 #define KEY_CTRL_ALT    0xA8
 

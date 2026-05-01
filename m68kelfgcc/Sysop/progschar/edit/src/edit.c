@@ -46,7 +46,7 @@ void main(void)
     unsigned char *vComma;
     unsigned char ix;
 
-    OSTaskSuspend(TASK_MMSJOS_MAIN);
+    //OSTaskSuspend(TASK_MMSJOS_MAIN);
 
     memset(vParamName, 0x00, sizeof(vParamName));
     if (*paramBasic != 0x00)
@@ -109,7 +109,7 @@ void main(void)
 
     clearScr();
 
-    OSTaskResume(TASK_MMSJOS_MAIN);
+    //OSTaskResume(TASK_MMSJOS_MAIN);
 
     return;
 }
@@ -533,7 +533,7 @@ void edDrawCommandHelp(void)
 
     if (edCmdModeK)
     {
-        vdp_set_cursor(13, 0);
+        vdp_set_cursor(14, 0);
         printText(" File / Block ");
 
         edClearLine(1);
@@ -550,20 +550,20 @@ void edDrawCommandHelp(void)
     }
     if (edCmdModeQ)
     {
-        vdp_set_cursor(16, 0);
-        printText(" Search ");
+        vdp_set_cursor(11, 0);
+        printText(" Search / Diversos");
 
         edClearLine(1);
         vdp_set_cursor(0, 1);
-        printText("  F Find");
+        printText("  F Find           |");
 
         edClearLine(2);
         vdp_set_cursor(0, 2);
-        printText("  R Replace");
+        printText("  R Replace        |");
 
         edClearLine(3);
         vdp_set_cursor(0, 3);
-        printText("  G Goto Line");
+        printText("  G Goto Line      |");
     }
 
     edDrawLine(4);
@@ -589,6 +589,7 @@ void edLoop(char *filename)
     unsigned int cursorOn;
     unsigned int tick;
     int changedText;
+    char logBlinkCursor;
     MMSJ_KEYEVENT k;
 
     clearScr();
@@ -599,24 +600,26 @@ void edLoop(char *filename)
     edPlaceCursor();
     tick = 0;
     cursorOn = 1;
-    
+    logBlinkCursor = 1;
+
     while (1)
     {
         key = KEY_NONE;
         
         if (mmsjKeyGet(&k))
-        {
-            
+        {            
             if (k.flags & KEY_CTRL)
             {
                 if (k.code == 'K')  // Files & Block
                 {
                     edCmdModeK = 1;
+                    logBlinkCursor = 0;
                     //edSetMessage("^K...");
                 }
                 else if (k.code == 'Q')    // Search
                 {
                     edCmdModeQ = 1;
+                    logBlinkCursor = 0;
                     //edSetMessage("^Q...");
                 }
                 else if (k.code == 'Y')    // Find Next
@@ -711,6 +714,8 @@ void edLoop(char *filename)
                     // procura proxima ocorrencia da palavra
                 }
 
+                logBlinkCursor = 1;
+
                 edDrawHeader(filename);
                 edDrawText();
                 edDrawStatus();
@@ -725,8 +730,8 @@ void edLoop(char *filename)
                 continue;   /* IMPORTANTÍSSIMO */
             }
 
-            if (key == KEY_ESC)
-                break;
+            /*if (key == KEY_ESC)
+                break;*/
 
             oldV = edVScroll;
             oldH = edHScroll;
@@ -784,7 +789,7 @@ void edLoop(char *filename)
         {
             tick++;
 
-            if (tick >= CURSOR_DELAY)
+            if (logBlinkCursor && tick >= CURSOR_DELAY)
             {
                 tick = 0;
 

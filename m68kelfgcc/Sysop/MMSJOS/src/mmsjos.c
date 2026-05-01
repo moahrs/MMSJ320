@@ -361,7 +361,7 @@ int mmsjKeyHit(void)
 //-----------------------------------------------------------------------------
 void keyboardTask(void *pdata)
 {
-    char keytec;
+    unsigned char keytec;
     MMSJ_KEYEVENT k;
 
     while (1)
@@ -372,8 +372,8 @@ void keyboardTask(void *pdata)
         {
             if (keytec == 0xEF) // CTRL/ALT/SHIFT + Tecla
             {
-                k.flags = readchar();
-                k.code = readchar();
+                k.flags = readChar();
+                k.code = readChar();
                 k.ascii = k.code;
                 k.raw = (k.flags << 8) | k.code;
             }
@@ -568,8 +568,10 @@ void prog01Task(void *pdata)
             break;
         }
 
+#ifdef USE_MALLOC
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
+#endif            
     }
 
     verifyWindows(TASK_Prog01);
@@ -590,9 +592,10 @@ void prog02Task(void *pdata)
             break;
         }
 
-
+#ifdef USE_MALLOC
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
+#endif  
     }
 
     verifyWindows(TASK_Prog02);
@@ -613,8 +616,10 @@ void prog03Task(void *pdata)
             break;
         }
 
+#ifdef USE_MALLOC
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
+#endif            
     }
 
     verifyWindows(TASK_Prog03);
@@ -635,8 +640,10 @@ void prog04Task(void *pdata)
             break;
         }
 
+#ifdef USE_MALLOC
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
+#endif
     }
 
     verifyWindows(TASK_Prog04);
@@ -657,8 +664,10 @@ void prog05Task(void *pdata)
             break;
         }
 
+#ifdef USE_MALLOC
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
+#endif
     }
 
     verifyWindows(TASK_Prog05);
@@ -679,8 +688,10 @@ void prog06Task(void *pdata)
             break;
         }
 
+#ifdef USE_MALLOC
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
+#endif            
     }
 
     verifyWindows(TASK_Prog06);
@@ -1973,6 +1984,7 @@ unsigned char fsRenameFile(char * vfilename, char * vnewname)
 unsigned char fsLoadSerialToFile(char * vfilename)
 {
     unsigned long vSize, ix, vStep;
+    unsigned long vNextProgress;
     unsigned char *xaddress;
     unsigned char *xaddressStart;
     unsigned char vBuffer[128];
@@ -1981,6 +1993,7 @@ unsigned char fsLoadSerialToFile(char * vfilename)
     VDP_COORD vcursor;
     unsigned long vSizeTotalRec;
     unsigned short vChunkSize;
+    unsigned char vProgressCount;
 
     vSizeTotalRec = 0;
 
@@ -2001,7 +2014,9 @@ unsigned char fsLoadSerialToFile(char * vfilename)
     if (vfilename == 0)
     {
         printText("Error, file name must be provided!!\r\n\0");
+#ifdef USE_MALLOC
         free(xaddressStart);
+#endif
         return ERRO_B_WRITE_FILE;;
     }
 
@@ -2011,7 +2026,9 @@ unsigned char fsLoadSerialToFile(char * vfilename)
         // Se existir, apaga
         if (fsDelFile(vfilename) != RETURN_OK)
         {
+#ifdef USE_MALLOC
             free(xaddressStart);
+#endif
             return ERRO_B_WRITE_FILE;
         }
     }
@@ -2019,7 +2036,9 @@ unsigned char fsLoadSerialToFile(char * vfilename)
     // Cria o Arquivo
     if (fsCreateFile(vfilename) != RETURN_OK)
     {
+#ifdef USE_MALLOC
         free(xaddressStart);
+#endif
         return ERRO_B_CREATE_FILE;
     }
 
@@ -2033,7 +2052,9 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
         if (fsOpenFile(vfilename) != RETURN_OK)
         {
+#ifdef USE_MALLOC
             free(xaddressStart);
+#endif
             return ERRO_B_WRITE_FILE;
         }
 
@@ -2066,6 +2087,8 @@ unsigned char fsLoadSerialToFile(char * vfilename)
         vmovposyatu = vcursor.y;
 
         vStep = (vSizeTotalRec >= 20) ? (vSizeTotalRec / 20) : 0;
+        vNextProgress = vStep;
+        vProgressCount = 0;
 
         vdp_set_cursor(1, (vcursor.y - 2));
 
@@ -2077,9 +2100,6 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
             for (iy = 0; iy < 128; iy++)
             {
-                if (vStep > 0 && ix > 0 && ((ix + iy) % vStep) == 0)
-                    printChar(219, 1);  // Cursor cheio
-
                 if (iy < vChunkSize)
                 {
                     vBuffer[iy] = *xaddress;
@@ -2089,8 +2109,20 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
             if (fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize) != RETURN_OK)
             {
+#ifdef USE_MALLOC
                 free(xaddressStart);
+#endif
                 return ERRO_B_WRITE_FILE;
+            }
+
+            if (vStep > 0)
+            {
+                while (vProgressCount < 20 && (ix + vChunkSize) >= vNextProgress)
+                {
+                    printChar(219, 1);
+                    vProgressCount++;
+                    vNextProgress += vStep;
+                }
             }
         }
 
@@ -2101,13 +2133,17 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
         fsCloseFile(vfilename, 1);
 
+    #ifdef USE_MALLOC
         free(xaddressStart);
+    #endif
     }
     else
     {
         printText("Serial Load Error...");
 
+    #ifdef USE_MALLOC
         free(xaddressStart);
+    #endif
 
         return ERRO_B_WRITE_FILE;
     }
@@ -2137,7 +2173,9 @@ unsigned char fsLoadSerialToRun(char * vfilename)
         printText(sqtdtam);
         printText("h\r\n\0");
         runFromOsCmd(vEnderExec);
+    #ifdef USE_MALLOC
         free(vEnderExec);
+    #endif
     }
     else
     {
