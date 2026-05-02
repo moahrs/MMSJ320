@@ -547,7 +547,7 @@ void edDrawCommandHelp(void)
     }
     if (edCmdModeQ)
     {
-        vdp_set_cursor(14, 0);
+        vdp_set_cursor(11, 0);
         printText(" Search / Quick ");
 
         edClearLine(1);

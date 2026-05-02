@@ -344,6 +344,13 @@ extern int isValidFilename(char *filename) ;
 extern unsigned char matches_wildcard(const char *pattern, const char *filename);
 extern unsigned char contains_wildcards(const char *pattern);
 
+#ifdef USE_MSPRINTF_MMSJOS
+extern void msprintf_ulong_hex(unsigned long v);
+extern void msprintf_long_dec(long v);
+extern void msprintf_ulong_dec(unsigned long v);
+extern void msprintf(const char *fmt, ...);
+#endif
+
 #ifdef __SO_ST_MFP__
 extern void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char TypeSet);
 extern unsigned int fsGetMfp(unsigned int Config);

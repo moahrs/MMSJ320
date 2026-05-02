@@ -391,6 +391,7 @@ monitor_func_table:
             dc.l _getVideoFontes
             dc.l _readMouse
             dc.l _loadSerialToMem2
+            dc.l _mprintf
             
            section     const
            align

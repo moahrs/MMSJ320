@@ -47,6 +47,11 @@ extern int hex2int(char ch);
 extern void asctohex(unsigned char a, unsigned char *s);
 extern unsigned char readMouse(unsigned char *vStat, unsigned char *vMovX, unsigned char *vMovY);
 
+extern void mprintf_ulong_hex(unsigned long v);
+extern void mprintf_long_dec(long v);
+extern void mprintf_ulong_dec(unsigned long v);
+extern void mprintf(const char *fmt, ...);
+
 #ifdef __KEYPS2__
 void writeKbdPs2(unsigned char pData);
 unsigned char readKbdPs2 (void);

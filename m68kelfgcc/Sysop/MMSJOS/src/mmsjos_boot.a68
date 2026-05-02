@@ -35,7 +35,7 @@ mmsjos_func_table:
             dc.l _fsOpenFile
             dc.l _fsCloseFile
             dc.l _fsInfoFile
-            dc.l _fsFree
+            dc.l _msprintf
             dc.l _fsReadFile
             dc.l _fsWriteFile
             dc.l _fsDelFile

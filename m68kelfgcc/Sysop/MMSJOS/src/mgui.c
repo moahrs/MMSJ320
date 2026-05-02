@@ -65,7 +65,7 @@ typedef struct LIST_WINDOWS
     unsigned long loadAddress;
     char zOrder;
     char active;
-    char keyTec;
+    int keyTec;
 } LIST_WINDOWS; 
 
 extern unsigned char *mguiIdRequest;
@@ -1002,6 +1002,8 @@ void fillin(unsigned char* vvar, unsigned short x, unsigned short y, unsigned sh
     unsigned short cc = 0;
     unsigned char cchar, vdisp = 0, vtec;
     unsigned char *vvarptr = vvar;
+    int key;
+    MMSJ_KEYEVENT k;
 
     if (vtipo == WINOPER)
     {
@@ -1011,7 +1013,13 @@ void fillin(unsigned char* vvar, unsigned short x, unsigned short y, unsigned sh
             *vvarptr++;
         }
 
-        vtec = readChar();
+        vtec = KEY_NONE;
+        
+        if (mmsjKeyGet(&k))
+        {
+            if (k.flags = 0x00)   // Key Pressed
+                vtec = k.ascii;
+        }
 
         if (vtec >= 0x20 && vtec < 0x7F && (x + cc + 6) < (x + pwidth))
         {
@@ -1694,6 +1702,8 @@ unsigned char editortela(void)
     unsigned char vresp = 1, vwb;
     unsigned char vx, cc, vpos, vposiconx, vposicony, mpos;
     unsigned char *ptr_prg;
+    int key;
+    MMSJ_KEYEVENT k;
 
     // Verifica se clicou no simbolo de sair
     if (mouseBtnPres == 0x04) // Meio - Para reiniciar o sprite do mouse que as vezes nao aparece assim que roda o prog
@@ -1714,8 +1724,13 @@ unsigned char editortela(void)
     // Verifica mouse e teclado
     if (mguiListWindows[6].active)  // Mgui ativo
     {
-        if (readChar() == 0x1B)  // ESC
-            vresp = 0x00;
+        key = KEY_NONE;
+        
+        if (mmsjKeyGet(&k))
+        {
+            if (k.flags == 0x00 && k.code == 0x1B)  // ESC
+                vresp = 0x00;
+        }
 
         if (mouseBtnPres == 0x01)  // Esquerdo
         {
@@ -1792,12 +1807,19 @@ void setPosPressed(unsigned char vppostx, unsigned char vpposty)
 void getMouseData(MGUI_MOUSE *pmouseData)
 {
     unsigned ix;
+    int key;
+    MMSJ_KEYEVENT k;
 
     ix = *mguiIdRequest;
 
     if (mguiListWindows[ix].active)
     {
-        mguiListWindows[ix].keyTec = readChar();
+        key = KEY_NONE;
+        
+        if (mmsjKeyGet(&k))
+            key = k.raw;
+
+        mguiListWindows[ix].keyTec = key;
         pmouseData->mouseButton = mouseBtnPres;
         pmouseData->mouseBtnDouble = mouseBtnPresDouble;
         pmouseData->vpostx = vpostx;

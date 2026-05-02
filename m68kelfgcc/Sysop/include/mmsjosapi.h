@@ -17,7 +17,7 @@ typedef unsigned char (*fsCreateFileType)(char * vfilename);
 typedef unsigned char (*fsOpenFileType)(char * vfilename);
 typedef unsigned char (*fsCloseFileType)(char * vfilename, unsigned char vupdated);
 typedef unsigned long (*fsInfoFileType)(char * vfilename, unsigned char vtype);
-typedef unsigned char (*fsFreeType)(unsigned long vAddress);
+typedef unsigned char (*msprintfType)(unsigned long vAddress);
 typedef unsigned short (*fsReadFileType)(char * vfilename, unsigned long voffset, unsigned char *buffer, unsigned short vsizebuffer);
 typedef unsigned char (*fsWriteFileType)(char * vfilename, unsigned long voffset, unsigned char *buffer, unsigned char vsizebuffer);
 typedef unsigned char (*fsDelFileType)(char * vfilename);
@@ -81,7 +81,7 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define fsOpenFile ((fsOpenFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[8] // Índice da função
 #define fsCloseFile ((fsCloseFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[9] // Índice da função
 #define fsInfoFile ((fsInfoFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[10] // Índice da função
-#define fsFree ((fsFreeType *)(unsigned long)MMSJOS_FUNC_TABLE)[11] // Índice da função
+#define msprintf ((msprintfType *)(unsigned long)MMSJOS_FUNC_TABLE)[11] // Índice da função
 #define fsReadFile ((fsReadFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[12] // Índice da função
 #define fsWriteFile ((fsWriteFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[13] // Índice da função
 #define fsDelFile ((fsDelFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[14] // Índice da função

@@ -33,6 +33,7 @@
 * 12/04/2026  1.4a02  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
 * 20/04/2026  1.4a03  Moacir Jr.   Alterar loadso e runso to loados e runos
 * 24/04/2026  1.4a04  Moacir Jr.   Ajustes nas variaveis basic e prepara para LOADBAS
+* 02/05/2026  1.4a05  Moacir Jr.   Ajuste endereco loadbas
 *--------------------------------------------------------------------------------
 *
 * Mapa de Memoria
@@ -102,6 +103,7 @@
 #include <string.h>
 #include <malloc.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include "mmsj320api.h"
 #include "mmsj320vdp.h"
 #include "mmsj320mfp.h"
@@ -173,6 +175,11 @@ void showCursor(void);
 void modeVideo(unsigned char *pMode);
 void printCharBuffer(unsigned char *pCharMade);
 unsigned char readMouse(unsigned char *vStat, unsigned char *vMovX, unsigned char *vMovY);
+
+void mprintf_ulong_hex(unsigned long v);
+void mprintf_long_dec(long v);
+void mprintf_ulong_dec(unsigned long v);
+void mprintf(const char *fmt, ...);
 
 void inputTask(void);
 
@@ -555,6 +562,232 @@ void inputTask(void)
 
         vtecant = vtec;
     }
+}
+
+//-----------------------------------------------------------------------------
+void mprintf_ulong_dec(unsigned long v)
+{
+    unsigned long divs[10];
+    int i;
+    int started;
+    unsigned char digit;
+
+    divs[0] = 1000000000UL;
+    divs[1] = 100000000UL;
+    divs[2] = 10000000UL;
+    divs[3] = 1000000UL;
+    divs[4] = 100000UL;
+    divs[5] = 10000UL;
+    divs[6] = 1000UL;
+    divs[7] = 100UL;
+    divs[8] = 10UL;
+    divs[9] = 1UL;
+
+    started = 0;
+
+    for (i = 0; i < 10; i++)
+    {
+        digit = 0;
+
+        while (v >= divs[i])
+        {
+            v -= divs[i];
+            digit++;
+        }
+
+        if (digit || started || i == 9)
+        {
+            printChar('0' + digit, 1);
+            started = 1;
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
+void mprintf_long_dec(long v)
+{
+    unsigned long u;
+
+    if (v < 0)
+    {
+        printChar('-', 1);
+
+        u = (unsigned long)(-(v + 1));
+        u++;
+    }
+    else
+    {
+        u = (unsigned long)v;
+    }
+
+    mprintf_ulong_dec(u);
+}
+
+//-----------------------------------------------------------------------------
+void mprintf_ulong_hex(unsigned long v)
+{
+    char tmp[8];
+    int n;
+    int d;
+
+    n = 0;
+
+    if (v == 0)
+    {
+        printChar('0', 1);
+        return;
+    }
+
+    while (v && n < 8)
+    {
+        d = (int)(v & 0x0F);
+
+        if (d < 10)
+            tmp[n] = (char)('0' + d);
+        else
+            tmp[n] = (char)('A' + d - 10);
+
+        n++;
+        v = v >> 4;
+    }
+
+    while (n > 0)
+    {
+        n--;
+        printChar(tmp[n], 1);
+    }
+}
+
+//-----------------------------------------------------------------------------
+void mprintf(const char *fmt, ...)
+{
+    va_list ap;
+    int v, ival;
+    long lval;
+    unsigned long ulval;
+    char *s;
+    char c;
+
+    va_start(ap, fmt);
+
+    while (*fmt)
+    {
+        if (*fmt != '%')
+        {
+            printChar(*fmt, 1);
+            fmt++;
+            continue;
+        }
+
+        fmt++;
+
+        if (*fmt == 0)
+            break;
+
+        switch (*fmt)
+        {
+            case 's':
+                s = va_arg(ap, char *);
+
+                if (!s)
+                    s = "(null)";
+
+                while (*s)
+                {
+                    printChar(*s, 1);
+                    s++;
+                }
+                break;
+
+            case 'c':
+                v = va_arg(ap, int);
+                printChar((char)v, 1);
+                break;
+
+            case 'd':
+            case 'i':
+                ival = va_arg(ap, int);
+                mprintf_long_dec((long)ival);
+                break;
+
+            case 'u':
+                ulval = (unsigned long)va_arg(ap, unsigned int);
+                mprintf_ulong_dec(ulval);
+                break;
+
+            case 'x':
+            case 'X':
+            {
+                unsigned long u;
+                char tmp[9];
+                int n = 0;
+                int d;
+
+                u = (unsigned long)va_arg(ap, unsigned int);
+
+                if (u == 0)
+                {
+                    printChar('0', 1);
+                    break;
+                }
+
+                while (u)
+                {
+                    d = (int)(u & 0x0F);
+
+                    if (d < 10)
+                        tmp[n++] = (char)('0' + d);
+                    else
+                        tmp[n++] = (char)('A' + d - 10);
+
+                    u >>= 4;
+                }
+
+                while (n > 0)
+                    printChar(tmp[--n], 1);
+                break;
+            }
+            case 'l':
+                fmt++;
+
+                if (*fmt == 'd' || *fmt == 'i')
+                {
+                    lval = va_arg(ap, long);
+                    mprintf_long_dec(lval);
+                }
+                else if (*fmt == 'u')
+                {
+                    ulval = va_arg(ap, unsigned long);
+                    mprintf_ulong_dec(ulval);
+                }
+                else if (*fmt == 'x' || *fmt == 'X')
+                {
+                    ulval = va_arg(ap, unsigned long);
+                    mprintf_ulong_hex(ulval);
+                }
+                else
+                {
+                    printChar('%', 1);
+                    printChar('l', 1);
+
+                    if (*fmt)
+                        printChar(*fmt, 1);
+                }
+                break;
+            case '%':
+                printChar('%', 1);
+                break;
+
+            default:
+                printChar('%', 1);
+                printChar(*fmt, 1);
+                break;
+        }
+
+        fmt++;
+    }
+
+    va_end(ap);
 }
 
 //-----------------------------------------------------------------------------
@@ -2438,7 +2671,7 @@ void carregaOSDisk(void)
 //-----------------------------------------------------------------------------
 unsigned int carregaBasic(void)
 {
-    unsigned char *xaddress = 0x00800000;
+    unsigned char *xaddress = 0x00870000;
     unsigned char vbyteprog[128], vbytes[4], dd, vByte = 0;
     unsigned int ix, cc;
     unsigned int vSizeFile;

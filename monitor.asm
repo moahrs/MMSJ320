@@ -34,6 +34,7 @@
 ; * 12/04/2026  1.4a02  Moacir Jr.   Ajustes no malloc/realloc/free e inclusao do xmodem 1k crc
 ; * 20/04/2026  1.4a03  Moacir Jr.   Alterar loadso e runso to loados e runos
 ; * 24/04/2026  1.4a04  Moacir Jr.   Ajustes nas variaveis basic e prepara para LOADBAS
+; * 02/05/2026  1.4a05  Moacir Jr.   Ajuste endereco loadbas
 ; *--------------------------------------------------------------------------------
 ; *
 ; * Mapa de Memoria
@@ -102,6 +103,7 @@
 ; #include <string.h>
 ; #include <malloc.h>
 ; #include <stdlib.h>
+; #include <stdarg.h>
 ; #include "mmsj320api.h"
 ; #include "mmsj320vdp.h"
 ; #include "mmsj320mfp.h"
@@ -166,6 +168,10 @@
 ; void modeVideo(unsigned char *pMode);
 ; void printCharBuffer(unsigned char *pCharMade);
 ; unsigned char readMouse(unsigned char *vStat, unsigned char *vMovX, unsigned char *vMovY);
+; void mprintf_ulong_hex(unsigned long v);
+; void mprintf_long_dec(long v);
+; void mprintf_ulong_dec(unsigned long v);
+; void mprintf(const char *fmt, ...);
 ; void inputTask(void);
 ; #ifdef __KEYPS2__
 ; void scanCodeTask(void *);
@@ -908,6 +914,623 @@ inputTask_10:
        move.b    D2,-1(A6)
        bra       inputTask_1
 ; }
+; }
+; //-----------------------------------------------------------------------------
+; void mprintf_ulong_dec(unsigned long v)
+; {
+       xdef      _mprintf_ulong_dec
+_mprintf_ulong_dec:
+       link      A6,#-40
+       movem.l   D2/D3/D4/A2,-(A7)
+       lea       -40(A6),A2
+; unsigned long divs[10];
+; int i;
+; int started;
+; unsigned char digit;
+; divs[0] = 1000000000UL;
+       move.l    #1000000000,(A2)
+; divs[1] = 100000000UL;
+       move.l    #100000000,4(A2)
+; divs[2] = 10000000UL;
+       move.l    #10000000,8(A2)
+; divs[3] = 1000000UL;
+       move.l    #1000000,12(A2)
+; divs[4] = 100000UL;
+       move.l    #100000,16(A2)
+; divs[5] = 10000UL;
+       move.l    #10000,20(A2)
+; divs[6] = 1000UL;
+       move.l    #1000,24(A2)
+; divs[7] = 100UL;
+       move.l    #100,28(A2)
+; divs[8] = 10UL;
+       move.l    #10,32(A2)
+; divs[9] = 1UL;
+       move.l    #1,36(A2)
+; started = 0;
+       clr.l     D4
+; for (i = 0; i < 10; i++)
+       clr.l     D2
+mprintf_ulong_dec_1:
+       cmp.l     #10,D2
+       bge       mprintf_ulong_dec_3
+; {
+; digit = 0;
+       clr.b     D3
+; while (v >= divs[i])
+mprintf_ulong_dec_4:
+       move.l    D2,D0
+       lsl.l     #2,D0
+       move.l    8(A6),D1
+       cmp.l     0(A2,D0.L),D1
+       blo.s     mprintf_ulong_dec_6
+; {
+; v -= divs[i];
+       move.l    D2,D0
+       lsl.l     #2,D0
+       move.l    0(A2,D0.L),D0
+       sub.l     D0,8(A6)
+; digit++;
+       addq.b    #1,D3
+       bra       mprintf_ulong_dec_4
+mprintf_ulong_dec_6:
+; }
+; if (digit || started || i == 9)
+       and.l     #255,D3
+       bne.s     mprintf_ulong_dec_9
+       tst.l     D4
+       bne.s     mprintf_ulong_dec_9
+       cmp.l     #9,D2
+       bne.s     mprintf_ulong_dec_7
+mprintf_ulong_dec_9:
+; {
+; printChar('0' + digit, 1);
+       pea       1
+       moveq     #48,D1
+       add.b     D3,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       _printChar
+       addq.w    #8,A7
+; started = 1;
+       moveq     #1,D4
+mprintf_ulong_dec_7:
+       addq.l    #1,D2
+       bra       mprintf_ulong_dec_1
+mprintf_ulong_dec_3:
+       movem.l   (A7)+,D2/D3/D4/A2
+       unlk      A6
+       rts
+; }
+; }
+; }
+; //-----------------------------------------------------------------------------
+; void mprintf_long_dec(long v)
+; {
+       xdef      _mprintf_long_dec
+_mprintf_long_dec:
+       link      A6,#0
+       movem.l   D2/D3,-(A7)
+       move.l    8(A6),D3
+; unsigned long u;
+; if (v < 0)
+       cmp.l     #0,D3
+       bge.s     mprintf_long_dec_1
+; {
+; printChar('-', 1);
+       pea       1
+       pea       45
+       jsr       _printChar
+       addq.w    #8,A7
+; u = (unsigned long)(-(v + 1));
+       move.l    D3,D0
+       addq.l    #1,D0
+       neg.l     D0
+       move.l    D0,D2
+; u++;
+       addq.l    #1,D2
+       bra.s     mprintf_long_dec_2
+mprintf_long_dec_1:
+; }
+; else
+; {
+; u = (unsigned long)v;
+       move.l    D3,D2
+mprintf_long_dec_2:
+; }
+; mprintf_ulong_dec(u);
+       move.l    D2,-(A7)
+       jsr       _mprintf_ulong_dec
+       addq.w    #4,A7
+       movem.l   (A7)+,D2/D3
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void mprintf_ulong_hex(unsigned long v)
+; {
+       xdef      _mprintf_ulong_hex
+_mprintf_ulong_hex:
+       link      A6,#-8
+       movem.l   D2/D3/D4/A2,-(A7)
+       move.l    8(A6),D4
+       lea       -8(A6),A2
+; char tmp[8];
+; int n;
+; int d;
+; n = 0;
+       clr.l     D2
+; if (v == 0)
+       tst.l     D4
+       bne.s     mprintf_ulong_hex_1
+; {
+; printChar('0', 1);
+       pea       1
+       pea       48
+       jsr       _printChar
+       addq.w    #8,A7
+; return;
+       bra       mprintf_ulong_hex_13
+mprintf_ulong_hex_1:
+; }
+; while (v && n < 8)
+mprintf_ulong_hex_4:
+       tst.l     D4
+       beq       mprintf_ulong_hex_6
+       cmp.l     #8,D2
+       bge.s     mprintf_ulong_hex_7
+       moveq     #1,D0
+       bra.s     mprintf_ulong_hex_8
+mprintf_ulong_hex_7:
+       clr.l     D0
+mprintf_ulong_hex_8:
+       tst.l     D0
+       beq       mprintf_ulong_hex_6
+; {
+; d = (int)(v & 0x0F);
+       move.l    D4,D0
+       and.l     #15,D0
+       move.l    D0,D3
+; if (d < 10)
+       cmp.l     #10,D3
+       bge.s     mprintf_ulong_hex_9
+; tmp[n] = (char)('0' + d);
+       moveq     #48,D0
+       ext.w     D0
+       ext.l     D0
+       add.l     D3,D0
+       move.b    D0,0(A2,D2.L)
+       bra.s     mprintf_ulong_hex_10
+mprintf_ulong_hex_9:
+; else
+; tmp[n] = (char)('A' + d - 10);
+       moveq     #65,D0
+       ext.w     D0
+       ext.l     D0
+       add.l     D3,D0
+       sub.l     #10,D0
+       move.b    D0,0(A2,D2.L)
+mprintf_ulong_hex_10:
+; n++;
+       addq.l    #1,D2
+; v = v >> 4;
+       lsr.l     #4,D4
+       bra       mprintf_ulong_hex_4
+mprintf_ulong_hex_6:
+; }
+; while (n > 0)
+mprintf_ulong_hex_11:
+       cmp.l     #0,D2
+       ble.s     mprintf_ulong_hex_13
+; {
+; n--;
+       subq.l    #1,D2
+; printChar(tmp[n], 1);
+       pea       1
+       move.b    0(A2,D2.L),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       _printChar
+       addq.w    #8,A7
+       bra       mprintf_ulong_hex_11
+mprintf_ulong_hex_13:
+       movem.l   (A7)+,D2/D3/D4/A2
+       unlk      A6
+       rts
+; }
+; }
+; //-----------------------------------------------------------------------------
+; void mprintf(const char *fmt, ...)
+; {
+       xdef      _mprintf
+_mprintf:
+       link      A6,#-16
+       movem.l   D2/D3/D4/D5/D6/D7/A2/A3,-(A7)
+       lea       _printChar.L,A2
+       lea       3(A6),A3
+; va_list ap;
+; int v, ival;
+; long lval;
+; unsigned long ulval;
+; char *s;
+; char c;
+; va_start(ap, fmt);
+       lea       8(A6),A0
+       addq.w    #4,A0
+       move.l    A0,D2
+; while (*fmt)
+mprintf_1:
+       move.l    8(A6),A0
+       tst.b     (A0)
+       beq       mprintf_3
+; {
+; if (*fmt != '%')
+       move.l    8(A6),A0
+       move.b    (A0),D0
+       cmp.b     #37,D0
+       beq.s     mprintf_4
+; {
+; printChar(*fmt, 1);
+       pea       1
+       move.l    8(A6),A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A2)
+       addq.w    #8,A7
+; fmt++;
+       addq.l    #1,8(A6)
+; continue;
+       bra       mprintf_2
+mprintf_4:
+; }
+; fmt++;
+       addq.l    #1,8(A6)
+; if (*fmt == 0)
+       move.l    8(A6),A0
+       move.b    (A0),D0
+       bne.s     mprintf_6
+; break;
+       bra       mprintf_3
+mprintf_6:
+; switch (*fmt)
+       move.l    8(A6),A0
+       move.b    (A0),D0
+       ext.w     D0
+       ext.l     D0
+       cmp.l     #105,D0
+       beq       mprintf_12
+       bgt.s     mprintf_20
+       cmp.l     #99,D0
+       beq       mprintf_11
+       bgt.s     mprintf_21
+       cmp.l     #88,D0
+       beq       mprintf_15
+       bgt       mprintf_8
+       cmp.l     #37,D0
+       beq       mprintf_18
+       bra       mprintf_8
+mprintf_21:
+       cmp.l     #100,D0
+       beq       mprintf_12
+       bra       mprintf_8
+mprintf_20:
+       cmp.l     #117,D0
+       beq       mprintf_14
+       bgt.s     mprintf_22
+       cmp.l     #115,D0
+       beq.s     mprintf_10
+       bgt       mprintf_8
+       cmp.l     #108,D0
+       beq       mprintf_17
+       bra       mprintf_8
+mprintf_22:
+       cmp.l     #120,D0
+       beq       mprintf_15
+       bra       mprintf_8
+mprintf_10:
+; {
+; case 's':
+; s = va_arg(ap, char *);
+       addq.l    #4,D2
+       move.l    D2,D0
+       subq.l    #4,D0
+       move.l    D0,A0
+       move.l    (A0),D4
+; if (!s)
+       tst.l     D4
+       bne.s     mprintf_23
+; s = "(null)";
+       lea       @monitor_8.L,A0
+       move.l    A0,D4
+mprintf_23:
+; while (*s)
+mprintf_25:
+       move.l    D4,A0
+       tst.b     (A0)
+       beq.s     mprintf_27
+; {
+; printChar(*s, 1);
+       pea       1
+       move.l    D4,A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A2)
+       addq.w    #8,A7
+; s++;
+       addq.l    #1,D4
+       bra       mprintf_25
+mprintf_27:
+; }
+; break;
+       bra       mprintf_9
+mprintf_11:
+; case 'c':
+; v = va_arg(ap, int);
+       addq.l    #4,D2
+       move.l    D2,D0
+       subq.l    #4,D0
+       move.l    D0,A0
+       move.l    (A0),-14(A6)
+; printChar((char)v, 1);
+       pea       1
+       move.l    -14(A6),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A2)
+       addq.w    #8,A7
+; break;
+       bra       mprintf_9
+mprintf_12:
+; case 'd':
+; case 'i':
+; ival = va_arg(ap, int);
+       addq.l    #4,D2
+       move.l    D2,D0
+       subq.l    #4,D0
+       move.l    D0,A0
+       move.l    (A0),-10(A6)
+; mprintf_long_dec((long)ival);
+       move.l    -10(A6),-(A7)
+       jsr       _mprintf_long_dec
+       addq.w    #4,A7
+; break;
+       bra       mprintf_9
+mprintf_14:
+; case 'u':
+; ulval = (unsigned long)va_arg(ap, unsigned int);
+       addq.l    #4,D2
+       move.l    D2,D0
+       subq.l    #4,D0
+       move.l    D0,A0
+       move.l    (A0),D3
+; mprintf_ulong_dec(ulval);
+       move.l    D3,-(A7)
+       jsr       _mprintf_ulong_dec
+       addq.w    #4,A7
+; break;
+       bra       mprintf_9
+mprintf_15:
+; case 'x':
+; case 'X':
+; {
+; unsigned long u;
+; char tmp[9];
+; int n = 0;
+       clr.l     D6
+; int d;
+; u = (unsigned long)va_arg(ap, unsigned int);
+       addq.l    #4,D2
+       move.l    D2,D0
+       subq.l    #4,D0
+       move.l    D0,A0
+       move.l    (A0),D5
+; if (u == 0)
+       tst.l     D5
+       bne.s     mprintf_28
+; {
+; printChar('0', 1);
+       pea       1
+       pea       48
+       jsr       (A2)
+       addq.w    #8,A7
+; break;
+       bra       mprintf_9
+mprintf_28:
+; }
+; while (u)
+mprintf_30:
+       tst.l     D5
+       beq       mprintf_32
+; {
+; d = (int)(u & 0x0F);
+       move.l    D5,D0
+       and.l     #15,D0
+       move.l    D0,D7
+; if (d < 10)
+       cmp.l     #10,D7
+       bge.s     mprintf_33
+; tmp[n++] = (char)('0' + d);
+       moveq     #48,D0
+       ext.w     D0
+       ext.l     D0
+       add.l     D7,D0
+       move.l    D6,D1
+       addq.l    #1,D6
+       move.b    D0,0(A3,D1.L)
+       bra.s     mprintf_34
+mprintf_33:
+; else
+; tmp[n++] = (char)('A' + d - 10);
+       moveq     #65,D0
+       ext.w     D0
+       ext.l     D0
+       add.l     D7,D0
+       sub.l     #10,D0
+       move.l    D6,D1
+       addq.l    #1,D6
+       move.b    D0,0(A3,D1.L)
+mprintf_34:
+; u >>= 4;
+       lsr.l     #4,D5
+       bra       mprintf_30
+mprintf_32:
+; }
+; while (n > 0)
+mprintf_35:
+       cmp.l     #0,D6
+       ble.s     mprintf_37
+; printChar(tmp[--n], 1);
+       pea       1
+       subq.l    #1,D6
+       move.b    0(A3,D6.L),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A2)
+       addq.w    #8,A7
+       bra       mprintf_35
+mprintf_37:
+; break;
+       bra       mprintf_9
+mprintf_17:
+; }
+; case 'l':
+; fmt++;
+       addq.l    #1,8(A6)
+; if (*fmt == 'd' || *fmt == 'i')
+       move.l    8(A6),A0
+       move.b    (A0),D0
+       cmp.b     #100,D0
+       beq.s     mprintf_40
+       move.l    8(A6),A0
+       move.b    (A0),D0
+       cmp.b     #105,D0
+       bne.s     mprintf_38
+mprintf_40:
+; {
+; lval = va_arg(ap, long);
+       addq.l    #4,D2
+       move.l    D2,D0
+       subq.l    #4,D0
+       move.l    D0,A0
+       move.l    (A0),-6(A6)
+; mprintf_long_dec(lval);
+       move.l    -6(A6),-(A7)
+       jsr       _mprintf_long_dec
+       addq.w    #4,A7
+       bra       mprintf_46
+mprintf_38:
+; }
+; else if (*fmt == 'u')
+       move.l    8(A6),A0
+       move.b    (A0),D0
+       cmp.b     #117,D0
+       bne.s     mprintf_41
+; {
+; ulval = va_arg(ap, unsigned long);
+       addq.l    #4,D2
+       move.l    D2,D0
+       subq.l    #4,D0
+       move.l    D0,A0
+       move.l    (A0),D3
+; mprintf_ulong_dec(ulval);
+       move.l    D3,-(A7)
+       jsr       _mprintf_ulong_dec
+       addq.w    #4,A7
+       bra       mprintf_46
+mprintf_41:
+; }
+; else if (*fmt == 'x' || *fmt == 'X')
+       move.l    8(A6),A0
+       move.b    (A0),D0
+       cmp.b     #120,D0
+       beq.s     mprintf_45
+       move.l    8(A6),A0
+       move.b    (A0),D0
+       cmp.b     #88,D0
+       bne.s     mprintf_43
+mprintf_45:
+; {
+; ulval = va_arg(ap, unsigned long);
+       addq.l    #4,D2
+       move.l    D2,D0
+       subq.l    #4,D0
+       move.l    D0,A0
+       move.l    (A0),D3
+; mprintf_ulong_hex(ulval);
+       move.l    D3,-(A7)
+       jsr       _mprintf_ulong_hex
+       addq.w    #4,A7
+       bra       mprintf_46
+mprintf_43:
+; }
+; else
+; {
+; printChar('%', 1);
+       pea       1
+       pea       37
+       jsr       (A2)
+       addq.w    #8,A7
+; printChar('l', 1);
+       pea       1
+       pea       108
+       jsr       (A2)
+       addq.w    #8,A7
+; if (*fmt)
+       move.l    8(A6),A0
+       tst.b     (A0)
+       beq.s     mprintf_46
+; printChar(*fmt, 1);
+       pea       1
+       move.l    8(A6),A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A2)
+       addq.w    #8,A7
+mprintf_46:
+; }
+; break;
+       bra       mprintf_9
+mprintf_18:
+; case '%':
+; printChar('%', 1);
+       pea       1
+       pea       37
+       jsr       (A2)
+       addq.w    #8,A7
+; break;
+       bra.s     mprintf_9
+mprintf_8:
+; default:
+; printChar('%', 1);
+       pea       1
+       pea       37
+       jsr       (A2)
+       addq.w    #8,A7
+; printChar(*fmt, 1);
+       pea       1
+       move.l    8(A6),A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A2)
+       addq.w    #8,A7
+; break;
+mprintf_9:
+; }
+; fmt++;
+       addq.l    #1,8(A6)
+mprintf_2:
+       bra       mprintf_1
+mprintf_3:
+; }
+; va_end(ap);
+       clr.l     D2
+       movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3
+       unlk      A6
+       rts
 ; }
 ; //-----------------------------------------------------------------------------
 ; #ifdef __KEYPS2__
@@ -1878,7 +2501,7 @@ processCmd_14:
        beq       processCmd_73
 ; {
 ; if (!strcmp(linhacomando,"CLS") && iy == 3)
-       pea       @monitor_8.L
+       pea       @monitor_9.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1895,7 +2518,7 @@ processCmd_14:
 processCmd_25:
 ; }
 ; else if (!strcmp(linhacomando,"CLEAR") && iy == 5)
-       pea       @monitor_9.L
+       pea       @monitor_10.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1912,7 +2535,7 @@ processCmd_25:
 processCmd_27:
 ; }
 ; else if (!strcmp(linhacomando,"VER") && iy == 3)
-       pea       @monitor_10.L
+       pea       @monitor_11.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1929,7 +2552,7 @@ processCmd_27:
 processCmd_29:
 ; }
 ; else if (!strcmp(linhacomando,"LOAD") && iy == 4)
-       pea       @monitor_11.L
+       pea       @monitor_12.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1939,7 +2562,7 @@ processCmd_29:
        bne.s     processCmd_31
 ; {
 ; printText("Wait...\r\n\0");
-       pea       @monitor_12.L
+       pea       @monitor_13.L
        jsr       (A5)
        addq.w    #4,A7
 ; if (linhaarg[0] != 0x00)
@@ -1960,7 +2583,7 @@ processCmd_33:
 processCmd_31:
 ; }
 ; else if (!strcmp(linhacomando,"LOAD2") && iy == 5)
-       pea       @monitor_13.L
+       pea       @monitor_14.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -1970,7 +2593,7 @@ processCmd_31:
        bne.s     processCmd_35
 ; {
 ; printText("Wait...\r\n\0");
-       pea       @monitor_12.L
+       pea       @monitor_13.L
        jsr       (A5)
        addq.w    #4,A7
 ; if (linhaarg[0] != 0x00)
@@ -1991,7 +2614,7 @@ processCmd_37:
 processCmd_35:
 ; }
 ; else if (!strcmp(linhacomando,"RUN") && iy == 3)
-       pea       @monitor_14.L
+       pea       @monitor_15.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2022,7 +2645,7 @@ processCmd_42:
 processCmd_39:
 ; }
 ; else if (!strcmp(linhacomando,"BASIC") && iy == 5)
-       pea       @monitor_15.L
+       pea       @monitor_16.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2043,7 +2666,7 @@ processCmd_39:
 processCmd_45:
 ; else 
 ; printText("OS loaded. Run Basic from OS !!!\r\n\0");
-       pea       @monitor_16.L
+       pea       @monitor_17.L
        jsr       (A5)
        addq.w    #4,A7
 processCmd_46:
@@ -2051,7 +2674,7 @@ processCmd_46:
 processCmd_43:
 ; }
 ; else if (!strcmp(linhacomando,"BASICAP2") && iy == 8)
-       pea       @monitor_17.L
+       pea       @monitor_18.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2068,7 +2691,7 @@ processCmd_43:
 processCmd_47:
 ; }
 ; else if (!strcmp(linhacomando,"MODE") && iy == 4)
-       pea       @monitor_18.L
+       pea       @monitor_19.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2085,7 +2708,7 @@ processCmd_47:
 processCmd_49:
 ; }
 ; else if (!strcmp(linhacomando,"POKE") && iy == 4)
-       pea       @monitor_19.L
+       pea       @monitor_20.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2103,7 +2726,7 @@ processCmd_49:
 processCmd_51:
 ; }
 ; else if (!strcmp(linhacomando,"LOADOS") && iy == 6)
-       pea       @monitor_20.L
+       pea       @monitor_21.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2118,7 +2741,7 @@ processCmd_51:
 processCmd_53:
 ; }
 ; else if (!strcmp(linhacomando,"RUNOS") && iy == 5)
-       pea       @monitor_21.L
+       pea       @monitor_22.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2133,7 +2756,7 @@ processCmd_53:
 processCmd_55:
 ; }
 ; else if (!strcmp(linhacomando,"LOADBAS") && iy == 7)
-       pea       @monitor_22.L
+       pea       @monitor_23.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2148,7 +2771,7 @@ processCmd_55:
 processCmd_57:
 ; }
 ; else if (!strcmp(linhacomando,"RUNBAS") && iy == 6)
-       pea       @monitor_23.L
+       pea       @monitor_24.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2167,7 +2790,7 @@ processCmd_57:
 processCmd_59:
 ; }
 ; else if (!strcmp(linhacomando,"DEBUG") && iy == 5)
-       pea       @monitor_24.L
+       pea       @monitor_25.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2183,7 +2806,7 @@ processCmd_59:
 ; debugMessages = 0;
        clr.b     _debugMessages.L
 ; printText("Debug Messages Off\r\n\0");
-       pea       @monitor_25.L
+       pea       @monitor_26.L
        jsr       (A5)
        addq.w    #4,A7
        bra.s     processCmd_64
@@ -2194,7 +2817,7 @@ processCmd_63:
 ; debugMessages = 1;
        move.b    #1,_debugMessages.L
 ; printText("Debug Messages On\r\n\0");
-       pea       @monitor_26.L
+       pea       @monitor_27.L
        jsr       (A5)
        addq.w    #4,A7
 processCmd_64:
@@ -2203,7 +2826,7 @@ processCmd_61:
 ; }
 ; }
 ; else if (strcmp(linhacomando,"DUMP") == 0 && iy == 4)
-       pea       @monitor_27.L
+       pea       @monitor_28.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2222,7 +2845,7 @@ processCmd_61:
 processCmd_65:
 ; }
 ; else if (strcmp(linhacomando,"DDUUMMPP") == 0 && iy == 8)
-       pea       @monitor_28.L
+       pea       @monitor_29.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2232,16 +2855,16 @@ processCmd_65:
        bne.s     processCmd_67
 ; {
 ; dumpMem("6020A0\0", "128\0", "\0");
+       pea       @monitor_32.L
        pea       @monitor_31.L
        pea       @monitor_30.L
-       pea       @monitor_29.L
        jsr       _dumpMem
        add.w     #12,A7
        bra       processCmd_73
 processCmd_67:
 ; }
 ; else if (strcmp(linhacomando,"DUMPS") == 0 && linhacomando[4] == 'S' && iy == 5)
-       pea       @monitor_32.L
+       pea       @monitor_33.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2262,7 +2885,7 @@ processCmd_67:
 processCmd_69:
 ; }
 ; else if (strcmp(linhacomando,"DUMPW") == 0 && linhacomando[4] == 'W' && iy == 5)
-       pea       @monitor_33.L
+       pea       @monitor_34.L
        move.l    A2,-(A7)
        jsr       (A3)
        addq.w    #8,A7
@@ -2291,7 +2914,7 @@ processCmd_71:
        tst.b     -5(A6)
        bne.s     processCmd_73
 ; printText("Unknown Command !!!\r\n\0");
-       pea       @monitor_34.L
+       pea       @monitor_35.L
        jsr       (A5)
        addq.w    #4,A7
 processCmd_73:
@@ -2606,23 +3229,23 @@ modeVideo_2:
        bne.s     modeVideo_12
 ; {
 ; printText("usage: mode [code]\r\n\0");
-       pea       @monitor_35.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printText("   code: 0 = Text Mode 40x24\r\n\0");
        pea       @monitor_36.L
        jsr       (A2)
        addq.w    #4,A7
-; printText("         1 = Graphic Text Mode 32x24\r\n\0");
+; printText("   code: 0 = Text Mode 40x24\r\n\0");
        pea       @monitor_37.L
        jsr       (A2)
        addq.w    #4,A7
-; printText("         2 = Graphic 256x192\r\n\0");
+; printText("         1 = Graphic Text Mode 32x24\r\n\0");
        pea       @monitor_38.L
        jsr       (A2)
        addq.w    #4,A7
-; printText("         3 = Graphic 64x48\r\n\0");
+; printText("         2 = Graphic 256x192\r\n\0");
        pea       @monitor_39.L
+       jsr       (A2)
+       addq.w    #4,A7
+; printText("         3 = Graphic 64x48\r\n\0");
+       pea       @monitor_40.L
        jsr       (A2)
        addq.w    #4,A7
 modeVideo_12:
@@ -2893,7 +3516,7 @@ pokeMem_1:
        cmp.b     #3,D0
        bne.s     pokeMem_3
 ; printText("usage: poke <ender> <byte>\r\n\0");
-       pea       @monitor_40.L
+       pea       @monitor_41.L
        jsr       _printText
        addq.w    #4,A7
 pokeMem_3:
@@ -2946,15 +3569,15 @@ _dumpMem:
        bne.s     dumpMem_3
 ; {
 ; printText("usage: dump <ender> [qtd] [cols]\r\n\0");
-       pea       @monitor_41.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printText("    qtd: default 64\r\n\0");
        pea       @monitor_42.L
        jsr       (A2)
        addq.w    #4,A7
-; printText("   cols: default 8\r\n\0");
+; printText("    qtd: default 64\r\n\0");
        pea       @monitor_43.L
+       jsr       (A2)
+       addq.w    #4,A7
+; printText("   cols: default 8\r\n\0");
+       pea       @monitor_44.L
        jsr       (A2)
        addq.w    #4,A7
 dumpMem_3:
@@ -3095,7 +3718,7 @@ dumpMem_27:
 dumpMem_26:
 ; }
 ; printText("|\0");
-       pea       @monitor_44.L
+       pea       @monitor_45.L
        jsr       (A2)
        addq.w    #4,A7
 ; for (iy = 0; iy < vcols; iy++)
@@ -3185,7 +3808,7 @@ _dumpMem2:
        cmp.b     #3,D0
        bne.s     dumpMem2_3
 ; writeLongSerial("usage: dump <ender initial> [qtd (default 256)]\r\n\0");
-       pea       @monitor_45.L
+       pea       @monitor_46.L
        jsr       (A2)
        addq.w    #4,A7
 dumpMem2_3:
@@ -3259,7 +3882,7 @@ dumpMem2_16:
        jsr       (A2)
        addq.w    #4,A7
 ; writeLongSerial("h : ");
-       pea       @monitor_46.L
+       pea       @monitor_47.L
        jsr       (A2)
        addq.w    #4,A7
 ; for (iy = 0; iy < 16; iy++)
@@ -3303,7 +3926,7 @@ dumpMem2_20:
 dumpMem2_22:
 ; }
 ; writeLongSerial(" | \0");
-       pea       @monitor_47.L
+       pea       @monitor_48.L
        jsr       (A2)
        addq.w    #4,A7
 ; for (iy = 0; iy < 16; iy++)
@@ -3393,15 +4016,15 @@ _dumpMemWin:
        bne.s     dumpMemWin_3
 ; {
 ; printText("usage: dumpw <ender> [qtd] [cols]\r\n\0");
-       pea       @monitor_48.L
-       jsr       (A3)
-       addq.w    #4,A7
-; printText("    qtd: default 128\r\n\0");
        pea       @monitor_49.L
        jsr       (A3)
        addq.w    #4,A7
+; printText("    qtd: default 128\r\n\0");
+       pea       @monitor_50.L
+       jsr       (A3)
+       addq.w    #4,A7
 ; printText("   cols: default 8\r\n\0");
-       pea       @monitor_43.L
+       pea       @monitor_44.L
        jsr       (A3)
        addq.w    #4,A7
 dumpMemWin_3:
@@ -3420,7 +4043,7 @@ dumpMemWin_1:
        cmp.b     #3,D0
        bne.s     dumpMemWin_8
 ; printText("dumpw Only Works in 40 cols\r\n\0");
-       pea       @monitor_50.L
+       pea       @monitor_51.L
        jsr       (A3)
        addq.w    #4,A7
 dumpMemWin_8:
@@ -3451,7 +4074,7 @@ dumpMemWin_12:
 ; clearScr();
        jsr       _clearScr
 ; printText("             DUMPW v0.1                \r\n\0");
-       pea       @monitor_51.L
+       pea       @monitor_52.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(218,1);
@@ -3523,15 +4146,6 @@ dumpMemWin_22:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("Addr ");
-       pea       @monitor_52.L
-       jsr       (A3)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A2)
-       addq.w    #8,A7
-; printText("         Bytes         ");
        pea       @monitor_53.L
        jsr       (A3)
        addq.w    #4,A7
@@ -3540,8 +4154,17 @@ dumpMemWin_22:
        pea       179
        jsr       (A2)
        addq.w    #8,A7
-; printText(" ASCII ");
+; printText("         Bytes         ");
        pea       @monitor_54.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText(" ASCII ");
+       pea       @monitor_55.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -3654,7 +4277,7 @@ dumpMemWin_34:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" <-:Prev  ->:Next  <");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(217,1);
@@ -3663,7 +4286,7 @@ dumpMemWin_34:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(":Addr  ESC:Exit ");
-       pea       @monitor_56.L
+       pea       @monitor_57.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -3823,7 +4446,7 @@ dumpMemWin_58:
 dumpMemWin_57:
 ; }
 ; printText("|\0");
-       pea       @monitor_44.L
+       pea       @monitor_45.L
        jsr       (A3)
        addq.w    #4,A7
 ; for (iy = 0; iy < vcols; iy++)
@@ -3916,7 +4539,7 @@ dumpMemWin_72:
        jsr       (A4)
        addq.w    #8,A7
 ; printText(" Address(HEX):                       \0");
-       pea       @monitor_57.L
+       pea       @monitor_58.L
        jsr       (A3)
        addq.w    #4,A7
 ; vdp_set_cursor(16, 21);
@@ -3936,7 +4559,7 @@ dumpMemWin_72:
        jsr       (A4)
        addq.w    #8,A7
 ; printText(" <-:Prev  ->:Next  <");
-       pea       @monitor_55.L
+       pea       @monitor_56.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(217,1);
@@ -3945,7 +4568,7 @@ dumpMemWin_72:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(":Addr  ESC:Exit ");
-       pea       @monitor_56.L
+       pea       @monitor_57.L
        jsr       (A3)
        addq.w    #4,A7
 ; if (vRetInput != 0x1B)
@@ -4271,7 +4894,7 @@ _loadSerialToMem2:
        tst.b     D7
        beq.s     loadSerialToMem2_1
 ; printText("Receiving (XMODEM-CRC/1K).\r\n<Esc> to Cancel...\r\n\0");
-       pea       @monitor_58.L
+       pea       @monitor_59.L
        jsr       (A3)
        addq.w    #4,A7
 loadSerialToMem2_1:
@@ -4294,7 +4917,7 @@ loadSerialToMem2_1:
 loadSerialToMem2_3:
 ; }
 ; printText("Address loading: 0x");
-       pea       @monitor_59.L
+       pea       @monitor_60.L
        jsr       (A3)
        addq.w    #4,A7
 ; itoa(pEndStart, sqtdtam, 16);
@@ -4308,7 +4931,7 @@ loadSerialToMem2_3:
        jsr       (A3)
        addq.w    #4,A7
 ; printText(" \0");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A3)
        addq.w    #4,A7
 ; vEndSave = pEndStart;
@@ -4341,7 +4964,7 @@ loadSerialToMem2_10:
        tst.b     D7
        beq.s     loadSerialToMem2_12
 ; printText("\r\nLoading aborted.\r\n\0");
-       pea       @monitor_61.L
+       pea       @monitor_62.L
        jsr       (A3)
        addq.w    #4,A7
 loadSerialToMem2_12:
@@ -4411,7 +5034,7 @@ loadSerialToMem2_23:
        tst.b     D7
        beq.s     loadSerialToMem2_25
 ; printText("\r\nTimeout waiting sender.\r\n\0");
-       pea       @monitor_62.L
+       pea       @monitor_63.L
        jsr       (A3)
        addq.w    #4,A7
 loadSerialToMem2_25:
@@ -4456,7 +5079,7 @@ loadSerialToMem2_31:
        tst.b     D7
        beq.s     loadSerialToMem2_33
 ; printText("\r\nTransfer canceled by sender.\r\n\0");
-       pea       @monitor_63.L
+       pea       @monitor_64.L
        jsr       (A3)
        addq.w    #4,A7
 loadSerialToMem2_33:
@@ -4505,7 +5128,7 @@ loadSerialToMem2_41:
        tst.b     D7
        beq.s     loadSerialToMem2_43
 ; printText("\r\nToo many protocol errors.\r\n\0");
-       pea       @monitor_64.L
+       pea       @monitor_65.L
        jsr       (A3)
        addq.w    #4,A7
 loadSerialToMem2_43:
@@ -4840,7 +5463,7 @@ loadSerialToMem2_81:
        tst.b     D7
        beq.s     loadSerialToMem2_86
 ; printText("\r\nNo memory while receiving.\r\n\0");
-       pea       @monitor_65.L
+       pea       @monitor_66.L
        jsr       (A3)
        addq.w    #4,A7
 loadSerialToMem2_86:
@@ -4897,11 +5520,11 @@ loadSerialToMem2_7:
        beq       loadSerialToMem2_91
 ; {
 ; printText("\r\nFile loaded in to memory successfuly.\r\n\0");
-       pea       @monitor_66.L
+       pea       @monitor_67.L
        jsr       (A3)
        addq.w    #4,A7
 ; printText("Address loaded: 0x");
-       pea       @monitor_67.L
+       pea       @monitor_68.L
        jsr       (A3)
        addq.w    #4,A7
 ; itoa(pEndStart, sqtdtam, 16);
@@ -4979,7 +5602,7 @@ _loadSerialToMem:
        tst.b     15(A6)
        beq.s     loadSerialToMem_1
 ; printText("Receiving. <Esc> to Cancel... \r\n\0");
-       pea       @monitor_68.L
+       pea       @monitor_69.L
        jsr       (A2)
        addq.w    #4,A7
 loadSerialToMem_1:
@@ -5006,7 +5629,7 @@ loadSerialToMem_1:
 loadSerialToMem_3:
 ; }
 ; printText("Address loading: 0x");
-       pea       @monitor_59.L
+       pea       @monitor_60.L
        jsr       (A2)
        addq.w    #4,A7
 ; itoa(pEndStart, sqtdtam, 16);
@@ -5020,7 +5643,7 @@ loadSerialToMem_3:
        jsr       (A2)
        addq.w    #4,A7
 ; printText(" \0");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A2)
        addq.w    #4,A7
 ; vEndSave = pEndStart;
@@ -5366,7 +5989,7 @@ loadSerialToMem_52:
        tst.b     15(A6)
        beq.s     loadSerialToMem_54
 ; printText("Timeout. Process Aborted.\r\n\0");
-       pea       @monitor_69.L
+       pea       @monitor_70.L
        jsr       (A2)
        addq.w    #4,A7
 loadSerialToMem_54:
@@ -5386,11 +6009,11 @@ loadSerialToMem_50:
        beq       loadSerialToMem_59
 ; {
 ; printText("File loaded in to memory successfuly.\r\n\0");
-       pea       @monitor_70.L
+       pea       @monitor_71.L
        jsr       (A2)
        addq.w    #4,A7
 ; printText("Address loaded: 0x");
-       pea       @monitor_67.L
+       pea       @monitor_68.L
        jsr       (A2)
        addq.w    #4,A7
 ; itoa(pEndStart, sqtdtam, 16);
@@ -5433,14 +6056,14 @@ loadSerialToMem_61:
        cmp.b     #99,D0
        bne.s     loadSerialToMem_65
 ; printText("Loading aborted.\r\n\0");
-       pea       @monitor_71.L
+       pea       @monitor_72.L
        jsr       (A2)
        addq.w    #4,A7
        bra.s     loadSerialToMem_66
 loadSerialToMem_65:
 ; else
 ; printText("File loaded in to memory with checksum errors.\r\n\0");
-       pea       @monitor_72.L
+       pea       @monitor_73.L
        jsr       (A2)
        addq.w    #4,A7
 loadSerialToMem_66:
@@ -5646,7 +6269,7 @@ carregaSO_4:
        bra       carregaSO_3
 carregaSO_6:
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A4)
        addq.w    #4,A7
 ; /*--------------*/
@@ -5697,7 +6320,7 @@ carregaSO_8:
 ; videoCursorPosColX = vAntX;
        move.w    D3,(A3)
 ; printText("   ");
-       pea       @monitor_73.L
+       pea       @monitor_74.L
        jsr       (A4)
        addq.w    #4,A7
 ; videoCursorPosColX = vAntX;
@@ -5784,7 +6407,7 @@ carregaSO_10:
 ; videoCursorPosColX = vAntX;
        move.w    D3,(A3)
 ; printText("Done!");
-       pea       @monitor_74.L
+       pea       @monitor_75.L
        jsr       (A4)
        addq.w    #4,A7
 ; //    printChar(' ',0);
@@ -5809,7 +6432,7 @@ _carregaOSDisk:
        lea       _printText.L,A2
 ; unsigned int verro;
 ; printText("Loading OS. Please Wait...\0");
-       pea       @monitor_75.L
+       pea       @monitor_76.L
        jsr       (A2)
        addq.w    #4,A7
 ; verro = carregaSO();
@@ -5819,14 +6442,14 @@ _carregaOSDisk:
        tst.l     -4(A6)
        beq.s     carregaOSDisk_1
 ; printText("IO Error....\r\n\0");
-       pea       @monitor_76.L
+       pea       @monitor_77.L
        jsr       (A2)
        addq.w    #4,A7
        bra.s     carregaOSDisk_2
 carregaOSDisk_1:
 ; else {
 ; printText("Ok\r\n\0");
-       pea       @monitor_77.L
+       pea       @monitor_78.L
        jsr       (A2)
        addq.w    #4,A7
 ; *hasMmsjosLoaded = 1;
@@ -5849,8 +6472,8 @@ _carregaBasic:
        lea       _videoCursorPosColX.L,A3
        lea       _printText.L,A4
        lea       _fsSendByte.L,A5
-; unsigned char *xaddress = 0x00800000;
-       move.l    #8388608,-154(A6)
+; unsigned char *xaddress = 0x00870000;
+       move.l    #8847360,-154(A6)
 ; unsigned char vbyteprog[128], vbytes[4], dd, vByte = 0;
        clr.b     D2
 ; unsigned int ix, cc;
@@ -5915,7 +6538,7 @@ carregaBasic_4:
        bra       carregaBasic_3
 carregaBasic_6:
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A4)
        addq.w    #4,A7
 ; /*--------------*/
@@ -5966,7 +6589,7 @@ carregaBasic_8:
 ; videoCursorPosColX = vAntX;
        move.w    D3,(A3)
 ; printText("   ");
-       pea       @monitor_73.L
+       pea       @monitor_74.L
        jsr       (A4)
        addq.w    #4,A7
 ; videoCursorPosColX = vAntX;
@@ -6053,7 +6676,7 @@ carregaBasic_10:
 ; videoCursorPosColX = vAntX;
        move.w    D3,(A3)
 ; printText("Done!");
-       pea       @monitor_74.L
+       pea       @monitor_75.L
        jsr       (A4)
        addq.w    #4,A7
 ; //    printChar(' ',0);
@@ -6078,7 +6701,7 @@ _carregaBasDisk:
        lea       _printText.L,A2
 ; unsigned int verro;
 ; printText("Loading Basic. Please Wait...\0");
-       pea       @monitor_78.L
+       pea       @monitor_79.L
        jsr       (A2)
        addq.w    #4,A7
 ; verro = carregaBasic();
@@ -6088,14 +6711,14 @@ _carregaBasDisk:
        tst.l     -4(A6)
        beq.s     carregaBasDisk_1
 ; printText("IO Error....\r\n\0");
-       pea       @monitor_76.L
+       pea       @monitor_77.L
        jsr       (A2)
        addq.w    #4,A7
        bra.s     carregaBasDisk_2
 carregaBasDisk_1:
 ; else {
 ; printText("Ok\r\n\0");
-       pea       @monitor_77.L
+       pea       @monitor_78.L
        jsr       (A2)
        addq.w    #4,A7
 carregaBasDisk_2:
@@ -6558,7 +7181,7 @@ _funcIntMfpGpi6:
        tst.b     (A5)
        beq.s     funcIntMfpGpi6_1
 ; writeLongSerial("Aqui 0\r\n\0");
-       pea       @monitor_79.L
+       pea       @monitor_80.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi6_1:
@@ -6639,7 +7262,7 @@ funcIntMfpGpi6_11:
        tst.b     (A5)
        beq.s     funcIntMfpGpi6_16
 ; writeLongSerial("Aqui 0.1\r\n\0");
-       pea       @monitor_80.L
+       pea       @monitor_81.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi6_16:
@@ -6689,7 +7312,7 @@ funcIntMfpGpi6_5:
        tst.b     (A5)
        beq.s     funcIntMfpGpi6_22
 ; writeLongSerial("Aqui 1\r\n\0");
-       pea       @monitor_81.L
+       pea       @monitor_82.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi6_22:
@@ -6768,7 +7391,7 @@ _funcIntMfpGpi7:
        tst.b     (A5)
        beq.s     funcIntMfpGpi7_1
 ; writeLongSerial("Aqui 2\r\n\0");
-       pea       @monitor_82.L
+       pea       @monitor_83.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi7_1:
@@ -6864,7 +7487,7 @@ funcIntMfpGpi7_15:
        tst.b     (A5)
        beq.s     funcIntMfpGpi7_20
 ; writeLongSerial("Aqui 2.1\r\n\0");
-       pea       @monitor_83.L
+       pea       @monitor_84.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi7_20:
@@ -6923,7 +7546,7 @@ funcIntMfpGpi7_26:
        tst.b     (A5)
        beq.s     funcIntMfpGpi7_27
 ; writeLongSerial("Aqui 3\r\n\0");
-       pea       @monitor_84.L
+       pea       @monitor_85.L
        jsr       (A4)
        addq.w    #4,A7
 funcIntMfpGpi7_27:
@@ -7222,15 +7845,6 @@ funcErrorBusAddr_3:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("          EXCEPTION OCCURRED        ");
        pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
@@ -7239,8 +7853,17 @@ funcErrorBusAddr_3:
        pea       179
        jsr       (A3)
        addq.w    #8,A7
+; printText("          EXCEPTION OCCURRED        ");
+       pea       @monitor_87.L
+       jsr       (A2)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A3)
+       addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(195,1);
@@ -7267,7 +7890,7 @@ funcErrorBusAddr_6:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; vOP = *errorBufferAddrBus;
@@ -7297,7 +7920,7 @@ funcErrorBusAddr_10:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("      BUS ERROR / ADDRESS ERROR     ");
-       pea       @monitor_87.L
+       pea       @monitor_88.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7306,7 +7929,7 @@ funcErrorBusAddr_10:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -7319,7 +7942,7 @@ funcErrorBusAddr_11:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("         ILLEGAL INSTRUCTION        ");
-       pea       @monitor_88.L
+       pea       @monitor_89.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7328,7 +7951,7 @@ funcErrorBusAddr_11:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -7341,7 +7964,7 @@ funcErrorBusAddr_12:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("             ZERO DIVIDE            ");
-       pea       @monitor_89.L
+       pea       @monitor_90.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7350,7 +7973,7 @@ funcErrorBusAddr_12:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -7363,7 +7986,7 @@ funcErrorBusAddr_13:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("           CHK INSTRUCTION          ");
-       pea       @monitor_90.L
+       pea       @monitor_91.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7372,7 +7995,7 @@ funcErrorBusAddr_13:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -7385,7 +8008,7 @@ funcErrorBusAddr_14:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("                TRAPV               ");
-       pea       @monitor_91.L
+       pea       @monitor_92.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7394,7 +8017,7 @@ funcErrorBusAddr_14:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -7407,7 +8030,7 @@ funcErrorBusAddr_15:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("         PRIVILEGE VIOLATION        ");
-       pea       @monitor_92.L
+       pea       @monitor_93.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7416,7 +8039,7 @@ funcErrorBusAddr_15:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; break;
@@ -7439,7 +8062,7 @@ funcErrorBusAddr_7:
        jsr       (A2)
        addq.w    #4,A7
 ; printText(" : ");
-       pea       @monitor_93.L
+       pea       @monitor_94.L
        jsr       (A2)
        addq.w    #4,A7
 ; itoa(vOP,sqtdtam,16);
@@ -7489,7 +8112,7 @@ funcErrorBusAddr_19:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; ix++;
@@ -7501,7 +8124,7 @@ funcErrorBusAddr_19:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" D0       D1       D2       D3      ");
-       pea       @monitor_94.L
+       pea       @monitor_95.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7510,7 +8133,7 @@ funcErrorBusAddr_19:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7577,7 +8200,7 @@ funcErrorBusAddr_20:
        cmp.l     #3,D3
        bhs.s     funcErrorBusAddr_23
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A2)
        addq.w    #4,A7
 funcErrorBusAddr_23:
@@ -7600,7 +8223,7 @@ funcErrorBusAddr_22:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" D4       D5       D6       D7      ");
-       pea       @monitor_95.L
+       pea       @monitor_96.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7609,7 +8232,7 @@ funcErrorBusAddr_22:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7676,7 +8299,7 @@ funcErrorBusAddr_25:
        cmp.l     #3,D3
        bhs.s     funcErrorBusAddr_28
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A2)
        addq.w    #4,A7
 funcErrorBusAddr_28:
@@ -7699,7 +8322,7 @@ funcErrorBusAddr_27:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" A0       A1       A2       A3      ");
-       pea       @monitor_96.L
+       pea       @monitor_97.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7708,7 +8331,7 @@ funcErrorBusAddr_27:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7775,7 +8398,7 @@ funcErrorBusAddr_30:
        cmp.l     #3,D3
        bhs.s     funcErrorBusAddr_33
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A2)
        addq.w    #4,A7
 funcErrorBusAddr_33:
@@ -7789,7 +8412,7 @@ funcErrorBusAddr_32:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7798,7 +8421,7 @@ funcErrorBusAddr_32:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" A4       A5       A6               ");
-       pea       @monitor_97.L
+       pea       @monitor_98.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7807,7 +8430,7 @@ funcErrorBusAddr_32:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7871,7 +8494,7 @@ funcErrorBusAddr_35:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A2)
        addq.w    #4,A7
        addq.l    #1,D3
@@ -7879,24 +8502,6 @@ funcErrorBusAddr_35:
 funcErrorBusAddr_37:
 ; }
 ; printText("        ");
-       pea       @monitor_98.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("\r\n");
-       pea       @monitor_2.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("                                    ");
        pea       @monitor_99.L
        jsr       (A2)
        addq.w    #4,A7
@@ -7914,7 +8519,7 @@ funcErrorBusAddr_37:
        pea       179
        jsr       (A3)
        addq.w    #8,A7
-; printText(" SR   PC       OffSet Special_Word  ");
+; printText("                                    ");
        pea       @monitor_100.L
        jsr       (A2)
        addq.w    #4,A7
@@ -7923,8 +8528,26 @@ funcErrorBusAddr_37:
        pea       179
        jsr       (A3)
        addq.w    #8,A7
+; printText("\r\n");
+       pea       @monitor_2.L
+       jsr       (A2)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A3)
+       addq.w    #8,A7
+; printText(" SR   PC       OffSet Special_Word  ");
+       pea       @monitor_101.L
+       jsr       (A2)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A3)
+       addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -7961,7 +8584,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A2)
        addq.w    #4,A7
 ; // Mostra PC to Return: 2 words
@@ -8010,7 +8633,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A2)
        addq.w    #4,A7
 ; // Mostra Vector offset: 1 word
@@ -8037,7 +8660,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText("   ");
-       pea       @monitor_73.L
+       pea       @monitor_74.L
        jsr       (A2)
        addq.w    #4,A7
 ; // Mostra Special Status Word: 1 word
@@ -8064,7 +8687,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText("          ");
-       pea       @monitor_101.L
+       pea       @monitor_102.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8082,7 +8705,7 @@ funcErrorBusAddr_37:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("                                    ");
-       pea       @monitor_99.L
+       pea       @monitor_100.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8100,7 +8723,7 @@ funcErrorBusAddr_37:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" FaultAddr OutB InB  Instr.InB      ");
-       pea       @monitor_102.L
+       pea       @monitor_103.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8109,7 +8732,7 @@ funcErrorBusAddr_37:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8168,7 +8791,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText("  ");
-       pea       @monitor_103.L
+       pea       @monitor_104.L
        jsr       (A2)
        addq.w    #4,A7
 ; // unused: 1 word
@@ -8198,7 +8821,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A2)
        addq.w    #4,A7
 ; // unused: 1 word
@@ -8228,7 +8851,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText(" ");
-       pea       @monitor_60.L
+       pea       @monitor_61.L
        jsr       (A2)
        addq.w    #4,A7
 ; // unused: 1 word
@@ -8258,7 +8881,7 @@ funcErrorBusAddr_37:
 ; ix++;
        addq.l    #1,D2
 ; printText("           ");
-       pea       @monitor_104.L
+       pea       @monitor_105.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8295,7 +8918,7 @@ funcErrorBusAddr_40:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8304,7 +8927,7 @@ funcErrorBusAddr_40:
        jsr       (A3)
        addq.w    #8,A7
 ; printText("            SYSTEM HALTED           ");
-       pea       @monitor_105.L
+       pea       @monitor_106.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8313,7 +8936,7 @@ funcErrorBusAddr_40:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; printChar(192,1);
@@ -8340,7 +8963,7 @@ funcErrorBusAddr_43:
        jsr       (A3)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_85.L
+       pea       @monitor_86.L
        jsr       (A2)
        addq.w    #4,A7
 ; for(;;);
@@ -8367,296 +8990,298 @@ funcErrorBusAddr_44:
 @monitor_7:
        dc.b      62,0
 @monitor_8:
-       dc.b      67,76,83,0
+       dc.b      40,110,117,108,108,41,0
 @monitor_9:
-       dc.b      67,76,69,65,82,0
+       dc.b      67,76,83,0
 @monitor_10:
-       dc.b      86,69,82,0
+       dc.b      67,76,69,65,82,0
 @monitor_11:
-       dc.b      76,79,65,68,0
+       dc.b      86,69,82,0
 @monitor_12:
-       dc.b      87,97,105,116,46,46,46,13,10,0
+       dc.b      76,79,65,68,0
 @monitor_13:
-       dc.b      76,79,65,68,50,0
+       dc.b      87,97,105,116,46,46,46,13,10,0
 @monitor_14:
-       dc.b      82,85,78,0
+       dc.b      76,79,65,68,50,0
 @monitor_15:
-       dc.b      66,65,83,73,67,0
+       dc.b      82,85,78,0
 @monitor_16:
+       dc.b      66,65,83,73,67,0
+@monitor_17:
        dc.b      79,83,32,108,111,97,100,101,100,46,32,82,117
        dc.b      110,32,66,97,115,105,99,32,102,114,111,109,32
        dc.b      79,83,32,33,33,33,13,10,0
-@monitor_17:
-       dc.b      66,65,83,73,67,65,80,50,0
 @monitor_18:
-       dc.b      77,79,68,69,0
+       dc.b      66,65,83,73,67,65,80,50,0
 @monitor_19:
-       dc.b      80,79,75,69,0
+       dc.b      77,79,68,69,0
 @monitor_20:
-       dc.b      76,79,65,68,79,83,0
+       dc.b      80,79,75,69,0
 @monitor_21:
-       dc.b      82,85,78,79,83,0
+       dc.b      76,79,65,68,79,83,0
 @monitor_22:
-       dc.b      76,79,65,68,66,65,83,0
+       dc.b      82,85,78,79,83,0
 @monitor_23:
-       dc.b      82,85,78,66,65,83,0
+       dc.b      76,79,65,68,66,65,83,0
 @monitor_24:
-       dc.b      68,69,66,85,71,0
+       dc.b      82,85,78,66,65,83,0
 @monitor_25:
-       dc.b      68,101,98,117,103,32,77,101,115,115,97,103,101
-       dc.b      115,32,79,102,102,13,10,0
+       dc.b      68,69,66,85,71,0
 @monitor_26:
        dc.b      68,101,98,117,103,32,77,101,115,115,97,103,101
-       dc.b      115,32,79,110,13,10,0
+       dc.b      115,32,79,102,102,13,10,0
 @monitor_27:
-       dc.b      68,85,77,80,0
+       dc.b      68,101,98,117,103,32,77,101,115,115,97,103,101
+       dc.b      115,32,79,110,13,10,0
 @monitor_28:
-       dc.b      68,68,85,85,77,77,80,80,0
+       dc.b      68,85,77,80,0
 @monitor_29:
-       dc.b      54,48,50,48,65,48,0
+       dc.b      68,68,85,85,77,77,80,80,0
 @monitor_30:
-       dc.b      49,50,56,0
+       dc.b      54,48,50,48,65,48,0
 @monitor_31:
-       dc.b      0
+       dc.b      49,50,56,0
 @monitor_32:
-       dc.b      68,85,77,80,83,0
+       dc.b      0
 @monitor_33:
-       dc.b      68,85,77,80,87,0
+       dc.b      68,85,77,80,83,0
 @monitor_34:
+       dc.b      68,85,77,80,87,0
+@monitor_35:
        dc.b      85,110,107,110,111,119,110,32,67,111,109,109
        dc.b      97,110,100,32,33,33,33,13,10,0
-@monitor_35:
+@monitor_36:
        dc.b      117,115,97,103,101,58,32,109,111,100,101,32
        dc.b      91,99,111,100,101,93,13,10,0
-@monitor_36:
+@monitor_37:
        dc.b      32,32,32,99,111,100,101,58,32,48,32,61,32,84
        dc.b      101,120,116,32,77,111,100,101,32,52,48,120,50
        dc.b      52,13,10,0
-@monitor_37:
+@monitor_38:
        dc.b      32,32,32,32,32,32,32,32,32,49,32,61,32,71,114
        dc.b      97,112,104,105,99,32,84,101,120,116,32,77,111
        dc.b      100,101,32,51,50,120,50,52,13,10,0
-@monitor_38:
+@monitor_39:
        dc.b      32,32,32,32,32,32,32,32,32,50,32,61,32,71,114
        dc.b      97,112,104,105,99,32,50,53,54,120,49,57,50,13
        dc.b      10,0
-@monitor_39:
+@monitor_40:
        dc.b      32,32,32,32,32,32,32,32,32,51,32,61,32,71,114
        dc.b      97,112,104,105,99,32,54,52,120,52,56,13,10,0
-@monitor_40:
+@monitor_41:
        dc.b      117,115,97,103,101,58,32,112,111,107,101,32
        dc.b      60,101,110,100,101,114,62,32,60,98,121,116,101
        dc.b      62,13,10,0
-@monitor_41:
+@monitor_42:
        dc.b      117,115,97,103,101,58,32,100,117,109,112,32
        dc.b      60,101,110,100,101,114,62,32,91,113,116,100
        dc.b      93,32,91,99,111,108,115,93,13,10,0
-@monitor_42:
+@monitor_43:
        dc.b      32,32,32,32,113,116,100,58,32,100,101,102,97
        dc.b      117,108,116,32,54,52,13,10,0
-@monitor_43:
+@monitor_44:
        dc.b      32,32,32,99,111,108,115,58,32,100,101,102,97
        dc.b      117,108,116,32,56,13,10,0
-@monitor_44:
-       dc.b      124,0
 @monitor_45:
+       dc.b      124,0
+@monitor_46:
        dc.b      117,115,97,103,101,58,32,100,117,109,112,32
        dc.b      60,101,110,100,101,114,32,105,110,105,116,105
        dc.b      97,108,62,32,91,113,116,100,32,40,100,101,102
        dc.b      97,117,108,116,32,50,53,54,41,93,13,10,0
-@monitor_46:
-       dc.b      104,32,58,32,0
 @monitor_47:
-       dc.b      32,124,32,0
+       dc.b      104,32,58,32,0
 @monitor_48:
+       dc.b      32,124,32,0
+@monitor_49:
        dc.b      117,115,97,103,101,58,32,100,117,109,112,119
        dc.b      32,60,101,110,100,101,114,62,32,91,113,116,100
        dc.b      93,32,91,99,111,108,115,93,13,10,0
-@monitor_49:
+@monitor_50:
        dc.b      32,32,32,32,113,116,100,58,32,100,101,102,97
        dc.b      117,108,116,32,49,50,56,13,10,0
-@monitor_50:
+@monitor_51:
        dc.b      100,117,109,112,119,32,79,110,108,121,32,87
        dc.b      111,114,107,115,32,105,110,32,52,48,32,99,111
        dc.b      108,115,13,10,0
-@monitor_51:
+@monitor_52:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,68,85
        dc.b      77,80,87,32,118,48,46,49,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,32,32,32,13,10,0
-@monitor_52:
-       dc.b      65,100,100,114,32,0
 @monitor_53:
+       dc.b      65,100,100,114,32,0
+@monitor_54:
        dc.b      32,32,32,32,32,32,32,32,32,66,121,116,101,115
        dc.b      32,32,32,32,32,32,32,32,32,0
-@monitor_54:
-       dc.b      32,65,83,67,73,73,32,0
 @monitor_55:
+       dc.b      32,65,83,67,73,73,32,0
+@monitor_56:
        dc.b      32,60,45,58,80,114,101,118,32,32,45,62,58,78
        dc.b      101,120,116,32,32,60,0
-@monitor_56:
+@monitor_57:
        dc.b      58,65,100,100,114,32,32,69,83,67,58,69,120,105
        dc.b      116,32,0
-@monitor_57:
+@monitor_58:
        dc.b      32,65,100,100,114,101,115,115,40,72,69,88,41
        dc.b      58,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,32,32,32,0
-@monitor_58:
+@monitor_59:
        dc.b      82,101,99,101,105,118,105,110,103,32,40,88,77
        dc.b      79,68,69,77,45,67,82,67,47,49,75,41,46,13,10
        dc.b      60,69,115,99,62,32,116,111,32,67,97,110,99,101
        dc.b      108,46,46,46,13,10,0
-@monitor_59:
+@monitor_60:
        dc.b      65,100,100,114,101,115,115,32,108,111,97,100
        dc.b      105,110,103,58,32,48,120,0
-@monitor_60:
-       dc.b      32,0
 @monitor_61:
+       dc.b      32,0
+@monitor_62:
        dc.b      13,10,76,111,97,100,105,110,103,32,97,98,111
        dc.b      114,116,101,100,46,13,10,0
-@monitor_62:
+@monitor_63:
        dc.b      13,10,84,105,109,101,111,117,116,32,119,97,105
        dc.b      116,105,110,103,32,115,101,110,100,101,114,46
        dc.b      13,10,0
-@monitor_63:
+@monitor_64:
        dc.b      13,10,84,114,97,110,115,102,101,114,32,99,97
        dc.b      110,99,101,108,101,100,32,98,121,32,115,101
        dc.b      110,100,101,114,46,13,10,0
-@monitor_64:
+@monitor_65:
        dc.b      13,10,84,111,111,32,109,97,110,121,32,112,114
        dc.b      111,116,111,99,111,108,32,101,114,114,111,114
        dc.b      115,46,13,10,0
-@monitor_65:
+@monitor_66:
        dc.b      13,10,78,111,32,109,101,109,111,114,121,32,119
        dc.b      104,105,108,101,32,114,101,99,101,105,118,105
        dc.b      110,103,46,13,10,0
-@monitor_66:
+@monitor_67:
        dc.b      13,10,70,105,108,101,32,108,111,97,100,101,100
        dc.b      32,105,110,32,116,111,32,109,101,109,111,114
        dc.b      121,32,115,117,99,99,101,115,115,102,117,108
        dc.b      121,46,13,10,0
-@monitor_67:
+@monitor_68:
        dc.b      65,100,100,114,101,115,115,32,108,111,97,100
        dc.b      101,100,58,32,48,120,0
-@monitor_68:
+@monitor_69:
        dc.b      82,101,99,101,105,118,105,110,103,46,32,60,69
        dc.b      115,99,62,32,116,111,32,67,97,110,99,101,108
        dc.b      46,46,46,32,13,10,0
-@monitor_69:
+@monitor_70:
        dc.b      84,105,109,101,111,117,116,46,32,80,114,111
        dc.b      99,101,115,115,32,65,98,111,114,116,101,100
        dc.b      46,13,10,0
-@monitor_70:
+@monitor_71:
        dc.b      70,105,108,101,32,108,111,97,100,101,100,32
        dc.b      105,110,32,116,111,32,109,101,109,111,114,121
        dc.b      32,115,117,99,99,101,115,115,102,117,108,121
        dc.b      46,13,10,0
-@monitor_71:
+@monitor_72:
        dc.b      76,111,97,100,105,110,103,32,97,98,111,114,116
        dc.b      101,100,46,13,10,0
-@monitor_72:
+@monitor_73:
        dc.b      70,105,108,101,32,108,111,97,100,101,100,32
        dc.b      105,110,32,116,111,32,109,101,109,111,114,121
        dc.b      32,119,105,116,104,32,99,104,101,99,107,115
        dc.b      117,109,32,101,114,114,111,114,115,46,13,10
        dc.b      0
-@monitor_73:
-       dc.b      32,32,32,0
 @monitor_74:
-       dc.b      68,111,110,101,33,0
+       dc.b      32,32,32,0
 @monitor_75:
+       dc.b      68,111,110,101,33,0
+@monitor_76:
        dc.b      76,111,97,100,105,110,103,32,79,83,46,32,80
        dc.b      108,101,97,115,101,32,87,97,105,116,46,46,46
        dc.b      0
-@monitor_76:
+@monitor_77:
        dc.b      73,79,32,69,114,114,111,114,46,46,46,46,13,10
        dc.b      0
-@monitor_77:
-       dc.b      79,107,13,10,0
 @monitor_78:
+       dc.b      79,107,13,10,0
+@monitor_79:
        dc.b      76,111,97,100,105,110,103,32,66,97,115,105,99
        dc.b      46,32,80,108,101,97,115,101,32,87,97,105,116
        dc.b      46,46,46,0
-@monitor_79:
-       dc.b      65,113,117,105,32,48,13,10,0
 @monitor_80:
-       dc.b      65,113,117,105,32,48,46,49,13,10,0
+       dc.b      65,113,117,105,32,48,13,10,0
 @monitor_81:
-       dc.b      65,113,117,105,32,49,13,10,0
+       dc.b      65,113,117,105,32,48,46,49,13,10,0
 @monitor_82:
-       dc.b      65,113,117,105,32,50,13,10,0
+       dc.b      65,113,117,105,32,49,13,10,0
 @monitor_83:
-       dc.b      65,113,117,105,32,50,46,49,13,10,0
+       dc.b      65,113,117,105,32,50,13,10,0
 @monitor_84:
-       dc.b      65,113,117,105,32,51,13,10,0
+       dc.b      65,113,117,105,32,50,46,49,13,10,0
 @monitor_85:
-       dc.b      32,13,10,0
+       dc.b      65,113,117,105,32,51,13,10,0
 @monitor_86:
+       dc.b      32,13,10,0
+@monitor_87:
        dc.b      32,32,32,32,32,32,32,32,32,32,69,88,67,69,80
        dc.b      84,73,79,78,32,79,67,67,85,82,82,69,68,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_87:
+@monitor_88:
        dc.b      32,32,32,32,32,32,66,85,83,32,69,82,82,79,82
        dc.b      32,47,32,65,68,68,82,69,83,83,32,69,82,82,79
        dc.b      82,32,32,32,32,32,0
-@monitor_88:
+@monitor_89:
        dc.b      32,32,32,32,32,32,32,32,32,73,76,76,69,71,65
        dc.b      76,32,73,78,83,84,82,85,67,84,73,79,78,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_89:
+@monitor_90:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,90,69
        dc.b      82,79,32,68,73,86,73,68,69,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_90:
+@monitor_91:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,67,72,75,32
        dc.b      73,78,83,84,82,85,67,84,73,79,78,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_91:
+@monitor_92:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,84,82,65,80,86,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_92:
+@monitor_93:
        dc.b      32,32,32,32,32,32,32,32,32,80,82,73,86,73,76
        dc.b      69,71,69,32,86,73,79,76,65,84,73,79,78,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_93:
-       dc.b      32,58,32,0
 @monitor_94:
+       dc.b      32,58,32,0
+@monitor_95:
        dc.b      32,68,48,32,32,32,32,32,32,32,68,49,32,32,32
        dc.b      32,32,32,32,68,50,32,32,32,32,32,32,32,68,51
        dc.b      32,32,32,32,32,32,0
-@monitor_95:
+@monitor_96:
        dc.b      32,68,52,32,32,32,32,32,32,32,68,53,32,32,32
        dc.b      32,32,32,32,68,54,32,32,32,32,32,32,32,68,55
        dc.b      32,32,32,32,32,32,0
-@monitor_96:
+@monitor_97:
        dc.b      32,65,48,32,32,32,32,32,32,32,65,49,32,32,32
        dc.b      32,32,32,32,65,50,32,32,32,32,32,32,32,65,51
        dc.b      32,32,32,32,32,32,0
-@monitor_97:
+@monitor_98:
        dc.b      32,65,52,32,32,32,32,32,32,32,65,53,32,32,32
        dc.b      32,32,32,32,65,54,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_98:
-       dc.b      32,32,32,32,32,32,32,32,0
 @monitor_99:
+       dc.b      32,32,32,32,32,32,32,32,0
+@monitor_100:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_100:
+@monitor_101:
        dc.b      32,83,82,32,32,32,80,67,32,32,32,32,32,32,32
        dc.b      79,102,102,83,101,116,32,83,112,101,99,105,97
        dc.b      108,95,87,111,114,100,32,32,0
-@monitor_101:
-       dc.b      32,32,32,32,32,32,32,32,32,32,0
 @monitor_102:
+       dc.b      32,32,32,32,32,32,32,32,32,32,0
+@monitor_103:
        dc.b      32,70,97,117,108,116,65,100,100,114,32,79,117
        dc.b      116,66,32,73,110,66,32,32,73,110,115,116,114
        dc.b      46,73,110,66,32,32,32,32,32,32,0
-@monitor_103:
-       dc.b      32,32,0
 @monitor_104:
-       dc.b      32,32,32,32,32,32,32,32,32,32,32,0
+       dc.b      32,32,0
 @monitor_105:
+       dc.b      32,32,32,32,32,32,32,32,32,32,32,0
+@monitor_106:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,83,89,83
        dc.b      84,69,77,32,72,65,76,84,69,68,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0

@@ -28,6 +28,8 @@
 #define ADDR_LOAD_FILE 0x00840000
 #endif
 #include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include "mmsj320api.h"
 #include "mmsj320vdp.h"
 #include "mmsj320mfp.h"
@@ -40,6 +42,8 @@
 unsigned long runOSMemory;
 
 #define MMSJ_HEAP_LIMIT 0x0086FFFFUL
+#define MPRINTF_BUF_SIZE 128
+#define USE_MSPRINTF_MMSJOS 1
 
 FAT32_DIR vdir;
 DISK  vdisk;
@@ -122,6 +126,13 @@ void strncpy2( char* _dst, const char* _src, int _n );
 int isValidFilename(char *filename) ;
 unsigned char matches_wildcard(const char *pattern, const char *filename);
 unsigned char contains_wildcards(const char *pattern);
+
+#ifdef USE_MSPRINTF_MMSJOS
+void msprintf_ulong_hex(unsigned long v);
+void msprintf_long_dec(long v);
+void msprintf_ulong_dec(unsigned long v);
+void msprintf(const char *fmt, ...);
+#endif
 
 #ifdef __SO_ST_MFP__
 void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char TypeSet);
@@ -261,6 +272,7 @@ void main(void)
     int vRetProcCmd;
     INT8U osErr;
     unsigned char sOsErr[10];
+    unsigned long ixxx;
 
     *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
 
@@ -512,6 +524,7 @@ void basicTask(void *pData)
 {
     unsigned char *linhaarg = (unsigned char*)pData;
     unsigned short ix;
+    unsigned char kbdTaskSuspended;
 
     // Area fixa para dados do BASIC: 0x00890000..0x008E0000
     *startBasic0 = 0x00890000;
@@ -526,6 +539,8 @@ void basicTask(void *pData)
     }
     else
     {
+        kbdTaskSuspended = 0;
+
         // Carrega parametros pro Basic
         memcpy(paramBasic, linhaarg, 64);
         if (*linhaarg)
@@ -541,12 +556,18 @@ void basicTask(void *pData)
         // Run Basic
         while(1)
         {
-            runFromOsCmd(0x00870000); // Testes = 0x00870000, Producao = 0x00020000
+            if (OSTaskSuspend(TASK_KBD_MAP) == OS_ERR_NONE)
+                kbdTaskSuspended = 1;
+
+            runFromOsCmd(0x00020000); // Testes = 0x00870000, Producao = 0x00020000
+
+            if (kbdTaskSuspended)
+                OSTaskResume(TASK_KBD_MAP);
+
             break;
         }
 
         *startBasic0 = 0;
-        *startBasic = 0;
         *paramBasic = 0;
     }
 
@@ -4199,5 +4220,233 @@ unsigned int fsGetMfp(unsigned int Config)
     retValue = *(vmfp + Config);
 
     return retValue;
+}
+#endif
+
+#ifdef USE_MSPRINTF_MMSJOS
+//-----------------------------------------------------------------------------
+void msprintf_ulong_dec(unsigned long v)
+{
+    unsigned long divs[10];
+    int i;
+    int started;
+    unsigned char digit;
+
+    divs[0] = 1000000000UL;
+    divs[1] = 100000000UL;
+    divs[2] = 10000000UL;
+    divs[3] = 1000000UL;
+    divs[4] = 100000UL;
+    divs[5] = 10000UL;
+    divs[6] = 1000UL;
+    divs[7] = 100UL;
+    divs[8] = 10UL;
+    divs[9] = 1UL;
+
+    started = 0;
+
+    for (i = 0; i < 10; i++)
+    {
+        digit = 0;
+
+        while (v >= divs[i])
+        {
+            v -= divs[i];
+            digit++;
+        }
+
+        if (digit || started || i == 9)
+        {
+            printChar('0' + digit, 1);
+            started = 1;
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
+void msprintf_long_dec(long v)
+{
+    unsigned long u;
+
+    if (v < 0)
+    {
+        printChar('-', 1);
+
+        u = (unsigned long)(-(v + 1));
+        u++;
+    }
+    else
+    {
+        u = (unsigned long)v;
+    }
+
+    msprintf_ulong_dec(u);
+}
+
+//-----------------------------------------------------------------------------
+void msprintf_ulong_hex(unsigned long v)
+{
+    char tmp[8];
+    int n;
+    int d;
+
+    n = 0;
+
+    if (v == 0)
+    {
+        printChar('0', 1);
+        return;
+    }
+
+    while (v && n < 8)
+    {
+        d = (int)(v & 0x0F);
+
+        if (d < 10)
+            tmp[n] = (char)('0' + d);
+        else
+            tmp[n] = (char)('A' + d - 10);
+
+        n++;
+        v = v >> 4;
+    }
+
+    while (n > 0)
+    {
+        n--;
+        printChar(tmp[n], 1);
+    }
+}
+
+//-----------------------------------------------------------------------------
+void msprintf(const char *fmt, ...)
+{
+    va_list ap;
+    int v, ival;
+    long lval;
+    unsigned long ulval;
+    char *s;
+    char c;
+
+    va_start(ap, fmt);
+
+    while (*fmt)
+    {
+        if (*fmt != '%')
+        {
+            printChar(*fmt, 1);
+            fmt++;
+            continue;
+        }
+
+        fmt++;
+
+        if (*fmt == 0)
+            break;
+
+        switch (*fmt)
+        {
+            case 's':
+                s = va_arg(ap, char *);
+
+                if (!s)
+                    s = "(null)";
+
+                while (*s)
+                {
+                    printChar(*s, 1);
+                    s++;
+                }
+                break;
+
+            case 'c':
+                v = va_arg(ap, int);
+                printChar((char)v, 1);
+                break;
+
+            case 'd':
+            case 'i':
+                ival = va_arg(ap, int);
+                msprintf_long_dec((long)ival);
+                break;
+
+            case 'u':
+                ulval = (unsigned long)va_arg(ap, unsigned int);
+                msprintf_ulong_dec(ulval);
+                break;
+
+            case 'x':
+            case 'X':
+            {
+                unsigned long u;
+                char tmp[9];
+                int n = 0;
+                int d;
+
+                u = (unsigned long)va_arg(ap, unsigned int);
+
+                if (u == 0)
+                {
+                    printChar('0', 1);
+                    break;
+                }
+
+                while (u)
+                {
+                    d = (int)(u & 0x0F);
+
+                    if (d < 10)
+                        tmp[n++] = (char)('0' + d);
+                    else
+                        tmp[n++] = (char)('A' + d - 10);
+
+                    u >>= 4;
+                }
+
+                while (n > 0)
+                    printChar(tmp[--n], 1);
+                break;
+            }
+            case 'l':
+                fmt++;
+
+                if (*fmt == 'd' || *fmt == 'i')
+                {
+                    lval = va_arg(ap, long);
+                    msprintf_long_dec(lval);
+                }
+                else if (*fmt == 'u')
+                {
+                    ulval = va_arg(ap, unsigned long);
+                    msprintf_ulong_dec(ulval);
+                }
+                else if (*fmt == 'x' || *fmt == 'X')
+                {
+                    ulval = va_arg(ap, unsigned long);
+                    msprintf_ulong_hex(ulval);
+                }
+                else
+                {
+                    printChar('%', 1);
+                    printChar('l', 1);
+
+                    if (*fmt)
+                        printChar(*fmt, 1);
+                }
+                break;
+            case '%':
+                printChar('%', 1);
+                break;
+
+            default:
+                printChar('%', 1);
+                printChar(*fmt, 1);
+                break;
+        }
+
+        fmt++;
+    }
+
+    va_end(ap);
 }
 #endif
