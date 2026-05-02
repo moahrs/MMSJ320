@@ -3,9 +3,7 @@
 
 typedef struct
 {
-    unsigned long pat;
-    unsigned long cor;
-    unsigned long size;
+    unsigned int id;
     unsigned short xi;
     unsigned short yi;
     unsigned short xf;
@@ -27,6 +25,20 @@ typedef struct
     unsigned char fg;
     unsigned char bg;
 } MGUI_COLOR;
+
+#define SS_BLOCK_SIZE    (12UL * 1024UL)
+#define SS_MAX_BLOCKS    10
+
+#define SS_PAT_SIZE      (6UL * 1024UL)
+#define SS_COL_SIZE      (6UL * 1024UL)
+
+typedef struct
+{
+    unsigned char used;
+    unsigned int  id;
+    unsigned long addrPat;
+    unsigned long addrCol;
+} SaveScreenSlot;
 
 extern unsigned char *memPosConfig; // Config file
 extern unsigned char *imgsMenuSys; // Images PBM 16x16 each icone in order (64 Bytes Each)
@@ -103,6 +115,14 @@ extern unsigned char bgcolorMgui;
 #define TASK_MGUI_MESSAGE 19
 
 // -------------------------------------------------------------------------------
+// Config INI - Busca direta no buffer
+// mguiCfgGet: busca 'key' dentro de '[section]' em 'buf', copia valor em vOutBuf.
+// Retorna vOutBuf em caso de sucesso, NULL se nao encontrado.
+// Para usar como int: atoi(mguiCfgGet(buf, "SEC", "KEY", tmp, sizeof(tmp)))
+// -------------------------------------------------------------------------------
+char mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax);
+
+// -------------------------------------------------------------------------------
 // Funcoes Graficas
 // -------------------------------------------------------------------------------
 #define DrawHoriLine(x, y, length, color) FillRect(x, y, length, 1, color)
@@ -113,7 +133,7 @@ void writecxy(unsigned char sizef, unsigned char pbyte, unsigned short pcolor, u
 void locatexy(unsigned short xx, unsigned short yy);
 MGUI_SAVESCR SaveScreen(unsigned short xi, unsigned short yi, unsigned short pwidth, unsigned short pheight);
 void SaveScreenNew(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi, unsigned short pwidth, unsigned short pheight);
-void RestoreScreen(MGUI_SAVESCR vEnderSave);
+void RestoreScreen(MGUI_SAVESCR *mguiSave);
 void SetDot(unsigned short x, unsigned short y, unsigned short color);
 void SetByte(unsigned short ix, unsigned short iy, unsigned char pByte, unsigned short pfcolor, unsigned short pbcolor);
 void FillRect(unsigned char xi, unsigned char yi, unsigned short pwidth, unsigned char pheight, unsigned char pcor);
@@ -149,7 +169,7 @@ void MostraIcone(unsigned short xi, unsigned short yi, unsigned char vicone, uns
 void runFromMguiCmd(void);
 void runBin(void);
 void importFile(void);
-void putImagePbmP4(unsigned long* memoria, unsigned short ix, unsigned short iy);
+void putImagePbmP4(unsigned char* memoria, unsigned short ix, unsigned short iy);
 
 // -------------------------------------------------------------------------------
 // Elementos

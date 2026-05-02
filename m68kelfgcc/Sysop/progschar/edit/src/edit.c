@@ -67,44 +67,41 @@ void main(void)
     edDirty = 0;
 
     vworkbase = noteAlign4(0x00880000 + vprogsize + 256);
+    
+    edFileBuf = EDIT_FILE_ADDR;
 
     if (vParamName[0] == 0x00)
     {
-        printText("Uso: editor <arquivo>\r\n");
-        return;
+        strcpy((char*)vParamName, "NONAME.TXT");
+        edFileSize = 0;
+        edFileBuf[0] = 0;
+        edDirty = 0;
     }
-
-    edFileBuf = EDIT_FILE_ADDR;
-
-    ret = loadFile((char*)vParamName, edFileBuf);
-
-    if (ret < 0)
+    else
     {
-        printText("Erro carregando arquivo\r\n");
-        return;
+        ret = loadFile((char*)vParamName, edFileBuf);
+
+        if (ret == 0)
+        {
+            printText("Erro carregando arquivo\r\n");
+            return;
+        }
+
+        edFileSize = ret;
+
+        if (edFileSize >= EDIT_MAX_FILE)
+            edFileSize = EDIT_MAX_FILE - 1;
+
+        edFileBuf[edFileSize] = 0;
+        edDirty = 0;
     }
-
-    /*
-       Importante:
-       garantir terminador zero no fim.
-       Se loadFile retornar tamanho, use isso.
-    */
-    edFileSize = ret;
-
-    if (edFileSize >= EDIT_MAX_FILE)
-        edFileSize = EDIT_MAX_FILE - 1;
-
-    edFileBuf[edFileSize] = 0;
 
     edCurLine = 0;
     edCurCol = 0;
     edVScroll = 0;
     edHScroll = 0;
-    textToFind[0] = 0;
-    textToChange[0] = 0;
 
     edBuildLines();
-
     edLoop((char*)vParamName);
 
     clearScr();
@@ -169,14 +166,14 @@ void edClearToEndLine(int used)
 }
 
 //-------------------------------------------------------------------
-void edDrawLine(int y)
+void edDrawLine(int y,char c)
 {
     int i;
 
     vdp_set_cursor(0, y);
 
     for (i = 0; i < EDIT_COLS; i++)
-        printChar('-', 1);
+        printChar(c, 1);
 }
 
 //-------------------------------------------------------------------
@@ -192,7 +189,7 @@ void edDrawHeader(char *filename)
     used = 7 + strlen(filename);
     edClearToEndLine(used);
 
-    edDrawLine(EDIT_TOP_LINE);
+    edDrawLine(EDIT_TOP_LINE, '-');
 }
 
 //-------------------------------------------------------------------
@@ -201,7 +198,7 @@ void edDrawStatus(void)
     char buf[80];
     char numbuf[12];
 
-    edDrawLine(EDIT_STATUS_LINE);
+    edDrawLine(EDIT_STATUS_LINE, '-');
 
     vdp_set_cursor(0, EDIT_STATUS_Y);
 
@@ -222,7 +219,7 @@ void edDrawStatus(void)
     itoa(edHScroll, numbuf, 10);
     strcat(buf, numbuf);
     if (textToFind[0] != 0)
-        strcat(buf, "  ^Y=Next");
+        strcat(buf, "  ^L=Next");
 
     printText(buf);
 
@@ -529,7 +526,7 @@ int edInsertEnter(void)
 //-------------------------------------------------------------------
 void edDrawCommandHelp(void)
 {
-    edDrawLine(0);
+    edDrawLine(0, '=');
 
     if (edCmdModeK)
     {
@@ -538,20 +535,20 @@ void edDrawCommandHelp(void)
 
         edClearLine(1);
         vdp_set_cursor(0, 1);
-        printText("  S=Save  A=Save As |  B=Begin   K=End ");
+        printText("  S=Save   A=SaveAs |  B=Begin   K=End ");
 
         edClearLine(2);
         vdp_set_cursor(0, 2);
-        printText("  O=Open            |  C=Copy    V=Move");
+        printText("  Q=Abandon  O=Open |  C=Copy    V=Move");
 
         edClearLine(3);
         vdp_set_cursor(0, 3);
-        printText("  X=Exit            |  D=Delete    ");
+        printText("  X=Save & Exit     |  D=Delete    ");
     }
     if (edCmdModeQ)
     {
-        vdp_set_cursor(11, 0);
-        printText(" Search / Diversos");
+        vdp_set_cursor(14, 0);
+        printText(" Search / Quick ");
 
         edClearLine(1);
         vdp_set_cursor(0, 1);
@@ -559,14 +556,14 @@ void edDrawCommandHelp(void)
 
         edClearLine(2);
         vdp_set_cursor(0, 2);
-        printText("  R Replace        |");
+        printText("  A Find & Replace |");
 
         edClearLine(3);
         vdp_set_cursor(0, 3);
         printText("  G Goto Line      |");
     }
 
-    edDrawLine(4);
+    edDrawLine(4, '=');
 }
 
 //-------------------------------------------------------------------
@@ -622,23 +619,26 @@ void edLoop(char *filename)
                     logBlinkCursor = 0;
                     //edSetMessage("^Q...");
                 }
-                else if (k.code == 'Y')    // Find Next
+                else if (k.code == 'L')    // Find Next
                 {                    
                     // procura proxima ocorrencia da palavra
-                    edCmdModeY = 1;
-                    key = 'Y';
+                    edCmdModeL = 1;
+                    key = 'L';
                 }
 
-                edDrawStatus();
+                if (edCmdModeK || edCmdModeQ)
+                {
+                    edDrawStatus();
 
-                cursorOn = 1;
-                edDrawCursor(1);
+                    cursorOn = 1;
+                    edDrawCursor(1);
 
-                edHelpMode = 1;
-                edDrawCommandHelp();
+                    edHelpMode = 1;
+                    edDrawCommandHelp();
 
-                if (!edCmdModeY)
-                    continue;
+                    if (!edCmdModeL)
+                        continue;
+                }
             }
             else if (k.flags == KEY_NONE)
                 key = k.ascii;
@@ -653,25 +653,33 @@ void edLoop(char *filename)
             /* =========================
             BLOCO WORDSTAR (^K ^Q)
             ========================= */
-            if (edCmdModeK || edCmdModeQ || edCmdModeY)
+            if (edCmdModeK || edCmdModeQ || edCmdModeL)
             {
                 if (edCmdModeK)
                 {
                     if (key == 'S' || key == 's')   // Save
                     {
-                        edSaveFile();
+                        if (strcmp(filename, "NONAME.TXT") == 0)
+                            edSaveFileAs((unsigned char*)filename);
+                        else
+                            edSaveFile();
                     }
                     if (key == 'A' || key == 'a')   // Save As
                     {
-                        edSaveFileAs();
+                        edSaveFileAs((unsigned char*)filename);
+                    }
+                    else if (key == 'Q' || key == 'q')  // Abandon
+                    {
+                        if (edCanExit())
+                            break;
                     }
                     else if (key == 'O' || key == 'o')  // Open
                     {
-                        edOpenFile();
+                        edOpenFile((unsigned char*)filename);
                     }
-                    else if (key == 'X' || key == 'x')  // Exit
+                    else if (key == 'X' || key == 'x')  // Save & Exit
                     {
-                        if (edCanExit())
+                        if (edSaveFile())
                             break;
                     }
                     else if (key == KEY_ESC)
@@ -690,8 +698,12 @@ void edLoop(char *filename)
                 {
                     if (key == 'F' || key == 'f')   // Find
                     {
+                        edSetMessage(" ");
+                        edDrawStatus();
+
+                        edFindFromCursor(0);                        
                     }
-                    else if (key == 'R' || key == 'r')  // Replace
+                    else if (key == 'A' || key == 'a')  // Find & Replace
                     {
                     }
                     else if (key == 'G' || key == 'g')  // Goto Line
@@ -709,9 +721,10 @@ void edLoop(char *filename)
 
                     edCmdModeQ = 0;
                 }
-                else if (edCmdModeY)
-                {
-                    // procura proxima ocorrencia da palavra
+                else if (edCmdModeL)    // procura proxima ocorrencia da palavra
+                {                    
+                    edFindFromCursor(1);
+                    edCmdModeL = 0;
                 }
 
                 logBlinkCursor = 1;
@@ -863,52 +876,97 @@ void edDrawCursor(int show)
 }
 
 //-------------------------------------------------------------------
-int edSaveFileAs(void)
+int edSaveFileAs(unsigned char* vParamName)
 {
-    /*
-       Aqui depois entra sua saveFile().
-       Exemplo futuro:
-       ret = saveFile(edFileName, edFileBuf, edFileSize);
-    */
+    unsigned char newFileName[128];
 
-    edDirty = 0;
+    newFileName[0] = 0;
+
+    edInputStatus("Save Name:", newFileName, sizeof(newFileName));
+    edToUpperCase(newFileName);
+    if (!edSaveToFile((char*)newFileName, edFileBuf, edFileSize))
+    {
+        edDirty = 0;
+        strcpy((char*)vParamName, (char*)newFileName);
+        return 1;
+    }
+
     return 0;
 }
 
 //-------------------------------------------------------------------
 int edSaveFile(void)
 {
-    /*
-       Aqui depois entra sua saveFile().
-       Exemplo futuro:
-       ret = saveFile(edFileName, edFileBuf, edFileSize);
-    */
+    if (!edSaveToFile((char*)edFileName, edFileBuf, edFileSize))
+    {
+        edDirty = 0;
+        return 1;
+    }
 
-    edDirty = 0;
     return 0;
 }
 
 //-------------------------------------------------------------------
-int edOpenFile(void)
+int edOpenFile(unsigned char* vParamName)
 {
-    /*
-       Preparado para depois chamar seu fillin/MGUI.
-       Por enquanto nao faz nada.
-    */
+    unsigned char openFileName[128];
+    long ret;
 
-    return 0;
+    openFileName[0] = 0;
+    edSetMessage(" ");
+    edDrawStatus();
+
+    edInputStatus("Open Name:", openFileName, sizeof(openFileName));
+    edToUpperCase(openFileName);
+
+    ret = loadFile((char*)openFileName, edFileBuf);
+
+    if (ret == 0)
+    {
+        edSetMessage("Open Error!");
+        edDrawStatus();
+
+        strcpy((char*)vParamName, "NONAME.TXT");
+        edFileSize = 0;
+        edFileBuf[0] = 0;
+        edDirty = 0;
+
+        return 0;
+    }
+
+    edFileSize = ret;
+
+    if (edFileSize >= EDIT_MAX_FILE)
+        edFileSize = EDIT_MAX_FILE - 1;
+
+    edFileBuf[edFileSize] = 0;
+    edDirty = 0;
+
+    strcpy((char*)vParamName, (char*)openFileName);
+    
+    edCurLine = 0;
+    edCurCol = 0;
+    edVScroll = 0;
+    edHScroll = 0;
+
+    edBuildLines();
+
+    return 1;
 }
 
 //-------------------------------------------------------------------
 int edCanExit(void)
 {
-    if (!edDirty)
-        return 1;
+    char vresp[2];
 
-    /*
-       Depois aqui entra pergunta:
-       "Arquivo alterado. Sair sem salvar? S/N"
-    */
+    if (edDirty)
+    {
+        edInputStatus("Exit without saving? (Y/N)", vresp, sizeof(vresp));
+        if (vresp[0] == 'Y' || vresp[0] == 'y')
+            return 1;
+    }
+    else
+        return 1;
 
     return 0;
 }
@@ -929,4 +987,307 @@ void edClearLine(int y)
 
     for (i = 0; i < EDIT_COLS; i++)
         printChar(' ', 1);
+}
+
+//-------------------------------------------------------------------
+int edInputStatus(char *prompt, char *out, int maxLen)
+{
+    int key;
+    int len;
+    int pos;
+    int hscroll;
+    int fieldX;
+    int fieldW;
+    int i;
+    MMSJ_KEYEVENT k;
+
+    len = strlen(out);
+    pos = len;
+    hscroll = 0;
+
+    fieldX = strlen(prompt);
+    fieldW = EDIT_COLS - fieldX;
+
+    if (fieldW < 1)
+        fieldW = 1;
+
+    edClearLine(EDIT_STATUS_Y);
+    vdp_set_cursor(0, EDIT_STATUS_Y);
+    printText(prompt);
+
+    while (1)
+    {
+        if (pos < hscroll)
+            hscroll = pos;
+
+        if (pos >= hscroll + fieldW)
+            hscroll = pos - fieldW + 1;
+
+        /*
+           Redesenha SOMENTE o campo, nao o prompt
+        */
+        vdp_set_cursor(fieldX, EDIT_STATUS_Y);
+
+        for (i = 0; i < fieldW; i++)
+        {
+            if (hscroll + i < len)
+                printChar(out[hscroll + i], 1);
+            else
+                printChar(' ', 1);
+        }
+
+        /*
+           Cursor dentro do campo
+        */
+        vdp_set_cursor(fieldX + pos - hscroll, EDIT_STATUS_Y);
+        printChar(CURSOR_CHAR, 0);
+
+        key = KEY_NONE;
+        
+        if (mmsjKeyGet(&k))
+        {            
+            if (k.flags == KEY_NONE)
+                key = k.ascii;
+        }
+
+        if (key == KEY_NONE)
+            continue;
+
+        /*
+           Apaga cursor restaurando o caractere correto
+        */
+        vdp_set_cursor(fieldX + pos - hscroll, EDIT_STATUS_Y);
+
+        if (pos < len)
+            printChar(out[pos], 0);
+        else
+            printChar(' ', 0);
+
+        if (key == KEY_ESC)
+            return 0;
+
+        if (key == KEY_ENTER)
+            return 1;
+
+        if (key == KEY_LEFT)
+        {
+            if (pos > 0)
+                pos--;
+        }
+        else if (key == KEY_RIGHT)
+        {
+            if (pos < len)
+                pos++;
+        }
+        else if (key == KEY_BACKSPACE)
+        {
+            if (pos > 0)
+            {
+                for (i = pos - 1; i < len; i++)
+                    out[i] = out[i + 1];
+
+                pos--;
+                len--;
+            }
+        }
+        else if (key == KEY_DELETE)
+        {
+            if (pos < len)
+            {
+                for (i = pos; i < len; i++)
+                    out[i] = out[i + 1];
+
+                len--;
+            }
+        }
+        else if (key >= 32 && key <= 126)
+        {
+            if (len < maxLen - 1)
+            {
+                for (i = len; i >= pos; i--)
+                    out[i + 1] = out[i];
+
+                out[pos] = (char)key;
+                pos++;
+                len++;
+            }
+        }
+    }
+
+    edDrawStatus();
+    edDrawCursor(1);
+}
+
+//-------------------------------------------------------------------
+int edMatchAt(int pos, char *txt)
+{
+    int i;
+    int len;
+
+    len = strlen(txt);
+
+    if (len <= 0)
+        return 0;
+
+    if (pos + len > edFileSize)
+        return 0;
+
+    for (i = 0; i < len; i++)
+    {
+        if (edToUpper(edFileBuf[pos + i]) != edToUpper(txt[i]))
+            return 0;
+    }
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
+int edFindFromCursor(int repeat)
+{
+    int pos;
+    int i;
+    int found;
+    int line;
+    int col;
+    char *p;
+
+    if (!repeat)
+    {
+        edSearchText[0] = 0;
+
+        edDrawCursor(0);
+
+        if (!edInputStatus("Find: ", edSearchText, ED_INPUT_MAX))
+        {
+            edDrawStatus();
+            return 0;
+        }
+    }
+
+    if (edSearchText[0] == 0)
+        return 0;
+
+    pos = edGetCursorOffset();
+
+    if (repeat)
+        pos++;
+
+    found = -1;
+
+    for (i = pos; i < edFileSize; i++)
+    {
+        if (edMatchAt(i, edSearchText))
+        {
+            found = i;
+            break;
+        }
+    }
+
+    if (found < 0)
+    {
+        edSetMessage("Not found");
+        edDrawStatus();
+        return 0;
+    }
+
+    line = 0;
+    col = 0;
+
+    for (i = 0; i < edNumLines; i++)
+    {
+        p = edLinePtr[i];
+
+        if (p <= edFileBuf + found)
+            line = i;
+        else
+            break;
+    }
+
+    col = (int)((edFileBuf + found) - edLinePtr[line]);
+
+    edCurLine = line;
+    edCurCol = col;
+
+    edAdjustScroll();
+    edDrawText();
+    edDrawStatus();
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
+static char edToUpper(char c)
+{
+    if (c >= 'a' && c <= 'z')
+        return c - 32;
+
+    return c;
+}
+
+//-------------------------------------------------------------------
+int edSaveToFile(char* vfilename, unsigned char* buf, int size)
+{
+    unsigned int ix, vChunkSize, iy;
+    unsigned char vBuffer[128];
+
+    edSetMessage("Saving...");                  
+    edDrawStatus();
+
+    // Tenta Abrir Arquivo
+    if (fsOpenFile(vfilename) != RETURN_OK)
+    {
+        // Se nao conseguir, cria o Arquivo
+        if (fsCreateFile(vfilename) != RETURN_OK)
+        {
+            edSetMessage("Save Error!");                  
+            edDrawStatus();
+            return ERRO_B_CREATE_FILE;
+        }
+    }
+
+    // Grava no Arquivo
+    for (ix = 0; ix < size; ix += 128)
+    {
+        vChunkSize = (unsigned short)(size - ix);
+        if (vChunkSize > 128)
+            vChunkSize = 128;
+
+        for (iy = 0; iy < 128; iy++)
+        {
+            if (iy < vChunkSize)
+            {
+                vBuffer[iy] = *buf;
+                buf += 1;
+            }
+        }
+
+        if (fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize) != RETURN_OK)
+        {
+            edSetMessage("Save Error!");                  
+            edDrawStatus();
+
+            return ERRO_B_WRITE_FILE;
+        }
+    }
+
+    // Fecha Arquivo e atualiza metadata de escrita
+    fsCloseFile(vfilename, 1);
+
+    edSetMessage(" ");                  
+    edDrawStatus();
+
+    edDirty = 0;
+    return 0;
+}   
+
+//-------------------------------------------------------------------
+void edToUpperCase(char* str) 
+{
+    if (str == '\0') return; // Basic safety check
+    
+    while (*str) 
+    {
+        *str = edToUpper((unsigned char)*str); // Convert each char
+        str++; // Move to the next character
+    }
 }

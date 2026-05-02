@@ -19,11 +19,24 @@
 
 #define ED_HELP_LINES 5
 
+#define ED_INPUT_MAX 30
+
+#define ED_BLOCK_NONE   0
+#define ED_BLOCK_MARKED 1
+
+char edMessage[40];
+char edSearchText[ED_INPUT_MAX];
+
+int edBlockMode;
+int edBlockStartLine;
+int edBlockStartCol;
+int edBlockEndLine;
+int edBlockEndCol;
 int edHelpMode;   /* 0=normal, 1=^K, 2=^Q */
 
 int edCmdModeK;
 int edCmdModeQ;
-int edCmdModeY;
+int edCmdModeL;
 int edDirty;
 char edFileName[128];
 
@@ -31,7 +44,7 @@ char *edFileBuf;
 char *edLinePtr[EDIT_MAX_LINES];
 char textToFind[128];
 char textToChange[128];
-char edMessage[80];
+char edMessage[40];
 
 int edNumLines;
 int edCurLine;
@@ -45,7 +58,7 @@ void edRestoreNormalTop(char *filename);
 void edLoop(char *filename);
 void edAdjustScroll(void); 
 void edPrintSpaces(int qtd);
-void edDrawLine(int y);
+void edDrawLine(int y,char c);
 void edDrawHeader(char *filename);
 void edDrawStatus(void);
 int edLineLen(int line);
@@ -65,10 +78,14 @@ int edGetCursorOffset(void);
 int edInsertChar(char c);
 void edClearToEndLine(int used);
 int edSaveFile(void);
-int edOpenFile(void);
+int edSaveFileAs(unsigned char* vParamName);
+int edOpenFile(unsigned char* vParamName);
 int edCanExit(void);
 void edSetMessage(char *msg);
 void edClearLine(int y);
-
-//void vdp_set_cursor(int x, int y);      /* use a sua rotina real */
-//void ClearScr(void);         /* use a sua rotina real */
+int edInputStatus(char *prompt, char *out, int maxLen);
+int edFindFromCursor(int repeat);
+int edMatchAt(int pos, char *txt);
+static char edToUpper(char c);
+int edSaveToFile(char* vfilename, unsigned char* buf, int size);
+void edToUpperCase(char* str);

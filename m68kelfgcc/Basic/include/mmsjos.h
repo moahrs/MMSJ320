@@ -239,9 +239,47 @@ extern MEM_ALOC vMemAloc;
 
 #define TASK_MMSJOS_MAIN    10
 
+#define KEY_ESC     27
+#define KEY_ENTER   13
+
+#define KEY_UP      17
+#define KEY_DOWN    19
+#define KEY_LEFT    18
+#define KEY_RIGHT   20
+
+#define KEY_BACKSPACE 8
+#define KEY_DELETE    127
+#define KEY_ENTER     13
+
+#define KEY_NONE     0
+
+#define KEY_CTRL        0xA0
+#define KEY_ALT         0x88
+#define KEY_CTRL_SHIFT  0xE0
+#define KEY_ALT_SHIFT   0xC8
+#define KEY_CTRL_ALT    0xA8
+
 extern const unsigned char strValidChars[];
 
 extern const unsigned char vmesc[12][3];
+
+#define KEYBUF_SIZE 32
+
+typedef struct
+{
+    unsigned char flags;
+    unsigned char code;
+    unsigned char  ascii;
+    unsigned int   raw;
+} MMSJ_KEYEVENT;
+
+static MMSJ_KEYEVENT keyBuf[KEYBUF_SIZE];
+static volatile unsigned char keyHead = 0;
+static volatile unsigned char keyTail = 0;
+
+//--- KeyBOardTAsks Functions
+extern int mmsjKeyGet(MMSJ_KEYEVENT *k);
+extern int mmsjKeyHit(void);
 
 //--- FAT16 Functions
 extern unsigned long fsInit(void);
@@ -309,6 +347,15 @@ extern unsigned char contains_wildcards(const char *pattern);
 #ifdef __SO_ST_MFP__
 extern void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char TypeSet);
 extern unsigned int fsGetMfp(unsigned int Config);
+#endif
+
+// Compatibilidade com codigo legado que referencia allocator interno da std68k
+#ifndef MMSJ_HEADER_TYPE_DEF
+#define MMSJ_HEADER_TYPE_DEF
+typedef struct header_compat {
+    struct header_compat *next;
+    unsigned long size;
+} HEADER;
 #endif
 
 // Funcoes de Alocacao de Memoria

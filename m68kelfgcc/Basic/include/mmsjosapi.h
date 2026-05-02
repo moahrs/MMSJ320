@@ -2,8 +2,8 @@
 #define MMSJOSAPI_H
 
 // Function Shared Definitions
-#define MMSJOS_FUNC_TABLE    0x00800032
-#define MGUI_FUNC_TABLE      0x0080557E
+#define MMSJOS_FUNC_TABLE    0x00800034
+#define MGUI_FUNC_TABLE      0x00803B24
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);
@@ -28,7 +28,7 @@ typedef unsigned char (*fsChangeDirType)(char * vdirname);
 typedef unsigned char (*fsRemoveDirType)(char * vdirname);
 typedef unsigned char (*fsPwdDirType)(unsigned char *vdirpath);
 typedef unsigned long (*fsFindInDirType)(char * vname, unsigned char vtype);
-typedef unsigned long (*fsMallocType)(unsigned long vMemSize);
+typedef unsigned long (*mmsjKeyGetType)(MMSJ_KEYEVENT *k);
 typedef unsigned long (*fsFindNextClusterType)(unsigned long vclusteratual, unsigned char vtype);
 typedef unsigned long (*fsFindClusterFreeType)(unsigned char vtype);
 typedef unsigned char (*OSTimeDlyHMSMType)(unsigned char hours, unsigned char minutes, unsigned char seconds, unsigned int ms);
@@ -40,7 +40,7 @@ typedef void (*writesxyType)(unsigned short x, unsigned short y, unsigned char s
 typedef void (*writecxyType)(unsigned char sizef, unsigned char pbyte, unsigned short pcolor, unsigned short pbcolor);
 typedef void (*locatexyType)(unsigned short xx, unsigned short yy);
 typedef void (*SaveScreenNewType)(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi, unsigned short pwidth, unsigned short pheight);
-typedef void (*RestoreScreenType)(MGUI_SAVESCR vEnderSave);
+typedef void (*RestoreScreenType)(MGUI_SAVESCR *mguiSave);
 typedef void (*SetDotType)(unsigned short x, unsigned short y, unsigned short color);
 typedef void (*SetByteType)(unsigned short ix, unsigned short iy, unsigned char pByte, unsigned short pfcolor, unsigned short pbcolor);
 typedef void (*FillRectType)(unsigned char xi, unsigned char yi, unsigned short pwidth, unsigned char pheight, unsigned char pcor);
@@ -52,14 +52,14 @@ typedef void (*PutIconeType)(unsigned int* vimage, unsigned short x, unsigned sh
 typedef void (*InvertRectType)(unsigned short xi, unsigned short yi, unsigned short pwidth, unsigned short pheight);
 typedef void (*SelRectType)(unsigned short x, unsigned short y, unsigned short pwidth, unsigned short pheight);
 typedef void (*PutImageType)(unsigned char* cimage, unsigned short x, unsigned short y);
-typedef void (*LoadIconLibType)(unsigned char* cfile);
+typedef void (*runFromMGUIType)(unsigned long vEnderExec);
 typedef unsigned char (*waitButtonType)(void);
 typedef unsigned char (*messageType)(char* bstr, unsigned char bbutton, unsigned short btime);
 typedef void (*drawButtonsnewType)(unsigned char *vbuttons, unsigned char *pbbutton, unsigned short xib, unsigned short yib);
 typedef void (*showWindowType)(unsigned char* bstr, unsigned char x1, unsigned char y1, unsigned short pwidth, unsigned char pheight, unsigned char bbutton);
 typedef void (*TrocaSpriteMouseType)(unsigned char vicone);
 typedef void (*MostraIconeType)(unsigned short xi, unsigned short yi, unsigned char vicone, unsigned char colorfg, unsigned char colorbg);
-typedef void (*importFileType)(void);
+typedef char (*mguiCfgGetType)(char *section, char *key, char *vOutBuf, unsigned char vOutMax);
 typedef void (*putImagePbmP4Type)(unsigned long* memoria, unsigned short ix, unsigned short iy);
 typedef void (*setPosPressedType)(unsigned char vppostx, unsigned char vpposty);
 typedef void (*getMouseDataType)(MGUI_MOUSE *pmouseData);
@@ -92,7 +92,7 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define fsRemoveDir ((fsRemoveDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[19] // Índice da função
 #define OSTimeDlyHMSM ((OSTimeDlyHMSMType *)(unsigned long)MMSJOS_FUNC_TABLE)[20] // Índice da função
 #define fsFindInDir ((fsFindInDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[21] // Índice da função
-#define fsMalloc ((fsMallocType *)(unsigned long)MMSJOS_FUNC_TABLE)[22] // Índice da função
+#define mmsjKeyGet ((mmsjKeyGetType *)(unsigned long)MMSJOS_FUNC_TABLE)[22] // Índice da função
 #define fsFindNextCluster ((fsFindNextClusterType *)(unsigned long)MMSJOS_FUNC_TABLE)[23] // Índice da função
 #define fsFindClusterFree ((fsFindClusterFreeType *)(unsigned long)MMSJOS_FUNC_TABLE)[24] // Índice da função
 #define OSTaskSuspend ((OSTaskSuspendType *)(unsigned long)MMSJOS_FUNC_TABLE)[25] // Índice da função
@@ -114,15 +114,15 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define PutIcone ((PutIconeType *)(unsigned long)MGUI_FUNC_TABLE)[12] // Índice da função
 #define InvertRect ((InvertRectType *)(unsigned long)MGUI_FUNC_TABLE)[13] // Índice da função
 #define SelRect ((SelRectType *)(unsigned long)MGUI_FUNC_TABLE)[14] // Índice da função
-#define PutImage ((PutImageType *)(unsigned long)MGUI_FUNC_TABLE)[15] // Índice da função
-#define LoadIconLib ((LoadIconLibType *)(unsigned long)MGUI_FUNC_TABLE)[16] // Índice da função
+#define fsPwdDir ((fsPwdDirType *)(unsigned long)MGUI_FUNC_TABLE)[15] // Índice da função
+#define runFromMGUI ((runFromMGUIType *)(unsigned long)MGUI_FUNC_TABLE)[16] // Índice da função
 #define waitButton ((waitButtonType *)(unsigned long)MGUI_FUNC_TABLE)[17] // Índice da função
 #define message ((messageType *)(unsigned long)MGUI_FUNC_TABLE)[18] // Índice da função
 #define drawButtonsnew ((drawButtonsnewType *)(unsigned long)MGUI_FUNC_TABLE)[19] // Índice da função
 #define showWindow ((showWindowType *)(unsigned long)MGUI_FUNC_TABLE)[20] // Índice da função
 #define TrocaSpriteMouse ((TrocaSpriteMouseType *)(unsigned long)MGUI_FUNC_TABLE)[21] // Índice da função
 #define MostraIcone ((MostraIconeType *)(unsigned long)MGUI_FUNC_TABLE)[22] // Índice da função
-#define importFile ((importFileType *)(unsigned long)MGUI_FUNC_TABLE)[23] // Índice da função
+#define mguiCfgGet ((mguiCfgGetType *)(unsigned long)MGUI_FUNC_TABLE)[23] // Índice da função
 #define putImagePbmP4 ((putImagePbmP4Type *)(unsigned long)MGUI_FUNC_TABLE)[24] // Índice da função
 #define setPosPressed ((setPosPressedType *)(unsigned long)MGUI_FUNC_TABLE)[25] // Índice da função
 #define getMouseData ((getMouseDataType *)(unsigned long)MGUI_FUNC_TABLE)[26] // Índice da função

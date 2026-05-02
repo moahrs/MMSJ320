@@ -280,6 +280,8 @@ void main(void)
 
     vbuf[0] = '\0';
 
+    mmsjKeyClear();
+
     showCursor();
 
     // Cria duas Tasks
@@ -292,6 +294,8 @@ void main(void)
         printText("uC/OS-II semaphore init error\r\n\0");
         for (;;) { }
     }
+
+    mmsjKeyClear();
 
     osErr = OSTaskCreate(keyboardTask, OS_NULL, &StkKbd[STACKSIZE - 1], TASK_KBD_MAP);
     if (osErr != OS_ERR_NONE)
@@ -356,6 +360,23 @@ int mmsjKeyGet(MMSJ_KEYEVENT *k)
 int mmsjKeyHit(void)
 {
     return (keyHead != keyTail);
+}
+
+//-----------------------------------------------------------------------------
+void mmsjKeyClear(void)
+{
+    unsigned char i;
+
+    keyHead = 0;
+    keyTail = 0;
+
+    for (i = 0; i < KEYBUF_SIZE; i++)
+    {
+        keyBuf[i].code  = 0;
+        keyBuf[i].flags = 0;
+        keyBuf[i].ascii = 0;
+        keyBuf[i].raw   = 0;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -520,7 +541,7 @@ void basicTask(void *pData)
         // Run Basic
         while(1)
         {
-            runFromOsCmd(0x00020000); // Testes = 0x00870000, Producao = 0x00020000
+            runFromOsCmd(0x00870000); // Testes = 0x00870000, Producao = 0x00020000
             break;
         }
 
@@ -1799,6 +1820,9 @@ unsigned long fsGetClusterDir (void) {
 //-------------------------------------------------------------------------
 unsigned char fsCreateFile(char * vfilename)
 {
+    if (!isValidFilename(vfilename))
+        return ERRO_B_INVALID_NAME;
+
 	// Verifica ja existe arquivo com esse nome
 	if (fsFindInDir(vfilename, TYPE_ALL) < ERRO_D_START)
 		return ERRO_B_FILE_FOUND;
