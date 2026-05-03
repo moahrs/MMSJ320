@@ -103,7 +103,7 @@ void main(void)
         while (1)
         {
             *mguiIdRequest = windowsId;
-            getMouseData(&mouseData);
+            getMouseData(0, &mouseData);
 
             if (mouseData.mouseButton == 0x02 || mouseData.mouseBtnDouble == 0x01)  // Direito ou DoubleClick Esquerdo
             {
@@ -201,7 +201,7 @@ void main(void)
 
                         while (1)
                         {
-                            getMouseData(&mouseData);
+                            getMouseData(0, &mouseData);
 
                             if (mouseData.mouseButton == 0x01)  // Esquerdo
                             {
@@ -347,15 +347,15 @@ void main(void)
                         unsigned char wmode = WINFULL;
                         while (1)
                         {
-                            fillin(&vstring, 80, 57, 130, wmode);
+                            fillin(0, &vstring, 80, 57, 130, wmode);
 
-                            if (button("OK", 18, 78, 44, 10, wmode))
+                            if (button(1, "OK", 18, 78, 44, 10, wmode))
                             {
                                 vwb = BTOK;
                                 break;
                             }
 
-                            if (button("CANCEL", 66, 78, 44, 10, wmode))
+                            if (button(2, "CANCEL", 66, 78, 44, 10, wmode))
                             {
                                 vwb = BTCANCEL;
                                 break;

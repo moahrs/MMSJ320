@@ -4,7 +4,7 @@ typedef struct LIST_WINDOWS
     unsigned long loadAddress;
     char zOrder;
     char active;
-    char keyTec;
+    int keyTec;
 } LIST_WINDOWS; 
 
 unsigned char *mguiIdRequest = 0x008D0000;

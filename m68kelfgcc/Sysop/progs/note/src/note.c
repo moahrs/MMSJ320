@@ -156,18 +156,6 @@ void main(void)
             if (vsizefile > 0 && vsizefile <= NOTE_MAX_FILE_SIZE)
                 noteBufSize = vsizefile;
 
-            // Le o arquivo em blocos de 512 bytes
-/*            voffset = 0;
-            while (voffset < noteBufSize)
-            {
-                vReadSize = 512;
-                if (voffset + vReadSize > noteBufSize)
-                    vReadSize = (unsigned short)(noteBufSize - voffset);
-
-                fsReadFile(vParamName, voffset, noteTextBuf + voffset, vReadSize);
-                voffset = voffset + vReadSize;
-            }*/
-
             // Garante terminador nulo
             *(noteTextBuf + noteBufSize) = 0x00;
         }
@@ -228,7 +216,8 @@ void main(void)
         while (1)
         {
             *mguiIdRequest = windowsId;
-            getMouseData(&mouseData);
+            getMouseData(0, &mouseData);    // Mouse
+            getMouseData(1, &mouseData);    // Teclado
             vtec = mguiListWindows[windowsId].keyTec;
 
             // --- Tratamento de Teclado ---
@@ -355,6 +344,8 @@ void drawNote(void)
     unsigned char titleBuf[32];
     unsigned char *pParam;
     unsigned char ix;
+    unsigned char vbuttonmess[16];
+    unsigned char bbutton = BTCLOSE;
 
     // Janela cheia
     showWindow("Note Viewer v0.1\0", 0, 0, 255, 191, BTNONE);
@@ -363,7 +354,10 @@ void drawNote(void)
     DrawLine(0, NOTE_CLOSE_Y - 4, 255, NOTE_CLOSE_Y - 4, nvcorfg);
 
     // Botao Close
-    button("Close", NOTE_CLOSE_X, NOTE_CLOSE_Y, NOTE_CLOSE_W, NOTE_CLOSE_H, WINDISP);
+    vbuttonmess[15] = NOTE_CLOSE_Y;
+    drawButtonsnew(&vbuttonmess, &bbutton, NOTE_CLOSE_X, NOTE_CLOSE_Y);
+
+//    button("Close", NOTE_CLOSE_X, NOTE_CLOSE_Y, NOTE_CLOSE_W, NOTE_CLOSE_H, WINDISP);
 
     // Se nao ha arquivo, exibe mensagem na area de texto
     if (!noteTextBuf || noteLineCount == 0)
