@@ -576,24 +576,58 @@ void basicTask(void *pData)
 //-----------------------------------------------------------------------------
 void verifyWindows(char pTask)
 {
-    unsigned char winActives;
     unsigned char ix;
+    unsigned char topIdx;
+    signed int topZ;
+    OS_TCB tcb;
 
-    winActives = 0;
-    for(ix = 0; ix < 6; ix++)
+    topIdx = 0xFF;
+    topZ = -32768;
+
+    for (ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
     {
         if (mguiListWindows[ix].id == pTask)
         {
             mguiListWindows[ix].id = 0;
+            mguiListWindows[ix].loadAddress = 0;
+            mguiListWindows[ix].zOrder = 0;
             mguiListWindows[ix].active = 0;
+            mguiListWindows[ix].keyTec = 0;
+            continue;
         }
 
-        if (mguiListWindows[ix].active)
-            winActives++;
+        if (mguiListWindows[ix].id == 0)
+            continue;
+
+        if (OSTaskQuery((INT8U)mguiListWindows[ix].id, &tcb) != OS_ERR_NONE)
+        {
+            mguiListWindows[ix].id = 0;
+            mguiListWindows[ix].loadAddress = 0;
+            mguiListWindows[ix].zOrder = 0;
+            mguiListWindows[ix].active = 0;
+            mguiListWindows[ix].keyTec = 0;
+            continue;
+        }
+
+        if ((signed int)mguiListWindows[ix].zOrder >= topZ)
+        {
+            topZ = (signed int)mguiListWindows[ix].zOrder;
+            topIdx = ix;
+        }
     }
-    
-    if (!winActives)
-        mguiListWindows[6].active = 1;
+
+    for (ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
+        mguiListWindows[ix].active = 0;
+
+    if (topIdx != 0xFF)
+    {
+        mguiListWindows[topIdx].active = 1;
+        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 0;
+    }
+    else
+    {
+        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 1;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -1579,55 +1613,116 @@ writeLongSerial("\r\n\0");*/
 void runFromMGUI(unsigned long vEnderExec)
 {
     unsigned int ix, iy;
+    unsigned char topIdx;
+    signed int nextZ;
+    signed int topZ;
+    INT8U osErr;
     OS_TCB dataTask;
+    OS_TCB tcb;
 
     *mguiRunTask = 0x00;
 
     // Verifica qual task esta liberada
-    for (ix = 0; ix < 6; ix++)
+    for (ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
     {
         // Se nao existir essa task, usa ela
-        if (OSTaskQuery((25 + ix), &dataTask) != OS_ERR_NONE)
+        if (OSTaskQuery((TASK_Prog01 + ix), &dataTask) != OS_ERR_NONE)
             break;
     }
 
     // Cria Janela
-    if (ix < 6)
+    if (ix < MGUI_APP_WINDOW_SLOTS)
     {
-        // Desativa todas as janelas para evitar conflito de id
-        for (iy = 0; iy <= 6; iy++)
+        nextZ = 0;
+        for (iy = 0; iy < MGUI_APP_WINDOW_SLOTS; iy++)
+        {
+            if (mguiListWindows[iy].id != 0)
+            {
+                if ((signed int)mguiListWindows[iy].zOrder >= nextZ)
+                    nextZ = (signed int)mguiListWindows[iy].zOrder + 1;
+            }
+
             mguiListWindows[iy].active = 0;
+            mguiListWindows[iy].keyTec = 0;
+        }
+
+        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 0;
+        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].keyTec = 0;
 
         // Ativa a janela que sera chamada
         mguiListWindows[ix].id = ix + TASK_Prog01;
         mguiListWindows[ix].loadAddress = vEnderExec;
-        mguiListWindows[ix].zOrder = 0;
+        mguiListWindows[ix].zOrder = (char)nextZ;
         mguiListWindows[ix].active = 1;
+    }
+    else
+    {
+        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 1;
+        return;
     }
 
     // Cria a task
+    osErr = OS_ERR_NONE;
     switch (ix)
     {
         case 0:
-            OSTaskCreate(prog01Task, (void *)vEnderExec, &StkTask01[STACKSIZEMGUI - 1], TASK_Prog01);
+            osErr = OSTaskCreate(prog01Task, (void *)vEnderExec, &StkTask01[STACKSIZEMGUI - 1], TASK_Prog01);
             break;
         case 1:
-            OSTaskCreate(prog02Task, (void *)vEnderExec, &StkTask02[STACKSIZEMGUI - 1], TASK_Prog02);
+            osErr = OSTaskCreate(prog02Task, (void *)vEnderExec, &StkTask02[STACKSIZEMGUI - 1], TASK_Prog02);
             break;
         case 2:
-            OSTaskCreate(prog03Task, (void *)vEnderExec, &StkTask03[STACKSIZEMGUI - 1], TASK_Prog03);
+            osErr = OSTaskCreate(prog03Task, (void *)vEnderExec, &StkTask03[STACKSIZEMGUI - 1], TASK_Prog03);
             break;
         case 3:
-            OSTaskCreate(prog04Task, (void *)vEnderExec, &StkTask04[STACKSIZEMGUI - 1], TASK_Prog04);
+            osErr = OSTaskCreate(prog04Task, (void *)vEnderExec, &StkTask04[STACKSIZEMGUI - 1], TASK_Prog04);
             break;
         case 4:
-            OSTaskCreate(prog05Task, (void *)vEnderExec, &StkTask05[STACKSIZEMGUI - 1], TASK_Prog05);
+            osErr = OSTaskCreate(prog05Task, (void *)vEnderExec, &StkTask05[STACKSIZEMGUI - 1], TASK_Prog05);
             break;
         case 5:
-            OSTaskCreate(prog06Task, (void *)vEnderExec, &StkTask06[STACKSIZEMGUI - 1], TASK_Prog06);
+            osErr = OSTaskCreate(prog06Task, (void *)vEnderExec, &StkTask06[STACKSIZEMGUI - 1], TASK_Prog06);
             break;
         default:
             break;
+    }
+
+    if (osErr != OS_ERR_NONE)
+    {
+        mguiListWindows[ix].id = 0;
+        mguiListWindows[ix].loadAddress = 0;
+        mguiListWindows[ix].zOrder = 0;
+        mguiListWindows[ix].active = 0;
+        mguiListWindows[ix].keyTec = 0;
+
+        topIdx = 0xFF;
+        topZ = -32768;
+        for (iy = 0; iy < MGUI_APP_WINDOW_SLOTS; iy++)
+        {
+            if (mguiListWindows[iy].id == 0)
+                continue;
+
+            if (OSTaskQuery((INT8U)mguiListWindows[iy].id, &tcb) != OS_ERR_NONE)
+                continue;
+
+            if ((signed int)mguiListWindows[iy].zOrder >= topZ)
+            {
+                topZ = (signed int)mguiListWindows[iy].zOrder;
+                topIdx = (unsigned char)iy;
+            }
+        }
+
+        if (topIdx != 0xFF)
+        {
+            mguiListWindows[topIdx].active = 1;
+            mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 0;
+        }
+        else
+        {
+            mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 1;
+        }
+
+        return;
     }
 
     // Se for um programa de execucao exclusiva, suspende o SO

@@ -13,7 +13,7 @@ SECTIONS
     .text __TEXT_ORIGIN : { *(.text*) } :text
     .rodata : { *(.rodata*) } :text
 
-    .data 0x00617000 : AT(ADDR(.rodata) + SIZEOF(.rodata))
+    .data 0x0062C000 : AT(ADDR(.rodata) + SIZEOF(.rodata))
     {
         __data_start = .;
         *(.data*)
@@ -22,7 +22,7 @@ SECTIONS
     __data_load_start = LOADADDR(.data);
     __data_load_end = LOADADDR(.data) + SIZEOF(.data);
 
-    .bss 0x00618000 (NOLOAD) :
+    .bss 0x0062C800 (NOLOAD) :
     {
         __bss_start = .;
         *(.bss*)
@@ -30,7 +30,7 @@ SECTIONS
         __bss_end = .;
     } :data
 
-    __stack = 0x00619000;
+    __stack = 0x0062E000;
     __ungetbuf = __stack;
     heap = 0x00840000;
 

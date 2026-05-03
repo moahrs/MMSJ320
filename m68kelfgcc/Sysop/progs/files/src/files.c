@@ -54,16 +54,23 @@ void main(void)
     MGUI_SAVESCR vsavescr;
     MGUI_MOUSE mouseData;
     MGUI_SAVESCR windowScr;
+    unsigned char winFound;
 
     // Define o ID do window
-    for(ix = 0; ix < 6; ix++)
+    windowsId = 0xFF;
+    winFound = 0;
+    for(ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
     {
-        if (mguiListWindows[ix].loadAddress == 0x00870000)
+        if (mguiListWindows[ix].active && mguiListWindows[ix].loadAddress == 0x00870000)
         {
             windowsId = ix;
+            winFound = 1;
             break;
         }
     }
+
+    if (!winFound)
+        return;
 
     // Pega as cores atuais
     getColorData(&vdpcolor);
@@ -347,7 +354,7 @@ void main(void)
                         unsigned char wmode = WINFULL;
                         while (1)
                         {
-                            fillin(0, &vstring, 80, 57, 130, wmode);
+                            fillin(0, vstring, 80, 57, 130, wmode);
 
                             if (button(1, "OK", 18, 78, 44, 10, wmode))
                             {
@@ -369,14 +376,10 @@ void main(void)
                         RestoreScreen(&vsavescr);
 
                         if (vwb == BTOK) {
-                            ix = 0;
-                            while(vstring[ix])
-                            {
-                                vnomefilenew[ix] = toupper(vstring[ix]);
-                                ix++;
-                            }
+                            for (ix = 0; ix < (sizeof(vnomefilenew) - 1) && vstring[ix]; ix++)
+                                vnomefilenew[ix] = (unsigned char)toupper(vstring[ix]);
 
-                            vstring[ix] = 0x00;
+                            vnomefilenew[ix] = 0x00;
 
                             switch (vopc)
                             {

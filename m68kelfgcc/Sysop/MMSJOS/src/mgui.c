@@ -2029,6 +2029,8 @@ void setPosPressed(unsigned char vppostx, unsigned char vpposty)
 //-------------------------------------------------------------------------
 // ptipo = 0 mouse, ptipo = 1 keyboard
 //-------------------------------------------------------------------------
+#define MGUI_LOCAL_MAX_SLOT 6
+
 void getMouseData(char ptipo, MGUI_MOUSE *pmouseData)
 {
     unsigned char ix;
@@ -2036,6 +2038,19 @@ void getMouseData(char ptipo, MGUI_MOUSE *pmouseData)
     MMSJ_KEYEVENT k;
 
     ix = *mguiIdRequest;
+    if (ix > MGUI_LOCAL_MAX_SLOT)
+    {
+        if (ptipo == 0x01)
+            return;
+
+        pmouseData->mouseButton = 0;
+        pmouseData->mouseBtnDouble = 0;
+        pmouseData->vpostx = 0;
+        pmouseData->vposty = 0;
+        pmouseData->mouseX = 0;
+        pmouseData->mouseY = 0;
+        return;
+    }
 
     if (mguiListWindows[ix].active)
     {
@@ -2220,6 +2235,7 @@ unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime)
 
     if (!btime)
     {
+        vbuttonmess[14] = OSTCBCur->OSTCBPrio;
         vbuttonmess[15] = vbty;
 
         TrocaSpriteMouse(MOUSE_POINTER);
@@ -2258,12 +2274,13 @@ void messageTask(void *pData)
     unsigned char prevFocusedButton = 0;
     unsigned char orderedButtons[7];
     unsigned char vbty;
-    unsigned char sqtdtam[10];
+    unsigned char callerPrio;
     MMSJ_KEYEVENT k;
-    unsigned char *vbutton = (int *)pData;
+    unsigned char *vbutton = (unsigned char *)pData;
     OS_TCB *ptcb;
 
     vbty = vbutton[15];
+    callerPrio = vbutton[14];
 
     for (i = 0; i < 7; i++)
         orderedButtons[i] = 0;
@@ -2353,22 +2370,22 @@ void messageTask(void *pData)
 
     vbutton[0] = ii;
 
-    // Resume todas as tarefas, menos a de messageTask e a mouseTask e a mmsjos (que nao deve ser reiniciada agora)
-    ptcb = OSTCBList;
-    while (ptcb->OSTCBPrio != OS_TASK_IDLE_PRIO) {     /* Go through all TCBs in TCB list              */
-        if (ptcb->OSTCBStat == OS_STAT_SUSPEND) // Tarefa válida
+    // Resume task chamadora e a tela do MGUI, sem despertar tasks alheias.
+    if (callerPrio < (OS_LOWEST_PRIO + 1u))
+    {
+        ptcb = OSTCBPrioTbl[callerPrio];
+        if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
         {
-            if (ptcb->OSTCBPrio != TASK_MGUI_MESSAGE && ptcb->OSTCBPrio != TASK_MGUI_MOUSE && ptcb->OSTCBPrio != TASK_MMSJOS_MAIN)
-            {
-/*writeLongSerial("Aqui 13 [\0");
-itoa(ptcb->OSTCBPrio, sqtdtam, 10);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");*/
-
-                OSTaskResume(ptcb->OSTCBPrio);
-            }
+            if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
+                OSTaskResume(callerPrio);
         }
-        ptcb = ptcb->OSTCBNext;                        /* Point at next TCB in TCB list                */
+    }
+
+    ptcb = OSTCBPrioTbl[TASK_MGUI_TELA];
+    if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
+    {
+        if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
+            OSTaskResume(TASK_MGUI_TELA);
     }
 
     vIndicaDialog = 0;

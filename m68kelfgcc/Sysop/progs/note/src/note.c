@@ -72,16 +72,23 @@ void main(void)
     unsigned char vParamName[128];
     unsigned char *vComma;
     unsigned char ix;
+    unsigned char winFound;
 
     // Define o ID do window
-    for(ix = 0; ix < 6; ix++)
+    windowsId = 0xFF;
+    winFound = 0;
+    for(ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
     {
-        if (mguiListWindows[ix].loadAddress == 0x00880000)
+        if (mguiListWindows[ix].active && mguiListWindows[ix].loadAddress == 0x00880000)
         {
             windowsId = ix;
+            winFound = 1;
             break;
         }
     }
+
+    if (!winFound)
+        return;
 
     // --- Atribuicao de ponteiros de funcao locais ---
     #ifdef USE_REALOCABLE_CODE
@@ -117,7 +124,7 @@ void main(void)
 
     memset(vParamName, 0x00, sizeof(vParamName));
     if (*paramBasic != 0x00)
-        strcpy((char*)vParamName, (char*)paramBasic);
+        strncpy((char*)vParamName, (char*)paramBasic, sizeof(vParamName) - 1);
 
     vComma = (unsigned char *)strrchr((char*)vParamName, ',');
     if (vComma)
