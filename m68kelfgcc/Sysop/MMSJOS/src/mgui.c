@@ -1955,11 +1955,13 @@ unsigned char editortela(void)
     // Verifica mouse e teclado
     if (mguiListWindows[6].active)  // Mgui ativo
     {
+        *mguiIdRequest = 6;
+
         key = KEY_NONE;
         
         if (mmsjKeyGet(&k))
         {
-            if (k.flags == 0x00 && k.code == 0x1B)  // ESC
+            if (k.flags == KEY_CTRL_ALT && k.code == "X")  // CTRL+ALT+X
                 vresp = 0x00;
         }
 
@@ -1976,16 +1978,6 @@ unsigned char editortela(void)
 //-------------------------------------------------------------------------
 void VerifyMouse(void)
 {
-    unsigned char sqtdtam[10];
-
-    /*FillRect(10,160,100,30,VDP_BLACK);
-    itoa(mouseStat,sqtdtam,10);
-    writesxy(10,160,6,sqtdtam,VDP_WHITE,VDP_BLACK);
-    itoa(mouseMoveX,sqtdtam,10);
-    writesxy(10,170,6,sqtdtam,VDP_WHITE,VDP_BLACK);
-    itoa(mouseMoveY,sqtdtam,10);
-    writesxy(10,180,6,sqtdtam,VDP_WHITE,VDP_BLACK);*/
-
     if (mouseMoveX < -2)
         mouseMoveX = -2;
 
@@ -2368,10 +2360,10 @@ void messageTask(void *pData)
         {
             if (ptcb->OSTCBPrio != TASK_MGUI_MESSAGE && ptcb->OSTCBPrio != TASK_MGUI_MOUSE && ptcb->OSTCBPrio != TASK_MMSJOS_MAIN)
             {
-writeLongSerial("Aqui 13 [\0");
+/*writeLongSerial("Aqui 13 [\0");
 itoa(ptcb->OSTCBPrio, sqtdtam, 10);
 writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");
+writeLongSerial("]\r\n\0");*/
 
                 OSTaskResume(ptcb->OSTCBPrio);
             }
@@ -2608,8 +2600,6 @@ void runBin(void)
     vnamein[0] = '\0';
     vfilename[0] = '\0';
     vfullpath[0] = '\0';
-
-    *mguiIdRequest = 6;
 
     SaveScreenNew(&vsavescr, 10,40,240,60);
     showWindow("Run",10,40,240,50,BTOK | BTCANCEL);
