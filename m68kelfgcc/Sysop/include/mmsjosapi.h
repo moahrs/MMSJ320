@@ -62,7 +62,7 @@ typedef void (*MostraIconeType)(unsigned short xi, unsigned short yi, unsigned c
 typedef char (*mguiCfgGetType)(char *section, char *key, char *vOutBuf, unsigned char vOutMax);
 typedef void (*putImagePbmP4Type)(unsigned long* memoria, unsigned short ix, unsigned short iy);
 typedef void (*setPosPressedType)(unsigned char vppostx, unsigned char vpposty);
-typedef void (*getMouseDataType)(MGUI_MOUSE *pmouseData);
+typedef void (*getMouseDataType)(char ptipo, MGUI_MOUSE *pmouseData);
 typedef void (*toggleboxType)(unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
 typedef void (*radiosetType)(unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
 typedef void (*fillinType)(unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);

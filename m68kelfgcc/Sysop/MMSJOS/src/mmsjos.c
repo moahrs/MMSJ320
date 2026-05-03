@@ -417,7 +417,6 @@ void keyboardTask(void *pdata)
                 k.ascii = keytec;
                 k.raw = k.code & 0xFF;
             }
-
             mmsjKeyPost(&k);
         }
 

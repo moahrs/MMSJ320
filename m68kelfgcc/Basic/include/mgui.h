@@ -85,6 +85,7 @@ extern unsigned char bgcolorMgui;
 
 #define WINOPER     0x01
 #define WINDISP     0x00
+#define WINFULL     0x02
 
 #define LINHAMENU      22
 #define COLMENU       8

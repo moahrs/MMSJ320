@@ -343,27 +343,27 @@ void main(void)
                                 break;
                         }
 
-                        fillin(&vstring, 80, 57, 130, WINDISP);
-                        button("OK", 18, 78, 44, 10, WINDISP);
-                        button("CANCEL", 66, 78, 44, 10, WINDISP);
-
+                        {
+                        unsigned char wmode = WINFULL;
                         while (1)
                         {
-                            fillin(&vstring, 80, 57, 130, WINOPER);
+                            fillin(&vstring, 80, 57, 130, wmode);
 
-                            if (button("OK", 18, 78, 44, 10, WINOPER))
+                            if (button("OK", 18, 78, 44, 10, wmode))
                             {
                                 vwb = BTOK;
                                 break;
                             }
 
-                            if (button("CANCEL", 66, 78, 44, 10, WINOPER))
+                            if (button("CANCEL", 66, 78, 44, 10, wmode))
                             {
                                 vwb = BTCANCEL;
                                 break;
                             }
 
+                            wmode = WINOPER;
                             OSTimeDlyHMSM(0, 0, 0, 100);
+                        }
                         }
 
                         RestoreScreen(&vsavescr);

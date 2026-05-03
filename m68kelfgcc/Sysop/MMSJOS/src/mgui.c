@@ -113,6 +113,145 @@ unsigned short mx, my, menyi[8], menyf[8];
 MGUI_SAVESCR endSaveMenu;
 unsigned char vIndicaDialog = 0;
 
+#define MGUI_WT_FILLIN   1
+#define MGUI_WT_BUTTON   2
+#define MGUI_WT_RADIO    3
+#define MGUI_WT_TOGGLE   4
+
+typedef struct
+{
+    unsigned char id;
+    unsigned char type;
+} MGUI_WIDGET_FOCUS;
+
+static MGUI_WIDGET_FOCUS mguiWidgetFocus[24];
+static unsigned char mguiWidgetCount = 0;
+static unsigned char mguiWidgetOnFocusIdx = 0;
+static unsigned char mguiWidgetLeaveFocusIdx = 255;
+static unsigned char mguiWidgetTabLatch = 0;
+//static unsigned char mguiWidgetWinfullLatch = 0;
+
+static void mguiWidgetFocusReset(void)
+{
+    mguiWidgetCount = 0;
+    mguiWidgetOnFocusIdx = 0;
+    mguiWidgetLeaveFocusIdx = 255;
+    mguiWidgetTabLatch = 0;
+}
+
+static char mguiWidgetRegister(unsigned char id, unsigned char type)
+{
+/*    unsigned char i;
+
+    for (i = 0; i < mguiWidgetCount; i++)
+    {
+        if (mguiWidgetFocus[i].id == id)
+            return i;
+    }
+
+    if (mguiWidgetCount < 24)
+    {
+        if (mguiWidgetCount == 0)
+            mguiWidgetOnFocusIdx = 0;  // primeiro widget registrado e o foco default*/
+
+        if (id > mguiWidgetCount)
+            mguiWidgetCount = id;
+
+        mguiWidgetFocus[id].id = id;
+        mguiWidgetFocus[id].type = type;
+
+        return (id);
+    //}
+
+    return -1;
+}
+
+//-------------------------------------------------------------------------
+// Estrutura retornada por mguiWidgetProcess
+//   key     : tecla ASCII pressionada (KEY_NONE se nenhuma; TAB ja consumido)
+//   clicked : 1 se houve clique do mouse dentro do widget
+//   focused : 1 se este widget esta com o foco apos o processamento
+//-------------------------------------------------------------------------
+typedef struct {
+    unsigned char key;
+    unsigned char clicked;
+    unsigned char focused;
+} MGUI_INPUT;
+
+static MGUI_INPUT mguiWidgetProcess(unsigned char thisIdx,
+                                    unsigned short wx, unsigned short wy,
+                                    unsigned short ww,  unsigned short wh,
+                                    unsigned char vtipo)
+{
+    MGUI_INPUT result;
+    MMSJ_KEYEVENT k;
+    MGUI_MOUSE vmouseData;
+    unsigned char reqWin;
+    unsigned char stqdtam[20];
+
+    result.key     = KEY_NONE;
+    result.clicked = 0;
+    result.focused = 0;
+
+    // Mouse: clique dentro do widget => toma o foco
+    getMouseData(0, &vmouseData);   // Pega Mouse
+    if (vmouseData.mouseButton == 0x01 &&
+        vmouseData.vpostx >= wx && vmouseData.vpostx <= (wx + ww) &&
+        vmouseData.vposty >= wy && vmouseData.vposty <= (wy + wh))
+    {
+        mguiWidgetOnFocusIdx = thisIdx;
+        result.clicked = 1;
+    }
+
+    result.focused = (thisIdx == mguiWidgetOnFocusIdx) ? 1 : 0;
+
+    if (result.clicked)
+        return result;
+
+    if (result.focused)
+        getMouseData(1, &vmouseData);   // Pega Teclado
+
+    if ((vtipo == WINOPER || vtipo == WINFULL) && result.focused)
+    {
+        // Leitura de tecla: tenta mmsjKeyGet primeiro, depois keyTec da janela
+        if (result.key == KEY_NONE)
+        {
+            reqWin = *mguiIdRequest;
+            if (reqWin > 6) 
+                reqWin = 6;
+            result.key = (unsigned char)(mguiListWindows[reqWin].keyTec & 0xFF);
+
+        }
+
+        // TAB: avanca foco e consome a tecla
+        if (result.key == 0x09 && mguiWidgetCount > 0)
+        {
+            if (!mguiWidgetTabLatch)
+            {
+                mguiWidgetOnFocusIdx++;
+                if (mguiWidgetOnFocusIdx > mguiWidgetCount)
+                    mguiWidgetOnFocusIdx = 0;
+                mguiWidgetTabLatch = 1;
+            }
+            result.key    = KEY_NONE;
+            result.focused = 0;
+        }
+        else if (result.key == 0x0D && mguiWidgetCount > 0)
+        {
+            if (mguiWidgetFocus[thisIdx].type != MGUI_WT_FILLIN)
+            {
+                result.clicked = 1;
+            }
+        }
+        else
+        {
+            mguiWidgetTabLatch = 0;
+        }
+    }
+
+    return result;
+}
+
 extern HEADER *_allocp;
 
 #define STACKSIZE  1024
@@ -972,24 +1111,50 @@ void InvertRect(unsigned short xi, unsigned short yi, unsigned short pwidth, uns
 }
 
 //-------------------------------------------------------------------------
-unsigned char button(unsigned char *title, unsigned short xib, unsigned short yib, unsigned short width, unsigned short height, unsigned char vtipo)
+unsigned char button(unsigned char id, unsigned char *title, unsigned short xib, unsigned short yib, unsigned short width, unsigned short height, unsigned char vtipo)
 {
-    unsigned char vRet = 0, xibf = xib + width, yibf = yib + height;
+    unsigned char vRet = 0;
     unsigned char vPosTxt;
+    unsigned char thisIdx;
+    unsigned char isFocused;
+    unsigned char borderColor;
+    char vdisp = 0;
+    unsigned char oldFocusIdx;
+    MGUI_INPUT inp;
 
-    if (vtipo == WINOPER)
+    if (vtipo == WINFULL)
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+    else
+        thisIdx = id;
+
+    oldFocusIdx = mguiWidgetOnFocusIdx;
+    inp = mguiWidgetProcess(thisIdx, xib, yib, width, height, vtipo);
+    isFocused = inp.focused;
+
+/*    if (!isFocused && vtipo != WINFULL)
+        return 0;*/
+
+    if (oldFocusIdx != mguiWidgetOnFocusIdx || (mguiWidgetOnFocusIdx == thisIdx && mguiWidgetLeaveFocusIdx != mguiWidgetOnFocusIdx))
     {
-        if (mouseBtnPres == 0x01)   // Left Mouse Button
-        {
-            if (vpostx >= xib && vpostx <= xibf && vposty >= yib && vposty <= yibf)
-                vRet = 1;
-        }
+        if (oldFocusIdx == thisIdx || mguiWidgetOnFocusIdx == thisIdx)
+            vdisp = 1;
     }
 
-    if (vtipo == WINDISP)
+    if (vtipo == WINOPER || vtipo == WINFULL)
     {
+        if (inp.clicked) vRet = 1;         // clique do mouse ativa o botao
+        if (inp.key == 0x0D) vRet = 1;    // ENTER ativa o botao
+    }
+
+    if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
+    {
+        if (mguiWidgetOnFocusIdx == thisIdx)
+            mguiWidgetLeaveFocusIdx = mguiWidgetOnFocusIdx;
+
+        vdisp = 0;
+        borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
         vPosTxt = (width / 2) - ((strlen(title) / 2) * 6);
-    	DrawRoundRect(xib,yib,width,height,1,vcorwf);  // rounded rectangle around text area
+        DrawRoundRect(xib,yib,width,height,1,borderColor);
         writesxy(xib + vPosTxt, yib + 2,1,title,vcorwf,vcorwb);
     }
 
@@ -997,101 +1162,141 @@ unsigned char button(unsigned char *title, unsigned short xib, unsigned short yi
 }
 
 //-------------------------------------------------------------------------
-void fillin(unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo)
+void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo)
 {
     unsigned short cc = 0;
-    unsigned char cchar, vdisp = 0, vtec;
-    unsigned char *vvarptr = vvar;
-    int key;
-    MMSJ_KEYEVENT k;
+    unsigned short len;
+    unsigned short maxChars;
+    unsigned char cchar;
+    unsigned char vdisp = 0;
+    unsigned char vtmp[2];
+    unsigned char thisIdx;
+    unsigned char oldFocusIdx;
+    unsigned char isFocused;
+    unsigned char borderColor;
+    unsigned char stqdtam[20];
+    MGUI_INPUT inp;
 
-    if (vtipo == WINOPER)
-    {
-        while (*vvarptr)
-        {
-            cc += 6;
-            *vvarptr++;
-        }
-
-        vtec = KEY_NONE;
+    if (vtipo == WINFULL)
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+    else
+        thisIdx = id;
         
-        if (mmsjKeyGet(&k))
-        {
-            if (k.flags = 0x00)   // Key Pressed
-                vtec = k.ascii;
-        }
+    oldFocusIdx = mguiWidgetOnFocusIdx;    
+    // area de clique inclui a borda desenhada (y-2, altura 13)
+    inp = mguiWidgetProcess(thisIdx, x, (unsigned short)(y - 2), pwidth, 13, vtipo);
+    isFocused = inp.focused;
+        
+    /*if (!isFocused && vtipo != WINFULL)
+        return;*/
 
-        if (vtec >= 0x20 && vtec < 0x7F && (x + cc + 6) < (x + pwidth))
-        {
-            *vvarptr++ = vtec;
-            *vvarptr = 0x00;
-
-            locatexy(x+cc,y+1);
-            writecxy(6, vtec, vcorwf, vcorwb);
-
+    if (oldFocusIdx != mguiWidgetOnFocusIdx || (mguiWidgetOnFocusIdx == thisIdx && mguiWidgetLeaveFocusIdx != mguiWidgetOnFocusIdx))
+    {
+        if (oldFocusIdx == thisIdx || mguiWidgetOnFocusIdx == thisIdx)
             vdisp = 1;
+    }
+
+    maxChars = (unsigned short)(pwidth / 6);
+    if (maxChars > 0)
+        maxChars = (unsigned short)(maxChars - 1);
+
+    if (isFocused && (vtipo == WINOPER || vtipo == WINFULL))
+    {
+        len = (unsigned short)strlen(vvar);
+
+        if (inp.key >= 0x20 && inp.key < 0x7F)
+        {
+            if (len < maxChars)
+            {
+                vvar[len] = inp.key;
+                vvar[len + 1] = 0x00;
+                vdisp = 1;
+            }
         }
         else
         {
-            switch (vtec)
+            switch (inp.key)
             {
                 case 0x0D:  // Enter
                     break;
                 case 0x08:  // BackSpace
-                    if (pposx > (x + 10))
+                    if (len > 0)
                     {
-                        *vvarptr = '\0';
-                        vvarptr--;
-                        if (vvarptr < vvar)
-                            vvarptr = vvar;
-                        *vvarptr = '\0';
-                        pposx = pposx - 6;
-                        FillRect(pposx, (pposy - 1), 6, 9, vcorwb);
-                        locatexy(pposx,pposy);
-                        writecxy(6, 0xFF, vcorwf, vcorwb);
-                        pposx = pposx - 6;
+                        vvar[len - 1] = 0x00;
+                        vdisp = 1;
                     }
                     break;
             }
         }
     }
 
-    if (vtipo == WINDISP || vdisp)
+    if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
     {
-        if (!vdisp)
+        if (mguiWidgetOnFocusIdx == thisIdx)
+            mguiWidgetLeaveFocusIdx = mguiWidgetOnFocusIdx;
+
+        vdisp = 0;
+
+        borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
+
+        FillRect(x-2,y-2,pwidth+4,13,vcorwb);
+        DrawRect(x-2,y-2,pwidth+4,13,borderColor);
+
+        cc = 0;
+        len = (unsigned short)strlen(vvar);
+        if (len > maxChars)
+            len = maxChars;
+
+        while (cc < len)
         {
-            FillRect(x-2,y-2,pwidth+4,13,vcorwb);
-            DrawRect(x-2,y-2,pwidth+4,13,vcorwf);
+            cchar = vvar[cc];
+            vtmp[0] = cchar;
+            vtmp[1] = 0x00;
+
+            writesxy(x + (cc * 6), y + 1, 6, vtmp, vcorwf, vcorwb);
+            cc++;
         }
 
-        vvarptr = vvar;
-        cc = 0;
-
-        while (*vvarptr)
+        if (isFocused)
         {
-            cchar = *vvarptr++;
-            cc += 6;
-
-            locatexy(x+cc,y+1);
-            writecxy(6, cchar, vcorwf, vcorwb);
-
-            if (pposx >= x + pwidth)
-                break;
+            if ((x + (len * 6) + 6) < (x + pwidth))
+            {
+                vtmp[0] = '|';
+                vtmp[1] = 0x00;
+                writesxy(x + (len * 6), y + 1, 6, vtmp, borderColor, vcorwb);
+            }
         }
     }
 }
 
 //-------------------------------------------------------------------------
-void radioset(unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo)
+void radioset(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo)
 {
-  unsigned char cc, xc;
-  unsigned char cchar, vdisp = 0;
+    unsigned char cc, xc;
+    unsigned char cchar, vdisp = 0;
+    unsigned char thisIdx, isFocused, borderColor;
+    unsigned short pheight;
+    MGUI_INPUT inp;
+
+    pheight = 10;
+    cc = 0;
+    while (vopt[cc] != '\0')
+    {
+        if (vopt[cc] == ',')
+            pheight += 10;
+        cc++;
+    }
+
+    thisIdx = mguiWidgetRegister(id, MGUI_WT_RADIO);
+    inp = mguiWidgetProcess(thisIdx, x, y, 140, pheight, vtipo);
+    isFocused = inp.focused;
+    borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
 
   xc = 0;
   cc = 0;
   cchar = ' ';
 
-  while(vtipo == WINOPER && cchar != '\0') {
+  while((vtipo == WINOPER || vtipo == WINFULL) && cchar != '\0') {
     cchar = vopt[cc];
     if (cchar == ',') {
       if (cchar == ',' && cc != 0)
@@ -1109,20 +1314,23 @@ void radioset(unsigned char* vopt, unsigned char *vvar, unsigned short x, unsign
   xc = 0;
   cc = 0;
 
-  while(vtipo == WINDISP || vdisp) {
+  while(vtipo == WINDISP || vtipo == WINFULL || vdisp) {
+        if (isFocused)
+            DrawRect(x - 2, y - 2, 146, pheight + 2, borderColor);
+
     cchar = vopt[cc];
 
     if (cchar == ',') {
       if (cchar == ',' && cc != 0)
         xc++;
 
-      FillRect(x, y + (xc * 10), 8, 8, vcorwb);
-      DrawCircle(x + 4, y + (xc * 10) + 2, 4, 0, vcorwf);
+            FillRect(x, y + (xc * 10), 8, 8, vcorwb);
+            DrawCircle(x + 4, y + (xc * 10) + 2, 4, 0, borderColor);
 
       if (vvar[0] == xc)
-        DrawCircle(x + 4, y + (xc * 10) + 2, 3, 1, vcorwf);
+                DrawCircle(x + 4, y + (xc * 10) + 2, 3, 1, borderColor);
       else
-        DrawCircle(x + 4, y + (xc * 10) + 2, 3, 0, vcorwf);
+                DrawCircle(x + 4, y + (xc * 10) + 2, 3, 0, borderColor);
 
       locatexy(x + 10, y + (xc * 10));
     }
@@ -1138,12 +1346,30 @@ void radioset(unsigned char* vopt, unsigned char *vvar, unsigned short x, unsign
 }
 
 //-------------------------------------------------------------------------
-void togglebox(unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo)
+void togglebox(unsigned char id, unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo)
 {
   unsigned char cc = 0;
-  unsigned char cchar, vdisp = 0;
+    unsigned char cchar, vdisp = 0;
+    unsigned char thisIdx, isFocused, borderColor;
+    unsigned short twidth;
+    MGUI_INPUT inp;
 
-  if (vtipo == WINOPER && vpostx >= x && vpostx <= x + 4 && vposty >= y && vposty <= y + 4)
+    twidth = 10 + (unsigned short)(strlen(bstr) * 6);
+    thisIdx = mguiWidgetRegister(id, MGUI_WT_TOGGLE);
+    inp = mguiWidgetProcess(thisIdx, x, y, twidth, 8, vtipo);
+    isFocused = inp.focused;
+    borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
+
+    if (isFocused && inp.key == 0x0D)
+    {
+        if (vvar[0])
+            vvar[0] = 0;
+        else
+            vvar[0] = 1;
+        vdisp = 1;
+    }
+
+  if ((vtipo == WINOPER || vtipo == WINFULL) && vpostx >= x && vpostx <= x + 4 && vposty >= y && vposty <= y + 4)
   {
     if (vvar[0])
       vvar[0] = 0;
@@ -1153,17 +1379,20 @@ void togglebox(unsigned char* bstr, unsigned char *vvar, unsigned short x, unsig
     vdisp = 1;
   }
 
-  if (vtipo == WINDISP || vdisp)
+  if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
   {
+        if (isFocused)
+            DrawRect(x - 2, y - 1, twidth + 4, 10, borderColor);
+
     FillRect(x, y + 2, 4, 4, vcorwb);
-    DrawRect(x, y + 2, 4, 4, vcorwf);
+        DrawRect(x, y + 2, 4, 4, borderColor);
 
     if (vvar[0]) {
-      DrawLine(x, y + 2, x + 4, y + 6, vcorwf);
-      DrawLine(x, y + 6, x + 4, y + 2, vcorwf);
+            DrawLine(x, y + 2, x + 4, y + 6, borderColor);
+            DrawLine(x, y + 6, x + 4, y + 2, borderColor);
     }
 
-    if (vtipo == WINDISP) {
+    if (vtipo == WINDISP || vtipo == WINFULL) {
       x += 6;
       locatexy(x,y);
       while (bstr[cc] != 0)
@@ -1534,6 +1763,8 @@ void showWindow(unsigned char* bstr, unsigned char x1, unsigned char y1, unsigne
         writesxy(x1 + 2, y1 + 3,1,bstr,vcorwf,vcorwb);
     }
 
+    mguiWidgetFocusReset();
+
     /*i = 1;
     for (ii = 0; ii <= 7; ii++)
         vbuttonwin[ii] = 0;
@@ -1804,9 +2035,11 @@ void setPosPressed(unsigned char vppostx, unsigned char vpposty)
 }
 
 //-------------------------------------------------------------------------
-void getMouseData(MGUI_MOUSE *pmouseData)
+// ptipo = 0 mouse, ptipo = 1 keyboard
+//-------------------------------------------------------------------------
+void getMouseData(char ptipo, MGUI_MOUSE *pmouseData)
 {
-    unsigned ix;
+    unsigned char ix;
     int key;
     MMSJ_KEYEVENT k;
 
@@ -1814,28 +2047,40 @@ void getMouseData(MGUI_MOUSE *pmouseData)
 
     if (mguiListWindows[ix].active)
     {
-        key = KEY_NONE;
-        
-        if (mmsjKeyGet(&k))
-            key = k.raw;
+        if (ptipo == 0x01)  // Apenas Teclado
+        {
+            key = KEY_NONE;
+            
+            if (mmsjKeyGet(&k))
+            {
+                key = k.raw;
+            }
 
-        mguiListWindows[ix].keyTec = key;
-        pmouseData->mouseButton = mouseBtnPres;
-        pmouseData->mouseBtnDouble = mouseBtnPresDouble;
-        pmouseData->vpostx = vpostx;
-        pmouseData->vposty = vposty;
-        pmouseData->mouseX = mouseX;
-        pmouseData->mouseY = mouseY;
+            mguiListWindows[ix].keyTec = key;
+        }
+        else if (ptipo == 0x00)
+        {
+            pmouseData->mouseButton = mouseBtnPres;
+            pmouseData->mouseBtnDouble = mouseBtnPresDouble;
+            pmouseData->vpostx = vpostx;
+            pmouseData->vposty = vposty;
+            pmouseData->mouseX = mouseX;
+            pmouseData->mouseY = mouseY;
+        }
     }
     else
     {
-        mguiListWindows[ix].keyTec = 0x00;
-        pmouseData->mouseButton = 0;
-        pmouseData->mouseBtnDouble = 0;
-        pmouseData->vpostx = 0;
-        pmouseData->vposty = 0;
-        pmouseData->mouseX = 0;
-        pmouseData->mouseY = 0;
+        if (ptipo == 0x01)  // Apenas Teclado
+            mguiListWindows[ix].keyTec = 0x00;
+        else if (ptipo == 0x00)
+        {
+            pmouseData->mouseButton = 0;
+            pmouseData->mouseBtnDouble = 0;
+            pmouseData->vpostx = 0;
+            pmouseData->vposty = 0;
+            pmouseData->mouseX = 0;
+            pmouseData->mouseY = 0;
+        }
     }
 }
 
@@ -1896,6 +2141,9 @@ unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime)
 
     for (ii = 0; ii <= 7; ii++)
         vbuttonwin[ii] = 0;
+
+    for (ii = 0; ii <= 15; ii++)
+        vbuttonmess[ii] = 0;
 
     bstrptr = bstr;
 	while (*bstrptr)
@@ -2010,11 +2258,47 @@ unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime)
 void messageTask(void *pData)
 {
     unsigned char i, ii = 0, iii;
+    unsigned char key = KEY_NONE;
+    unsigned char tabLatch = 0;
+    unsigned char focusCount = 0;
+    unsigned char focusPos = 0;
+    unsigned char focusedButton = 0;
+    unsigned char prevFocusedButton = 0;
+    unsigned char orderedButtons[7];
     unsigned char vbty;
+    unsigned char sqtdtam[10];
+    MMSJ_KEYEVENT k;
     unsigned char *vbutton = (int *)pData;
     OS_TCB *ptcb;
 
     vbty = vbutton[15];
+
+    for (i = 0; i < 7; i++)
+        orderedButtons[i] = 0;
+
+    for (i = 1; i <= 7; i++)
+    {
+        if (vbutton[i] == 0)
+            continue;
+
+        for (iii = 0; iii < focusCount; iii++)
+        {
+            if (vbutton[i] < vbutton[orderedButtons[iii]])
+                break;
+        }
+
+        for (; focusCount > iii; focusCount--)
+            orderedButtons[focusCount] = orderedButtons[focusCount - 1];
+
+        orderedButtons[iii] = i;
+        focusCount++;
+    }
+
+    if (focusCount)
+    {
+        focusedButton = orderedButtons[0];
+        DrawRoundRect(vbutton[focusedButton], vbty, 32, 10, 1, VDP_DARK_BLUE);
+    }
 
     while (!ii) {
         if (mouseBtnPres == 0x01)  // Esquerdo
@@ -2032,22 +2316,67 @@ void messageTask(void *pData)
             }
         }
 
+        key = KEY_NONE;
+        if (mmsjKeyGet(&k))
+        {
+            if (k.flags == 0x00)
+                key = k.ascii;
+        }
+
+        if (focusCount)
+        {
+            if (key == 0x09 && focusCount > 1)
+            {
+                if (!tabLatch)
+                {
+                    prevFocusedButton = focusedButton;
+                    focusPos++;
+                    if (focusPos >= focusCount)
+                        focusPos = 0;
+
+                    focusedButton = orderedButtons[focusPos];
+
+                    DrawRoundRect(vbutton[prevFocusedButton], vbty, 32, 10, 1, vcorwf);
+                    DrawRoundRect(vbutton[focusedButton], vbty, 32, 10, 1, VDP_DARK_BLUE);
+
+                    tabLatch = 1;
+                }
+            }
+            else
+            {
+                tabLatch = 0;
+            }
+
+            if (key == 0x0D)
+            {
+                ii = 1;
+
+                for (iii = 1; iii <= (focusedButton - 1); iii++)
+                    ii *= 2;
+            }
+        }
+
         OSTimeDlyHMSM(0, 0, 0, 30);
     }
 
     vbutton[0] = ii;
 
     // Resume todas as tarefas, menos a de messageTask e a mouseTask e a mmsjos (que nao deve ser reiniciada agora)
-    for (i = 0; i < OS_LOWEST_PRIO + 1; i++)
-    {
-        ptcb = &OSTCBTbl[i];
-        if (ptcb != NULL) // Tarefa válida
+    ptcb = OSTCBList;
+    while (ptcb->OSTCBPrio != OS_TASK_IDLE_PRIO) {     /* Go through all TCBs in TCB list              */
+        if (ptcb->OSTCBStat == OS_STAT_SUSPEND) // Tarefa válida
         {
             if (ptcb->OSTCBPrio != TASK_MGUI_MESSAGE && ptcb->OSTCBPrio != TASK_MGUI_MOUSE && ptcb->OSTCBPrio != TASK_MMSJOS_MAIN)
             {
+writeLongSerial("Aqui 13 [\0");
+itoa(ptcb->OSTCBPrio, sqtdtam, 10);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");
+
                 OSTaskResume(ptcb->OSTCBPrio);
             }
         }
+        ptcb = ptcb->OSTCBNext;                        /* Point at next TCB in TCB list                */
     }
 
     vIndicaDialog = 0;
@@ -2248,7 +2577,7 @@ void menuTask(void *pData)
                         importFile();
                         break;
                     case 2: // About
-                        message("MGUI v0.1\nGraphical User Interface\n \nwww.utilityinf.com.br\0", BTCLOSE, 0);
+                        message("MGUI v"versionMgui"\nGraphical User Interface\n \nwww.utilityinf.com.br\0", BTCLOSE, 0);
                         break;
                 }
             }
@@ -2280,22 +2609,37 @@ void runBin(void)
     vfilename[0] = '\0';
     vfullpath[0] = '\0';
 
+    *mguiIdRequest = 6;
+
     SaveScreenNew(&vsavescr, 10,40,240,60);
-    showWindow("Run Binary",10,40,240,50,BTOK | BTCANCEL);
+    showWindow("Run",10,40,240,50,BTOK | BTCANCEL);
 
     writesxy(12,57,8,"File Name:",vcorwf,vcorwb);
-    fillin(vnamein, 78, 57, 130, WINDISP);
 
-    while (1)
     {
-        fillin(vnamein, 78, 57, 130, WINOPER);
+        unsigned char wmode = WINFULL;
+        while (1)
+        {
+            fillin(0, vnamein, 78, 57, 130, wmode);
+            if (button(1, "OK", 18, 78, 44, 10, wmode))
+            {
+                vwb = BTOK;
+                break;
+            }
 
-        vwb = waitButton();
+            if (button(2, "CANCEL", 66, 78, 44, 10, wmode))
+            {
+                vwb = BTCANCEL;
+                break;
+            }
 
-        if (vwb == BTOK || vwb == BTCANCEL)
-            break;
+            wmode = WINOPER;
 
-        OSTimeDlyHMSM(0, 0, 0, 30);
+            if (vwb == BTOK || vwb == BTCANCEL)
+                break;
+
+            OSTimeDlyHMSM(0, 0, 0, 30);
+        }
     }
 
     RestoreScreen(&vsavescr);
@@ -2409,20 +2753,33 @@ void importFile(void)
     showWindow("Import File",10,40,240,50,BTOK | BTCANCEL);
 
     writesxy(12,57,8,"File Name:",vcorwf,vcorwb);
-    fillin(vstring, 78, 57, 130, WINDISP);
 
     vErro = RETURN_OK;
 
-    while (1)
     {
-        fillin(vstring, 78, 57, 130, WINOPER);
+        unsigned char wmode = WINFULL;
+        while (1)
+        {
+            fillin(0,vstring, 78, 57, 130, wmode);
+            if (button(1, "OK", 18, 78, 44, 10, wmode))
+            {
+                vwb = BTOK;
+                break;
+            }
 
-        vwb = waitButton();
+            if (button(2, "CANCEL", 66, 78, 44, 10, wmode))
+            {
+                vwb = BTCANCEL;
+                break;
+            }
 
-        if (vwb == BTOK || vwb == BTCANCEL)
-            break;
+            wmode = WINOPER;
 
-        OSTimeDlyHMSM(0, 0, 0, 30);
+            if (vwb == BTOK || vwb == BTCANCEL)
+                break;
+
+            OSTimeDlyHMSM(0, 0, 0, 30);
+        }
     }
 
     RestoreScreen(&vsavescr);
@@ -2858,15 +3215,27 @@ void executeCmd(void) {
     showWindow();
 
     writesxy(12,55,1,"Execute:",vcorwf,vcorwb);
-    fillin(vstring, 84, 55, 160, WINDISP);
 
+    {
+    unsigned char wmode = WINFULL;
     while (1) {
-        fillin(vstring, 84, 55, 160, WINOPER);
+        fillin(0,vstring, 84, 55, 160, wmode);
+        if (button(1, "OK", 18, 78, 44, 10, wmode))
+        {
+            vwb = BTOK;
+            break;
+        }
 
-        vwb = waitButton();
+        if (button(2, "CANCEL", 66, 78, 44, 10, wmode))
+        {
+            vwb = BTCANCEL;
+            break;
+        }
+        wmode = WINOPER;
 
         if (vwb == BTOK || vwb == BTCANCEL)
             break;
+    }
     }
 
     if (vwb == BTOK) {

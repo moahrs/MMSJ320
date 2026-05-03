@@ -85,6 +85,7 @@ extern unsigned char bgcolorMgui;
 
 #define WINOPER     0x01
 #define WINDISP     0x00
+#define WINFULL     0x02
 
 #define LINHAMENU      22
 #define COLMENU       8
@@ -149,7 +150,7 @@ void LoadIconLib(unsigned char* cfile);
 unsigned long readMousePs2 (void);
 void VerifyMouse(void);
 void setPosPressed(unsigned char vppostx, unsigned char vpposty);
-void getMouseData(MGUI_MOUSE *pmouseData);
+void getMouseData(char ptipo, MGUI_MOUSE *pmouseData);
 void getColorData(MGUI_COLOR *pColor);
 unsigned char waitButton(void);
 unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime);
@@ -175,8 +176,8 @@ void putImagePbmP4(unsigned char* memoria, unsigned short ix, unsigned short iy)
 // Elementos
 // -------------------------------------------------------------------------------
 void showWindow(unsigned char* bstr, unsigned char x1, unsigned char y1, unsigned short pwidth, unsigned char pheight, unsigned char bbutton);
-void fillin(unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
-unsigned char button(unsigned char *title, unsigned short xib, unsigned short yib, unsigned short width, unsigned short height, unsigned char vtipo);
-void radioset(unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
-void togglebox(unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
+void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
+unsigned char button(unsigned char id, unsigned char *title, unsigned short xib, unsigned short yib, unsigned short width, unsigned short height, unsigned char vtipo);
+void radioset(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
+void togglebox(unsigned char id, unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
 #endif
