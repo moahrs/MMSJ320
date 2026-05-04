@@ -26,6 +26,8 @@
 #include <malloc.h>
 #endif
 #ifndef USE_MALLOC
+// 2KB Config buffer - 0x0081FFFF
+#define ADDR_CFG_FILE   0x0081F800
 // 128KB Save Screen - 0x0083FFFF
 #define ADDR_SAVE_SCR   0x00820000 
 // 128KB Load Files Diversos - 0x0085FFFF
@@ -78,7 +80,7 @@ extern LIST_WINDOWS *mguiListWindows;
 unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
 unsigned char *vvdgc = 0x00400043; // VDP TMS9118 Registers/Address Mode
 
-unsigned char *memPosConfig = 0x008EF800; // Config file
+unsigned char *memPosConfig = (unsigned char*)ADDR_CFG_FILE; // Config file
 unsigned char *imgsMenuSys = 0x00; // Images PBM 16x16 each icone in order (64 Bytes Each)
 unsigned char vFinalOS; // Atualizar sempre que a compilacao passar desse valor
 unsigned char vcorwf; //
@@ -2386,6 +2388,13 @@ void messageTask(void *pData)
     {
         if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
             OSTaskResume(TASK_MGUI_TELA);
+    }
+
+    ptcb = OSTCBPrioTbl[TASK_MGUI_MOUSE];
+    if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
+    {
+        if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
+            OSTaskResume(TASK_MGUI_MOUSE);
     }
 
     vIndicaDialog = 0;

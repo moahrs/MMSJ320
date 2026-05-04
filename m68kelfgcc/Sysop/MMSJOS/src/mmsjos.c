@@ -580,6 +580,7 @@ void verifyWindows(char pTask)
     unsigned char topIdx;
     signed int topZ;
     OS_TCB tcb;
+    OS_TCB *ptcb;
 
     topIdx = 0xFF;
     topZ = -32768;
@@ -627,6 +628,20 @@ void verifyWindows(char pTask)
     else
     {
         mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 1;
+    }
+
+    ptcb = OSTCBPrioTbl[TASK_MGUI_TELA];
+    if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
+    {
+        if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
+            OSTaskResume(TASK_MGUI_TELA);
+    }
+
+    ptcb = OSTCBPrioTbl[TASK_MGUI_MOUSE];
+    if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
+    {
+        if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
+            OSTaskResume(TASK_MGUI_MOUSE);
     }
 }
 

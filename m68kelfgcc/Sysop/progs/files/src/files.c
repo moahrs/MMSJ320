@@ -544,8 +544,16 @@ void main(void)
                         else
                         {
                             execProg[0] = 0;
+
                             // Load File in fixed memory slot 0x00880000
                             vsizefile = loadFile(vnomefile, (unsigned char *)0x00880000);
+
+                            if (vsizefile == 0 || vsizefile >= ERRO_D_START)
+                            {
+                                message("Loading Error...\0", BTCLOSE, 0);
+                                linhastatus(0, "\0");
+                                break;
+                            }
 
                             // Passa o tamanho do BIN carregado para o programa
                             if (vsizefile > 0)

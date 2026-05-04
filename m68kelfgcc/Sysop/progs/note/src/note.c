@@ -44,6 +44,7 @@ char *ltoa(long value, char *str, int base);
 #define NOTE_MAX_FILE_SIZE 32768UL
 #define NOTE_LOAD_ADDR     0x00880000UL
 #define NOTE_WORK_GAP      256UL
+#define NOTE_DEFAULT_PROG_SIZE 5096UL
 
 static unsigned char noteCfgColor[16];
 static unsigned long noteLineStorage[NOTE_MAX_LINES];
@@ -51,6 +52,35 @@ static unsigned long noteLineStorage[NOTE_MAX_LINES];
 static unsigned long noteAlign4(unsigned long value)
 {
     return (value + 3UL) & 0xFFFFFFFCUL;
+}
+
+static unsigned char noteParseProgSize(unsigned char *vParamName, unsigned long *vProgSize)
+{
+    unsigned char *vComma;
+    unsigned char *vptr;
+    unsigned long value;
+
+    vComma = (unsigned char *)strrchr((char*)vParamName, ',');
+    if (!vComma)
+        return 0;
+
+    vptr = vComma + 1;
+    if (*vptr == 0x00)
+        return 0;
+
+    value = 0;
+    while (*vptr)
+    {
+        if (*vptr < '0' || *vptr > '9')
+            return 0;
+
+        value = (value * 10UL) + (unsigned long)(*vptr - '0');
+        vptr++;
+    }
+
+    *vComma = 0x00;
+    *vProgSize = value;
+    return 1;
 }
 
 //-----------------------------------------------------------------------------
@@ -70,7 +100,6 @@ void main(void)
     unsigned long vworkbase;
     unsigned short vReadSize;
     unsigned char vParamName[128];
-    unsigned char *vComma;
     unsigned char ix;
     unsigned char winFound;
 
@@ -120,22 +149,16 @@ void main(void)
     noteHOffset   = 0;
     noteLineCount = 0;
     noteBufSize   = 0;
-    vprogsize     = 0;
+    vprogsize     = NOTE_DEFAULT_PROG_SIZE;
 
     memset(vParamName, 0x00, sizeof(vParamName));
     if (*paramBasic != 0x00)
         strncpy((char*)vParamName, (char*)paramBasic, sizeof(vParamName) - 1);
 
-    vComma = (unsigned char *)strrchr((char*)vParamName, ',');
-    if (vComma)
-    {
-        *vComma = 0x00;
-        vprogsize = atol((char*)(vComma + 1));
+    noteParseProgSize(vParamName, &vprogsize);
 
-        vComma = (unsigned char *)strchr((char*)vParamName, ',');
-        if (vComma)
-            *vComma = 0x00;
-    }
+    if (vprogsize < 512UL || vprogsize > 0x00010000UL || vprogsize >= ERRO_D_START)
+        vprogsize = NOTE_DEFAULT_PROG_SIZE;
 
     vworkbase = noteAlign4(NOTE_LOAD_ADDR + vprogsize + NOTE_WORK_GAP);
     noteTextBuf = (unsigned char *)vworkbase;
