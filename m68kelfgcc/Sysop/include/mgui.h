@@ -3,7 +3,13 @@
 
 typedef struct
 {
-    unsigned int id;
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        unsigned long *pat;
+        unsigned long *cor;
+        unsigned int size;
+    #else
+        unsigned int id;
+    #endif
     unsigned short xi;
     unsigned short yi;
     unsigned short xf;

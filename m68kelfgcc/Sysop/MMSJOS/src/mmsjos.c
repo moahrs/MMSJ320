@@ -16,15 +16,15 @@
 * 20/04/2026  1.0a04  Moacir Jr.   Ajustes chamar basic com malloc e passagem de parametros
 * 28/04/2026  1.0a05  Moacir Jr.   Convertido para m68k-elf-gcc e retirada do malloc/realloc/free
 ********************************************************************************/
-//#define USE_MALLOC 0
-
 #include <ucos_ii.h>
 #include <ctype.h>
 #include <string.h>
-#ifdef USE_MALLOC
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+#if defined(USE_MALLOC)
 #include <malloc.h>
 #endif
-#ifndef USE_MALLOC
+#endif
+#if !defined(USE_MALLOC) && !defined(USE_MSMALLOC)
 #define ADDR_LOAD_FILE 0x00840000
 #endif
 #include <stdlib.h>
@@ -41,9 +41,131 @@
 
 unsigned long runOSMemory;
 
-#define MMSJ_HEAP_LIMIT 0x0086FFFFUL
+#define MMSJ_HEAP_LIMIT 0x008CFFFFUL
 #define MPRINTF_BUF_SIZE 128
-#define USE_MSPRINTF_MMSJOS 1
+
+#ifdef USE_MSMALLOC
+#define HEAP_START  ((unsigned char*)0x00820000)
+#define HEAP_SIZE   0x000AFFFFUL   /* 704 KB */
+
+typedef struct MEMBLOCK {
+    unsigned long size;
+    unsigned char used;
+    struct MEMBLOCK *next;
+} MEMBLOCK;
+
+static MEMBLOCK *heapFirst = 0;
+#endif
+
+#ifdef USE_RELOC_LOAD_PROGS
+typedef struct
+{
+    char magic[4];
+    unsigned long version;
+    unsigned long textDataSize;
+    unsigned long bssSize;
+    unsigned long entryOffset;
+    unsigned long relocCount;
+} MBIN_HEADER;
+
+typedef void (*PROG_ENTRY)(void);
+
+int loadMbinAndRun(char *filename, char porig)
+{
+    MBIN_HEADER h;
+    unsigned char *fileBuf;
+    unsigned char *codeBase;
+    unsigned char *relocPtr;
+    unsigned long fullBufSize;
+    unsigned long fullFileSize;
+    unsigned long i;
+    unsigned long relocOffset;
+    unsigned long *pFix;
+    unsigned char *vEnderExec;
+    unsigned char tmp[20];
+    unsigned long dbgRet;
+
+    /* Passo 1: lê só o header para obter os tamanhos */
+    loadFileSize(filename, &h, sizeof(MBIN_HEADER));
+
+    if (h.magic[0] != 'E' ||
+        h.magic[1] != 'X' ||
+        h.magic[2] != 'E' ||
+        h.magic[3] != ' ')
+    {
+        return -1;
+    }
+
+    /* Tamanho do arquivo no disco */
+    fullFileSize = sizeof(MBIN_HEADER) + h.textDataSize + h.relocCount * 4UL;
+
+    /* Buffer único: header + código + max(bss, tabela de reloc) + bss
+       O código fica em fileBuf+sizeof(MBIN_HEADER); o BSS vem logo depois.
+       A tabela de reloc (que está no arquivo logo após o código) será
+       usada primeiro e depois sobrescrita pelo memset do BSS. */
+    fullBufSize = sizeof(MBIN_HEADER) + h.textDataSize + h.bssSize;
+
+    if (fullFileSize > fullBufSize)
+        fullBufSize = fullFileSize;   /* garante espaço para a tabela de reloc */
+
+    fileBuf = msmalloc(fullBufSize);
+
+    if (!fileBuf)
+        return -2;
+
+    /* Carrega o arquivo inteiro (header + código + tabela de reloc) */
+    {
+        dbgRet = loadFileSize(filename, fileBuf, fullFileSize);
+    }
+
+    /* codeBase aponta diretamente para o início do código dentro do buffer,
+       pulando o header - sem memcpy */
+    codeBase = fileBuf + sizeof(MBIN_HEADER);
+
+    relocPtr = codeBase + h.textDataSize;
+
+    for (i = 0; i < h.relocCount; i++)
+    {
+        relocOffset = *(unsigned long *)(relocPtr + i * 4UL);
+
+        if (relocOffset + 4 > h.textDataSize)
+        {
+            msfree(fileBuf);
+            return -11;
+        }
+
+        pFix = (unsigned long *)(codeBase + relocOffset);
+
+        *pFix = *pFix + (unsigned long)codeBase;
+    }
+
+    memset(codeBase + h.textDataSize, 0, h.bssSize);
+
+    vEnderExec = codeBase + h.entryOffset;
+
+    if (((unsigned long)vEnderExec & 1) != 0)
+    {
+        msfree(fileBuf);
+        return -10;
+    }
+
+    if (porig == 1)
+        runFromOsCmd((unsigned long)vEnderExec);
+    else if (porig == 2)
+    {
+        strcat(paramBasic, ",");
+        ltoa((unsigned long)vEnderExec, tmp, 10);
+        strcat(paramBasic, tmp);
+
+        runFromMGUI((unsigned long)vEnderExec);
+    }
+    
+
+    msfree(fileBuf);
+
+    return 0;
+}
+#endif
 
 FAT32_DIR vdir;
 DISK  vdisk;
@@ -93,7 +215,8 @@ unsigned char fsWriteFile(char * vfilename, unsigned long voffset, unsigned char
 unsigned char fsDelFile(char * vfilename);
 unsigned char fsRenameFile(char * vfilename, char * vnewname);
 void runFromOsCmd(unsigned long vEnderExec);
-unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress);
+unsigned long loadFile(unsigned char *parquivo, void* xaddress);
+unsigned long loadFileSize(unsigned char *parquivo, void* xaddress, unsigned long xsize);
 void catFile(unsigned char *parquivo);
 unsigned char fsLoadSerialToFile(char * vfilename);
 unsigned char fsLoadSerialToRun(char * vfilename);
@@ -154,7 +277,7 @@ HEADER *_allocp;
 #define versionMMSJOS "1.0a05"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 
-#define STACKSIZE  8192
+#define STACKSIZE  16384
 #define STACKSIZEMGUI  2048
 #define STACKSIZEBASIC  32768
 
@@ -658,7 +781,7 @@ void prog01Task(void *pdata)
             break;
         }
 
-#ifdef USE_MALLOC
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
 #endif            
@@ -682,7 +805,7 @@ void prog02Task(void *pdata)
             break;
         }
 
-#ifdef USE_MALLOC
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
 #endif  
@@ -706,7 +829,7 @@ void prog03Task(void *pdata)
             break;
         }
 
-#ifdef USE_MALLOC
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
 #endif            
@@ -730,7 +853,7 @@ void prog04Task(void *pdata)
             break;
         }
 
-#ifdef USE_MALLOC
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
 #endif
@@ -754,7 +877,7 @@ void prog05Task(void *pdata)
             break;
         }
 
-#ifdef USE_MALLOC
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
 #endif
@@ -778,7 +901,7 @@ void prog06Task(void *pdata)
             break;
         }
 
-#ifdef USE_MALLOC
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
             free(vAddrExec);
 #endif            
@@ -1523,35 +1646,41 @@ writeLongSerial("\r\n\0");*/
                 ix = iy;
                 linhacomando[ix] = '.';
                 ix++;
-                linhacomando[ix] = 'B';
+                linhacomando[ix] = 'E'; // 'B';
                 ix++;
-                linhacomando[ix] = 'I';
+                linhacomando[ix] = 'X'; // 'I';
                 ix++;
-                linhacomando[ix] = 'N';
+                linhacomando[ix] = 'E'; // 'N';
                 ix++;
                 linhacomando[ix] = '\0';
 
                 vretfat = fsFindInDir(linhacomando, TYPE_FILE);
                 if (vretfat <= ERRO_D_START)
                 {
-                    // Slot fixo para apps gerais: 0x00880000
-                    vEnderExec = 0x00880000;
-                    itoa(vEnderExec,sqtdtam,16);
-                    printText("Loading File in \0");
-                    printText(sqtdtam);
-                    printText("h\r\n\0");
-                    vsizeProg = loadFile(linhacomando, (unsigned long*)vEnderExec);
-                    strcpy(paramBasic, linhaarg);
-                    strcat(paramBasic, ",");
-                    ltoa(vsizeProg, sqtdtam, 10);
-                    strcat(paramBasic, sqtdtam);
-                    if (!verro)
-                        runFromOsCmd(vEnderExec);
-                    else
-                    {
-                        if (linhaParametro[0] == '\0')
-                            printText("Loading File Error...\r\n\0");
-                    }
+                    #ifdef USE_RELOC_LOAD_PROGS
+                        strcpy(paramBasic, linhaarg);
+                        if (loadMbinAndRun(linhacomando, 1) != 0)
+                            printText("Error Executing File\r\n\0");
+                    #else
+                        // Slot fixo para apps gerais: 0x00880000
+                        vEnderExec = 0x00880000;
+                        itoa(vEnderExec,sqtdtam,16);
+                        printText("Loading File in \0");
+                        printText(sqtdtam);
+                        printText("h\r\n\0");
+                        vsizeProg = loadFile(linhacomando, (unsigned long*)vEnderExec);
+                        strcpy(paramBasic, linhaarg);
+                        strcat(paramBasic, ",");
+                        ltoa(vsizeProg, sqtdtam, 10);
+                        strcat(paramBasic, sqtdtam);
+                        if (!verro)
+                            runFromOsCmd(vEnderExec);
+                        else
+                        {
+                            if (linhaParametro[0] == '\0')
+                                printText("Loading File Error...\r\n\0");
+                        }
+                    #endif
 
                     ix = 255;
                 }
@@ -1760,19 +1889,197 @@ void delayus(int pTimeUS)
 //-----------------------------------------------------------------------------
 // Memory Allocation Functions
 //-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Initialization
+//-----------------------------------------------------------------------------
 void memInit(void)
 {
     // Alloc all memmory available minus reserved
-    /*vMemAloc->prev = NULL;
-    vMemAloc->name[0] = 0x00;
-    vMemAloc->address = 0x00810000;
-    vMemAloc->size = (*vtotmem * 1024) - 0x00010000 - 0x00040000; // 0x00600000 - 0x0063FFFF (256KB) = Reserved and 0x00800000 - 0x0080FFFF (64KB) = Reserved SO
-    vMemAloc->status = 0;
-    vMemAloc->next = NULL;*/
+#ifdef USE_MSMALLOC
+    heapFirst = (MEMBLOCK*)HEAP_START;
+    heapFirst->size = HEAP_SIZE - sizeof(MEMBLOCK);
+    heapFirst->used = 0;
+    heapFirst->next = 0;
+#endif    
+}
+
+#ifdef USE_MSMALLOC
+//-----------------------------------------------------------------------------
+// Allocation Memory
+//-----------------------------------------------------------------------------
+void *msmalloc(unsigned long size)
+{
+    MEMBLOCK *blk;
+    MEMBLOCK *newblk;
+
+    if (size == 0)
+        return 0;
+
+    /* alinhamento em 2 bytes para 68000 */
+    if (size & 1)
+        size++;
+
+    blk = heapFirst;
+
+    while (blk)
+    {
+        if (!blk->used && blk->size >= size)
+        {
+            if (blk->size > size + sizeof(MEMBLOCK) + 4)
+            {
+                newblk = (MEMBLOCK*)((unsigned char*)blk + sizeof(MEMBLOCK) + size);
+                newblk->size = blk->size - size - sizeof(MEMBLOCK);
+                newblk->used = 0;
+                newblk->next = blk->next;
+
+                blk->size = size;
+                blk->next = newblk;
+            }
+
+            blk->used = 1;
+            return (void*)((unsigned char*)blk + sizeof(MEMBLOCK));
+        }
+
+        blk = blk->next;
+    }
+
+    return 0;
 }
 
 //-----------------------------------------------------------------------------
+// Re-Alloc Memory
+//-----------------------------------------------------------------------------
+void *msrealloc(void *ptr, unsigned long newSize)
+{
+    MEMBLOCK *blk;
+    MEMBLOCK *next;
+    MEMBLOCK *newblk;
+    void *newptr;
+    unsigned long copySize;
+    unsigned char *src;
+    unsigned char *dst;
+    unsigned long i;
+
+    if (ptr == 0)
+        return msmalloc(newSize);
+
+    if (newSize == 0)
+    {
+        msfree(ptr);
+        return 0;
+    }
+
+    if (newSize & 1)
+        newSize++;
+
+    blk = (MEMBLOCK*)((unsigned char*)ptr - sizeof(MEMBLOCK));
+
+    /* Caso 1: já cabe */
+    if (blk->size >= newSize)
+    {
+        /* se sobrar bastante, divide */
+        if (blk->size >= newSize + sizeof(MEMBLOCK) + 4)
+        {
+            newblk = (MEMBLOCK*)((unsigned char*)blk + sizeof(MEMBLOCK) + newSize);
+            newblk->size = blk->size - newSize - sizeof(MEMBLOCK);
+            newblk->used = 0;
+            newblk->next = blk->next;
+
+            blk->size = newSize;
+            blk->next = newblk;
+        }
+
+        return ptr;
+    }
+
+    /* Caso 2: tenta crescer usando o próximo bloco livre */
+    next = blk->next;
+
+    if (next && !next->used &&
+        ((unsigned char*)blk + sizeof(MEMBLOCK) + blk->size == (unsigned char*)next))
+    {
+        if (blk->size + sizeof(MEMBLOCK) + next->size >= newSize)
+        {
+            blk->size += sizeof(MEMBLOCK) + next->size;
+            blk->next = next->next;
+
+            /* se sobrar bastante depois de expandir, divide */
+            if (blk->size >= newSize + sizeof(MEMBLOCK) + 4)
+            {
+                newblk = (MEMBLOCK*)((unsigned char*)blk + sizeof(MEMBLOCK) + newSize);
+                newblk->size = blk->size - newSize - sizeof(MEMBLOCK);
+                newblk->used = 0;
+                newblk->next = blk->next;
+
+                blk->size = newSize;
+                blk->next = newblk;
+            }
+
+            return ptr;
+        }
+    }
+
+    /* Caso 3: não dá para crescer ali, aloca outro e copia */
+    newptr = msmalloc(newSize);
+
+    if (newptr == 0)
+        return 0;
+
+    copySize = blk->size;
+
+    if (copySize > newSize)
+        copySize = newSize;
+
+    src = (unsigned char*)ptr;
+    dst = (unsigned char*)newptr;
+
+    for (i = 0; i < copySize; i++)
+        dst[i] = src[i];
+
+    msfree(ptr);
+
+    return newptr;
+}
+
+//-----------------------------------------------------------------------------
+// Free Allocated Memory
+//-----------------------------------------------------------------------------
+void msfree(void *ptr)
+{
+    MEMBLOCK *blk;
+    MEMBLOCK *cur;
+
+    if (!ptr)
+        return;
+
+    blk = (MEMBLOCK*)((unsigned char*)ptr - sizeof(MEMBLOCK));
+    blk->used = 0;
+
+    /* junta blocos livres consecutivos */
+    cur = heapFirst;
+
+    while (cur && cur->next)
+    {
+        if (!cur->used && !cur->next->used)
+        {
+            cur->size += sizeof(MEMBLOCK) + cur->next->size;
+            cur->next = cur->next->next;
+        }
+        else
+        {
+            cur = cur->next;
+        }
+    }
+}
+#endif
+
+//-----------------------------------------------------------------------------
 // Disk Functions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Send byte to disk 
 //-----------------------------------------------------------------------------
 int fsSendByte(unsigned char vByte, unsigned char pType)
 {
@@ -1790,6 +2097,8 @@ int fsSendByte(unsigned char vByte, unsigned char pType)
 }
 
 //-----------------------------------------------------------------------------
+// Receive byte from disk
+//-----------------------------------------------------------------------------
 unsigned char fsRecByte(unsigned char pType)
 {
     unsigned char vByte;
@@ -1806,6 +2115,8 @@ unsigned char fsRecByte(unsigned char pType)
     return vByte;
 }
 
+//-----------------------------------------------------------------------------
+// Write Fat Sector
 //-----------------------------------------------------------------------------
 static unsigned char fsWriteFatSector(unsigned long vfat)
 {
@@ -2151,8 +2462,12 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
     vSizeTotalRec = 0;
 
-    #ifdef USE_MALLOC
-        xaddress = malloc(STOF_RX_BUFFER_SIZE);
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #if defined(USE_MALLOC)
+            xaddress = malloc(STOF_RX_BUFFER_SIZE);
+        #else
+            xaddress = msmalloc(STOF_RX_BUFFER_SIZE);
+        #endif
     #else
         xaddress = (unsigned char *)ADDR_LOAD_FILE; // 128Kb Endereco fixo
     #endif
@@ -2168,8 +2483,12 @@ unsigned char fsLoadSerialToFile(char * vfilename)
     if (vfilename == 0)
     {
         printText("Error, file name must be provided!!\r\n\0");
-#ifdef USE_MALLOC
-        free(xaddressStart);
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #if defined(USE_MALLOC)
+            free(xaddressStart);
+        #else
+            msfree(xaddressStart);
+        #endif
 #endif
         return ERRO_B_WRITE_FILE;;
     }
@@ -2180,8 +2499,12 @@ unsigned char fsLoadSerialToFile(char * vfilename)
         // Se existir, apaga
         if (fsDelFile(vfilename) != RETURN_OK)
         {
-#ifdef USE_MALLOC
-            free(xaddressStart);
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+            #if defined(USE_MALLOC)
+                free(xaddressStart);
+            #else
+                msfree(xaddressStart);
+            #endif
 #endif
             return ERRO_B_WRITE_FILE;
         }
@@ -2190,8 +2513,12 @@ unsigned char fsLoadSerialToFile(char * vfilename)
     // Cria o Arquivo
     if (fsCreateFile(vfilename) != RETURN_OK)
     {
-#ifdef USE_MALLOC
-        free(xaddressStart);
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #if defined(USE_MALLOC)
+            free(xaddressStart);
+        #else
+            msfree(xaddressStart);
+        #endif
 #endif
         return ERRO_B_CREATE_FILE;
     }
@@ -2206,8 +2533,12 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
         if (fsOpenFile(vfilename) != RETURN_OK)
         {
-#ifdef USE_MALLOC
-            free(xaddressStart);
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+            #if defined(USE_MALLOC)
+                free(xaddressStart);
+            #else
+                msfree(xaddressStart);
+            #endif
 #endif
             return ERRO_B_WRITE_FILE;
         }
@@ -2263,8 +2594,12 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
             if (fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize) != RETURN_OK)
             {
-#ifdef USE_MALLOC
-                free(xaddressStart);
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+                #if defined(USE_MALLOC)
+                    free(xaddressStart);
+                #else
+                    msfree(xaddressStart);
+                #endif
 #endif
                 return ERRO_B_WRITE_FILE;
             }
@@ -2287,16 +2622,24 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
         fsCloseFile(vfilename, 1);
 
-    #ifdef USE_MALLOC
-        free(xaddressStart);
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #if defined(USE_MALLOC)
+            free(xaddressStart);
+        #else
+            msfree(xaddressStart);
+        #endif
     #endif
     }
     else
     {
         printText("Serial Load Error...");
 
-    #ifdef USE_MALLOC
-        free(xaddressStart);
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #if defined(USE_MALLOC)
+            free(xaddressStart);
+        #else
+            msfree(xaddressStart);
+        #endif
     #endif
 
         return ERRO_B_WRITE_FILE;
@@ -2313,8 +2656,12 @@ unsigned char fsLoadSerialToRun(char * vfilename)
     int iy;
     unsigned char *vEnderExec;
 
-    #ifdef USE_MALLOC
-        vEnderExec = malloc(1024);
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #if defined(USE_MALLOC)
+            vEnderExec = malloc(1024);
+        #else
+            vEnderExec = msmalloc(1024);
+        #endif
     #else
         vEnderExec = (unsigned char*)ADDR_LOAD_FILE;
     #endif
@@ -2327,8 +2674,12 @@ unsigned char fsLoadSerialToRun(char * vfilename)
         printText(sqtdtam);
         printText("h\r\n\0");
         runFromOsCmd(vEnderExec);
-    #ifdef USE_MALLOC
-        free(vEnderExec);
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #if defined(USE_MALLOC)
+            free(vEnderExec);
+        #else
+            msfree(vEnderExec);
+        #endif
     #endif
     }
     else
@@ -3990,7 +4341,12 @@ void catFile(unsigned char *parquivo) {
 }
 
 //-----------------------------------------------------------------------------
-unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress)
+unsigned long loadFile(unsigned char *parquivo, void* xaddress)
+{
+    loadFileSize(parquivo, xaddress, 0);
+}
+
+unsigned long loadFileSize(unsigned char *parquivo, void* xaddress, unsigned long xsize)
 {
     unsigned short cc, dd;
     unsigned char vbuffer[512];
@@ -3998,13 +4354,15 @@ unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress)
     unsigned int vbytegrava = 0;
     unsigned short xdado = 0, xcounter = 0;
     unsigned short vcrc, vcrcpic, vloop;
-    unsigned long vsizeR, vsizefile = 0;
+    unsigned long vsizeR, vsizefile = 0, vsizeDest;
 
 //*tempData = parquivo;
 //*(tempData + 1) = xaddress;
 
 	vsizefile = 0;
     verro = 0;
+
+    vclusterdir = vretpath.ClusterDirAtu;
 
     if (fsFindDirPath(parquivo, FIND_PATH_PART) == FIND_PATH_RET_ERROR)
     {
@@ -4022,7 +4380,12 @@ unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress)
 
 			if (vsizeR != 0)
             {
-                for (dd = 0; dd < vsizeR; dd++)
+                if (xsize != 0 && (xsize - vsizefile) < vsizeR)
+                    vsizeDest = xsize - vsizefile;
+                else
+                    vsizeDest = vsizeR;
+
+                for (dd = 0; dd < vsizeDest; dd++)
                 {
                     // Grava exatamente os bytes lidos para evitar sobrescrever heap.
                     *xaddressb++ = vbuffer[dd];
@@ -4030,6 +4393,9 @@ unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress)
 
 
                 vsizefile += vsizeR;
+
+                if (xsize != 0 && vsizefile >= xsize)
+                    break;
 			}
 			else
 				break;
@@ -4039,7 +4405,7 @@ unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress)
     	fsCloseFile(vretpath.Name, 0);
     }
     else
-        verro = 1;
+        verro = 2;
 
     vclusterdir = vretpath.ClusterDirAtu;
 
@@ -4268,7 +4634,7 @@ unsigned long fsMalloc(unsigned long vMemSize)
 {
     unsigned long mMemDef;
 
-    #ifdef USE_MALLOC    
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)    
         unsigned int error_code = OS_ERR_NONE;
 
         if (!vMemSize)

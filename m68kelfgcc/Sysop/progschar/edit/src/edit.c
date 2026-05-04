@@ -40,11 +40,12 @@ void main(void)
     int ret;
     unsigned long vsizefile;
     unsigned long vprogsize;
-    unsigned long vworkbase;
+//    unsigned long vworkbase;
     unsigned short vReadSize;
     unsigned char vParamName[128];
     unsigned char *vComma;
     unsigned char ix;
+    unsigned char sqtdtam[20];
 
     //OSTaskSuspend(TASK_MMSJOS_MAIN);
 
@@ -52,7 +53,7 @@ void main(void)
     if (*paramBasic != 0x00)
         strcpy((char*)vParamName, (char*)paramBasic);
 
-    vComma = (unsigned char *)strrchr((char*)vParamName, ',');
+/*    vComma = (unsigned char *)strrchr((char*)vParamName, ',');
     if (vComma)
     {
         *vComma = 0x00;
@@ -63,12 +64,19 @@ void main(void)
             *vComma = 0x00;
     }
 
+    vworkbase = noteAlign4(0x00880000 + vprogsize + 256);*/
+    
     strcpy(edFileName, (char*)vParamName);
     edDirty = 0;
+    edFileBuf = (char *)msmalloc((unsigned long)EDIT_MAX_FILE);
 
-    vworkbase = noteAlign4(0x00880000 + vprogsize + 256);
-    
-    edFileBuf = EDIT_FILE_ADDR;
+    if (!edFileBuf)
+    {
+        printText("Sem memoria para edFileBuf\r\n");
+        return;
+    }
+
+    memset(edFileBuf, 0, EDIT_MAX_FILE);
 
     if (vParamName[0] == 0x00)
     {
@@ -918,6 +926,8 @@ int edOpenFile(unsigned char* vParamName)
 
     edInputStatus("Open Name:", openFileName, sizeof(openFileName));
     edToUpperCase(openFileName);
+
+    memset(edFileBuf, 0, EDIT_MAX_FILE);
 
     ret = loadFile((char*)openFileName, edFileBuf);
 

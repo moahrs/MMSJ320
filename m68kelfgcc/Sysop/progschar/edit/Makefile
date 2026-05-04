@@ -7,10 +7,10 @@ TARGET = edit.elf
 BIN = edit.bin
 MAP = edit.map
 LST = edit.lst
-TEXT_ORIGIN ?= 0x00880000
+TEXT_ORIGIN ?= 0x00000000
 
 CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -Iinclude -I../../include -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
-LDFLAGS = -T linker_edit.ld -nostdlib -Wl,--defsym=__TEXT_ORIGIN=$(TEXT_ORIGIN)
+LDFLAGS = -T linker_edit.ld -nostdlib  -Wl,--emit-relocs -Wl,-Map=$(MAP)
 LDLIBS = -lgcc
 
 SRC_C = \
@@ -38,7 +38,7 @@ all: $(TARGET) $(BIN) $(LST)
 flash: TEXT_ORIGIN=0x00020000
 flash: clean all
 
-ram: TEXT_ORIGIN=0x00880000
+ram: TEXT_ORIGIN=0x00000000
 ram: clean all
 
 $(TARGET): $(OBJ)

@@ -59,8 +59,9 @@ exit /b 0
 :done
 
 echo.
+..\..\elftoexe files.elf files.exe
 echo Artefatos gerados:
-dir files.elf files.bin files.map files.lst
-copy /Y files.bin D:\PROJETOS\MMSJ320\HD_ATU\MGUI\PROGS\FILES.BIN
-copy /Y files.bin F:\MGUI\PROGS\FILES.BIN
+dir files.elf files.exe files.map files.lst
+copy /Y files.exe D:\PROJETOS\MMSJ320\HD_ATU\MGUI\PROGS\FILES.EXE
+copy /Y files.exe F:\MGUI\PROGS\FILES.EXE
 exit /b 0

@@ -49,7 +49,7 @@ void main(void)
     unsigned char vtamstr[16];
     unsigned long vworkbase;
     unsigned char *vComma;
-    unsigned long vprogsize;
+    unsigned long vaddress;
     VDP_COLOR vdpcolor;
     MGUI_SAVESCR vsavescr;
     MGUI_MOUSE mouseData;
@@ -57,11 +57,18 @@ void main(void)
     unsigned char winFound;
 
     // Define o ID do window
+    vComma = (unsigned char *)strrchr((char*)paramBasic, ',');
+    if (vComma)
+    {
+        *vComma = 0x00;
+        vaddress = atol((char*)(vComma + 1));
+    }
+
     windowsId = 0xFF;
     winFound = 0;
     for(ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
     {
-        if (mguiListWindows[ix].active && mguiListWindows[ix].loadAddress == 0x00870000)
+        if (mguiListWindows[ix].active && mguiListWindows[ix].loadAddress == vaddress)
         {
             windowsId = ix;
             winFound = 1;
@@ -70,24 +77,22 @@ void main(void)
     }
 
     if (!winFound)
+    {
+writeLongSerial("Aqui 0\r\n\0");
         return;
+    }
 
     // Pega as cores atuais
     getColorData(&vdpcolor);
     vcorfg = vdpcolor.fg;
     vcorbg = vdpcolor.bg;
 
-    vComma = (unsigned char *)strrchr((char*)paramBasic, ',');
-    if (vComma)
-    {
-        *vComma = 0x00;
-        vprogsize = atol((char*)(vComma + 1));
-    }
-
-    vworkbase = noteAlign4(0x00870000 + vprogsize + 256);
-    dir = (FILES_DIR *)vworkbase;
+    dir = msmalloc(sizeof(FILES_DIR) * 32);  //(FILES_DIR *)vworkbase;
     if (!dir)
+    {
+writeLongSerial("Aqui 1\r\n\0");
         return;
+    }
 
     vcont = 1;
     vpos = 0;
@@ -97,8 +102,10 @@ void main(void)
     memset(dir, 0x00, sizeof(FILES_DIR) * 32);
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
+writeLongSerial("Aqui 2\r\n\0");
 
     SaveScreenNew(&windowScr, 0, 0, 255, 191);
+writeLongSerial("Aqui 3\r\n\0");
 
     drawWindow();
 
@@ -543,34 +550,39 @@ void main(void)
                         }
                         else
                         {
-                            execProg[0] = 0;
-
-                            // Load File in fixed memory slot 0x00880000
-                            vsizefile = loadFile(vnomefile, (unsigned char *)0x00880000);
-
-                            if (vsizefile == 0 || vsizefile >= ERRO_D_START)
-                            {
-                                message("Loading Error...\0", BTCLOSE, 0);
-                                linhastatus(0, "\0");
-                                break;
-                            }
-
-                            // Passa o tamanho do BIN carregado para o programa
-                            if (vsizefile > 0)
-                            {
-                                strcpy(vtmpparam, paramBasic);
+                            #ifdef USE_RELOC_LOAD_PROGS
                                 strcpy(paramBasic, vtmpparam);
-                                strcat(paramBasic, ",");
-                                ltoa(vsizefile, (char*)vtamstr, 10);
-                                strcat(paramBasic, (char*)vtamstr);
-                            }
+                                loadMbinAndRun(vnomefile, 2);
+                            #else
+                                execProg[0] = 0;
 
-                            // Run 0x00880000
-                            /*while (*mguiRunTask); // Espera o MGUI liberar a execução do programa
-                            *mguiRunTask = 0x00880000;*/
+                                // Load File in fixed memory slot 0x00880000
+                                vsizefile = loadFile(vnomefile, (unsigned char *)0x00880000);
 
-                            vEndExec = 0x00880000;
-                            runFromMGUI(vEndExec);
+                                if (vsizefile == 0 || vsizefile >= ERRO_D_START)
+                                {
+                                    message("Loading Error...\0", BTCLOSE, 0);
+                                    linhastatus(0, "\0");
+                                    break;
+                                }
+
+                                // Passa o tamanho do BIN carregado para o programa
+                                if (vsizefile > 0)
+                                {
+                                    strcpy(vtmpparam, paramBasic);
+                                    strcpy(paramBasic, vtmpparam);
+                                    strcat(paramBasic, ",");
+                                    ltoa(vsizefile, (char*)vtamstr, 10);
+                                    strcat(paramBasic, (char*)vtamstr);
+                                }
+
+                                // Run 0x00880000
+                                /*while (*mguiRunTask); // Espera o MGUI liberar a execução do programa
+                                *mguiRunTask = 0x00880000;*/
+
+                                vEndExec = 0x00880000;
+                                runFromMGUI(vEndExec);
+                            #endif
                         }
 
                         vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
@@ -645,7 +657,9 @@ void main(void)
 void drawWindow(void)
 {
     // Cria a Janela
+writeLongSerial("Aqui 4\r\n\0");
     showWindow("File Explorer v0.3a01\0", 0, 0, 255, 191, BTNONE);
+writeLongSerial("Aqui 5\r\n\0");
 
     // Prepara Cabeçalho
     FillRect(0,18,255,10,vcorbg);

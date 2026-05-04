@@ -59,8 +59,9 @@ exit /b 0
 :done
 
 echo.
+..\..\elftoexe edit.elf edit.exe
 echo Artefatos gerados:
-dir edit.elf edit.bin edit.map edit.lst
-copy /Y edit.bin D:\PROJETOS\MMSJ320\HD_ATU\EDIT.BIN
-copy /Y edit.bin F:\EDIT.BIN
+dir edit.elf edit.exe edit.map edit.lst
+copy /Y edit.exe D:\PROJETOS\MMSJ320\HD_ATU\EDIT.exe
+copy /Y edit.exe F:\EDIT.exe
 exit /b 0

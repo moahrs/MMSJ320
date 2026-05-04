@@ -265,6 +265,11 @@ extern const unsigned char vmesc[12][3];
 
 #define KEYBUF_SIZE 32
 
+//#define USE_MALLOC 0
+#define USE_MSMALLOC 1
+#define USE_MSPRINTF_MMSJOS 1
+#define USE_RELOC_LOAD_PROGS 1
+
 typedef struct
 {
     unsigned char flags;
@@ -312,7 +317,8 @@ extern unsigned char fsWriteFile(char * vfilename, unsigned long voffset, unsign
 extern unsigned char fsDelFile(char * vfilename);
 extern unsigned char fsRenameFile(char * vfilename, char * vnewname);
 extern void runFromOsCmd(unsigned long vEnderExec);
-extern unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress);
+extern unsigned long loadFile(unsigned char *parquivo, void* xaddress);
+extern unsigned long loadFileSize(unsigned char *parquivo, void* xaddress, unsigned long xsize);
 extern void catFile(unsigned char *parquivo);
 extern unsigned char fsLoadSerialToFile(char * vfilename);
 extern unsigned char fsLoadSerialToRun(char * vfilename);
@@ -345,11 +351,21 @@ extern int isValidFilename(char *filename) ;
 extern unsigned char matches_wildcard(const char *pattern, const char *filename);
 extern unsigned char contains_wildcards(const char *pattern);
 
+#ifdef USE_MSMALLOC
+extern void *msmalloc(unsigned long size);
+extern void *msrealloc(void *ptr, unsigned long newSize);
+extern void msfree(void *ptr);
+#endif
+
 #ifdef USE_MSPRINTF_MMSJOS
 extern void msprintf_ulong_hex(unsigned long v);
 extern void msprintf_long_dec(long v);
 extern void msprintf_ulong_dec(unsigned long v);
 extern void msprintf(const char *fmt, ...);
+#endif
+
+#ifdef USE_RELOC_LOAD_PROGS
+extern int loadMbinAndRun(char *filename, char porig);
 #endif
 
 #ifdef __SO_ST_MFP__

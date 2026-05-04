@@ -10,8 +10,8 @@
 
 #define EDIT_TEXT_ROWS    19
 
-#define EDIT_FILE_ADDR    ((char *)0x00840000)
-#define EDIT_MAX_FILE     65536
+//#define EDIT_FILE_ADDR    ((char *)0x00840000)
+#define EDIT_MAX_FILE     32768
 #define EDIT_MAX_LINES    1024
 
 #define CURSOR_CHAR  254
@@ -44,7 +44,6 @@ char *edFileBuf;
 char *edLinePtr[EDIT_MAX_LINES];
 char textToFind[128];
 char textToChange[128];
-char edMessage[40];
 
 int edNumLines;
 int edCurLine;

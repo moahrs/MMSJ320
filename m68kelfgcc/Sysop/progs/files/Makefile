@@ -7,10 +7,11 @@ TARGET = files.elf
 BIN = files.bin
 MAP = files.map
 LST = files.lst
-TEXT_ORIGIN ?= 0x00870000
+# TEXT_ORIGIN ?= 0x00870000
+TEXT_ORIGIN ?= 0x00000000
 
 CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -Iinclude -I../../include -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
-LDFLAGS = -T linker_files.ld -nostdlib -Wl,--defsym=__TEXT_ORIGIN=$(TEXT_ORIGIN)
+LDFLAGS = -T linker_files.ld -nostdlib -Wl,--emit-relocs -Wl,-Map=$(MAP)
 LDLIBS = -lgcc
 
 SRC_C = \
@@ -38,7 +39,8 @@ all: $(TARGET) $(BIN) $(LST)
 flash: TEXT_ORIGIN=0x00020000
 flash: clean all
 
-ram: TEXT_ORIGIN=0x00870000
+# ram: TEXT_ORIGIN=0x00870000
+ram: TEXT_ORIGIN=0x00000000
 ram: clean all
 
 $(TARGET): $(OBJ)

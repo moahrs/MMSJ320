@@ -18,14 +18,20 @@
 *--------------------------------------------------------------------------------
 *
 *********************************************************************************/
-//#define USE_MALLOC
 #include <ucos_ii.h>
 #include <ctype.h>
 #include <string.h>
+#include <stdlib.h>
+#include "mmsj320vdp.h"
+#include "mmsj320mfp.h"
+#include "mmsjos.h"
+#include "monitor.h"
+#include "monitorapi.h"
+#include "mgui.h"
 #ifdef USE_MALLOC
 #include <malloc.h>
 #endif
-#ifndef USE_MALLOC
+#if !defined(USE_MALLOC) && !defined(USE_MSMALLOC)
 // 2KB Config buffer - 0x0081FFFF
 #define ADDR_CFG_FILE   0x0081F800
 // 128KB Save Screen - 0x0083FFFF
@@ -39,13 +45,6 @@
 // 256KB Load App's - 0x008CFFFF
 #define ADDR_EXEC_PROG  0x00880000
 #endif
-#include <stdlib.h>
-#include "mmsj320vdp.h"
-#include "mmsj320mfp.h"
-#include "mmsjos.h"
-#include "monitor.h"
-#include "monitorapi.h"
-#include "mgui.h"
 
 // Variaveis definidas em mmsj320api.h (incluido pelo mmsjos.c).
 // Declaradas aqui como extern para evitar multipla definicao.
@@ -80,7 +79,11 @@ extern LIST_WINDOWS *mguiListWindows;
 unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
 unsigned char *vvdgc = 0x00400043; // VDP TMS9118 Registers/Address Mode
 
+#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+unsigned char *memPosConfig; // Config file
+#else
 unsigned char *memPosConfig = (unsigned char*)ADDR_CFG_FILE; // Config file
+#endif
 unsigned char *imgsMenuSys = 0x00; // Images PBM 16x16 each icone in order (64 Bytes Each)
 unsigned char vFinalOS; // Atualizar sempre que a compilacao passar desse valor
 unsigned char vcorwf; //
@@ -518,7 +521,9 @@ void SaveScreenNew(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi,
         
     if (xf < xi || yf < yi)
     {
-        mguiSave->id = -1;
+        #if !defined(USE_MALLOC) && !defined(USE_MSMALLOC)
+            mguiSave->id = -1;
+        #endif
         return;
     }
 
@@ -526,9 +531,14 @@ void SaveScreenNew(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi,
     total_rows = ((unsigned int)yf - (unsigned int)yi) + 1u;
     vsizetotal = bytes_per_row * total_rows;
 
-    #ifdef USE_MALLOC
-        saverPat = malloc(vsizetotal);
-        saverCor = malloc(vsizetotal);
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #ifdef USE_MALLOC
+            saverPat = malloc(vsizetotal);
+            saverCor = malloc(vsizetotal);
+        #else
+            saverPat = msmalloc(vsizetotal);
+            saverCor = msmalloc(vsizetotal);
+        #endif
     #else
         slot = ss_alloc_slot();
 
@@ -550,11 +560,16 @@ void SaveScreenNew(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi,
         mguiSave->yf = yf;
     #endif
 
-    #ifdef USE_MALLOC
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (!saverPat || !saverCor)
         {
-            if (saverPat) free(saverPat);
-            if (saverCor) free(saverCor);
+            #ifdef USE_MALLOC            
+                if (saverPat) free(saverPat);
+                if (saverCor) free(saverCor);
+            #else
+                if (saverPat) msfree(saverPat);
+                if (saverCor) msfree(saverCor);
+            #endif
             mguiSave->pat = 0;
             mguiSave->cor = 0;
             mguiSave->size = 0;
@@ -606,7 +621,7 @@ void SaveScreenNew(MGUI_SAVESCR *mguiSave, unsigned short xi, unsigned short yi,
         }
     }
 
-    #ifdef USE_MALLOC
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         mguiSave->pat = saverPat;
         mguiSave->cor = saverCor;
         mguiSave->size = vsizetotal;
@@ -651,18 +666,18 @@ void RestoreScreen(MGUI_SAVESCR *mguiSave) {
     unsigned char *saverCor;
     int slot;
 
-    slot = ss_find_slot(mguiSave->id);
-
-    if (slot < 0)
-        return;   /* slot não encontrado */ 
-
-    #ifdef USE_MALLOC
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         saverPat = mguiSave->pat;
         saverCor = mguiSave->cor;
         
         if (!saverPat || !saverCor || mguiSave->size == 0)
             return;
     #else
+        slot = ss_find_slot(mguiSave->id);
+
+        if (slot < 0)
+            return;   /* slot não encontrado */ 
+
         saverPat = ssSlots[slot].addrPat;
         saverCor = ssSlots[slot].addrCol;    
         ssSlots[slot].used = 0; /* libera slot */
@@ -698,9 +713,14 @@ void RestoreScreen(MGUI_SAVESCR *mguiSave) {
         }
     }
 
-    #ifdef USE_MALLOC    
-        free(mguiSave->cor);
-        free(mguiSave->pat);
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #ifdef USE_MALLOC
+            free(mguiSave->cor);
+            free(mguiSave->pat);
+        #else
+            msfree(mguiSave->cor);
+            msfree(mguiSave->pat);
+        #endif
     #endif
 }
 
@@ -1574,8 +1594,12 @@ void startMGI(void) {
     errorMalloc = 0;
 
     vdp_get_cfg(&mgui_pattern_table, &mgui_color_table);
-    #ifdef USE_MALLOC
-        vLoadImage = malloc(SIZE_LOAD_IMAGE_MEM);
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #ifdef USE_MALLOC
+            vLoadImage = malloc(SIZE_LOAD_IMAGE_MEM);
+        #else
+            vLoadImage = msmalloc(SIZE_LOAD_IMAGE_MEM);
+        #endif
     #else
         vLoadImage = (unsigned char*)ADDR_LOAD_FILE;   // Endereco fixo para carregar a imagem, nao vem de malloc. 
     #endif
@@ -1583,8 +1607,11 @@ void startMGI(void) {
     {
         loadFile("/MGUI/IMAGES/UTILITY.PBM", (unsigned long*)vLoadImage);
         putImagePbmP4((unsigned long*)vLoadImage, 8, 1);
+            
         #ifdef USE_MALLOC
             free(vLoadImage);
+        #else
+            msfree(vLoadImage);
         #endif
     }
     else 
@@ -1599,15 +1626,36 @@ void startMGI(void) {
     writesxy(105,150,1,"v"versionMgui,vcorwf,vcorwb);
 
     writesxy(86,170,1,"Loading Config",vcorwf,vcorwb);
-    cfgSize = loadFile("/MGUI/MGUI.CFG", (unsigned short*)memPosConfig);
-    if (cfgSize > SIZE_LOAD_CFG_MEM)
-        cfgSize = SIZE_LOAD_CFG_MEM;
-    memPosConfig[cfgSize] = 0x00;
+
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #ifdef USE_MALLOC
+            memPosConfig = malloc(SIZE_LOAD_CFG_MEM);
+        #else
+            memPosConfig = msmalloc(SIZE_LOAD_CFG_MEM);
+        #endif
+    #endif
+
+    if (memPosConfig)
+    {
+        cfgSize = loadFile("/MGUI/MGUI.CFG", (unsigned short*)memPosConfig);
+        if (cfgSize > SIZE_LOAD_CFG_MEM)
+            cfgSize = SIZE_LOAD_CFG_MEM;
+        memPosConfig[cfgSize] = 0x00;
+    }
+    else
+    {
+        errorMalloc = 1;
+        memPosConfig = 0;
+    }
 
     writesxy(53,170,1,"Loading Icons ",vcorwf,vcorwb);
 
-    #ifdef USE_MALLOC
-        imgsMenuSys = malloc(SIZE_LOAD_ICONS_MEM);
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #ifdef USE_MALLOC
+            imgsMenuSys = malloc(SIZE_LOAD_ICONS_MEM);
+        #else
+            imgsMenuSys = msmalloc(SIZE_LOAD_ICONS_MEM);
+        #endif
     #else
         imgsMenuSys = (unsigned char*)ADDR_LOAD_ICONS;   // Endereco fixo para carregar as imagens, nao vem de malloc.
     #endif
@@ -1684,8 +1732,12 @@ void startMGI(void) {
             OSTimeDlyHMSM(0, 0, 0, 15);
         }
 
-        #ifdef USE_MALLOC
-            free(imgsMenuSys);
+        #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+            #ifdef USE_MALLOC
+                free(imgsMenuSys);
+            #else
+                msfree(imgsMenuSys);
+            #endif
         #endif
         /* memPosConfig usa buffer fixo (0x008EF800), nao vem de malloc. */
     }
@@ -1951,8 +2003,8 @@ unsigned char editortela(void)
     *(vmfp + Reg_IMRA) = 0x60;    */
 
     // Verifica se tem algum prog pra executar pelo run
-    if (*mguiRunTask)
-        runFromMGUI(*mguiRunTask);
+/*    if (*mguiRunTask)
+        runFromMGUI(*mguiRunTask);*/
 
     // Verifica mouse e teclado
     if (mguiListWindows[6].active)  // Mgui ativo
@@ -2571,24 +2623,32 @@ void menuTask(void *pData)
                 switch (vpos)
                 {
                     case 0: // Call "Files" Program from Disk
-                        vsizefilemalloc = fsInfoFile("/MGUI/PROGS/FILES.BIN", INFO_SIZE);
-                        if (vsizefilemalloc != ERRO_D_NOT_FOUND)
-                        {
+                        #ifdef USE_RELOC_LOAD_PROGS
                             TrocaSpriteMouse(MOUSE_HOURGLASS);
-                            vEndExec = (unsigned char*)ADDR_EXEC_FILES; // endereco fixo FILES
-                            loadFile("/MGUI/PROGS/FILES.BIN", (unsigned long*)vEndExec);
                             paramBasic[0] = '\0';
-                            strcpy(paramBasic, ",");
-                            ltoa(vsizefilemalloc, tmp, 10);
-                            strcat(paramBasic, tmp);
                             TrocaSpriteMouse(MOUSE_POINTER);
-                            if (!verro)
-                                runFromMGUI(vEndExec);
+                            if (loadMbinAndRun("/MGUI/PROGS/FILES.EXE", 2) != 0)
+                                message("Error Executing File\0", BTCLOSE, 0);
+                        #else
+                            vsizefilemalloc = fsInfoFile("/MGUI/PROGS/FILES.BIN", INFO_SIZE);
+                            if (vsizefilemalloc != ERRO_D_NOT_FOUND)
+                            {
+                                    TrocaSpriteMouse(MOUSE_HOURGLASS);
+                                    vEndExec = (unsigned char*)ADDR_EXEC_FILES; // endereco fixo FILES
+                                    loadFile("/MGUI/PROGS/FILES.BIN", (unsigned long*)vEndExec);
+                                    paramBasic[0] = '\0';
+                                    strcpy(paramBasic, ",");
+                                    ltoa(vsizefilemalloc, tmp, 10);
+                                    strcat(paramBasic, tmp);
+                                    TrocaSpriteMouse(MOUSE_POINTER);
+                                    if (!verro)
+                                        runFromMGUI(vEndExec);
+                                    else
+                                        message("Loading Error...\0", BTCLOSE, 0);
+                            }
                             else
-                                message("Loading Error...\0", BTCLOSE, 0);
-                        }
-                        else
-                            message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);
+                                message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);
+                        #endif
 
                         break;
                     case 1: // Import File via Serial
@@ -2689,6 +2749,15 @@ void runBin(void)
             return;
         }
 
+    #ifdef USE_RELOC_LOAD_PROGS
+        strcat(vfilename, ".EXE");
+    }
+    else if (strcmp(vdot, ".EXE") != 0)
+    {
+        message("Only .EXE files are allowed\0", BTCLOSE, 0);
+        return;
+    }
+    #else
         strcat(vfilename, ".BIN");
     }
     else if (strcmp(vdot, ".BIN") != 0)
@@ -2696,6 +2765,7 @@ void runBin(void)
         message("Only .BIN files are allowed\0", BTCLOSE, 0);
         return;
     }
+    #endif
 
     if (vfilename[0] == '/')
         strcpy(vfullpath, vfilename);
@@ -2718,30 +2788,37 @@ void runBin(void)
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
     vUseFixedAddr = 1;
-    if (!strcmp(vfullpath, "/MGUI/PROGS/FILES.BIN"))
-    {
-        vEndExec = (unsigned char*)ADDR_EXEC_FILES;
-    }
-    else
-    {
-        vEndExec = (unsigned char*)ADDR_EXEC_PROG;
-    }
 
-    if (!vEndExec)
-    {
+    #ifdef USE_RELOC_LOAD_PROGS
+        //strcpy(paramBasic, linhaarg);
+        if (loadMbinAndRun(vfullpath, 2) != 0)
+            printText("Error Executing File\r\n\0");
+    #else
+        if (!strcmp(vfullpath, "/MGUI/PROGS/FILES.BIN"))
+        {
+            vEndExec = (unsigned char*)ADDR_EXEC_FILES;
+        }
+        else
+        {
+            vEndExec = (unsigned char*)ADDR_EXEC_PROG;
+        }
+
+        if (!vEndExec)
+        {
+            TrocaSpriteMouse(MOUSE_POINTER);
+            message("No memory to load .BIN\0", BTCLOSE, 0);
+            return;
+        }
+
+        loadFile(vfullpath, (unsigned long*)vEndExec);
         TrocaSpriteMouse(MOUSE_POINTER);
-        message("No memory to load .BIN\0", BTCLOSE, 0);
-        return;
-    }
-
-    loadFile(vfullpath, (unsigned long*)vEndExec);
-    TrocaSpriteMouse(MOUSE_POINTER);
-    if (!verro)
-        runFromMGUI(vEndExec);
-    else
-    {
-        message("Loading Error...\0", BTCLOSE, 0);
-    }
+        if (!verro)
+            runFromMGUI(vEndExec);
+        else
+        {
+            message("Loading Error...\0", BTCLOSE, 0);
+        }
+    #endif
 
     return;
 }
@@ -2839,8 +2916,12 @@ void importFile(void)
                 // Recebe os dados via Serial
                 writesxy(12,55,8,"Reading Serial...",vcorwf,vcorwb);
 
-                #ifdef USE_MALLOC
-                    xaddress = malloc(128UL * 1024UL); // Aloca 128KB para receber o arquivo via serial
+                #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+                    #ifdef USE_MALLOC
+                        xaddress = malloc(128UL * 1024UL); // Aloca 128KB para receber o arquivo via serial
+                    #else
+                        xaddress = msmalloc(128UL * 1024UL); // Aloca 128KB para receber o arquivo via serial
+                    #endif
                 #else
                     xaddress = (unsigned char*)ADDR_LOAD_FILE; // Endereço fixo
                 #endif
@@ -2854,8 +2935,12 @@ void importFile(void)
                     vErro = fsOpenFile(vfilename);
                     if (vErro != RETURN_OK)
                     {
-                        #ifdef USE_MALLOC                        
-                            free(xaddressStart);
+                        #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+                            #ifdef USE_MALLOC
+                                free(xaddressStart);
+                            #else
+                                msfree(xaddressStart);
+                            #endif
                         #endif
                     }
                     else
@@ -2892,8 +2977,12 @@ void importFile(void)
                             vErro = fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize);
                             if (vErro != RETURN_OK)
                             {
-                                #ifdef USE_MALLOC
-                                    free(xaddressStart);
+                                #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+                                    #ifdef USE_MALLOC
+                                        free(xaddressStart);
+                                    #else
+                                        msfree(xaddressStart);
+                                    #endif
                                 #endif
                                 break;
                             }

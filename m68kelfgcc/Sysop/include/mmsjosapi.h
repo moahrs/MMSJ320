@@ -4,6 +4,7 @@
 // Function Shared Definitions
 #define MMSJOS_FUNC_TABLE    0x00800034
 #define MGUI_FUNC_TABLE      0x00803B24
+#define MMSJOS_UCOSII_TABLE  0x0080D2D0
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);
@@ -22,7 +23,7 @@ typedef unsigned short (*fsReadFileType)(char * vfilename, unsigned long voffset
 typedef unsigned char (*fsWriteFileType)(char * vfilename, unsigned long voffset, unsigned char *buffer, unsigned char vsizebuffer);
 typedef unsigned char (*fsDelFileType)(char * vfilename);
 typedef unsigned char (*fsRenameFileType)(char * vfilename, char * vnewname);
-typedef unsigned long (*loadFileType)(unsigned char *parquivo, unsigned short* xaddress);
+typedef unsigned long (*loadFileType)(unsigned char *parquivo, void* xaddress);
 typedef unsigned char (*fsMakeDirType)(char * vdirname);
 typedef unsigned char (*fsChangeDirType)(char * vdirname);
 typedef unsigned char (*fsRemoveDirType)(char * vdirname);
@@ -68,6 +69,12 @@ typedef void (*radiosetType)(unsigned char id, unsigned char* vopt, unsigned cha
 typedef void (*fillinType)(unsigned char id, unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
 typedef void (*getColorDataType)(MGUI_COLOR *pColor);
 typedef unsigned char (*buttonType)(unsigned char id, unsigned char* title, unsigned short xib, unsigned short yib, unsigned short pwidth, unsigned short height, unsigned char vtipo);
+
+// MMSJOS UCOSII Struct for Functions
+typedef void *(*msmallocType)(unsigned long size);
+typedef void *(*msreallocType)(void *ptr, unsigned long newSize);
+typedef void (*msfreeType)(void *ptr);
+typedef int (*loadMbinAndRunType)(char *filename, char porig);
 
 // MMSJOS define functions
 #define fsGetDirAtuData ((fsGetDirAtuDataType *)(unsigned long)MMSJOS_FUNC_TABLE)[0] // Índice da função
@@ -132,6 +139,13 @@ typedef unsigned char (*buttonType)(unsigned char id, unsigned char* title, unsi
 #define getColorData ((getColorDataType *)(unsigned long)MGUI_FUNC_TABLE)[30] // Índice da função
 #define button ((buttonType *)(unsigned long)MGUI_FUNC_TABLE)[31] // Índice da função
 
+// MMSJOS UCOSII define Functions
+#define msmalloc ((msmallocType *)(unsigned long)MMSJOS_UCOSII_TABLE)[0] // Índice da função
+#define msrealloc ((msreallocType *)(unsigned long)MMSJOS_UCOSII_TABLE)[1] // Índice da função
+#define msfree ((msfreeType *)(unsigned long)MMSJOS_UCOSII_TABLE)[2] // Índice da função
+#define loadMbinAndRun ((loadMbinAndRunType *)(unsigned long)MMSJOS_UCOSII_TABLE)[3] // Índice da função
+
+// Apoio
 const unsigned char strValidChars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ^&'@{}[],$=!-#()%.+~_";
 
 const unsigned char vmesc[12][3] = {{'J','a','n'},{'F','e','b'},{'M','a','r'},
