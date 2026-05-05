@@ -260,7 +260,7 @@ static MGUI_INPUT mguiWidgetProcess(unsigned char thisIdx,
 extern HEADER *_allocp;
 
 #define STACKSIZE  1024
-#define STACKSIZEMGUI  2048
+#define STACKSIZEMGUI  8192
 #define STACKSIZEMOUSE  2048
 #define STACKSIZEMENU  1024
 
@@ -1729,7 +1729,7 @@ void startMGI(void) {
             if (!editortela())
                 break;
 
-            OSTimeDlyHMSM(0, 0, 0, 15);
+            OSTimeDly(1); // OSTimeDlyHMSM(0, 0, 0, 15);
         }
 
         #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
@@ -1795,7 +1795,7 @@ void mouseTask (void *pData)
             mouseBtnPresDouble = 0;
         }
 
-        OSTimeDlyHMSM(0, 0, 0, 15);
+        OSTimeDly(1); // OSTimeDlyHMSM(0, 0, 0, 15);
     }
 }
 
@@ -2015,7 +2015,7 @@ unsigned char editortela(void)
         
         if (mmsjKeyGet(&k))
         {
-            if (k.flags == KEY_CTRL_ALT && k.code == "X")  // CTRL+ALT+X
+            if (k.flags == KEY_CTRL_ALT && k.code == 'X')  // CTRL+ALT+X
                 vresp = 0x00;
         }
 
@@ -2419,7 +2419,7 @@ void messageTask(void *pData)
             }
         }
 
-        OSTimeDlyHMSM(0, 0, 0, 30);
+        OSTimeDly(1);  // OSTimeDlyHMSM(0, 0, 0, 30);
     }
 
     vbutton[0] = ii;
@@ -2663,7 +2663,7 @@ void menuTask(void *pData)
             break;
         }
 
-        OSTimeDlyHMSM(0, 0, 0, 50);
+        OSTimeDly(1); // OSTimeDlyHMSM(0, 0, 0, 50);
     }
 
     RestoreScreen(&endSaveMenu);
@@ -2714,7 +2714,7 @@ void runBin(void)
             if (vwb == BTOK || vwb == BTCANCEL)
                 break;
 
-            OSTimeDlyHMSM(0, 0, 0, 30);
+            OSTimeDly(1);  // OSTimeDlyHMSM(0, 0, 0, 30);
         }
     }
 
@@ -2871,7 +2871,7 @@ void importFile(void)
             if (vwb == BTOK || vwb == BTCANCEL)
                 break;
 
-            OSTimeDlyHMSM(0, 0, 0, 30);
+            OSTimeDly(1); // OSTimeDlyHMSM(0, 0, 0, 30);
         }
     }
 
@@ -3023,7 +3023,7 @@ void importFile(void)
                 if (vwb == BTCLOSE)
                     break;
 
-                OSTimeDlyHMSM(0, 0, 0, 30);
+                OSTimeDly(1);  // OSTimeDlyHMSM(0, 0, 0, 30);
             }
 
             RestoreScreen(&vsavescr);
