@@ -210,6 +210,17 @@ void edDrawStatus(void)
 
     vdp_set_cursor(0, EDIT_STATUS_Y);
 
+    if (edMsgActive)
+    {
+        printText(edTempMessage);
+        edClearLineFrom(EDIT_STATUS_Y, strlen(edTempMessage));
+        return;
+    }
+
+    edDrawLine(EDIT_STATUS_LINE, '-');
+
+    vdp_set_cursor(0, EDIT_STATUS_Y);
+
     buf[0] = 0;
     strcat(buf, " LIN:");
     itoa(edCurLine + 1, numbuf, 10);
@@ -363,6 +374,422 @@ void edDrawText(void)
             }
         }
     }
+}
+
+//-------------------------------------------------------------------
+void edBlockBegin(void)
+{
+    edBlockMode = ED_BLOCK_MARKED;
+    edBlockStartLine = edCurLine;
+    edBlockStartCol = edCurCol;
+    edBlockEndLine = edCurLine;
+    edBlockEndCol = edCurCol;
+
+    edSetMessage("Block Begin Marked...");
+}
+
+//-------------------------------------------------------------------
+void edBlockEnd(void)
+{
+    if (edBlockMode != ED_BLOCK_MARKED)
+    {
+        edSetMessage("No block begin");
+        return;
+    }
+
+    edBlockEndLine = edCurLine;
+    edBlockEndCol = edCurCol;
+
+    edSetMessage("Block Marked");
+}
+
+//-------------------------------------------------------------------
+unsigned long edGetOffsetFromLineCol(int line, int col)
+{
+    int len;
+    unsigned long off;
+
+    if (line < 0)
+        line = 0;
+
+    if (line >= edNumLines)
+        line = edNumLines - 1;
+
+    len = edLineLen(line);
+
+    if (col < 0)
+        col = 0;
+
+    if (col > len)
+        col = len;
+
+    off = (unsigned long)(edLinePtr[line] - edFileBuf);
+    off = off + (unsigned long)col;
+
+    if (off > edFileSize)
+        off = edFileSize;
+
+    return off;
+}
+
+//-------------------------------------------------------------------
+void edSetCursorFromOffset(unsigned long off)
+{
+    int i;
+    unsigned long lineOff;
+
+    if (off > edFileSize)
+        off = edFileSize;
+
+    edCurLine = 0;
+    edCurCol = 0;
+
+    for (i = 0; i < edNumLines; i++)
+    {
+        lineOff = (unsigned long)(edLinePtr[i] - edFileBuf);
+
+        if (lineOff <= off)
+            edCurLine = i;
+        else
+            break;
+    }
+
+    edCurCol = (int)(off - (unsigned long)(edLinePtr[edCurLine] - edFileBuf));
+
+    if (edCurCol > edLineLen(edCurLine))
+        edCurCol = edLineLen(edCurLine);
+}
+
+//-------------------------------------------------------------------
+int edGetBlockRange(unsigned long *start, unsigned long *end)
+{
+    unsigned long a;
+    unsigned long b;
+    unsigned long t;
+
+    if (edBlockMode == ED_BLOCK_NONE)
+    {
+        edSetMessage("No block marked");
+        return 0;
+    }
+
+    a = edGetOffsetFromLineCol(edBlockStartLine, edBlockStartCol);
+    b = edGetOffsetFromLineCol(edBlockEndLine, edBlockEndCol);
+
+    if (a > b)
+    {
+        t = a;
+        a = b;
+        b = t;
+    }
+
+    if (a == b)
+    {
+        edSetMessage("Empty block");
+        return 0;
+    }
+
+    *start = a;
+    *end = b;
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
+int edBlockDel(void)
+{
+    unsigned long start;
+    unsigned long end;
+    unsigned long size;
+    unsigned long i;
+
+    if (!edGetBlockRange(&start, &end))
+        return 0;
+
+    size = end - start;
+
+    for (i = start; i + size <= edFileSize; i++)
+        edFileBuf[i] = edFileBuf[i + size];
+
+    edFileSize = edFileSize - size;
+    edFileBuf[edFileSize] = 0;
+
+    edDirty = 1;
+    edBlockMode = ED_BLOCK_NONE;
+
+    edBuildLines();
+    edSetCursorFromOffset(start);
+    edAdjustScroll();
+
+    edSetMessage("Block deleted");
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
+int edBlockCopy(void)
+{
+    unsigned long start;
+    unsigned long end;
+    unsigned long size;
+    unsigned long i;
+
+    if (!edGetBlockRange(&start, &end))
+        return 0;
+
+    size = end - start;
+
+    if (size >= EDIT_CLIP_MAX)
+    {
+        edSetMessage("Block too big");
+        return 0;
+    }
+
+    for (i = 0; i < size; i++)
+        edClipBuf[i] = edFileBuf[start + i];
+
+    edClipBuf[size] = 0;
+    edClipSize = size;
+
+    edSetMessage("Block copied");
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
+int edBlockMove(void)
+{
+    unsigned long start;
+    unsigned long end;
+    unsigned long size;
+    unsigned long target;
+    unsigned long i;
+
+    if (!edGetBlockRange(&start, &end))
+        return 0;
+
+    target = edGetCursorOffset();
+
+    if (target >= start && target <= end)
+    {
+        edSetMessage("Cannot move inside block");
+        return 0;
+    }
+
+    size = end - start;
+
+    if (size >= EDIT_CLIP_MAX)
+    {
+        edSetMessage("Block too big");
+        return 0;
+    }
+
+    /*
+       Copia bloco para buffer temporario
+    */
+    for (i = 0; i < size; i++)
+        edClipBuf[i] = edFileBuf[start + i];
+
+    edClipBuf[size] = 0;
+    edClipSize = size;
+
+    /*
+       Remove bloco original
+    */
+    for (i = start; i + size <= edFileSize; i++)
+        edFileBuf[i] = edFileBuf[i + size];
+
+    edFileSize = edFileSize - size;
+    edFileBuf[edFileSize] = 0;
+
+    /*
+       Se o destino estava depois do bloco, precisa compensar
+    */
+    if (target > end)
+        target = target - size;
+
+    /*
+       Abre espaco no destino
+    */
+    if (edFileSize + size >= EDIT_MAX_FILE)
+    {
+        edSetMessage("No memory");
+        return 0;
+    }
+
+    for (i = edFileSize + 1; i > target; i--)
+        edFileBuf[i + size - 1] = edFileBuf[i - 1];
+
+    /*
+       Insere bloco
+    */
+    for (i = 0; i < size; i++)
+        edFileBuf[target + i] = edClipBuf[i];
+
+    edFileSize = edFileSize + size;
+    edFileBuf[edFileSize] = 0;
+
+    edDirty = 1;
+    edBlockMode = ED_BLOCK_NONE;
+
+    edBuildLines();
+    edSetCursorFromOffset(target + size);
+    edAdjustScroll();
+
+    edSetMessage("Block moved");
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
+int edGotoLine(void)
+{
+    char sLine[12];
+    int line;
+
+    sLine[0] = 0;
+
+    if (!edInputStatus("Goto Line: ", sLine, sizeof(sLine)))
+    {
+        edSetMessage("Goto canceled");
+        return 0;
+    }
+
+    if (sLine[0] == 0)
+        return 0;
+
+    line = atoi(sLine);
+
+    if (line <= 0)
+        line = 1;
+
+    if (line > edNumLines)
+        line = edNumLines;
+
+    edCurLine = line - 1;
+    edCurCol = 0;
+
+    edAdjustScroll();
+    edDrawText();
+    edDrawStatus();
+    edDrawCursor(1);
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
+int edReplaceAsk(void)
+{
+    char findText[ED_INPUT_MAX];
+    char replText[ED_INPUT_MAX];
+    char resp[4];
+    int pos;
+    int i;
+    int found;
+    int oldLen;
+    int count;
+
+    findText[0] = 0;
+    replText[0] = 0;
+    count = 0;
+
+    if (!edInputStatus("Find: ", findText, sizeof(findText)))
+        return 0;
+
+    if (findText[0] == 0)
+        return 0;
+
+    if (!edInputStatus("Replace with: ", replText, sizeof(replText)))
+        return 0;
+
+    strcpy(edSearchText, findText);
+
+    pos = edGetCursorOffset();
+    oldLen = strlen(findText);
+
+    while (pos < edFileSize)
+    {
+        found = -1;
+
+        for (i = pos; i < edFileSize; i++)
+        {
+            if (edMatchAt(i, findText))
+            {
+                found = i;
+                break;
+            }
+        }
+
+        if (found < 0)
+            break;
+
+        edSetCursorFromOffset(found);
+        edAdjustScroll();
+        edDrawText();
+        edDrawStatus();
+        edDrawCursor(1);
+
+        resp[0] = 0;
+        if (!edInputStatus("Replace? Y/N/A/Q: ", resp, sizeof(resp)))
+            break;
+
+        if (resp[0] == 'Q' || resp[0] == 'q')
+            break;
+
+        if (resp[0] == 'Y' || resp[0] == 'y' ||
+            resp[0] == 'A' || resp[0] == 'a')
+        {
+            if (!edReplaceAt((unsigned long)found, oldLen, replText))
+                break;
+
+            count++;
+
+            pos = found + strlen(replText);
+
+            if (resp[0] == 'A' || resp[0] == 'a')
+            {
+                while (pos < edFileSize)
+                {
+                    found = -1;
+
+                    for (i = pos; i < edFileSize; i++)
+                    {
+                        if (edMatchAt(i, findText))
+                        {
+                            found = i;
+                            break;
+                        }
+                    }
+
+                    if (found < 0)
+                        break;
+
+                    if (!edReplaceAt((unsigned long)found, oldLen, replText))
+                        break;
+
+                    count++;
+                    pos = found + strlen(replText);
+                }
+
+                break;
+            }
+        }
+        else
+        {
+            pos = found + oldLen;
+        }
+    }
+
+    edDrawText();
+    edDrawStatus();
+    edDrawCursor(1);
+
+    if (count == 0)
+        edSetMessage("Not replaced");
+    else
+        edSetMessage("Replace done");
+
+    return count;
 }
 
 //-------------------------------------------------------------------
@@ -690,6 +1117,26 @@ void edLoop(char *filename)
                         if (edSaveFile())
                             break;
                     }
+                    else if (key == 'B' || key == 'b')  // ^KB = marca inicio
+                    {
+                        edBlockBegin();
+                    }
+                    else if (key == 'K' || key == 'k')  // ^KK = marca fim
+                    {
+                        edBlockEnd();
+                    }
+                    else if (key == 'Y' || key == 'y')  // ^KY = apaga bloco
+                    {
+                        edBlockDel();                    
+                    }
+                    else if (key == 'C' || key == 'c')  // ^KC = copia bloco
+                    {
+                        edBlockCopy();                    
+                    }
+                    else if (key == 'V' || key == 'v')  // ^KV = move bloco
+                    {
+                        edBlockMove();                    
+                    }
                     else if (key == KEY_ESC)
                     {
                         edCmdModeK = 0;
@@ -706,16 +1153,15 @@ void edLoop(char *filename)
                 {
                     if (key == 'F' || key == 'f')   // Find
                     {
-                        edSetMessage(" ");
-                        edDrawStatus();
-
                         edFindFromCursor(0);                        
                     }
                     else if (key == 'A' || key == 'a')  // Find & Replace
                     {
+                        edReplaceAsk()
                     }
                     else if (key == 'G' || key == 'g')  // Goto Line
                     {
+                        edGotoLine();
                     }
                     else if (key == KEY_ESC)
                     {
@@ -808,6 +1254,7 @@ void edLoop(char *filename)
         }
         else
         {
+            // tick cursor piscante
             tick++;
 
             if (logBlinkCursor && tick >= CURSOR_DELAY)
@@ -825,6 +1272,18 @@ void edLoop(char *filename)
                     cursorOn = 1;
                 }
             }
+
+            // Tick msgs temposaria status
+            if (edMsgActive)
+            {
+                edMsgTimer--;
+
+                if (edMsgTimer <= 0)
+                {
+                    edMsgActive = 0;
+                    edDrawStatus();
+                }
+            }            
         }
     }
 }
@@ -921,13 +1380,14 @@ int edOpenFile(unsigned char* vParamName)
     long ret;
 
     openFileName[0] = 0;
-    edSetMessage(" ");
     edDrawStatus();
 
     edInputStatus("Open Name:", openFileName, sizeof(openFileName));
     edToUpperCase(openFileName);
 
     memset(edFileBuf, 0, EDIT_MAX_FILE);
+
+    edSetMessage("Loading File!");
 
     ret = loadFile((char*)openFileName, edFileBuf);
 
@@ -943,6 +1403,8 @@ int edOpenFile(unsigned char* vParamName)
 
         return 0;
     }
+
+    edSetMessage("Done!");
 
     edFileSize = ret;
 
@@ -984,8 +1446,11 @@ int edCanExit(void)
 //-------------------------------------------------------------------
 void edSetMessage(char *msg)
 {
-    strncpy(edMessage, msg, sizeof(edMessage) - 1);
-    edMessage[sizeof(edMessage) - 1] = 0;
+    strncpy(edTempMessage, msg, sizeof(edTempMessage) - 1);
+    edTempMessage[sizeof(edTempMessage) - 1] = 0;
+
+    edMsgActive = 1;
+    edMsgTimer = ED_MSG_TICKS;
 }
 
 //-------------------------------------------------------------------
@@ -1240,7 +1705,7 @@ int edSaveToFile(char* vfilename, unsigned char* buf, int size)
     unsigned int ix, vChunkSize, iy;
     unsigned char vBuffer[128];
 
-    edSetMessage("Saving...");                  
+    edSetMessage("Saving File...");                  
     edDrawStatus();
 
     // Tenta Abrir Arquivo
@@ -1249,7 +1714,7 @@ int edSaveToFile(char* vfilename, unsigned char* buf, int size)
         // Se nao conseguir, cria o Arquivo
         if (fsCreateFile(vfilename) != RETURN_OK)
         {
-            edSetMessage("Save Error!");                  
+            edSetMessage("Save File Error!");                  
             edDrawStatus();
             return ERRO_B_CREATE_FILE;
         }
@@ -1273,7 +1738,7 @@ int edSaveToFile(char* vfilename, unsigned char* buf, int size)
 
         if (fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize) != RETURN_OK)
         {
-            edSetMessage("Save Error!");                  
+            edSetMessage("Save File Error!");                  
             edDrawStatus();
 
             return ERRO_B_WRITE_FILE;
@@ -1283,7 +1748,6 @@ int edSaveToFile(char* vfilename, unsigned char* buf, int size)
     // Fecha Arquivo e atualiza metadata de escrita
     fsCloseFile(vfilename, 1);
 
-    edSetMessage(" ");                  
     edDrawStatus();
 
     edDirty = 0;
