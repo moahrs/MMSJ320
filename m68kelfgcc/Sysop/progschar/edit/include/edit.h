@@ -24,6 +24,17 @@
 #define ED_BLOCK_NONE   0
 #define ED_BLOCK_MARKED 1
 
+#define EDIT_CLIP_MAX EDIT_MAX_FILE
+
+#define ED_MSG_TICKS 4000   /* ajusta pro teu loop */
+
+char edTempMessage[80];
+int edMsgActive;
+int edMsgTimer;
+
+unsigned char edClipBuf[EDIT_CLIP_MAX];
+unsigned long edClipSize;
+
 char edMessage[40];
 char edSearchText[ED_INPUT_MAX];
 
@@ -88,3 +99,11 @@ int edMatchAt(int pos, char *txt);
 static char edToUpper(char c);
 int edSaveToFile(char* vfilename, unsigned char* buf, int size);
 void edToUpperCase(char* str);
+void edBlockBegin(void);
+void edBlockEnd(void);
+unsigned long edGetOffsetFromLineCol(int line, int col);
+void edSetCursorFromOffset(unsigned long off);
+int edGetBlockRange(unsigned long *start, unsigned long *end);
+int edBlockDel(void);
+int edBlockCopy(void);
+int edBlockMove(void);
