@@ -4,7 +4,7 @@
 // Function Shared Definitions
 #define MMSJOS_FUNC_TABLE    0x00800034
 #define MGUI_FUNC_TABLE      0x00803B24
-#define MMSJOS_UCOSII_TABLE  0x0080D2D0
+#define MMSJOS_UCOSII_TABLE  0x0080D2E4
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);
@@ -53,7 +53,7 @@ typedef void (*PutIconeType)(unsigned int* vimage, unsigned short x, unsigned sh
 typedef void (*InvertRectType)(unsigned short xi, unsigned short yi, unsigned short pwidth, unsigned short pheight);
 typedef void (*SelRectType)(unsigned short x, unsigned short y, unsigned short pwidth, unsigned short pheight);
 typedef void (*PutImageType)(unsigned char* cimage, unsigned short x, unsigned short y);
-typedef void (*runFromMGUIType)(unsigned long vEnderExec);
+typedef void (*runFromMGUIType)(unsigned long vEnderExec, unsigned long vFileBuf);
 typedef unsigned char (*waitButtonType)(void);
 typedef unsigned char (*messageType)(char* bstr, unsigned char bbutton, unsigned short btime);
 typedef void (*drawButtonsnewType)(unsigned char *vbuttons, unsigned char *pbbutton, unsigned short xib, unsigned short yib);

@@ -326,7 +326,7 @@ extern unsigned char fsFindDirPath(char * vpath, char vtype);
 extern void fsGetDirAtuData(FAT32_DIR *pDir);
 extern unsigned long fsMalloc(unsigned long vMemSize);
 extern void fsFree(unsigned long vAddress);
-extern void runFromMGUI(unsigned long vEnderExec);
+extern void runFromMGUI(unsigned long vEnderExec, unsigned long vFileBuf);
 
 // Funcoes de Manipulacao de Diretorios
 extern unsigned char fsMakeDir(char * vdirname);

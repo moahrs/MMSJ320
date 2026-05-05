@@ -150,18 +150,19 @@ int loadMbinAndRun(char *filename, char porig)
     }
 
     if (porig == 1)
+    {
         runFromOsCmd((unsigned long)vEnderExec);
+        
+        msfree(fileBuf);
+    }
     else if (porig == 2)
     {
         strcat(paramBasic, ",");
         ltoa((unsigned long)vEnderExec, tmp, 10);
         strcat(paramBasic, tmp);
 
-        runFromMGUI((unsigned long)vEnderExec);
+        runFromMGUI((unsigned long)vEnderExec, (unsigned long)fileBuf);
     }
-    
-
-    msfree(fileBuf);
 
     return 0;
 }
@@ -224,7 +225,7 @@ unsigned char fsFindDirPath(char * vpath, char vtype);
 void fsGetDirAtuData(FAT32_DIR *pDir);
 unsigned long fsMalloc(unsigned long vMemSize);
 void fsFree(unsigned long vAddress);
-void runFromMGUI(unsigned long vEnderExec);
+void runFromMGUI(unsigned long vEnderExec, unsigned long vFileBuf);
 static unsigned char fsCheckDirEmpty(unsigned long vdircluster);
 
 // Funcoes de Manipulacao de Diretorios
@@ -771,7 +772,9 @@ void verifyWindows(char pTask)
 //-----------------------------------------------------------------------------
 void prog01Task(void *pdata)
 {
-    unsigned long vAddrExec = (unsigned long*)pdata;
+    unsigned long vAddrExec = ((unsigned long*)pdata)[0];
+    unsigned long vFileBuf = ((unsigned long*)pdata)[1];
+    unsigned char tmp[20];
 
     if (vAddrExec)
     {
@@ -783,7 +786,19 @@ void prog01Task(void *pdata)
 
 #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
-            free(vAddrExec);
+        {
+            #ifdef USE_MALLOC
+                if (!vFileBuf)
+                    free(vAddrExec);
+                else
+                    free(vFileBuf);
+            #else
+                if (!vFileBuf)
+                    msfree(vAddrExec);
+                else
+                    msfree(vFileBuf);
+            #endif
+        }
 #endif            
     }
 
@@ -807,7 +822,13 @@ void prog02Task(void *pdata)
 
 #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
-            free(vAddrExec);
+        {
+            #ifdef USE_MALLOC
+                free(vAddrExec);
+            #else
+                msfree(vAddrExec);
+            #endif
+        }
 #endif  
     }
 
@@ -831,7 +852,13 @@ void prog03Task(void *pdata)
 
 #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
-            free(vAddrExec);
+        {
+            #ifdef USE_MALLOC
+                free(vAddrExec);
+            #else
+                msfree(vAddrExec);
+            #endif
+        }
 #endif            
     }
 
@@ -855,7 +882,13 @@ void prog04Task(void *pdata)
 
 #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
-            free(vAddrExec);
+        {
+            #ifdef USE_MALLOC
+                free(vAddrExec);
+            #else
+                msfree(vAddrExec);
+            #endif
+        }
 #endif
     }
 
@@ -879,7 +912,13 @@ void prog05Task(void *pdata)
 
 #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
-            free(vAddrExec);
+        {
+            #ifdef USE_MALLOC
+                free(vAddrExec);
+            #else
+                msfree(vAddrExec);
+            #endif
+        }
 #endif
     }
 
@@ -901,10 +940,16 @@ void prog06Task(void *pdata)
             break;
         }
 
-#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+/*#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         if (vAddrExec <= MMSJ_HEAP_LIMIT)
-            free(vAddrExec);
-#endif            
+        {
+            #ifdef USE_MALLOC
+                free(vAddrExec);
+            #else
+                msfree(vAddrExec);
+            #endif
+        }
+#endif           */ 
     }
 
     verifyWindows(TASK_Prog06);
@@ -1754,12 +1799,13 @@ writeLongSerial("\r\n\0");*/
 }
 
 //-----------------------------------------------------------------------------
-void runFromMGUI(unsigned long vEnderExec)
+void runFromMGUI(unsigned long vEnderExec, unsigned long vFileBuf)
 {
     unsigned int ix, iy;
     unsigned char topIdx;
     signed int nextZ;
     signed int topZ;
+    unsigned long vAddressExec[2];
     INT8U osErr;
     OS_TCB dataTask;
     OS_TCB tcb;
@@ -1807,10 +1853,12 @@ void runFromMGUI(unsigned long vEnderExec)
 
     // Cria a task
     osErr = OS_ERR_NONE;
+    vAddressExec[0] = vEnderExec;
+    vAddressExec[1] = vFileBuf;
     switch (ix)
     {
         case 0:
-            osErr = OSTaskCreate(prog01Task, (void *)vEnderExec, &StkTask01[STACKSIZEMGUI - 1], TASK_Prog01);
+            osErr = OSTaskCreate(prog01Task, (void *)vAddressExec, &StkTask01[STACKSIZEMGUI - 1], TASK_Prog01);
             break;
         case 1:
             osErr = OSTaskCreate(prog02Task, (void *)vEnderExec, &StkTask02[STACKSIZEMGUI - 1], TASK_Prog02);
@@ -1910,6 +1958,7 @@ void memInit(void)
 //-----------------------------------------------------------------------------
 void *msmalloc(unsigned long size)
 {
+    unsigned char sqtdtam[20];
     MEMBLOCK *blk;
     MEMBLOCK *newblk;
 
@@ -1938,6 +1987,18 @@ void *msmalloc(unsigned long size)
             }
 
             blk->used = 1;
+
+/*writeLongSerial("Alloc: [\0");
+ltoa(blk, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[\0");            
+ltoa(sizeof(MEMBLOCK), sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]-[\0");            
+ltoa((blk + sizeof(MEMBLOCK)), sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");            */
+
             return (void*)((unsigned char*)blk + sizeof(MEMBLOCK));
         }
 
@@ -2047,6 +2108,7 @@ void *msrealloc(void *ptr, unsigned long newSize)
 //-----------------------------------------------------------------------------
 void msfree(void *ptr)
 {
+    unsigned char sqtdtam[20];
     MEMBLOCK *blk;
     MEMBLOCK *cur;
 
@@ -2058,6 +2120,11 @@ void msfree(void *ptr)
 
     /* junta blocos livres consecutivos */
     cur = heapFirst;
+
+/*writeLongSerial("Free : [\0");
+ltoa(ptr, sqtdtam, 16);
+writeLongSerial(sqtdtam);
+writeLongSerial("]\r\n\0");            */
 
     while (cur && cur->next)
     {

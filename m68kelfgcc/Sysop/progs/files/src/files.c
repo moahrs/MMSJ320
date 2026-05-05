@@ -50,11 +50,11 @@ void main(void)
     unsigned long vworkbase;
     unsigned char *vComma;
     unsigned long vaddress;
+    unsigned char winFound;
     VDP_COLOR vdpcolor;
     MGUI_SAVESCR vsavescr;
     MGUI_MOUSE mouseData;
     MGUI_SAVESCR windowScr;
-    unsigned char winFound;
 
     // Define o ID do window
     vComma = (unsigned char *)strrchr((char*)paramBasic, ',');
@@ -78,7 +78,6 @@ void main(void)
 
     if (!winFound)
     {
-writeLongSerial("Aqui 0\r\n\0");
         return;
     }
 
@@ -90,7 +89,6 @@ writeLongSerial("Aqui 0\r\n\0");
     dir = msmalloc(sizeof(FILES_DIR) * 32);  //(FILES_DIR *)vworkbase;
     if (!dir)
     {
-writeLongSerial("Aqui 1\r\n\0");
         return;
     }
 
@@ -102,10 +100,8 @@ writeLongSerial("Aqui 1\r\n\0");
     memset(dir, 0x00, sizeof(FILES_DIR) * 32);
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
-writeLongSerial("Aqui 2\r\n\0");
 
     SaveScreenNew(&windowScr, 0, 0, 255, 191);
-writeLongSerial("Aqui 3\r\n\0");
 
     drawWindow();
 
@@ -551,6 +547,7 @@ writeLongSerial("Aqui 3\r\n\0");
                         else
                         {
                             #ifdef USE_RELOC_LOAD_PROGS
+                                strcpy(vtmpparam, paramBasic);
                                 strcpy(paramBasic, vtmpparam);
                                 loadMbinAndRun(vnomefile, 2);
                             #else
@@ -581,7 +578,7 @@ writeLongSerial("Aqui 3\r\n\0");
                                 *mguiRunTask = 0x00880000;*/
 
                                 vEndExec = 0x00880000;
-                                runFromMGUI(vEndExec);
+                                runFromMGUI(vEndExec, 0);
                             #endif
                         }
 
@@ -657,9 +654,7 @@ writeLongSerial("Aqui 3\r\n\0");
 void drawWindow(void)
 {
     // Cria a Janela
-writeLongSerial("Aqui 4\r\n\0");
     showWindow("File Explorer v0.3a01\0", 0, 0, 255, 191, BTNONE);
-writeLongSerial("Aqui 5\r\n\0");
 
     // Prepara Cabeçalho
     FillRect(0,18,255,10,vcorbg);

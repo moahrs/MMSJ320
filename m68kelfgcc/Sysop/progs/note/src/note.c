@@ -36,11 +36,6 @@
 #include "mmsj320api.h"
 #include "note.h"
 
-#ifdef USE_REALOCABLE_CODE
-char *itoa(int value, char *str, int base);
-char *ltoa(long value, char *str, int base);
-#endif
-
 #define NOTE_MAX_FILE_SIZE 32768UL
 #define NOTE_LOAD_ADDR     0x00880000UL
 #define NOTE_WORK_GAP      256UL
@@ -52,35 +47,6 @@ static unsigned long noteLineStorage[NOTE_MAX_LINES];
 static unsigned long noteAlign4(unsigned long value)
 {
     return (value + 3UL) & 0xFFFFFFFCUL;
-}
-
-static unsigned char noteParseProgSize(unsigned char *vParamName, unsigned long *vProgSize)
-{
-    unsigned char *vComma;
-    unsigned char *vptr;
-    unsigned long value;
-
-    vComma = (unsigned char *)strrchr((char*)vParamName, ',');
-    if (!vComma)
-        return 0;
-
-    vptr = vComma + 1;
-    if (*vptr == 0x00)
-        return 0;
-
-    value = 0;
-    while (*vptr)
-    {
-        if (*vptr < '0' || *vptr > '9')
-            return 0;
-
-        value = (value * 10UL) + (unsigned long)(*vptr - '0');
-        vptr++;
-    }
-
-    *vComma = 0x00;
-    *vProgSize = value;
-    return 1;
 }
 
 //-----------------------------------------------------------------------------
@@ -97,18 +63,31 @@ void main(void)
     unsigned long voffset, vch;
     unsigned long vsizefile;
     unsigned long vprogsize;
-    unsigned long vworkbase;
     unsigned short vReadSize;
     unsigned char vParamName[128];
     unsigned char ix;
+    unsigned char *vComma;
+    unsigned long vaddress;
     unsigned char winFound;
+
+    memset(vParamName, 0x00, sizeof(vParamName));
+    if (*paramBasic != 0x00)
+        strcpy((char*)vParamName, (char*)paramBasic);
+
+    vComma = (unsigned char *)strrchr((char*)vParamName, ',');
+
+    if (vComma)
+    {
+        *vComma = 0x00;
+        vaddress = atol((char*)(vComma + 1));
+    }
 
     // Define o ID do window
     windowsId = 0xFF;
     winFound = 0;
     for(ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
     {
-        if (mguiListWindows[ix].active && mguiListWindows[ix].loadAddress == 0x00880000)
+        if (mguiListWindows[ix].active && mguiListWindows[ix].loadAddress == vaddress)
         {
             windowsId = ix;
             winFound = 1;
@@ -118,17 +97,6 @@ void main(void)
 
     if (!winFound)
         return;
-
-    // --- Atribuicao de ponteiros de funcao locais ---
-    #ifdef USE_REALOCABLE_CODE
-    drawNote        = drawNoteDef;
-    displayNotePage = displayNotePageDef;
-    drawScrollBarV  = drawScrollBarVDef;
-    drawScrollBarH  = drawScrollBarHDef;    
-    nmystrcpy       = strcpy;
-    nmymemset       = memset;
-    nmyitoa         = itoa;
-    #endif
 
     // --- Inicializa variaveis ---
     getColorData(&vdpcolor);
@@ -151,17 +119,7 @@ void main(void)
     noteBufSize   = 0;
     vprogsize     = NOTE_DEFAULT_PROG_SIZE;
 
-    memset(vParamName, 0x00, sizeof(vParamName));
-    if (*paramBasic != 0x00)
-        strncpy((char*)vParamName, (char*)paramBasic, sizeof(vParamName) - 1);
-
-    noteParseProgSize(vParamName, &vprogsize);
-
-    if (vprogsize < 512UL || vprogsize > 0x00010000UL || vprogsize >= ERRO_D_START)
-        vprogsize = NOTE_DEFAULT_PROG_SIZE;
-
-    vworkbase = noteAlign4(NOTE_LOAD_ADDR + vprogsize + NOTE_WORK_GAP);
-    noteTextBuf = (unsigned char *)vworkbase;
+    noteTextBuf = msmalloc(NOTE_MAX_FILE_SIZE + 1);
     noteLines = noteLineStorage;
 
     memset(noteTextBuf, 0x00, NOTE_MAX_FILE_SIZE + 1);

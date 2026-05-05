@@ -59,8 +59,9 @@ exit /b 0
 :done
 
 echo.
+..\..\elftoexe note.elf note.exe
 echo Artefatos gerados:
-dir note.elf note.bin note.map note.lst
-copy /Y note.bin D:\PROJETOS\MMSJ320\HD_ATU\MGUI\PROGS\NOTE.BIN
-copy /Y note.bin F:\MGUI\PROGS\NOTE.BIN
+dir note.elf note.exe note.map note.lst
+copy /Y note.exe D:\PROJETOS\MMSJ320\HD_ATU\MGUI\PROGS\NOTE.EXE
+copy /Y note.exe F:\MGUI\PROGS\NOTE.EXE
 exit /b 0
