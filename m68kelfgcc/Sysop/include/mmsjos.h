@@ -84,6 +84,16 @@ typedef struct
     unsigned char        Ext[3];
 } FILE_NAME;
 
+typedef struct FILES_DIR
+{
+    unsigned char        Name[9];
+    unsigned char        Ext[4];
+    unsigned char        Modify[12];
+    unsigned char        Size[8];
+	  unsigned char		Attr[6];
+    unsigned char        posy;
+} FILES_DIR;
+
 typedef struct
 {
     char                 Name[13];
@@ -350,6 +360,8 @@ extern void strncpy2( char* _dst, const char* _src, int _n );
 extern int isValidFilename(char *filename) ;
 extern unsigned char matches_wildcard(const char *pattern, const char *filename);
 extern unsigned char contains_wildcards(const char *pattern);
+extern void fsListDir(FILES_DIR * dir, unsigned char *param);
+extern int setFontUseG2(unsigned char *nameFile);
 
 #ifdef USE_MSMALLOC
 extern void *msmalloc(unsigned long size);
@@ -372,6 +384,44 @@ extern int loadMbinAndRun(char *filename, char porig);
 extern void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char TypeSet);
 extern unsigned int fsGetMfp(unsigned int Config);
 #endif
+
+
+typedef struct
+{
+    unsigned char name[20];
+    unsigned char w;
+    unsigned char h;
+    unsigned long addr
+} MGUI_SET_FONT;
+
+extern MGUI_SET_FONT addrSetFontUseG2; // Endereco da funcao setFontUseG2, para ser usada por programas externos
+
+typedef struct
+{
+    unsigned long fonFileOffset;
+    unsigned long fonFileSize;
+
+    unsigned long fntOffset;
+    unsigned long fntSize;
+
+    unsigned int dfVersion;
+    unsigned long dfSize;
+
+    unsigned int dfPixWidth;
+    unsigned int dfPixHeight;
+    unsigned int dfWidthBytes;
+    unsigned int dfMaxWidth;
+
+    unsigned char  dfFirstChar;
+    unsigned char  dfLastChar;
+    unsigned char  dfDefaultChar;
+    unsigned char  dfBreakChar;
+
+    unsigned long dfBitsOffset;
+    unsigned long bitsFileOffset;
+
+    unsigned int alignShift;
+} FON_INFO;
 
 // Compatibilidade com codigo legado que referencia allocator interno da std68k
 #ifndef MMSJ_HEADER_TYPE_DEF

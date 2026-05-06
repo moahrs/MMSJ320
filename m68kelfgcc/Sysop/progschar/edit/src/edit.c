@@ -678,6 +678,51 @@ int edGotoLine(void)
 }
 
 //-------------------------------------------------------------------
+int edReplaceAt(unsigned long pos, int oldLen, char *newText)
+{
+    int newLen;
+    long diff;
+    long i;
+
+    newLen = strlen(newText);
+    diff = (long)newLen - (long)oldLen;
+
+    if (pos > edFileSize)
+        return 0;
+
+    if (diff > 0)
+    {
+        if (edFileSize + diff >= EDIT_MAX_FILE)
+        {
+            edSetMessage("No memory");
+            return 0;
+        }
+
+        for (i = edFileSize; i >= (long)(pos + oldLen); i--)
+            edFileBuf[i + diff] = edFileBuf[i];
+    }
+    else if (diff < 0)
+    {
+        for (i = pos + oldLen; i <= edFileSize; i++)
+            edFileBuf[i + diff] = edFileBuf[i];
+    }
+
+    for (i = 0; i < newLen; i++)
+        edFileBuf[pos + i] = newText[i];
+
+    edFileSize = edFileSize + diff;
+    edFileBuf[edFileSize] = 0;
+
+    edDirty = 1;
+    edBuildLines();
+
+    edSetCursorFromOffset(pos + newLen);
+    edAdjustScroll();
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
 int edReplaceAsk(void)
 {
     char findText[ED_INPUT_MAX];
@@ -790,6 +835,23 @@ int edReplaceAsk(void)
         edSetMessage("Replace done");
 
     return count;
+}
+
+//-------------------------------------------------------------------
+void edClearLineFrom(int y, int start)
+{
+    int i;
+
+    if (start < 0)
+        start = 0;
+
+    if (start >= EDIT_COLS)
+        return;
+
+    vdp_set_cursor(start, y);
+
+    for (i = start; i < EDIT_COLS; i++)
+        printChar(' ', 1);
 }
 
 //-------------------------------------------------------------------
@@ -1157,7 +1219,7 @@ void edLoop(char *filename)
                     }
                     else if (key == 'A' || key == 'a')  // Find & Replace
                     {
-                        edReplaceAsk()
+                        edReplaceAsk();
                     }
                     else if (key == 'G' || key == 'g')  // Goto Line
                     {

@@ -3,4 +3,7 @@ mmsjos_ucosii_table:
             dc.l _msrealloc
             dc.l _msfree
             dc.l _loadMbinAndRun
+            dc.l _readFontStruct
+            dc.l _fsListDir
+            dc.l _setFontUseG2
             dc.l 0

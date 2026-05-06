@@ -85,6 +85,8 @@ unsigned char *memPosConfig; // Config file
 unsigned char *memPosConfig = (unsigned char*)ADDR_CFG_FILE; // Config file
 #endif
 unsigned char *imgsMenuSys = 0x00; // Images PBM 16x16 each icone in order (64 Bytes Each)
+unsigned char *memVideoFonts = 0x00; // Fontes para Video, formato igual ao do VDP (8 bytes por char, 256 chars = 2048 bytes)
+unsigned char *memLoadFileFont = 0x00; // Fontes para Video, formato igual ao do VDP (8 bytes por char, 256 chars = 2048 bytes)
 unsigned char vFinalOS; // Atualizar sempre que a compilacao passar desse valor
 unsigned char vcorwf; //
 unsigned char vcorwb; //
@@ -1554,18 +1556,20 @@ char mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax)
 
 //-----------------------------------------------------------------------------
 void startMGI(void) {
-    unsigned char vnomefile[12];
+    unsigned char vnomefile[13], vnomeall[32];
     unsigned char lc, ll, *ptr_ico, *ptr_prg, *ptr_pos;
     unsigned char* vLoadImage = 0x00;
     unsigned long cfgSize;
-    int percent;
-    long ix;
+    int percent, ixx, iyy, iz;
+    long ix, isizelastfont;
     char errorMalloc;
     VDP_COLOR cores;
     VDP_COORD cursor;
     unsigned int error_code = OS_ERR_NONE;
     int iy;
     char tmp[32];
+    FILES_DIR *pDir;
+    FON_INFO fi;
 
     OSTaskSuspend(TASK_MMSJOS_MAIN);
 
@@ -1679,6 +1683,109 @@ void startMGI(void) {
         imgsMenuSys = 0;
     }
 
+    writesxy(53,170,1,"Loading Font's ",vcorwf,vcorwb);
+
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #ifdef USE_MALLOC
+            memVideoFonts = malloc(SIZE_LOAD_FONTS_MEM);
+            memLoadFileFont = malloc(SIZE_LOAD_FILE_FONT_MEM);
+        #else
+            memVideoFonts = msmalloc(SIZE_LOAD_FONTS_MEM);
+            memLoadFileFont = msmalloc(SIZE_LOAD_FILE_FONT_MEM);
+        #endif
+    #else
+        memVideoFonts = (unsigned char*)ADDR_LOAD_FONTS;   // Endereco fixo para carregar as fontes, nao vem de malloc.
+        memLoadFileFont = (unsigned char*)ADDR_LOAD_FILE_FONT;   // Endereco fixo para carregar as fontes, nao vem de malloc.
+    #endif
+
+    if (memVideoFonts)
+    {
+        // Ler todas as fontes da pasta (ateh 4)
+        pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
+        fsListDir(pDir, "/MGUI/FONTS/*.FON");
+        ixx = 0;
+        iyy = 0;
+        isizelastfont = 0;
+
+        // Loop de carregamento das fontes, lendo o nome do arquivo para mostrar na tela e depois carregar a fonte usando o nome completo (com caminho) para carregar a fonte na memoria. O loop para quando encontra
+        while (pDir[ixx].Name[0] != 0)
+        {
+            strcpy(vnomefile, pDir[ixx].Name);
+            strcat(vnomefile, ".");
+            strcat(vnomefile, pDir[ixx].Ext);
+            writesxy(137,170,1,vnomefile,vcorwf,vcorwb);
+            strcpy(vnomeall, "/MGUI/FONTS/");
+            strcat(vnomeall, vnomefile);
+
+            // Carrega a fonte usando o nome completo (com caminho) para carregar a fonte na memoria. O loop para quando encontra
+            cfgSize = loadFile(vnomeall, memLoadFileFont);
+
+            // Processa a fonte, pegando os principais dados (altura, largura, etc) e depois copiando os dados da fonte para o local correto na memoria de fontes de video (memVideoFonts), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
+            if (readFontStruct(memLoadFileFont, cfgSize, &fi))
+            {
+                iyy++;
+
+                // Grava cabecalho
+                strcpy(memVideoFonts, vnomefile);                // Nome da fonte (12 chars)
+                *(memVideoFonts + 12) = 0x00;
+                *(memVideoFonts + 13) = fi.dfFirstChar;          // First Char
+                *(memVideoFonts + 14) = fi.dfLastChar;           // Last Char
+                *(memVideoFonts + 15) = fi.dfPixWidth & 0xFF;    // Width
+                *(memVideoFonts + 16) = fi.dfPixHeight & 0xFF;   // Height
+                isizelastfont += 17;
+                // Se nao comeca no 0, coloca zeros até o primeiro
+                if (fi.dfFirstChar > 0)
+                {
+                    for (ix = 0; ix < fi.dfFirstChar; ix++)
+                    {
+                        // Copia os dados de cada char da fonte para o local correto na memoria de fontes de video (memVideoFonts), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
+                        for (iz = 0; iz < 8; iz++)
+                            *(memVideoFonts + ((ix * 8) + iz + isizelastfont)) = 0x00;
+                    }
+                }
+
+                // Copia caracteres
+                for (ix = fi.dfFirstChar; ix <= fi.dfLastChar; ix++)
+                {
+                    for (iz = 0; iz < 8; iz++)
+                    {
+                        *(memVideoFonts + ((ix * 8) + iz + isizelastfont)) = *(memLoadFileFont + (fi.bitsFileOffset + (ix * 8) + iz));
+                    }
+                }
+
+                // Se nao termina no 255, coloca zeros até o 255
+                if (fi.dfLastChar < 255)
+                {
+                    for (ix = fi.dfLastChar + 1; ix <= 255; ix++)
+                    {
+                        // Copia os dados de cada char da fonte para o local correto na memoria de fontes de video (memVideoFonts), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
+                        for (iz = 0; iz < 8; iz++)
+                            *(memVideoFonts + ((ix * 8) + iz + isizelastfont)) = 0x00;
+                    }
+                }
+
+                isizelastfont += 2048; // 256 chars * 8 bytes por char
+            }
+
+            ixx++;
+
+            if (iyy >= 4) // Limite de 4 fontes
+                break;
+        }
+
+        msfree(pDir);
+        msfree(memLoadFileFont);
+    }
+    else
+    {
+        errorMalloc = 1;
+        memVideoFonts = 0;
+        memLoadFileFont = 0;
+    }
+
+    if (!setFontUseG2("Eve5x8.FON"))
+        setFontUseG2("DEFAULT");
+
     writesxy(53,170,1,"      Please Wait...       ",vcorwf,vcorwb);
 
     if (!errorMalloc)
@@ -1721,6 +1828,7 @@ void startMGI(void) {
         vIndicaDialog = 0;
 
         // Inicia Controles de Tela (Mouse e Teclado)
+        msprintf("OLA !!! SOU A FONTE 5x8\0");
         while(1)
         {
             if (vIndicaDialog)
@@ -1735,8 +1843,10 @@ void startMGI(void) {
         #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
             #ifdef USE_MALLOC
                 free(imgsMenuSys);
+                free(memVideoFonts);
             #else
                 msfree(imgsMenuSys);
+                msfree(memVideoFonts);
             #endif
         #endif
         /* memPosConfig usa buffer fixo (0x008EF800), nao vem de malloc. */

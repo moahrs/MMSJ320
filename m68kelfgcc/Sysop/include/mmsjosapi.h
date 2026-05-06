@@ -4,7 +4,7 @@
 // Function Shared Definitions
 #define MMSJOS_FUNC_TABLE    0x00800034
 #define MGUI_FUNC_TABLE      0x00803B24
-#define MMSJOS_UCOSII_TABLE  0x0080D29C
+#define MMSJOS_UCOSII_TABLE  0x0080dcbc
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);
@@ -75,6 +75,9 @@ typedef void *(*msmallocType)(unsigned long size);
 typedef void *(*msreallocType)(void *ptr, unsigned long newSize);
 typedef void (*msfreeType)(void *ptr);
 typedef int (*loadMbinAndRunType)(char *filename, char porig);
+typedef int (*readFontStructType)(unsigned char *file, unsigned long fileSize, FON_INFO *info);
+typedef void (*fsListDirType)(FILES_DIR * dir, unsigned char *param);
+typedef unsigned char (*setFontUseG2Type)(unsigned char *nameFile);
 
 // MMSJOS define functions
 #define fsGetDirAtuData ((fsGetDirAtuDataType *)(unsigned long)MMSJOS_FUNC_TABLE)[0] // Índice da função
@@ -144,6 +147,9 @@ typedef int (*loadMbinAndRunType)(char *filename, char porig);
 #define msrealloc ((msreallocType *)(unsigned long)MMSJOS_UCOSII_TABLE)[1] // Índice da função
 #define msfree ((msfreeType *)(unsigned long)MMSJOS_UCOSII_TABLE)[2] // Índice da função
 #define loadMbinAndRun ((loadMbinAndRunType *)(unsigned long)MMSJOS_UCOSII_TABLE)[3] // Índice da função
+#define readFontStruct ((readFontStructType *)(unsigned long)MMSJOS_UCOSII_TABLE)[4] // Índice da função
+#define fsListDir ((fsListDirType *)(unsigned long)MMSJOS_UCOSII_TABLE)[5] // Índice da função
+#define setFontUseG2 ((setFontUseG2Type *)(unsigned long)MMSJOS_UCOSII_TABLE)[6] // Índice da função
 
 // Apoio
 const unsigned char strValidChars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ^&'@{}[],$=!-#()%.+~_";

@@ -1,4 +1,4 @@
-typedef struct FILES_DIR
+/*typedef struct FILES_DIR
 {
     unsigned char        Name[9];
     unsigned char        Ext[4];
@@ -6,7 +6,7 @@ typedef struct FILES_DIR
     unsigned char        Size[8];
 	  unsigned char		Attr[6];
     unsigned char        posy;
-} FILES_DIR;
+} FILES_DIR;*/
 
 typedef struct LIST_DIR 
 {

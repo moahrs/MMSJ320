@@ -57,6 +57,22 @@ typedef struct MEMBLOCK {
 static MEMBLOCK *heapFirst = 0;
 #endif
 
+#define RT_FONTDIR 0x8007
+#define RT_FONT    0x8008
+
+static unsigned int rd16(unsigned char *p)
+{
+    return (unsigned int)p[0] | ((unsigned int)p[1] << 8);
+}
+
+static unsigned long rd32(unsigned char *p)
+{
+    return (unsigned long)p[0] |
+           ((unsigned long)p[1] << 8) |
+           ((unsigned long)p[2] << 16) |
+           ((unsigned long)p[3] << 24);
+}
+
 #ifdef USE_RELOC_LOAD_PROGS
 typedef struct
 {
@@ -262,6 +278,8 @@ void msprintf(const char *fmt, ...);
 void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char TypeSet);
 unsigned int fsGetMfp(unsigned int Config);
 #endif
+
+MGUI_SET_FONT addrSetFontUseG2; // Endereco da funcao setFontUseG2, para ser usada por programas externos
 
 const unsigned char strValidChars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ^&'@{}[],$=!-#()%.+~_";
 
@@ -975,6 +993,7 @@ unsigned long fsOsCommand(unsigned char * linhaParametro)
     unsigned char izzzz, logpath = 0, logcopyok;
     char cTemp[128];
     unsigned char vposTemp = 0, vrettype, logwildcard = 0;
+    FILES_DIR *pDir;
 
     vretfat = RETURN_OK;
 
@@ -1089,6 +1108,20 @@ writeLongSerial("\r\n\0");*/
         {
             fsVer();
             printText("\r\n\0");
+        }
+        else if (!strcmp(linhacomando,"DIR") && iy == 3)
+        {
+            pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
+            fsListDir(pDir, linhaarg);
+            ix = 0;
+
+            while (pDir[ix].Name[0] != 0)
+            {
+                msprintf("%s.%s %s %ld %s\r\n\0", pDir[ix].Name, pDir[ix].Ext, pDir[ix].Attr, pDir[ix].Size, pDir[ix].Modify);
+                ix++;
+            }
+
+            msfree(pDir);
         }
         else if (!strcmp(linhacomando,"MGUI") && iy == 4)
         {
@@ -4992,3 +5025,412 @@ void msprintf(const char *fmt, ...)
     va_end(ap);
 }
 #endif
+
+//-----------------------------------------------------------------------------
+int setFontUseG2(unsigned char *nameFile)
+{
+    int ix;
+
+    if (strcmp(nameFile, "DEFAULT") == 0)
+    {
+        strcpy(addrSetFontUseG2.name, "DEFAULT");
+        addrSetFontUseG2.w = 6;
+        addrSetFontUseG2.h = 8;
+        addrSetFontUseG2.addr = getVideoFontes();
+    }
+    else
+    {
+        // Procura a fonte na memoria de fontes
+        for (ix = 0; ix < 4; ix++)
+        {
+            if (strcmp(nameFile, *(memVideoFonts + (ix * 2064))) == 0)
+            {
+                strcpy(addrSetFontUseG2.name,*(memVideoFonts + (ix * 2064)));
+                addrSetFontUseG2.w = (unsigned char)*(memVideoFonts + (ix * 2064)) + 15;
+                addrSetFontUseG2.h = (unsigned char)*(memVideoFonts + (ix * 2064)) + 16;
+                addrSetFontUseG2.addr = *(memVideoFonts + (ix * 2064) + 17);
+
+                break;
+            }
+        }
+
+        if (ix > 3)
+            return 0;   // Fonte nao encontrada
+    }
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+int readFontStruct(unsigned char *file, unsigned long fileSize, FON_INFO *info)
+{
+    unsigned long neOffset;
+    unsigned long resTable;
+    unsigned int alignShift;
+    unsigned long p;
+    unsigned int typeId;
+    unsigned int count;
+    unsigned long i;
+
+    unsigned int rnOffset;
+    unsigned int rnLength;
+    unsigned long realOffset;
+    unsigned long realLength;
+
+    unsigned char *fnt;
+
+    memset(info, 0, sizeof(FON_INFO));
+
+    if (fileSize < 0x40)
+        return 1;
+
+    if (file[0] != 'M' || file[1] != 'Z')
+        return 2;
+
+    neOffset = rd32(file + 0x3C);
+
+    if (neOffset + 0x40 >= fileSize)
+        return 3;
+
+    if (file[neOffset] != 'N' || file[neOffset + 1] != 'E')
+        return 4;
+
+    /*
+       NE + 0x24 = offset da Resource Table,
+       relativo ao começo do NE.
+    */
+    resTable = neOffset + rd16(file + neOffset + 0x24);
+
+    if (resTable + 2 >= fileSize)
+        return 5;
+
+    alignShift = rd16(file + resTable);
+    p = resTable + 2;
+
+    info->alignShift = alignShift;
+
+    while (p + 8 < fileSize)
+    {
+        typeId = rd16(file + p);
+        p += 2;
+
+        if (typeId == 0x0000)
+            break;
+
+        count = rd16(file + p);
+        p += 2;
+
+        /*
+           DWORD reserved
+        */
+        p += 4;
+
+        for (i = 0; i < count; i++)
+        {
+            if (p + 12 > fileSize)
+                return 6;
+
+            rnOffset = rd16(file + p + 0);
+            rnLength = rd16(file + p + 2);
+
+            realOffset = ((unsigned long)rnOffset) << alignShift;
+            realLength = ((unsigned long)rnLength) << alignShift;
+
+            if (typeId == RT_FONT)
+            {
+                if (realOffset + realLength > fileSize)
+                    return 0;
+
+                info->fonFileOffset = realOffset;
+                info->fonFileSize   = realLength;
+
+                info->fntOffset = realOffset;
+                info->fntSize   = realLength;
+
+                fnt = file + realOffset;
+
+                /*
+                   Header FNT Windows 2.x/3.x bitmap.
+                   Offsets relativos ao começo do FNT.
+                */
+                info->dfVersion     = rd16(fnt + 0x00);
+                info->dfSize        = rd32(fnt + 0x02);
+
+                info->dfPixWidth    = rd16(fnt + 0x56);
+                info->dfPixHeight   = rd16(fnt + 0x58);
+                info->dfMaxWidth    = rd16(fnt + 0x5D);
+
+                info->dfFirstChar   = fnt[0x5F];
+                info->dfLastChar    = fnt[0x60];
+                info->dfDefaultChar = fnt[0x61];
+                info->dfBreakChar   = fnt[0x62];
+
+                info->dfWidthBytes  = rd16(fnt + 0x63);
+
+                info->dfBitsOffset  = rd32(fnt + 0x71);
+                info->bitsFileOffset = realOffset + info->dfBitsOffset;
+
+                if (info->bitsFileOffset >= fileSize)
+                    return 7;
+
+                return 0;
+            }
+
+            p += 12;
+        }
+    }
+
+    return 9;
+}
+
+//-----------------------------------------------------------------------------
+void fsListDir(FILES_DIR * dir, unsigned char *param)
+{
+    unsigned char vcont, ikk, ix, iy, cc, dd, ee, cnum[20];
+    unsigned char vnomefile[32], dsize;
+    unsigned char vname[20], sqtdtam[20], cuntam, errorName;
+    unsigned long vtotbytes = 0, vqtdtam;
+    unsigned char vrettype = 0, logwildcard = 0, logpath;
+    unsigned long vclusterdiratu;
+    unsigned int dFileCursor, vPosDir;
+    FILES_DIR ddir;
+    FAT32_DIR vdirfiles;
+
+    // Leitura dos Arquivos
+    dFileCursor = 0;
+    dsize = sizeof(FILES_DIR);
+    vPosDir = 0;
+    dir[0].Name[0] = '\0';
+
+    // Acessa Pasta a ser listada
+    vclusterdiratu = vclusterdir;
+
+    if (param[0] > 0x20)
+    {
+        // Acha o caminho final
+        vrettype = fsFindDirPath(param, FIND_PATH_LAST);
+
+        // Verifica se tem wildcard
+        logwildcard = contains_wildcards(vretpath.Name);
+
+        // Verifica Erro
+        if (vrettype == FIND_PATH_RET_ERROR && !logwildcard)
+            return;
+
+        vclusterdir = vretpath.ClusterDir;
+    }
+    else
+        vrettype = FIND_PATH_RET_FOLDER;
+
+    // Logica de leitura Diretorio FAT32
+    if (fsFindInDir(NULL, TYPE_FIRST_ENTRY) < ERRO_D_START)
+    {
+        while (1)
+        {
+            fsGetDirAtuData(&vdirfiles);
+
+            if (vdirfiles.Attr != ATTR_VOLUME)
+            {
+                // Nome
+                errorName = 0;
+                for (cc = 0; cc <= 7; cc++)
+                {
+                    ddir.Name[cc] = 0x00;
+                    if (vdirfiles.Name[cc] > 32 && vdirfiles.Name[cc] <= 127 )
+                    {
+                        ddir.Name[cc] = vdirfiles.Name[cc];
+                    }
+                    else if (vdirfiles.Name[cc] != 32)
+                        errorName = 1;
+                }
+
+                ddir.Name[8] = '\0';
+
+                // Extensao
+                for (cc = 0; cc <= 2; cc++)
+                {
+                    ddir.Ext[cc] = 0x00;
+                    if (vdirfiles.Ext[cc] > 32 && vdirfiles.Ext[cc] <= 127)
+                    {
+                        ddir.Ext[cc] = vdirfiles.Ext[cc];
+                    }
+                    else if (vdirfiles.Ext[cc] != 32)
+                        errorName = 1;
+                }
+
+                ddir.Ext[3] = '\0';
+
+                if (!errorName)
+                {
+                    strcpy(vname, ddir.Name);
+                    strcat(vname, ".");
+                    strcat(vname, ddir.Ext);
+                    if (vrettype != FIND_PATH_RET_FOLDER && !matches_wildcard(param, vname))
+                        errorName = 1;                     
+                }
+
+                if (!errorName)
+                {
+                    // Data Ultima Modificacao
+                    // Mes
+                    vqtdtam = (vdirfiles.UpdateDate & 0x01E0) >> 5;
+                    if (vqtdtam < 1 || vqtdtam > 12)
+                        vqtdtam = 1;
+
+                    vqtdtam--;
+
+                    if (vqtdtam < 1  && vqtdtam > 12)
+                        vqtdtam = 1;
+
+                    ddir.Modify[0] = vmesc[vqtdtam][0];
+                    ddir.Modify[1] = vmesc[vqtdtam][1];
+                    ddir.Modify[2] = vmesc[vqtdtam][2];
+                    ddir.Modify[3] = '/';
+
+                    // Dia
+                    vqtdtam = vdirfiles.UpdateDate & 0x001F;
+                    memset(sqtdtam, 0x0, 10);
+                    itoa(vqtdtam, sqtdtam, 10);
+
+                    if (vqtdtam < 10) {
+                        ddir.Modify[4] = '0';
+                        ddir.Modify[5] = sqtdtam[0];
+                    }
+                    else {
+                        ddir.Modify[4] = sqtdtam[0];
+                        ddir.Modify[5] = sqtdtam[1];
+                    }
+                    ddir.Modify[6] = '/';
+
+                    // Ano
+                    vqtdtam = ((vdirfiles.UpdateDate & 0xFE00) >> 9) + 1980;
+                    memset(sqtdtam, 0x0, 10);
+                    itoa(vqtdtam, sqtdtam, 10);
+
+                    ddir.Modify[7] = sqtdtam[0];
+                    ddir.Modify[8] = sqtdtam[1];
+                    ddir.Modify[9] = sqtdtam[2];
+                    ddir.Modify[10] = sqtdtam[3];
+
+                    ddir.Modify[11] = '\0';
+
+                    // Tamanho
+                    if (vdirfiles.Attr != ATTR_DIRECTORY) {
+                        // Reduz o tamanho a unidade (GB, MB ou KB)
+                        vqtdtam = vdirfiles.Size;
+
+                        if ((vqtdtam & 0xC0000000) != 0) {
+                            cuntam = 'G';
+                            vqtdtam = ((vqtdtam & 0xC0000000) >> 30) + 1;
+                        }
+                        else if ((vqtdtam & 0x3FF00000) != 0) {
+                            cuntam = 'M';
+                            vqtdtam = ((vqtdtam & 0x3FF00000) >> 20) + 1;
+                        }
+                        else if ((vqtdtam & 0x000FFC00) != 0) {
+                            cuntam = 'K';
+                            vqtdtam = ((vqtdtam & 0x000FFC00) >> 10) + 1;
+                        }
+                        else
+                            cuntam = ' ';
+
+                        // Transforma para decimal
+                        memset(sqtdtam, 0x0, 10);
+                        itoa(vqtdtam, sqtdtam, 10);
+
+                        // Primeira Parte da Linha do dir, tamanho
+                        for(ix = 0; ix <= 3; ix++) {
+                            if (sqtdtam[ix] == 0)
+                                break;
+                        }
+
+                        iy = (4 - ix);
+
+                        for(ix = 0; ix <= 3; ix++) {
+                            if (iy <= ix) {
+                                ikk = ix - iy;
+                                ddir.Size[ix] = sqtdtam[ikk];
+                            }
+                            else
+                                ddir.Size[ix] = ' ';
+                        }
+
+                        ddir.Size[ix] = cuntam;
+                    }
+                    else {
+                        ddir.Size[0] = ' ';
+                        ddir.Size[1] = ' ';
+                        ddir.Size[2] = ' ';
+                        ddir.Size[3] = ' ';
+                        ddir.Size[4] = '0';
+                    }
+
+                    ddir.Size[5] = '\0';
+
+                    // Atributos
+                    if (vdirfiles.Attr == ATTR_DIRECTORY) {
+                        ddir.Attr[0] = '<';
+                        ddir.Attr[1] = 'D';
+                        ddir.Attr[2] = 'I';
+                        ddir.Attr[3] = 'R';
+                        ddir.Attr[4] = '>';
+                    }
+                    else {
+                        ddir.Attr[0] = ' ';
+                        ddir.Attr[1] = ' ';
+                        ddir.Attr[2] = ' ';
+                        ddir.Attr[3] = ' ';
+                        ddir.Attr[4] = ' ';
+                    }
+
+                    ddir.Attr[5] = '\0';
+
+                    if (dFileCursor >= 32)
+                        break;
+
+                    strcpy(dir[dFileCursor].Name, ddir.Name);
+                    strcpy(dir[dFileCursor].Ext, ddir.Ext);
+                    strcpy(dir[dFileCursor].Modify, ddir.Modify);
+                    strcpy(dir[dFileCursor].Size, ddir.Size);
+                    strcpy(dir[dFileCursor].Attr, ddir.Attr);
+                    dir[dFileCursor].Attr[5] = 0x00;
+
+                    //dir[dFileCursor] = ddir;
+                    vPosDir = dFileCursor;
+                    dFileCursor = dFileCursor + 1;
+                    dir[dFileCursor].Name[0] = '\0';
+                }
+            }
+
+            // Verifica se tem mais Arquivos
+			for (ix = 0; ix <= 7; ix++) {
+			    vnomefile[ix] = vdirfiles.Name[ix];
+				if (vnomefile[ix] == 0x20) {
+					vnomefile[ix] = '\0';
+					break;
+			    }
+			}
+
+			vnomefile[ix] = '\0';
+
+			if (vdirfiles.Name[0] != '.') {
+			    vnomefile[ix] = '.';
+			    ix++;
+				for (iy = 0; iy <= 2; iy++) {
+				    vnomefile[ix] = vdirfiles.Ext[iy];
+					if (vnomefile[ix] == 0x20) {
+						vnomefile[ix] = '\0';
+						break;
+				    }
+				    ix++;
+				}
+				vnomefile[ix] = '\0';
+			}
+
+			if (fsFindInDir(vnomefile, TYPE_NEXT_ENTRY) >= ERRO_D_START)
+				break;
+        }
+    }
+
+    vclusterdir = vclusterdiratu;
+}

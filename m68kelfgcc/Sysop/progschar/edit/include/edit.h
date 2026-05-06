@@ -107,3 +107,7 @@ int edGetBlockRange(unsigned long *start, unsigned long *end);
 int edBlockDel(void);
 int edBlockCopy(void);
 int edBlockMove(void);
+int edReplaceAt(unsigned long pos, int oldLen, char *newText);
+int edGotoLine(void);
+int edReplaceAsk(void);
+void edClearLineFrom(int y, int start);

@@ -76,6 +76,7 @@ extern unsigned int mgui_color_table;
 extern unsigned long mguiVideoFontes;
 extern unsigned char fgcolorMgui;
 extern unsigned char bgcolorMgui;
+extern unsigned char *memVideoFonts; // Fontes para Video, formato igual ao do VDP (8 bytes por char, 256 chars = 2048 bytes)
 
 #define BTNONE      0x00
 #define BTOK        0x01
@@ -113,9 +114,11 @@ extern unsigned char bgcolorMgui;
 #define ICON_EXIT  56
 #define ICON_HOURGLASS  57
 
-#define SIZE_LOAD_IMAGE_MEM 8192    // Max PBM file format for 256x192 area
-#define SIZE_LOAD_ICONS_MEM 8192    // 128 incons 64 bytes
-#define SIZE_LOAD_CFG_MEM    2048   // Max config file size (+1 byte for terminator)
+#define SIZE_LOAD_IMAGE_MEM 8192     // Max PBM file format for 256x192 area
+#define SIZE_LOAD_ICONS_MEM 8192     // 128 icons 64 bytes
+#define SIZE_LOAD_CFG_MEM    2048    // Max config file size (+1 byte for terminator)
+#define SIZE_LOAD_FONTS_MEM  10240   // Max font file size 4 set de fonts de 8 Bytes (max 8x8) x 256 chars
+#define SIZE_LOAD_FILE_FONT_MEM 8192 // Max font file size 4 set de fonts de 8 Bytes (max 8x8) x 256 chars
 
 #define TASK_MGUI_TELA    11
 #define TASK_MGUI_MOUSE   12
