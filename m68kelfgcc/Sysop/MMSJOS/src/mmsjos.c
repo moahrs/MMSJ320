@@ -4905,7 +4905,7 @@ void printCharOs(unsigned char pchr, unsigned char pmove)
                 }
                 break;
             case 0xFF:  // Cursor
-                vdp_write(0xFE);
+                vdp_writeOs(0xFE);
                 break;
             default:
                 vdp_writeOs(pchr);
