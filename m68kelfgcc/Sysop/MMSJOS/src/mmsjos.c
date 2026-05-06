@@ -4874,47 +4874,56 @@ void printCharOs(unsigned char pchr, unsigned char pmove)
     videoCursorPosColX = vcursor.x;
     videoCursorPosRowY = vcursor.y; 
 
-    switch (pchr)
+    if (vdp_mode == VDP_MODE_TEXT || vdp_mode == VDP_MODE_G1)
     {
-        case 0x0A:  // LF
-            if (videoCursorPosRowY + 1 == 24)
-                printChar(pchr);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
-            else 
-            {
-                videoCursorPosRowY = videoCursorPosRowY + 1;
-                vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY);
-            }
-            break;
-        case 0x0D:  // CR
-            videoCursorPosColX = 0;
-            vdp_set_cursor(0, videoCursorPosRowY);
-            break;
-        case 0x08:  // BackSpace
-            if (videoCursorPosColX > 0)
-            {
-                videoCursorPosColX = videoCursorPosColX - 1;
-                vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY);
-            }
-            break;
-        case 0xFF:  // Cursor
-            vdp_write(0xFE);
-            break;
-        default:
-            vdp_writeOs(pchr);
-
-            if (vdp_mode == VDP_MODE_TEXT)
-                vdp_colorize(fgcolor, bgcolor);
-
-            if (pmove)
-            {
-                vdp_set_cursor_pos(VDP_CSR_RIGHT);
-
-                if (vdp_mode == VDP_MODE_TEXT && videoCursorPosRowY == 24)
+        // Usa processo normal com a fonte Default do monitor
+        printChar(pchr, pmove);
+    }
+    else 
+    {
+        // Usa fonte selecionada
+        switch (pchr)
+        {
+            case 0x0A:  // LF
+                if (videoCursorPosRowY + 1 == 24)
+                    printChar(pchr);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
+                else 
                 {
-                    videoCursorPosRowY = 23;
-                    printChar(0x0A);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
+                    videoCursorPosRowY = videoCursorPosRowY + 1;
+                    vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY);
                 }
-            }
+                break;
+            case 0x0D:  // CR
+                videoCursorPosColX = 0;
+                vdp_set_cursor(0, videoCursorPosRowY);
+                break;
+            case 0x08:  // BackSpace
+                if (videoCursorPosColX > 0)
+                {
+                    videoCursorPosColX = videoCursorPosColX - 1;
+                    vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY);
+                }
+                break;
+            case 0xFF:  // Cursor
+                vdp_write(0xFE);
+                break;
+            default:
+                vdp_writeOs(pchr);
+
+                if (vdp_mode == VDP_MODE_TEXT)
+                    vdp_colorize(fgcolor, bgcolor);
+
+                if (pmove)
+                {
+                    vdp_set_cursor_pos(VDP_CSR_RIGHT);
+
+                    if (vdp_mode == VDP_MODE_TEXT && videoCursorPosRowY == 24)
+                    {
+                        videoCursorPosRowY = 23;
+                        printChar(0x0A);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
+                    }
+                }
+        }
     }
 }
 
