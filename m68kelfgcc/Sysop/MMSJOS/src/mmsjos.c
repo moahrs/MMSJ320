@@ -5174,8 +5174,10 @@ int setFontUseG2(unsigned char *nameFile)
             if (strcmp(nameFile, *(memVideoFonts + (ix * 2064))) == 0)
             {
                 strcpy(addrSetFontUseG2.name,*(memVideoFonts + (ix * 2064)));
-                addrSetFontUseG2.w = (unsigned char)*(memVideoFonts + (ix * 2064)) + 15;
-                addrSetFontUseG2.h = (unsigned char)*(memVideoFonts + (ix * 2064)) + 16;
+                addrSetFontUseG2.fc   = (unsigned char)*(memVideoFonts + (ix * 2064)) + 13;
+                addrSetFontUseG2.lc   = (unsigned char)*(memVideoFonts + (ix * 2064)) + 14;
+                addrSetFontUseG2.w    = (unsigned char)*(memVideoFonts + (ix * 2064)) + 15;
+                addrSetFontUseG2.h    = (unsigned char)*(memVideoFonts + (ix * 2064)) + 16;
                 addrSetFontUseG2.addr = *(memVideoFonts + (ix * 2064) + 17);
 
                 break;

@@ -388,13 +388,16 @@ extern unsigned int fsGetMfp(unsigned int Config);
 
 typedef struct
 {
-    unsigned char name[20];
-    unsigned char w;
-    unsigned char h;
-    unsigned long addr
+    unsigned char name[20]; // Font Name
+    unsigned char fc;       // First Char
+    unsigned char lc;       // Last Char
+    unsigned char w;        // Width
+    unsigned char h;        // Height
+    unsigned long addr;     // Addr Memory Set Char Font
 } MGUI_SET_FONT;
 
 extern MGUI_SET_FONT addrSetFontUseG2; // Endereco da funcao setFontUseG2, para ser usada por programas externos
+extern MGUI_SET_FONT listFontsUseG2[4]; 
 
 typedef struct
 {
