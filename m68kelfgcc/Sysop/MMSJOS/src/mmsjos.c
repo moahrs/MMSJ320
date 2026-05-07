@@ -57,6 +57,8 @@ typedef struct MEMBLOCK {
 static MEMBLOCK *heapFirst = 0;
 #endif
 
+unsigned char vdp_mode; // Modo de video 0 = caracter (32 x 24), 1 = grafico (256 x 192)
+
 #define RT_FONTDIR 0x8007
 #define RT_FONT    0x8008
 
@@ -280,6 +282,7 @@ unsigned int fsGetMfp(unsigned int Config);
 #endif
 
 MGUI_SET_FONT addrSetFontUseG2; // Endereco da funcao setFontUseG2, para ser usada por programas externos
+MGUI_SET_FONT listFontsUseG2[4]; 
 
 const unsigned char strValidChars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ^&'@{}[],$=!-#()%.+~_";
 
@@ -417,6 +420,8 @@ void main(void)
     unsigned long ixxx;
 
     *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
+    
+    vdp_mode = VDP_MODE_TEXT;
 
     clearScr();
     printText("MMSJ-OS v"versionMMSJOS);
@@ -4800,6 +4805,38 @@ unsigned int fsGetMfp(unsigned int Config)
 
 #ifdef USE_MSPRINTF_MMSJOS
 //-----------------------------------------------------------------------------
+void vdp_set_cursor_pos_os(unsigned char direction)
+{
+    unsigned char pMoveId = 1;
+    unsigned short videoCursorPosColX;  // Posicao atual do cursor na coluna (0 a 255)
+    unsigned short videoCursorPosRowY;  // Posical atual do cursor na linha (0 a 191)
+    VDP_COORD vcursor;
+
+    vcursor = vdp_get_cursor_safe();
+    videoCursorPosColX = vcursor.x;
+    videoCursorPosRowY = vcursor.y; 
+
+    if (vdp_mode != VDP_MODE_TEXT)
+        pMoveId = addrSetFontUseG2.w;
+
+    switch (direction)
+    {
+        case VDP_CSR_UP:
+            vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY - pMoveId);
+            break;
+        case VDP_CSR_DOWN:
+            vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY + pMoveId);
+            break;
+        case VDP_CSR_LEFT:
+            vdp_set_cursor(videoCursorPosColX - pMoveId, videoCursorPosRowY);
+            break;
+        case VDP_CSR_RIGHT:
+            vdp_set_cursor(videoCursorPosColX + pMoveId, videoCursorPosRowY);
+            break;
+    }
+}
+
+//-----------------------------------------------------------------------------
 void vdp_writeOs(unsigned char chr)
 {
     unsigned int name_offset;       // Position in name table
@@ -4810,18 +4847,23 @@ void vdp_writeOs(unsigned char chr)
     unsigned long vEndFont, vEndPart;
     unsigned short videoCursorPosColX;  // Posicao atual do cursor na coluna (0 a 255)
     unsigned short videoCursorPosRowY;  // Posical atual do cursor na linha (0 a 191)
+    unsigned char fgcolor, bgcolor, vendsizeh;
     VDP_COORD vcursor;
+    VDP_COLOR vdpcolor;
 
-    vcursor = vdp_get_cursor_safe()
+    vcursor = vdp_get_cursor_safe();
     videoCursorPosColX = vcursor.x;
     videoCursorPosRowY = vcursor.y; 
+    getColorData(&vdpcolor);
+    fgcolor = vdpcolor.fg;
+    bgcolor = vdpcolor.bg;
 
     name_offset = videoCursorPosRowY * (vdpMaxCols + 1) + videoCursorPosColX; // Position in name table
     pattern_offset = name_offset << 3;                    // Offset of pattern in pattern table
 
     if (vdp_mode == VDP_MODE_G2)
     {
-        vEndPart = chr - 32;
+        vEndPart = chr - addrSetFontUseG2.fc;
         vEndPart = vEndPart << 3;
         vAntY = videoCursorPosRowY;
         for (i = 0; i < addrSetFontUseG2.h; i++)
@@ -4830,7 +4872,8 @@ void vdp_writeOs(unsigned char chr)
             vEndFont += vEndPart + i;
             tempFontes = vEndFont;
             vAntX = videoCursorPosColX;
-            for (ix = addrSetFontUseG2.w; ix >=0; ix--)
+            vendsizeh = 8 - addrSetFontUseG2.w;
+            for (ix = 7; ix >=vendsizeh; ix--)
             {
                 vdp_plot_hires(videoCursorPosColX, videoCursorPosRowY, ((*tempFontes >> ix) & 0x01) ? fgcolor : 0, bgcolor);
                 videoCursorPosColX = videoCursorPosColX + 1;
@@ -4842,7 +4885,7 @@ void vdp_writeOs(unsigned char chr)
     }
     else if (vdp_mode == VDP_MODE_MULTICOLOR)
     {
-        vEndPart = chr - 32;
+        vEndPart = chr - addrSetFontUseG2.fc;
         vEndPart = vEndPart << 3;
         vAntY = videoCursorPosRowY;
         for (i = 0; i < addrSetFontUseG2.h; i++)
@@ -4851,7 +4894,8 @@ void vdp_writeOs(unsigned char chr)
             vEndFont += vEndPart + i;
             tempFontes = vEndFont;
             vAntX = videoCursorPosColX;
-            for (ix = addrSetFontUseG2.w; ix >=0; ix--)
+            vendsizeh = 8 - addrSetFontUseG2.w;
+            for (ix = 7; ix >=vendsizeh; ix--)
             {
                 vdp_plot_color(videoCursorPosColX, videoCursorPosRowY, ((*tempFontes >> ix) & 0x01) ? fgcolor : bgcolor);
                 videoCursorPosColX = videoCursorPosColX + 1;
@@ -4868,11 +4912,16 @@ void printCharOs(unsigned char pchr, unsigned char pmove)
 {
     unsigned short videoCursorPosColX;  // Posicao atual do cursor na coluna (0 a 255)
     unsigned short videoCursorPosRowY;  // Posical atual do cursor na linha (0 a 191)
+    unsigned char fgcolor, bgcolor;
     VDP_COORD vcursor;
+    VDP_COLOR vdpcolor;
 
-    vcursor = vdp_get_cursor_safe()
+    vcursor = vdp_get_cursor_safe();
     videoCursorPosColX = vcursor.x;
     videoCursorPosRowY = vcursor.y; 
+    getColorData(&vdpcolor);
+    fgcolor = vdpcolor.fg;
+    bgcolor = vdpcolor.bg;
 
     if (vdp_mode == VDP_MODE_TEXT || vdp_mode == VDP_MODE_G1)
     {
@@ -4886,7 +4935,7 @@ void printCharOs(unsigned char pchr, unsigned char pmove)
         {
             case 0x0A:  // LF
                 if (videoCursorPosRowY + 1 == 24)
-                    printChar(pchr);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
+                    printChar(pchr, pmove);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
                 else 
                 {
                     videoCursorPosRowY = videoCursorPosRowY + 1;
@@ -4915,12 +4964,12 @@ void printCharOs(unsigned char pchr, unsigned char pmove)
 
                 if (pmove)
                 {
-                    vdp_set_cursor_pos(VDP_CSR_RIGHT);
+                    vdp_set_cursor_pos_os(VDP_CSR_RIGHT);
 
                     if (vdp_mode == VDP_MODE_TEXT && videoCursorPosRowY == 24)
                     {
                         videoCursorPosRowY = 23;
-                        printChar(0x0A);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
+                        printChar(0x0A, pmove);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
                     }
                 }
         }
@@ -5162,8 +5211,10 @@ int setFontUseG2(unsigned char *nameFile)
     if (strcmp(nameFile, "DEFAULT") == 0)
     {
         strcpy(addrSetFontUseG2.name, "DEFAULT");
-        addrSetFontUseG2.w = 6;
-        addrSetFontUseG2.h = 8;
+        addrSetFontUseG2.fc = 32;
+        addrSetFontUseG2.lc = 255;
+        addrSetFontUseG2.w  = 6;
+        addrSetFontUseG2.h  = 8;
         addrSetFontUseG2.addr = getVideoFontes();
     }
     else
@@ -5171,14 +5222,14 @@ int setFontUseG2(unsigned char *nameFile)
         // Procura a fonte na memoria de fontes
         for (ix = 0; ix < 4; ix++)
         {
-            if (strcmp(nameFile, *(memVideoFonts + (ix * 2064))) == 0)
+            if (strncmp(nameFile, listFontsUseG2[ix].name, strlen(nameFile)) == 0)
             {
-                strcpy(addrSetFontUseG2.name,*(memVideoFonts + (ix * 2064)));
-                addrSetFontUseG2.fc   = (unsigned char)*(memVideoFonts + (ix * 2064)) + 13;
-                addrSetFontUseG2.lc   = (unsigned char)*(memVideoFonts + (ix * 2064)) + 14;
-                addrSetFontUseG2.w    = (unsigned char)*(memVideoFonts + (ix * 2064)) + 15;
-                addrSetFontUseG2.h    = (unsigned char)*(memVideoFonts + (ix * 2064)) + 16;
-                addrSetFontUseG2.addr = *(memVideoFonts + (ix * 2064) + 17);
+                strcpy(addrSetFontUseG2.name, listFontsUseG2[ix].name);
+                addrSetFontUseG2.fc   = listFontsUseG2[ix].fc;
+                addrSetFontUseG2.lc   = listFontsUseG2[ix].lc;
+                addrSetFontUseG2.w    = listFontsUseG2[ix].w;
+                addrSetFontUseG2.h    = listFontsUseG2[ix].h;
+                addrSetFontUseG2.addr = listFontsUseG2[ix].addr;
 
                 break;
             }
@@ -5395,7 +5446,7 @@ void fsListDir(FILES_DIR * dir, unsigned char *param)
                     strcpy(vname, ddir.Name);
                     strcat(vname, ".");
                     strcat(vname, ddir.Ext);
-                    if (vrettype != FIND_PATH_RET_FOLDER && !matches_wildcard(param, vname))
+                    if (vrettype != FIND_PATH_RET_FOLDER && !matches_wildcard(vretpath.Name, vname))
                         errorName = 1;                     
                 }
 

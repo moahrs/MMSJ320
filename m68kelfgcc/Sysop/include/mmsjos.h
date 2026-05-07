@@ -273,6 +273,8 @@ extern const unsigned char strValidChars[];
 
 extern const unsigned char vmesc[12][3];
 
+extern unsigned char vdp_mode; // Modo de video 0 = caracter (32 x 24), 1 = grafico (256 x 192)
+
 #define KEYBUF_SIZE 32
 
 //#define USE_MALLOC 0
@@ -388,7 +390,7 @@ extern unsigned int fsGetMfp(unsigned int Config);
 
 typedef struct
 {
-    unsigned char name[20]; // Font Name
+    unsigned char name[12]; // Font Name
     unsigned char fc;       // First Char
     unsigned char lc;       // Last Char
     unsigned char w;        // Width

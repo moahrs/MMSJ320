@@ -1591,6 +1591,7 @@ void startMGI(void) {
 
     vdp_init(VDP_MODE_G2, VDP_DARK_BLUE, 0, 0);
     vdp_set_bdcolor(VDP_DARK_BLUE);
+    vdp_mode = VDP_MODE_G2;
 
     fgcolorMgui = VDP_WHITE; // cores.fg;
     bgcolorMgui = VDP_DARK_BLUE; // cores.bg;
@@ -1698,14 +1699,18 @@ void startMGI(void) {
         memLoadFileFont = (unsigned char*)ADDR_LOAD_FILE_FONT;   // Endereco fixo para carregar as fontes, nao vem de malloc.
     #endif
 
-    if (memVideoFonts)
+    if (memVideoFonts && memLoadFileFont)
     {
         // Ler todas as fontes da pasta (ateh 4)
         pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
         fsListDir(pDir, "/MGUI/FONTS/*.FON");
         ixx = 0;
-        iyy = 0;
         isizelastfont = 0;
+
+        for (iyy=0; iyy < 4; iyy++)
+            listFontsUseG2[iyy].name[0] = 0x00;
+
+        iyy = 0;
 
         // Loop de carregamento das fontes, lendo o nome do arquivo para mostrar na tela e depois carregar a fonte usando o nome completo (com caminho) para carregar a fonte na memoria. O loop para quando encontra
         while (pDir[ixx].Name[0] != 0)
@@ -1713,7 +1718,7 @@ void startMGI(void) {
             strcpy(vnomefile, pDir[ixx].Name);
             strcat(vnomefile, ".");
             strcat(vnomefile, pDir[ixx].Ext);
-            writesxy(137,170,1,vnomefile,vcorwf,vcorwb);
+            writesxy(140,170,1,vnomefile,vcorwf,vcorwb);
             strcpy(vnomeall, "/MGUI/FONTS/");
             strcat(vnomeall, vnomefile);
 
@@ -1721,25 +1726,30 @@ void startMGI(void) {
             cfgSize = loadFile(vnomeall, memLoadFileFont);
 
             // Processa a fonte, pegando os principais dados (altura, largura, etc) e depois copiando os dados da fonte para o local correto na memoria de fontes de video (memVideoFonts), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
-            if (readFontStruct(memLoadFileFont, cfgSize, &fi))
+            if (!readFontStruct(memLoadFileFont, cfgSize, &fi))
             {
-                iyy++;
+                // Somente Aceita Fontes no maximo 8x8 pixels por caracter
+                if (fi.dfPixWidth > 8 || fi.dfPixHeight > 8)
+                    continue;
 
                 // Grava cabecalho
-                strcpy(memVideoFonts, vnomefile);                // Nome da fonte (12 chars)
-                *(memVideoFonts + 12) = 0x00;
-                *(memVideoFonts + 13) = fi.dfFirstChar;          // First Char
-                *(memVideoFonts + 14) = fi.dfLastChar;           // Last Char
-                *(memVideoFonts + 15) = fi.dfPixWidth & 0xFF;    // Width
-                *(memVideoFonts + 16) = fi.dfPixHeight & 0xFF;   // Height
+                strcpy((memVideoFonts + isizelastfont), vnomefile);              // Nome da fonte (12 chars)
+                *(memVideoFonts + isizelastfont + 12) = 0x00;
+                *(memVideoFonts + isizelastfont + 13) = 0;                       // First Char
+                *(memVideoFonts + isizelastfont + 14) = 255;                     // Last Char
+                *(memVideoFonts + isizelastfont + 15) = fi.dfPixWidth & 0xFF;    // Width
+                *(memVideoFonts + isizelastfont + 16) = fi.dfPixHeight & 0xFF;   // Height
                 isizelastfont += 17;
 
                 // Guarda Lista Carregada
-                strcpy(listFontsUseG2[iyy - 1].name, vnomefile);                
-                listFontsUseG2[iyy - 1].fc = fi.dfFirstChar;
-                listFontsUseG2[iyy - 1].lc = fi.dfLastChar;
-                listFontsUseG2[iyy - 1].w  = fi.dfPixWidth & 0xFF;
-                listFontsUseG2[iyy - 1].h  = fi.dfPixHeight & 0xFF;
+                strcpy(listFontsUseG2[iyy].name, vnomefile);                
+                listFontsUseG2[iyy].fc = 0;
+                listFontsUseG2[iyy].lc = 255;
+                listFontsUseG2[iyy].w  = fi.dfPixWidth & 0xFF;
+                listFontsUseG2[iyy].h  = fi.dfPixHeight & 0xFF;
+                listFontsUseG2[iyy].addr = (memVideoFonts + isizelastfont);
+
+                iyy++;
 
                 // Se nao comeca no 0, coloca zeros até o primeiro
                 if (fi.dfFirstChar > 0)
@@ -1832,10 +1842,9 @@ void startMGI(void) {
 
         vIndicaDialog = 0;
 
-        if (!setFontUseG2("Eve5x8.FON"))
+        if (!setFontUseG2("EVE5X8.FON"))
             setFontUseG2("DEFAULT");
         msprintf("OLA !!! SOU A FONTE 5x8\0");
-
 
         // Inicia Controles de Tela (Mouse e Teclado)
         while(1)
@@ -1863,6 +1872,7 @@ void startMGI(void) {
 
     vdp_init(VDP_MODE_TEXT, VDP_BLACK, 0, 0);
     vdp_textcolor(VDP_WHITE, VDP_BLACK);
+    vdp_mode = VDP_MODE_TEXT;
 
     clearScr();
 
