@@ -7,3 +7,4 @@ mmsjos_ucosii_table:
             dc.l _fsListDir
             dc.l _setFontUseG2
             dc.l 0
+            dc.l 0
