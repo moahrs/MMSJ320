@@ -4807,7 +4807,7 @@ unsigned int fsGetMfp(unsigned int Config)
 
 #ifdef USE_MSPRINTF_MMSJOS
 //-----------------------------------------------------------------------------
-void vdp_set_cursor_pos_os(unsigned char direction)
+void vdp_set_cursor_pos_G2(unsigned char direction)
 {
     unsigned char pMoveId = 1;
     unsigned short videoCursorPosColX;  // Posicao atual do cursor na coluna (0 a 255)
@@ -4971,7 +4971,7 @@ void printCharG2(unsigned char pchr, unsigned char pmove)
 
                 if (pmove)
                 {
-                    vdp_set_cursor_pos_os(VDP_CSR_RIGHT);
+                    vdp_set_cursor_pos_G2(VDP_CSR_RIGHT);
 
                     if (vdp_mode == VDP_MODE_TEXT && videoCursorPosRowY == 24)
                     {

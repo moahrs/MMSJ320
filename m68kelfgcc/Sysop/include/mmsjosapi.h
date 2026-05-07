@@ -4,7 +4,7 @@
 // Function Shared Definitions
 #define MMSJOS_FUNC_TABLE    0x00800034
 #define MGUI_FUNC_TABLE      0x00803B24
-#define MMSJOS_UCOSII_TABLE  0x0080E3E4
+#define MMSJOS_UCOSII_TABLE  0x0080E4DC
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);

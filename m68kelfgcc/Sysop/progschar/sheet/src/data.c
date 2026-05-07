@@ -2,7 +2,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdio.h>
-#include <ncurses.h>
+#include <vc_screen.h>
 
 #include "data.h"
 

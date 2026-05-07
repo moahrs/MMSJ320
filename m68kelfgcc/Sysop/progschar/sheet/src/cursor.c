@@ -1,7 +1,16 @@
-#include <ncurses.h>
+#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
-
+#include "mmsj320api.h"
+#include "mmsj320vdp.h"
+#include "mmsj320mfp.h"
+#include "monitor.h"
+#include "mmsjos.h"
+#include "mgui.h"
+#include "mguiapi.h"
+#include "monitorapi.h"
+#include "mmsjosapi.h"
+#include <vc_screen.h>
 #include "data.h"
 #include "cursor.h"
 #include "layout.h"

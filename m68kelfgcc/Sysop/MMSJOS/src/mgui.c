@@ -330,100 +330,123 @@ void vdp_set_cursor_pos_gui(unsigned char direction)
 //-----------------------------------------------------------------------------
 void vdp_write_gui(unsigned char chr)
 {
-    unsigned int name_offset; // Position in name table
-    unsigned int pattern_offset;                    // Offset of pattern in pattern table
-    unsigned short i, ix, iy, xf;
-    unsigned short vAntX, vAntY;
-    unsigned char *tempFontes = mguiVideoFontes;
-    unsigned long vEndFont, vEndPart;
-    unsigned short posX, posY, modX, modY, offset, offsetmodX, posmodX;
-    unsigned char lineChar, pixel, color;
+    unsigned short i;
+    unsigned short glyphW;
+    unsigned short glyphH;
+    unsigned short firstCount;
+    unsigned short secondCount;
+    unsigned short srcIndex;
+    unsigned short posX;
+    unsigned short posY;
+    unsigned short modX;
+    unsigned short modY;
+    unsigned short offset;
+    unsigned short offset2;
+    unsigned short charIndex;
+    unsigned short vAntY;
+    unsigned long fontBase;
+    unsigned int firstMask;
+    unsigned int secondMask;
+    unsigned int color;
+    unsigned int src16;
+    unsigned int shifted;
+    unsigned int lineChar;
+    unsigned char pixel;
+    unsigned char pixel2;
     VDP_COORD cursor;
 
     cursor = vdp_get_cursor_safe();
 
-    name_offset = cursor.y * (cursor.maxx + 1) + cursor.x; // Position in name table
-    pattern_offset = name_offset << 3;
+    /* Fonte default (MGUI original): 6x8 iniciando em 0x20 */
+    fontBase = (unsigned long)mguiVideoFontes;
+    glyphW = 6;
+    glyphH = 8;
+    charIndex = (chr >= 32) ? (unsigned short)(chr - 32) : 0;
 
-    vEndPart = chr - 32;
-    vEndPart = vEndPart << 3;
-    vAntY = cursor.y;
-    for (i = 0; i < 8; i++)
+    /* Fonte custom (setFontUseG2): mesmo formato compacto de 8 bytes por char */
+    if (addrSetFontUseG2.addr != 0)
     {
-        vEndFont = mguiVideoFontes;
-        vEndFont += vEndPart + i;
-        tempFontes = vEndFont;
-        lineChar = *tempFontes;
-        lineChar = (lineChar & 0xFC);
+        fontBase = addrSetFontUseG2.addr;
+        if (addrSetFontUseG2.w > 0 && addrSetFontUseG2.w <= 8)
+            glyphW = addrSetFontUseG2.w;
+        if (addrSetFontUseG2.h > 0 && addrSetFontUseG2.h <= 8)
+            glyphH = addrSetFontUseG2.h;
 
-        ix = cursor.x;
-        iy = cursor.y;
-        xf = ix + 6;
-        offsetmodX = 0;
+        if (chr < addrSetFontUseG2.fc)
+            charIndex = 0;
+        else
+            charIndex = (unsigned short)(chr - addrSetFontUseG2.fc);
 
-        while (ix < xf)
+        if (addrSetFontUseG2.lc >= addrSetFontUseG2.fc && chr > addrSetFontUseG2.lc)
+            charIndex = 0;
+    }
+
+    modX = (unsigned short)(cursor.x & 0x07);
+    firstCount = (unsigned short)(8 - modX);
+    if (firstCount > glyphW)
+        firstCount = glyphW;
+    secondCount = (unsigned short)(glyphW - firstCount);
+
+    if (firstCount == 8)
+        firstMask = 0xFF;
+    else
+        firstMask = (((1U << firstCount) - 1U) << (8 - modX - firstCount));
+
+    if (secondCount == 0)
+        secondMask = 0;
+    else if (secondCount == 8)
+        secondMask = 0xFF;
+    else
+        secondMask = (((1U << secondCount) - 1U) << (8 - secondCount));
+
+    color = ((unsigned int)(bgcolorMgui & 0x0F)) | (((unsigned int)fgcolorMgui & 0x0F) << 4);
+
+    vAntY = cursor.y;
+    for (i = 0; i < glyphH; i++)
+    {
+        srcIndex = (unsigned short)((charIndex << 3) + i);
+        lineChar = *((unsigned char *)(fontBase + srcIndex));
+        lineChar &= (0xFFU << (8 - glyphW));
+
+        src16 = (lineChar << 8);
+        shifted = (src16 >> modX);
+
+        posX = (unsigned short)(8 * (cursor.x / 8));
+        posY = (unsigned short)(256 * (cursor.y / 8));
+        modY = (unsigned short)(cursor.y % 8);
+
+        offset = (unsigned short)(posX + modY + posY);
+
+        setReadAddress(mgui_pattern_table + offset);
+        setReadAddress(mgui_pattern_table + offset);
+        pixel = *vvdgd;
+
+        pixel = (unsigned char)((pixel & (unsigned char)(~firstMask)) |
+                               (((shifted >> 8) & 0xFFU) & firstMask));
+
+        setWriteAddress(mgui_pattern_table + offset);
+        *vvdgd = pixel;
+        setWriteAddress(mgui_color_table + offset);
+        *vvdgd = (unsigned char)color;
+
+        if (secondMask)
         {
-            posX = (int)(8 * (ix / 8));
-            posY = (int)(256 * (iy / 8));
-            modX = (int)(ix % 8);
-            modY = (int)(iy % 8);
+            offset2 = (unsigned short)(offset + 8);
 
-            offset = posX + modY + posY;
+            setReadAddress(mgui_pattern_table + offset2);
+            setReadAddress(mgui_pattern_table + offset2);
+            pixel2 = *vvdgd;
 
-            setReadAddress(mgui_pattern_table + offset);
-            setReadAddress(mgui_pattern_table + offset);
-            pixel = *vvdgd;
-            setReadAddress(mgui_color_table + offset);
-            setReadAddress(mgui_color_table + offset);
-            color = *vvdgd;
+            pixel2 = (unsigned char)((pixel2 & (unsigned char)(~secondMask)) |
+                                    ((shifted & 0xFFU) & secondMask));
 
-            if (modX > 2 || (modX == 0 && ix > cursor.x))   // Parcial com bits dos 6 bits no proximo Byte
-            {
-                if (ix == cursor.x)  // Posicao inicial
-                {
-                    posmodX = (8 - modX);
-                    pixel = ((pixel & (0xFF << posmodX)) | (lineChar >> modX));
-                    offsetmodX = posmodX;
-                }
-                else
-                {
-                    posmodX = (6 - offsetmodX);
-                    pixel = ((pixel & (0xFF >> posmodX)) | (lineChar << offsetmodX));
-                }
-
-                ix += posmodX;
-            }
-            else    // Total, com 6 bits no mesmo Byte
-            {
-                lineChar = lineChar >> modX;
-
-                switch (modX)
-                {
-                    case 0:
-                        pixel = pixel & 0x03;
-                        break;
-                    case 1:
-                        pixel = pixel & 0x81;
-                        break;
-                    case 2:
-                        pixel = pixel & 0xC0;
-                        break;
-                }
-
-                pixel = pixel | lineChar;
-
-                ix += 6;
-            }
-
-            color = (bgcolorMgui & 0x0F) | (fgcolorMgui << 4);
-
-            setWriteAddress(mgui_pattern_table + offset);
-            *vvdgd = (pixel);
-            setWriteAddress(mgui_color_table + offset);
-            *vvdgd = (color);
+            setWriteAddress(mgui_pattern_table + offset2);
+            *vvdgd = pixel2;
+            setWriteAddress(mgui_color_table + offset2);
+            *vvdgd = (unsigned char)color;
         }
 
-        cursor.y = cursor.y + 1;
+        cursor.y = (unsigned short)(cursor.y + 1);
     }
 
     cursor.y = vAntY;
@@ -1597,6 +1620,8 @@ void startMGI(void) {
     
     errorMalloc = 0;
 
+    setFontUseG2(99);    // Fonte default 6x8
+
     vdp_get_cfg(&mgui_pattern_table, &mgui_color_table);
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         #ifdef USE_MALLOC
@@ -1783,9 +1808,8 @@ void startMGI(void) {
 
         vIndicaDialog = 0;
 
-/*        if (!setFontUseG2(0))
+        if (!setFontUseG2(0) )   // Seta fonte 0 = 5x8 
             setFontUseG2(99);    // Fonte default 6x8, caso nao tenha conseguido carregar a fonte 0
-        mprintf("OLA !!! SOU A FONTE 5x8\0");*/
 
         // Inicia Controles de Tela (Mouse e Teclado)
         while(1)

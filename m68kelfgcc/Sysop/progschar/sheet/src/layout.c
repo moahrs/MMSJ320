@@ -1,4 +1,4 @@
-#include <ncurses.h>
+#include <vc_screen.h>
 #include <string.h>
 #include <stdlib.h>
 

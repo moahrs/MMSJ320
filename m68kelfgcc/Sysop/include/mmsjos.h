@@ -363,6 +363,9 @@ extern int isValidFilename(char *filename) ;
 extern unsigned char matches_wildcard(const char *pattern, const char *filename);
 extern unsigned char contains_wildcards(const char *pattern);
 extern void fsListDir(FILES_DIR * dir, unsigned char *param);
+
+extern void vdp_set_cursor_pos_G2(unsigned char direction);
+extern void vdp_writeG2(unsigned char chr);
 extern int setFontUseG2(unsigned char vpos);
 extern int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bufLoad, unsigned char *bufSave);
 
