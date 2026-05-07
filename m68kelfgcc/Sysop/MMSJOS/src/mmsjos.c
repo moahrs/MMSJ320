@@ -4800,6 +4800,134 @@ unsigned int fsGetMfp(unsigned int Config)
 
 #ifdef USE_MSPRINTF_MMSJOS
 //-----------------------------------------------------------------------------
+void vdp_writeOs(unsigned char chr)
+{
+    unsigned int name_offset;       // Position in name table
+    unsigned int pattern_offset;    // Offset of pattern in pattern table
+    char i, ix;
+    unsigned short vAntX, vAntY;
+    unsigned char *tempFontes = addrSetFontUseG2.addr;
+    unsigned long vEndFont, vEndPart;
+    unsigned short videoCursorPosColX;  // Posicao atual do cursor na coluna (0 a 255)
+    unsigned short videoCursorPosRowY;  // Posical atual do cursor na linha (0 a 191)
+    VDP_COORD vcursor;
+
+    vcursor = vdp_get_cursor_safe()
+    videoCursorPosColX = vcursor.x;
+    videoCursorPosRowY = vcursor.y; 
+
+    name_offset = videoCursorPosRowY * (vdpMaxCols + 1) + videoCursorPosColX; // Position in name table
+    pattern_offset = name_offset << 3;                    // Offset of pattern in pattern table
+
+    if (vdp_mode == VDP_MODE_G2)
+    {
+        vEndPart = chr - 32;
+        vEndPart = vEndPart << 3;
+        vAntY = videoCursorPosRowY;
+        for (i = 0; i < addrSetFontUseG2.h; i++)
+        {
+            vEndFont = addrSetFontUseG2.addr;
+            vEndFont += vEndPart + i;
+            tempFontes = vEndFont;
+            vAntX = videoCursorPosColX;
+            for (ix = addrSetFontUseG2.w; ix >=0; ix--)
+            {
+                vdp_plot_hires(videoCursorPosColX, videoCursorPosRowY, ((*tempFontes >> ix) & 0x01) ? fgcolor : 0, bgcolor);
+                videoCursorPosColX = videoCursorPosColX + 1;
+            }
+            videoCursorPosColX = vAntX;
+            videoCursorPosRowY = videoCursorPosRowY + 1;
+        }
+        videoCursorPosRowY = vAntY;
+    }
+    else if (vdp_mode == VDP_MODE_MULTICOLOR)
+    {
+        vEndPart = chr - 32;
+        vEndPart = vEndPart << 3;
+        vAntY = videoCursorPosRowY;
+        for (i = 0; i < addrSetFontUseG2.h; i++)
+        {
+            vEndFont = addrSetFontUseG2.addr;
+            vEndFont += vEndPart + i;
+            tempFontes = vEndFont;
+            vAntX = videoCursorPosColX;
+            for (ix = addrSetFontUseG2.w; ix >=0; ix--)
+            {
+                vdp_plot_color(videoCursorPosColX, videoCursorPosRowY, ((*tempFontes >> ix) & 0x01) ? fgcolor : bgcolor);
+                videoCursorPosColX = videoCursorPosColX + 1;
+            }
+            videoCursorPosColX = vAntX;
+            videoCursorPosRowY = videoCursorPosRowY + 1;
+        }
+        videoCursorPosRowY = vAntY;
+    }
+}
+
+//-----------------------------------------------------------------------------
+void printCharOs(unsigned char pchr, unsigned char pmove)
+{
+    unsigned short videoCursorPosColX;  // Posicao atual do cursor na coluna (0 a 255)
+    unsigned short videoCursorPosRowY;  // Posical atual do cursor na linha (0 a 191)
+    VDP_COORD vcursor;
+
+    vcursor = vdp_get_cursor_safe()
+    videoCursorPosColX = vcursor.x;
+    videoCursorPosRowY = vcursor.y; 
+
+    if (vdp_mode == VDP_MODE_TEXT || vdp_mode == VDP_MODE_G1)
+    {
+        // Usa processo normal com a fonte Default do monitor
+        printChar(pchr, pmove);
+    }
+    else 
+    {
+        // Usa fonte selecionada
+        switch (pchr)
+        {
+            case 0x0A:  // LF
+                if (videoCursorPosRowY + 1 == 24)
+                    printChar(pchr);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
+                else 
+                {
+                    videoCursorPosRowY = videoCursorPosRowY + 1;
+                    vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY);
+                }
+                break;
+            case 0x0D:  // CR
+                videoCursorPosColX = 0;
+                vdp_set_cursor(0, videoCursorPosRowY);
+                break;
+            case 0x08:  // BackSpace
+                if (videoCursorPosColX > 0)
+                {
+                    videoCursorPosColX = videoCursorPosColX - 1;
+                    vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY);
+                }
+                break;
+            case 0xFF:  // Cursor
+                vdp_writeOs(0xFE);
+                break;
+            default:
+                vdp_writeOs(pchr);
+
+                if (vdp_mode == VDP_MODE_TEXT)
+                    vdp_colorize(fgcolor, bgcolor);
+
+                if (pmove)
+                {
+                    vdp_set_cursor_pos(VDP_CSR_RIGHT);
+
+                    if (vdp_mode == VDP_MODE_TEXT && videoCursorPosRowY == 24)
+                    {
+                        videoCursorPosRowY = 23;
+                        printChar(0x0A);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
+                    }
+                }
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
 void msprintf_ulong_dec(unsigned long v)
 {
     unsigned long divs[10];
@@ -4832,7 +4960,7 @@ void msprintf_ulong_dec(unsigned long v)
 
         if (digit || started || i == 9)
         {
-            printChar('0' + digit, 1);
+            printCharOs('0' + digit, 1);
             started = 1;
         }
     }
@@ -4845,7 +4973,7 @@ void msprintf_long_dec(long v)
 
     if (v < 0)
     {
-        printChar('-', 1);
+        printCharOs('-', 1);
 
         u = (unsigned long)(-(v + 1));
         u++;
@@ -4869,7 +4997,7 @@ void msprintf_ulong_hex(unsigned long v)
 
     if (v == 0)
     {
-        printChar('0', 1);
+        printCharOs('0', 1);
         return;
     }
 
@@ -4889,7 +5017,7 @@ void msprintf_ulong_hex(unsigned long v)
     while (n > 0)
     {
         n--;
-        printChar(tmp[n], 1);
+        printCharOs(tmp[n], 1);
     }
 }
 
@@ -4909,7 +5037,7 @@ void msprintf(const char *fmt, ...)
     {
         if (*fmt != '%')
         {
-            printChar(*fmt, 1);
+            printCharOs(*fmt, 1);
             fmt++;
             continue;
         }
@@ -4929,14 +5057,14 @@ void msprintf(const char *fmt, ...)
 
                 while (*s)
                 {
-                    printChar(*s, 1);
+                    printCharOs(*s, 1);
                     s++;
                 }
                 break;
 
             case 'c':
                 v = va_arg(ap, int);
-                printChar((char)v, 1);
+                printCharOs((char)v, 1);
                 break;
 
             case 'd':
@@ -4962,7 +5090,7 @@ void msprintf(const char *fmt, ...)
 
                 if (u == 0)
                 {
-                    printChar('0', 1);
+                    printCharOs('0', 1);
                     break;
                 }
 
@@ -4979,7 +5107,7 @@ void msprintf(const char *fmt, ...)
                 }
 
                 while (n > 0)
-                    printChar(tmp[--n], 1);
+                    printCharOs(tmp[--n], 1);
                 break;
             }
             case 'l':
@@ -5002,20 +5130,20 @@ void msprintf(const char *fmt, ...)
                 }
                 else
                 {
-                    printChar('%', 1);
-                    printChar('l', 1);
+                    printCharOs('%', 1);
+                    printCharOs('l', 1);
 
                     if (*fmt)
-                        printChar(*fmt, 1);
+                        printCharOs(*fmt, 1);
                 }
                 break;
             case '%':
-                printChar('%', 1);
+                printCharOs('%', 1);
                 break;
 
             default:
-                printChar('%', 1);
-                printChar(*fmt, 1);
+                printCharOs('%', 1);
+                printCharOs(*fmt, 1);
                 break;
         }
 
@@ -5046,8 +5174,10 @@ int setFontUseG2(unsigned char *nameFile)
             if (strcmp(nameFile, *(memVideoFonts + (ix * 2064))) == 0)
             {
                 strcpy(addrSetFontUseG2.name,*(memVideoFonts + (ix * 2064)));
-                addrSetFontUseG2.w = (unsigned char)*(memVideoFonts + (ix * 2064)) + 15;
-                addrSetFontUseG2.h = (unsigned char)*(memVideoFonts + (ix * 2064)) + 16;
+                addrSetFontUseG2.fc   = (unsigned char)*(memVideoFonts + (ix * 2064)) + 13;
+                addrSetFontUseG2.lc   = (unsigned char)*(memVideoFonts + (ix * 2064)) + 14;
+                addrSetFontUseG2.w    = (unsigned char)*(memVideoFonts + (ix * 2064)) + 15;
+                addrSetFontUseG2.h    = (unsigned char)*(memVideoFonts + (ix * 2064)) + 16;
                 addrSetFontUseG2.addr = *(memVideoFonts + (ix * 2064) + 17);
 
                 break;

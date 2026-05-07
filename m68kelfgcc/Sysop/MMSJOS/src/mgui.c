@@ -1733,6 +1733,14 @@ void startMGI(void) {
                 *(memVideoFonts + 15) = fi.dfPixWidth & 0xFF;    // Width
                 *(memVideoFonts + 16) = fi.dfPixHeight & 0xFF;   // Height
                 isizelastfont += 17;
+
+                // Guarda Lista Carregada
+                strcpy(listFontsUseG2[iyy - 1].name, vnomefile);                
+                listFontsUseG2[iyy - 1].fc = fi.dfFirstChar;
+                listFontsUseG2[iyy - 1].lc = fi.dfLastChar;
+                listFontsUseG2[iyy - 1].w  = fi.dfPixWidth & 0xFF;
+                listFontsUseG2[iyy - 1].h  = fi.dfPixHeight & 0xFF;
+
                 // Se nao comeca no 0, coloca zeros até o primeiro
                 if (fi.dfFirstChar > 0)
                 {
@@ -1783,9 +1791,6 @@ void startMGI(void) {
         memLoadFileFont = 0;
     }
 
-    if (!setFontUseG2("Eve5x8.FON"))
-        setFontUseG2("DEFAULT");
-
     writesxy(53,170,1,"      Please Wait...       ",vcorwf,vcorwb);
 
     if (!errorMalloc)
@@ -1827,8 +1832,12 @@ void startMGI(void) {
 
         vIndicaDialog = 0;
 
-        // Inicia Controles de Tela (Mouse e Teclado)
+        if (!setFontUseG2("Eve5x8.FON"))
+            setFontUseG2("DEFAULT");
         msprintf("OLA !!! SOU A FONTE 5x8\0");
+
+
+        // Inicia Controles de Tela (Mouse e Teclado)
         while(1)
         {
             if (vIndicaDialog)
