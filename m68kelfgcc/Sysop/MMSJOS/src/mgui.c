@@ -1569,7 +1569,6 @@ void startMGI(void) {
     int iy;
     char tmp[32];
     FILES_DIR *pDir;
-    FON_INFO fi;
 
     OSTaskSuspend(TASK_MMSJOS_MAIN);
 
@@ -1722,70 +1721,12 @@ void startMGI(void) {
             strcpy(vnomeall, "/MGUI/FONTS/");
             strcat(vnomeall, vnomefile);
 
-            // Carrega a fonte usando o nome completo (com caminho) para carregar a fonte na memoria. O loop para quando encontra
-            cfgSize = loadFile(vnomeall, memLoadFileFont);
-
-            // Processa a fonte, pegando os principais dados (altura, largura, etc) e depois copiando os dados da fonte para o local correto na memoria de fontes de video (memVideoFonts), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
-            if (!readFontStruct(memLoadFileFont, cfgSize, &fi))
-            {
-                // Somente Aceita Fontes no maximo 8x8 pixels por caracter
-                if (fi.dfPixWidth > 8 || fi.dfPixHeight > 8)
-                    continue;
-
-                // Grava cabecalho
-                strcpy((memVideoFonts + isizelastfont), vnomefile);              // Nome da fonte (12 chars)
-                *(memVideoFonts + isizelastfont + 12) = 0x00;
-                *(memVideoFonts + isizelastfont + 13) = 0;                       // First Char
-                *(memVideoFonts + isizelastfont + 14) = 255;                     // Last Char
-                *(memVideoFonts + isizelastfont + 15) = fi.dfPixWidth & 0xFF;    // Width
-                *(memVideoFonts + isizelastfont + 16) = fi.dfPixHeight & 0xFF;   // Height
-                isizelastfont += 17;
-
-                // Guarda Lista Carregada
-                strcpy(listFontsUseG2[iyy].name, vnomefile);                
-                listFontsUseG2[iyy].fc = 0;
-                listFontsUseG2[iyy].lc = 255;
-                listFontsUseG2[iyy].w  = fi.dfPixWidth & 0xFF;
-                listFontsUseG2[iyy].h  = fi.dfPixHeight & 0xFF;
-                listFontsUseG2[iyy].addr = (memVideoFonts + isizelastfont);
-
-                iyy++;
-
-                // Se nao comeca no 0, coloca zeros até o primeiro
-                if (fi.dfFirstChar > 0)
-                {
-                    for (ix = 0; ix < fi.dfFirstChar; ix++)
-                    {
-                        // Copia os dados de cada char da fonte para o local correto na memoria de fontes de video (memVideoFonts), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
-                        for (iz = 0; iz < 8; iz++)
-                            *(memVideoFonts + ((ix * 8) + iz + isizelastfont)) = 0x00;
-                    }
-                }
-
-                // Copia caracteres
-                for (ix = fi.dfFirstChar; ix <= fi.dfLastChar; ix++)
-                {
-                    for (iz = 0; iz < 8; iz++)
-                    {
-                        *(memVideoFonts + ((ix * 8) + iz + isizelastfont)) = *(memLoadFileFont + (fi.bitsFileOffset + (ix * 8) + iz));
-                    }
-                }
-
-                // Se nao termina no 255, coloca zeros até o 255
-                if (fi.dfLastChar < 255)
-                {
-                    for (ix = fi.dfLastChar + 1; ix <= 255; ix++)
-                    {
-                        // Copia os dados de cada char da fonte para o local correto na memoria de fontes de video (memVideoFonts), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
-                        for (iz = 0; iz < 8; iz++)
-                            *(memVideoFonts + ((ix * 8) + iz + isizelastfont)) = 0x00;
-                    }
-                }
-
-                isizelastfont += 2048; // 256 chars * 8 bytes por char
-            }
-
             ixx++;
+
+            if (loadFontUseG2(iyy, vnomeall, memLoadFileFont, memVideoFonts))
+                continue;
+
+            iyy++;
 
             if (iyy >= 4) // Limite de 4 fontes
                 break;
@@ -1842,9 +1783,9 @@ void startMGI(void) {
 
         vIndicaDialog = 0;
 
-        if (!setFontUseG2("EVE5X8.FON"))
-            setFontUseG2("DEFAULT");
-        msprintf("OLA !!! SOU A FONTE 5x8\0");
+/*        if (!setFontUseG2(0))
+            setFontUseG2(99);    // Fonte default 6x8, caso nao tenha conseguido carregar a fonte 0
+        mprintf("OLA !!! SOU A FONTE 5x8\0");*/
 
         // Inicia Controles de Tela (Mouse e Teclado)
         while(1)

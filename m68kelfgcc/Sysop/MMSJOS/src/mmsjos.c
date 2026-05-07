@@ -268,12 +268,14 @@ void strncpy2( char* _dst, const char* _src, int _n );
 int isValidFilename(char *filename) ;
 unsigned char matches_wildcard(const char *pattern, const char *filename);
 unsigned char contains_wildcards(const char *pattern);
+int setFontUseG2(unsigned char vpos);
+int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bufLoad, unsigned char *bufSave);
 
 #ifdef USE_MSPRINTF_MMSJOS
-void msprintf_ulong_hex(unsigned long v);
-void msprintf_long_dec(long v);
-void msprintf_ulong_dec(unsigned long v);
-void msprintf(const char *fmt, ...);
+void mprintf_ulong_hex(unsigned long v);
+void mprintf_long_dec(long v);
+void mprintf_ulong_dec(unsigned long v);
+void mprintf(const char *fmt, ...);
 #endif
 
 #ifdef __SO_ST_MFP__
@@ -1122,7 +1124,7 @@ writeLongSerial("\r\n\0");*/
 
             while (pDir[ix].Name[0] != 0)
             {
-                msprintf("%s.%s %s %ld %s\r\n\0", pDir[ix].Name, pDir[ix].Ext, pDir[ix].Attr, pDir[ix].Size, pDir[ix].Modify);
+                mprintf("%s.%s %s %ld %s\r\n\0", pDir[ix].Name, pDir[ix].Ext, pDir[ix].Attr, pDir[ix].Size, pDir[ix].Modify);
                 ix++;
             }
 
@@ -4448,7 +4450,7 @@ void catFile(unsigned char *parquivo) {
 //-----------------------------------------------------------------------------
 unsigned long loadFile(unsigned char *parquivo, void* xaddress)
 {
-    loadFileSize(parquivo, xaddress, 0);
+    return (loadFileSize(parquivo, xaddress, 0));
 }
 
 unsigned long loadFileSize(unsigned char *parquivo, void* xaddress, unsigned long xsize)
@@ -4816,28 +4818,33 @@ void vdp_set_cursor_pos_os(unsigned char direction)
     videoCursorPosColX = vcursor.x;
     videoCursorPosRowY = vcursor.y; 
 
-    if (vdp_mode != VDP_MODE_TEXT)
-        pMoveId = addrSetFontUseG2.w;
-
     switch (direction)
     {
         case VDP_CSR_UP:
+            if (vdp_mode != VDP_MODE_TEXT)
+                pMoveId = addrSetFontUseG2.h;
             vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY - pMoveId);
             break;
         case VDP_CSR_DOWN:
+            if (vdp_mode != VDP_MODE_TEXT)
+                pMoveId = addrSetFontUseG2.h;
             vdp_set_cursor(videoCursorPosColX, videoCursorPosRowY + pMoveId);
             break;
         case VDP_CSR_LEFT:
+            if (vdp_mode != VDP_MODE_TEXT)
+                pMoveId = addrSetFontUseG2.w;
             vdp_set_cursor(videoCursorPosColX - pMoveId, videoCursorPosRowY);
             break;
         case VDP_CSR_RIGHT:
+            if (vdp_mode != VDP_MODE_TEXT)
+                pMoveId = addrSetFontUseG2.w;
             vdp_set_cursor(videoCursorPosColX + pMoveId, videoCursorPosRowY);
             break;
     }
 }
 
 //-----------------------------------------------------------------------------
-void vdp_writeOs(unsigned char chr)
+void vdp_writeG2(unsigned char chr)
 {
     unsigned int name_offset;       // Position in name table
     unsigned int pattern_offset;    // Offset of pattern in pattern table
@@ -4908,7 +4915,7 @@ void vdp_writeOs(unsigned char chr)
 }
 
 //-----------------------------------------------------------------------------
-void printCharOs(unsigned char pchr, unsigned char pmove)
+void printCharG2(unsigned char pchr, unsigned char pmove)
 {
     unsigned short videoCursorPosColX;  // Posicao atual do cursor na coluna (0 a 255)
     unsigned short videoCursorPosRowY;  // Posical atual do cursor na linha (0 a 191)
@@ -4954,10 +4961,10 @@ void printCharOs(unsigned char pchr, unsigned char pmove)
                 }
                 break;
             case 0xFF:  // Cursor
-                vdp_writeOs(0xFE);
+                vdp_writeG2(0xFE);
                 break;
             default:
-                vdp_writeOs(pchr);
+                vdp_writeG2(pchr);
 
                 if (vdp_mode == VDP_MODE_TEXT)
                     vdp_colorize(fgcolor, bgcolor);
@@ -4977,7 +4984,51 @@ void printCharOs(unsigned char pchr, unsigned char pmove)
 }
 
 //-----------------------------------------------------------------------------
-void msprintf_ulong_dec(unsigned long v)
+void msprintf_puts(char **dst, char *s)
+{
+    if (!s)
+        s = "(null)";
+
+    while (*s)
+    {
+        **dst = *s;
+        (*dst)++;
+        s++;
+    }
+}
+
+//-----------------------------------------------------------------------------
+void msprintf_ulong_hex(char **dst, unsigned long v)
+{
+    char tmp[8];
+    int n;
+    int d;
+
+    n = 0;
+
+    if (v == 0)
+    {
+        **dst = '0';
+        (*dst)++;
+        return;
+    }
+
+    while (v && n < 8)
+    {
+        d = (int)(v & 0x0F);
+        tmp[n++] = d < 10 ? '0' + d : 'A' + d - 10;
+        v >>= 4;
+    }
+
+    while (n > 0)
+    {
+        **dst = tmp[--n];
+        (*dst)++;
+    }
+}
+
+//-----------------------------------------------------------------------------
+void msprintf_ulong_dec(char **dst, unsigned long v)
 {
     unsigned long divs[10];
     int i;
@@ -5009,20 +5060,22 @@ void msprintf_ulong_dec(unsigned long v)
 
         if (digit || started || i == 9)
         {
-            printCharOs('0' + digit, 1);
+            **dst = (char)('0' + digit);
+            (*dst)++;
             started = 1;
         }
     }
 }
 
 //-----------------------------------------------------------------------------
-void msprintf_long_dec(long v)
+void msprintf_long_dec(char **dst, long v)
 {
     unsigned long u;
 
     if (v < 0)
     {
-        printCharOs('-', 1);
+        **dst = '-';
+        (*dst)++;
 
         u = (unsigned long)(-(v + 1));
         u++;
@@ -5032,11 +5085,172 @@ void msprintf_long_dec(long v)
         u = (unsigned long)v;
     }
 
-    msprintf_ulong_dec(u);
+    msprintf_ulong_dec(dst, u);
 }
 
 //-----------------------------------------------------------------------------
-void msprintf_ulong_hex(unsigned long v)
+void msprintf(char *buffer, const char *fmt, ...)
+{
+    va_list ap;
+    char *dst;
+    char *s;
+    int ival;
+    long lval;
+    unsigned long ulval;
+
+    dst = buffer;
+
+    va_start(ap, fmt);
+
+    while (*fmt)
+    {
+        if (*fmt != '%')
+        {
+            *dst++ = *fmt++;
+            continue;
+        }
+
+        fmt++;
+
+        if (*fmt == 0)
+            break;
+
+        switch (*fmt)
+        {
+            case 's':
+                s = va_arg(ap, char *);
+                msprintf_puts(&dst, s);
+                break;
+
+            case 'c':
+                ival = va_arg(ap, int);
+                *dst++ = (char)ival;
+                break;
+
+            case 'd':
+            case 'i':
+                ival = va_arg(ap, int);
+                msprintf_long_dec(&dst, (long)ival);
+                break;
+
+            case 'u':
+                ulval = (unsigned long)va_arg(ap, unsigned int);
+                msprintf_ulong_dec(&dst, ulval);
+                break;
+
+            case 'x':
+            case 'X':
+                ulval = (unsigned long)va_arg(ap, unsigned int);
+                msprintf_ulong_hex(&dst, ulval);
+                break;
+
+            case 'l':
+                fmt++;
+
+                if (*fmt == 'd' || *fmt == 'i')
+                {
+                    lval = va_arg(ap, long);
+                    msprintf_long_dec(&dst, lval);
+                }
+                else if (*fmt == 'u')
+                {
+                    ulval = va_arg(ap, unsigned long);
+                    msprintf_ulong_dec(&dst, ulval);
+                }
+                else if (*fmt == 'x' || *fmt == 'X')
+                {
+                    ulval = va_arg(ap, unsigned long);
+                    msprintf_ulong_hex(&dst, ulval);
+                }
+                else
+                {
+                    *dst++ = '%';
+                    *dst++ = 'l';
+
+                    if (*fmt)
+                        *dst++ = *fmt;
+                }
+                break;
+
+            case '%':
+                *dst++ = '%';
+                break;
+
+            default:
+                *dst++ = '%';
+                *dst++ = *fmt;
+                break;
+        }
+
+        fmt++;
+    }
+
+    *dst = 0;
+
+    va_end(ap);
+}
+
+//-----------------------------------------------------------------------------
+void mprintf_ulong_dec(unsigned long v)
+{
+    unsigned long divs[10];
+    int i;
+    int started;
+    unsigned char digit;
+
+    divs[0] = 1000000000UL;
+    divs[1] = 100000000UL;
+    divs[2] = 10000000UL;
+    divs[3] = 1000000UL;
+    divs[4] = 100000UL;
+    divs[5] = 10000UL;
+    divs[6] = 1000UL;
+    divs[7] = 100UL;
+    divs[8] = 10UL;
+    divs[9] = 1UL;
+
+    started = 0;
+
+    for (i = 0; i < 10; i++)
+    {
+        digit = 0;
+
+        while (v >= divs[i])
+        {
+            v -= divs[i];
+            digit++;
+        }
+
+        if (digit || started || i == 9)
+        {
+            printCharG2('0' + digit, 1);
+            started = 1;
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
+void mprintf_long_dec(long v)
+{
+    unsigned long u;
+
+    if (v < 0)
+    {
+        printCharG2('-', 1);
+
+        u = (unsigned long)(-(v + 1));
+        u++;
+    }
+    else
+    {
+        u = (unsigned long)v;
+    }
+
+    mprintf_ulong_dec(u);
+}
+
+//-----------------------------------------------------------------------------
+void mprintf_ulong_hex(unsigned long v)
 {
     char tmp[8];
     int n;
@@ -5046,7 +5260,7 @@ void msprintf_ulong_hex(unsigned long v)
 
     if (v == 0)
     {
-        printCharOs('0', 1);
+        printCharG2('0', 1);
         return;
     }
 
@@ -5066,12 +5280,12 @@ void msprintf_ulong_hex(unsigned long v)
     while (n > 0)
     {
         n--;
-        printCharOs(tmp[n], 1);
+        printCharG2(tmp[n], 1);
     }
 }
 
 //-----------------------------------------------------------------------------
-void msprintf(const char *fmt, ...)
+void mprintf(const char *fmt, ...)
 {
     va_list ap;
     int v, ival;
@@ -5086,7 +5300,7 @@ void msprintf(const char *fmt, ...)
     {
         if (*fmt != '%')
         {
-            printCharOs(*fmt, 1);
+            printCharG2(*fmt, 1);
             fmt++;
             continue;
         }
@@ -5106,25 +5320,25 @@ void msprintf(const char *fmt, ...)
 
                 while (*s)
                 {
-                    printCharOs(*s, 1);
+                    printCharG2(*s, 1);
                     s++;
                 }
                 break;
 
             case 'c':
                 v = va_arg(ap, int);
-                printCharOs((char)v, 1);
+                printCharG2((char)v, 1);
                 break;
 
             case 'd':
             case 'i':
                 ival = va_arg(ap, int);
-                msprintf_long_dec((long)ival);
+                mprintf_long_dec((long)ival);
                 break;
 
             case 'u':
                 ulval = (unsigned long)va_arg(ap, unsigned int);
-                msprintf_ulong_dec(ulval);
+                mprintf_ulong_dec(ulval);
                 break;
 
             case 'x':
@@ -5139,7 +5353,7 @@ void msprintf(const char *fmt, ...)
 
                 if (u == 0)
                 {
-                    printCharOs('0', 1);
+                    printCharG2('0', 1);
                     break;
                 }
 
@@ -5156,7 +5370,7 @@ void msprintf(const char *fmt, ...)
                 }
 
                 while (n > 0)
-                    printCharOs(tmp[--n], 1);
+                    printCharG2(tmp[--n], 1);
                 break;
             }
             case 'l':
@@ -5165,34 +5379,34 @@ void msprintf(const char *fmt, ...)
                 if (*fmt == 'd' || *fmt == 'i')
                 {
                     lval = va_arg(ap, long);
-                    msprintf_long_dec(lval);
+                    mprintf_long_dec(lval);
                 }
                 else if (*fmt == 'u')
                 {
                     ulval = va_arg(ap, unsigned long);
-                    msprintf_ulong_dec(ulval);
+                    mprintf_ulong_dec(ulval);
                 }
                 else if (*fmt == 'x' || *fmt == 'X')
                 {
                     ulval = va_arg(ap, unsigned long);
-                    msprintf_ulong_hex(ulval);
+                    mprintf_ulong_hex(ulval);
                 }
                 else
                 {
-                    printCharOs('%', 1);
-                    printCharOs('l', 1);
+                    printCharG2('%', 1);
+                    printCharG2('l', 1);
 
                     if (*fmt)
-                        printCharOs(*fmt, 1);
+                        printCharG2(*fmt, 1);
                 }
                 break;
             case '%':
-                printCharOs('%', 1);
+                printCharG2('%', 1);
                 break;
 
             default:
-                printCharOs('%', 1);
-                printCharOs(*fmt, 1);
+                printCharG2('%', 1);
+                printCharG2(*fmt, 1);
                 break;
         }
 
@@ -5204,11 +5418,9 @@ void msprintf(const char *fmt, ...)
 #endif
 
 //-----------------------------------------------------------------------------
-int setFontUseG2(unsigned char *nameFile)
+int setFontUseG2(unsigned char vpos)
 {
-    int ix;
-
-    if (strcmp(nameFile, "DEFAULT") == 0)
+    if (vpos == 99)
     {
         strcpy(addrSetFontUseG2.name, "DEFAULT");
         addrSetFontUseG2.fc = 32;
@@ -5219,27 +5431,92 @@ int setFontUseG2(unsigned char *nameFile)
     }
     else
     {
-        // Procura a fonte na memoria de fontes
-        for (ix = 0; ix < 4; ix++)
-        {
-            if (strncmp(nameFile, listFontsUseG2[ix].name, strlen(nameFile)) == 0)
-            {
-                strcpy(addrSetFontUseG2.name, listFontsUseG2[ix].name);
-                addrSetFontUseG2.fc   = listFontsUseG2[ix].fc;
-                addrSetFontUseG2.lc   = listFontsUseG2[ix].lc;
-                addrSetFontUseG2.w    = listFontsUseG2[ix].w;
-                addrSetFontUseG2.h    = listFontsUseG2[ix].h;
-                addrSetFontUseG2.addr = listFontsUseG2[ix].addr;
-
-                break;
-            }
-        }
-
-        if (ix > 3)
+        if (listFontsUseG2[vpos].name[0] == 0x00)
             return 0;   // Fonte nao encontrada
+
+        strcpy(addrSetFontUseG2.name, listFontsUseG2[vpos].name);
+        addrSetFontUseG2.fc   = listFontsUseG2[vpos].fc;
+        addrSetFontUseG2.lc   = listFontsUseG2[vpos].lc;
+        addrSetFontUseG2.w    = listFontsUseG2[vpos].w;
+        addrSetFontUseG2.h    = listFontsUseG2[vpos].h;
+        addrSetFontUseG2.addr = listFontsUseG2[vpos].addr;
     }
 
     return 1;
+}
+
+//-----------------------------------------------------------------------------
+int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bufLoad, unsigned char *bufSave)
+{
+    unsigned long cfgSize;
+    long isizelastfont;
+    int ix, iz;
+    FON_INFO fi;
+    unsigned char sqtdtam[20];
+
+    // Carrega a fonte usando o nome completo (com caminho) para carregar a fonte na memoria. O loop para quando encontra
+    cfgSize = loadFile(fileName, bufLoad);
+
+    isizelastfont = vpos * 2053; // Cada fonte ocupa 2053 bytes (5 bytes de header + 256 chars * 8 bytes por char)
+
+    // Processa a fonte, pegando os principais dados (altura, largura, etc) e depois copiando os dados da fonte para o local correto na memoria de fontes de video (bufSave), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
+    if (cfgSize && !readFontStruct(bufLoad, cfgSize, &fi))
+    {
+        // Somente Aceita Fontes no maximo 8x8 pixels por caracter
+        if (fi.dfPixWidth > 8 || fi.dfPixHeight > 8)
+            return 1;
+
+        // Grava cabecalho
+        *(bufSave + isizelastfont) = 0x00;
+        *(bufSave + isizelastfont + 1) = 0;                       // First Char
+        *(bufSave + isizelastfont + 2) = 255;                     // Last Char
+        *(bufSave + isizelastfont + 3) = fi.dfPixWidth & 0xFF;    // Width
+        *(bufSave + isizelastfont + 4) = fi.dfPixHeight & 0xFF;   // Height
+        isizelastfont += 5;
+
+        // Guarda Lista Carregada
+        strcpy(listFontsUseG2[vpos].name, fi.fontName);                
+        listFontsUseG2[vpos].fc = 0;
+        listFontsUseG2[vpos].lc = 255;
+        listFontsUseG2[vpos].w  = fi.dfPixWidth & 0xFF;
+        listFontsUseG2[vpos].h  = fi.dfPixHeight & 0xFF;
+        listFontsUseG2[vpos].addr = (bufSave + isizelastfont);
+
+        // Se nao comeca no 0, coloca zeros até o primeiro
+        if (fi.dfFirstChar > 0)
+        {
+            for (ix = 0; ix < fi.dfFirstChar; ix++)
+            {
+                // Copia os dados de cada char da fonte para o local correto na memoria de fontes de video (bufSave), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
+                for (iz = 0; iz < 8; iz++)
+                    *(bufSave + ((ix * 8) + iz + isizelastfont)) = 0x00;
+            }
+        }
+
+        // Copia caracteres
+        for (ix = fi.dfFirstChar; ix <= fi.dfLastChar; ix++)
+        {
+            for (iz = 0; iz < 8; iz++)
+            {
+                *(bufSave + ((ix * 8) + iz + isizelastfont)) = *(bufLoad + (fi.bitsFileOffset + (ix * 8) + iz));
+            }
+        }
+
+        // Se nao termina no 255, coloca zeros até o 255
+        if (fi.dfLastChar < 255)
+        {
+            for (ix = fi.dfLastChar + 1; ix <= 255; ix++)
+            {
+                // Copia os dados de cada char da fonte para o local correto na memoria de fontes de video (bufSave), usando o formato necessario para as rotinas de desenho de texto do MGUI. O loop para quando encontra
+                for (iz = 0; iz < 8; iz++)
+                    *(bufSave + ((ix * 8) + iz + isizelastfont)) = 0x00;
+            }
+        }
+    }
+    else
+        return 2;
+    
+    return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -5348,8 +5625,36 @@ int readFontStruct(unsigned char *file, unsigned long fileSize, FON_INFO *info)
 
                 info->dfWidthBytes  = rd16(fnt + 0x63);
 
+                info->dfDevice = rd32(fnt + 0x65);
+                info->dfFace   = rd32(fnt + 0x69);
+
                 info->dfBitsOffset  = rd32(fnt + 0x71);
                 info->bitsFileOffset = realOffset + info->dfBitsOffset;
+
+                {
+                    int n;
+                    unsigned char *name;
+
+                    info->fontName[0] = 0;
+
+                    if (info->dfFace != 0 && info->dfFace < realLength)
+                    {
+                        name = fnt + info->dfFace;
+
+                        for (n = 0; n < 19; n++)
+                        {
+                            if (info->dfFace + n >= realLength)
+                                break;
+
+                            if (name[n] == 0)
+                                break;
+
+                            info->fontName[n] = name[n];
+                        }
+
+                        info->fontName[n] = 0;
+                    }
+                }                
 
                 if (info->bitsFileOffset >= fileSize)
                     return 7;

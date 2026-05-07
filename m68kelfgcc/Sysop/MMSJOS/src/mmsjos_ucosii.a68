@@ -6,4 +6,6 @@ mmsjos_ucosii_table:
             dc.l _readFontStruct
             dc.l _fsListDir
             dc.l _setFontUseG2
+            dc.l _loadFontUseG2
+            dc.l _msprintf
             dc.l 0

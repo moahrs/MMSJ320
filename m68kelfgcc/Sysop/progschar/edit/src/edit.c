@@ -642,6 +642,51 @@ int edBlockMove(void)
 }
 
 //-------------------------------------------------------------------
+int edBlockPaste(void)
+{
+    unsigned long pos;
+    unsigned long i;
+
+    if (edClipSize <= 0)
+    {
+        edSetMessage("Clipboard empty");
+        return 0;
+    }
+
+    pos = edGetCursorOffset();
+
+    if (edFileSize + edClipSize >= EDIT_MAX_FILE)
+    {
+        edSetMessage("No memory");
+        return 0;
+    }
+
+    /* abre espaço */
+    for (i = edFileSize; i >= pos; i--)
+        edFileBuf[i + edClipSize] = edFileBuf[i];
+
+    /* copia dados */
+    for (i = 0; i < edClipSize; i++)
+        edFileBuf[pos + i] = edClipBuf[i];
+
+    edFileSize += edClipSize;
+    edFileBuf[edFileSize] = 0;
+
+    edDirty = 1;
+
+    edBuildLines();
+    edSetCursorFromOffset(pos + edClipSize);
+    edAdjustScroll();
+
+    edDrawText();
+    edDrawStatus();
+
+    edSetMessage("Block pasted");
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
 int edGotoLine(void)
 {
     char sLine[12];
@@ -1040,7 +1085,7 @@ void edDrawCommandHelp(void)
 
         edClearLine(3);
         vdp_set_cursor(0, 3);
-        printText("  X=Save & Exit     |  D=Delete    ");
+        printText("  X=Save & Exit     |  P=Paste   D=Del ");
     }
     if (edCmdModeQ)
     {
@@ -1198,6 +1243,14 @@ void edLoop(char *filename)
                     else if (key == 'V' || key == 'v')  // ^KV = move bloco
                     {
                         edBlockMove();                    
+                    }
+                    else if (key == 'P' || key == 'p')  // ^KP = cola bloco
+                    {
+                        edBlockPaste();
+                    }
+                    else if (key == 'D' || key == 'd')  // ^KD = apaga bloco
+                    {
+                        edBlockDel();
                     }
                     else if (key == KEY_ESC)
                     {
@@ -1538,6 +1591,7 @@ int edInputStatus(char *prompt, char *out, int maxLen)
     int i;
     MMSJ_KEYEVENT k;
 
+    out[0] = '\0';
     len = strlen(out);
     pos = len;
     hscroll = 0;

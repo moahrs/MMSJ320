@@ -363,7 +363,8 @@ extern int isValidFilename(char *filename) ;
 extern unsigned char matches_wildcard(const char *pattern, const char *filename);
 extern unsigned char contains_wildcards(const char *pattern);
 extern void fsListDir(FILES_DIR * dir, unsigned char *param);
-extern int setFontUseG2(unsigned char *nameFile);
+extern int setFontUseG2(unsigned char vpos);
+extern int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bufLoad, unsigned char *bufSave);
 
 #ifdef USE_MSMALLOC
 extern void *msmalloc(unsigned long size);
@@ -372,10 +373,15 @@ extern void msfree(void *ptr);
 #endif
 
 #ifdef USE_MSPRINTF_MMSJOS
-extern void msprintf_ulong_hex(unsigned long v);
-extern void msprintf_long_dec(long v);
-extern void msprintf_ulong_dec(unsigned long v);
-extern void msprintf(const char *fmt, ...);
+extern void msprintf_puts(char **dst, char *s);
+extern void msprintf_ulong_hex(char **dst, unsigned long v);
+extern void msprintf_ulong_dec(char **dst, unsigned long v);
+extern void msprintf_long_dec(char **dst, long v);
+extern void msprintf(char *buffer, const char *fmt, ...);
+extern void mprintf_ulong_hex(unsigned long v);
+extern void mprintf_long_dec(long v);
+extern void mprintf_ulong_dec(unsigned long v);
+extern void mprintf(const char *fmt, ...);
 #endif
 
 #ifdef USE_RELOC_LOAD_PROGS
@@ -422,10 +428,15 @@ typedef struct
     unsigned char  dfDefaultChar;
     unsigned char  dfBreakChar;
 
+    unsigned long dfDevice;
+    unsigned long dfFace;
+
     unsigned long dfBitsOffset;
     unsigned long bitsFileOffset;
 
     unsigned int alignShift;
+
+    char fontName[20];
 } FON_INFO;
 
 // Compatibilidade com codigo legado que referencia allocator interno da std68k
