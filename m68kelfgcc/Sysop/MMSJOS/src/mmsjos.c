@@ -4817,8 +4817,11 @@ void setColorVideoG2(unsigned char fgcolor, unsigned char bgcolor)
 //-----------------------------------------------------------------------------
 void setModeVideoOS(unsigned char mode)
 {
+    unsigned char vdpTColor;
+
+    vdpTColor = (VDP_WHITE << 4) | VDP_BLACK;
     vdp_mode = mode;
-    vdp_init(mode, VDP_BLACK, 0, 0);
+    vdp_init(mode, vdpTColor, 0, 0);
 
     if (vdp_mode == VDP_MODE_TEXT)
         vdp_colorize(VDP_WHITE, VDP_BLACK);
