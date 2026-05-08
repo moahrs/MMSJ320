@@ -163,6 +163,7 @@ static unsigned char sheet_screen_dirty[SHEET_ROWS][SHEET_COLS];
 
 static int sheet_formula_refs_cell(char *expr, int row1, int col1);
 static void sheet_recalc_dependents_rec(int src_row1, int src_col1, cell table[256][64], int depth);
+static void sheet_recalc_all_formulas(cell table[256][64]);
 static void sheet_recalc_from_cell(int row1, int col1, cell table[256][64]);
 static void sheet_refresh_visible_dirty_cells(int top_row, int left_col, int max_y, int max_x, int draw_size, cell table[256][64]);
 
@@ -281,7 +282,7 @@ void set_icon(int row, int col)
     move(0, 6);
     if (table[row - 1][col - 1] != 0) {
         mprintf("<");
-        if (table[row - 1][col - 1]->contents < 2)
+        if (table[row - 1][col - 1]->contents != 2)
             mprintf("V");
         else
             mprintf("L");
@@ -1351,6 +1352,39 @@ static void sheet_recalc_from_cell(int row1, int col1, cell table[256][64])
 
     sheet_screen_dirty[row1 - 1][col1 - 1] = 1;
     sheet_recalc_dependents_rec(row1, col1, table, 0);
+    sheet_recalc_all_formulas(table);
+}
+
+//-------------------------------------------------------
+static void sheet_recalc_all_formulas(cell table[256][64])
+{
+    int i;
+
+    /*
+     * Safety pass: keeps off-screen formula chains consistent.
+     * We recalc only formula cells (no full draw), then repaint only dirty visibles.
+     */
+    for (i = 0; i < SHEET_MAX_CELLS; i++) {
+        cell c;
+
+        if (!sheet_cell_used[i])
+            continue;
+
+        c = &sheet_cell_pool[i];
+
+        if (c->contents != CELL_FORMULA)
+            continue;
+
+        if (!c->data || !c->data->label)
+            continue;
+
+        c->cache_valid = 0;
+        c->cached_value = eval_formula(c->data->label, table);
+        c->cache_valid = 1;
+
+        if (c->row >= 1 && c->row <= SHEET_ROWS && c->col >= 1 && c->col <= SHEET_COLS)
+            sheet_screen_dirty[c->row - 1][c->col - 1] = 1;
+    }
 }
 
 //-------------------------------------------------------
