@@ -260,7 +260,7 @@ extern MEM_ALOC vMemAloc;
 #define KEY_BACKSPACE 8
 #define KEY_DELETE    127
 #define KEY_ENTER     13
-
+#define KEY_HOME      2
 #define KEY_NONE     0
 
 #define KEY_CTRL        0xA0

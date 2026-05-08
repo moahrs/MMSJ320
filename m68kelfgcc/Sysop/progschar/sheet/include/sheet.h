@@ -122,6 +122,7 @@ void init_table(void);
 void set_data(char *input, int row, int col, cell table[256][64]);
 void print_data(int row, int col, int draw_size, cell table[256][64], char *out);
 void get_raw(int row, int col, int entry_size, cell (*table)[64], char *out);
+static int sheet_parse_cell_ref(char *cellref, int *out_row1, int *out_col1);
 /* ===== end data.h ===== */
 
 /* ===== begin functions.h ===== */
@@ -157,7 +158,7 @@ void parse_input();
 void fill_in(int y, int x, int row, int col);
 void refill(int y, int x, int row, int col);
 void input();
-void entry(int ch);
+int entry(int ch, char tp);
 void set_icon(int row, int col);
 
 /* ===== end cursor.h ===== */
@@ -166,10 +167,8 @@ void set_icon(int row, int col);
 /* ===== predeclaracoes ===== */
 void vc_start(void);
 void set_icon(int row, int col);
-void entry(int ch);
 void fill_in(int y, int x, int row, int col);
 void refill(int y, int x, int row, int col);
-void input(void);
 int  to_num(char c);
 void to_char(int i, char *out);
 void set_data(char *input, int row, int col, cell table[256][64]);

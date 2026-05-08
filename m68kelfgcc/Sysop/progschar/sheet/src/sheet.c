@@ -31,7 +31,7 @@ void *mscalloc(unsigned int nmemb, unsigned int size)
 /* vc_screen.c */
 
 
-static unsigned char bufOut[128];
+static unsigned char bufCmd[128];
 unsigned char vc_fgcolor = VC_COLOR_FG;
 unsigned char vc_bgcolor = VC_COLOR_BG;
 int curscr = 1;
@@ -281,12 +281,12 @@ void set_icon(int row, int col)
     /* tipo */
     move(0, 6);
     if (table[row - 1][col - 1] != 0) {
-        mprintf("<");
+        mprintf("(");
         if (table[row - 1][col - 1]->contents != 2)
             mprintf("V");
         else
             mprintf("L");
-        mprintf(">");
+        mprintf(")");
     } else {
         mprintf("   ");
     }
@@ -308,10 +308,11 @@ void set_icon(int row, int col)
 
 ///Gets entry when anything besides the arrow keys are typed
 ///Handles screen sizing automatically, will not scroll past size of screen
-void entry(int ch) {
+int entry(int ch, char tp) {
 	char entry_line[128];
 	int typed;
 	int i;
+    int vret = 0;
 
     memset(entry_line, 0, sizeof(entry_line));
 
@@ -329,7 +330,8 @@ void entry(int ch) {
 		typed++;
 	}
 
-	while((ch = getch()) != 13) {
+    ch = getch();
+	while(ch != 13 && (tp || (!tp && !(ch >= 17 && ch <= 20)))) {    // Return and Arraow keys end entry
 		if (ch == 8 || ch == 127) {
 			if (typed > 0) {
 				move(2, typed);
@@ -351,20 +353,39 @@ void entry(int ch) {
 				getch();
 			}*/
 		}
+
+        ch = getch();
 	}
-	
+
+    if (!tp && ch >= 17 && ch <= 20)
+        vret = ch;
+
 	move(2, 0);
 	for (i = 0; i < max_x; i++) {
 		mprintf(" ");
 	}
-	set_icon(row, col);
-	
-	move(y, x);
-	set_data(entry_line, row, col, table);
-    sheet_recalc_from_cell(row, col, table);
-    sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
-    fill_in(y, x, row, col);
-	set_icon(row, col);
+
+    if (!tp)
+    {
+        set_icon(row, col);	
+        move(y, x);
+        set_data(entry_line, row, col, table);
+        sheet_recalc_from_cell(row, col, table);
+        sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+        fill_in(y, x, row, col);
+        set_icon(row, col);
+    }
+    else
+    {
+        if (entry_line[0] == '>')        
+            strcpy(bufCmd, (entry_line + 1));
+        else
+            strcpy(bufCmd, entry_line);
+
+        vret = 1;
+    }
+
+    return vret;
 }
 
 ///Draw the cursor at the new location with the data inside
@@ -392,12 +413,19 @@ void refill(int y, int x, int row, int col) {
 void input() {
 	int ch;
     int flag;
+    int vret = 0;
 	while(1) 
     {
-        ch = getch();
+        if (!vret)
+            ch = getch();
+        else
+        {
+            ch = vret;
+            vret = 0;
+        }
+
 		if (ch >= 17 && ch <= 20) 
         {
-			getch(); //Arrow keys are in the form of [[A, this clears out the second bracket
 			if (ch == KEY_UP) { //up
 				if (row > 1 && row > corner_row) {
 					refill(y, x, row, col);
@@ -474,10 +502,69 @@ void input() {
 					move(y, x);
 				}
 			}
-		} 
+		}
+        else if (ch == KEY_HOME) 
+        {
+            // Go to A1 Cell
+            row = 1;
+            col = 1;
+
+            if (row < corner_row || row > corner_row + (max_y - 5))
+                corner_row = (row < (max_y - 5)) ? 1 : (row - (max_y - 5) / 2);
+
+            if (col < corner_col || col > corner_col + vc_div_int(max_x - 4, draw_size))
+                corner_col = (col < 10) ? 1 : (col - 10);
+
+            draw_axes(corner_row, corner_col);
+            draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+            x = SHEET_GRID_X + ((col - corner_col) * draw_size);
+            y = SHEET_GRID_Y + ((row - corner_row));
+            move(y, x);
+            set_icon(row, col);
+            fill_in(y, x, row, col);
+            move(y, x);
+        }
+        else if (ch == '>') 
+        {
+            // Go to Cell
+			vret = entry(ch, 1);
+            if (vret)
+            {
+                int new_row;
+                int new_col;
+                
+                vret = 0;
+
+                if (sheet_parse_cell_ref((char *)bufCmd, &new_row, &new_col))
+                {
+                    row = new_row;
+                    col = new_col;
+
+                    if (row < 1 || row > SHEET_ROWS || col < 1 || col > SHEET_COLS) {
+                        row = 1;
+                        col = 1;
+                    }
+
+                    if (row < corner_row || row > corner_row + (max_y - 5))
+                        corner_row = (row < (max_y - 5)) ? 1 : (row - (max_y - 5) / 2);
+
+                    if (col < corner_col || col > corner_col + vc_div_int(max_x - 4, draw_size))
+                        corner_col = (col < 10) ? 1 : (col - 10);
+
+                    draw_axes(corner_row, corner_col);
+                    draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+                    x = SHEET_GRID_X + ((col - corner_col) * draw_size);
+                    y = SHEET_GRID_Y + ((row - corner_row));
+                    move(y, x);
+                    set_icon(row, col);
+                    fill_in(y, x, row, col);
+                    move(y, x);
+                }
+            }
+        }
         else if (ch != 0 && ch <= 127) 
         {
-			entry(ch);
+			vret = entry(ch, 0);
 			//refill(y, x);
 		} 
         else if (ch & 0xFF00) 
@@ -642,8 +729,11 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
         return;
 
     // Labels
-    if (inputCell[0] == 34) {
-        txt = sheet_store_text(inputCell + 1);
+    if (inputCell[0] == 34 || (inputCell[0] >= 0x41 && inputCell[0] <= 0x5A) || (inputCell[0] >= 0x61 && inputCell[0] <= 0x7A)) {
+        if (inputCell[0] == 34)     // "
+            txt = sheet_store_text(inputCell + 1);
+        else
+            txt = sheet_store_text(inputCell);
 
         if (txt == 0)
             return;
@@ -1032,6 +1122,41 @@ void parse_input() {
 	}
 }
 /* ===== end input.c ===== */
+
+//-------------------------------------------------------
+// Parse cell reference string like "B5", "AB110" into row1, col1 (1-indexed)
+// Returns 1 on success, 0 on failure
+int sheet_parse_cell_ref(char *cellref, int *out_row1, int *out_col1)
+{
+    char *q;
+    int col1;
+    int row1;
+
+    if (!cellref || cellref[0] == 0)
+        return 0;
+
+    q = cellref;
+    col1 = 0;
+    row1 = 0;
+
+    while (*q >= 'A' && *q <= 'Z') {
+        col1 = (col1 * 26) + (*q - 'A' + 1);
+        q++;
+    }
+
+    while (*q >= '0' && *q <= '9') {
+        row1 = (row1 * 10) + (*q - '0');
+        q++;
+    }
+
+    if (col1 <= 0 || row1 <= 0 || *q != 0)
+        return 0;
+
+    *out_row1 = row1;
+    *out_col1 = col1;
+
+    return 1;
+}
 
 //-------------------------------------------------------
 // Somente para divisoes pequenas
