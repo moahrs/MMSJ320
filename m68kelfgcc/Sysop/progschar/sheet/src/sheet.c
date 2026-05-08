@@ -1069,6 +1069,128 @@ int vc_div_int(int n, int d)
 }
 
 //-------------------------------------------------------
+static int parse_cell_ref_ptr(char **pp, int *out_row0, int *out_col0)
+{
+    char *q;
+    int col1;
+    int row1;
+    int has_col;
+    int has_row;
+
+    q = *pp;
+    col1 = 0;
+    row1 = 0;
+    has_col = 0;
+    has_row = 0;
+
+    while (*q >= 'A' && *q <= 'Z') {
+        col1 = (col1 * 26) + (*q - 'A' + 1);
+        has_col = 1;
+        q++;
+    }
+
+    while (*q >= '0' && *q <= '9') {
+        row1 = (row1 * 10) + (*q - '0');
+        has_row = 1;
+        q++;
+    }
+
+    if (!has_col || !has_row || row1 <= 0 || col1 <= 0)
+        return 0;
+
+    *out_row0 = row1 - 1;
+    *out_col0 = col1 - 1;
+    *pp = q;
+
+    return 1;
+}
+
+//-------------------------------------------------------
+static long parse_sum_function(cell table[256][64])
+{
+    char *q;
+    int r1;
+    int c1;
+    int r2;
+    int c2;
+    int rr;
+    int cc;
+    long sum;
+
+    q = p;
+
+    if (q[0] != 'S' || q[1] != 'U' || q[2] != 'M')
+        return 0;
+
+    q += 3;
+
+    while (*q == ' ')
+        q++;
+
+    if (*q != '(') {
+        p = q;
+        return 0;
+    }
+
+    q++;
+
+    while (*q == ' ')
+        q++;
+
+    if (!parse_cell_ref_ptr(&q, &r1, &c1)) {
+        p = q;
+        return 0;
+    }
+
+    while (*q == ' ')
+        q++;
+
+    if (*q == ':') {
+        q++;
+
+        while (*q == ' ')
+            q++;
+
+        if (!parse_cell_ref_ptr(&q, &r2, &c2)) {
+            p = q;
+            return 0;
+        }
+    } else {
+        r2 = r1;
+        c2 = c1;
+    }
+
+    while (*q == ' ')
+        q++;
+
+    if (*q == ')')
+        q++;
+
+    if (r1 > r2) {
+        rr = r1;
+        r1 = r2;
+        r2 = rr;
+    }
+
+    if (c1 > c2) {
+        cc = c1;
+        c1 = c2;
+        c2 = cc;
+    }
+
+    sum = 0;
+
+    for (rr = r1; rr <= r2; rr++) {
+        for (cc = c1; cc <= c2; cc++) {
+            sum += get_cell_value(rr, cc, table);
+        }
+    }
+
+    p = q;
+    return sum;
+}
+
+//-------------------------------------------------------
 long parse_number()
 {
     long v = 0;
@@ -1112,25 +1234,18 @@ long get_cell_value(int row, int col, cell table[256][64])
 //-------------------------------------------------------
 long parse_cell(cell table[256][64])
 {
-    int col = 0;
-    int row = 0;
+    int row0;
+    int col0;
+    char *q;
 
-    // letra
-    if (*p >= 'A' && *p <= 'Z') {
-        col = *p - 'A';
-        p++;
-    }
+    q = p;
 
-    // número
-    while (*p >= '0' && *p <= '9') {
-        row = row * 10 + (*p - '0');
-        p++;
-    }
-
-    if (row <= 0)
+    if (!parse_cell_ref_ptr(&q, &row0, &col0))
         return 0;
 
-    return get_cell_value(row - 1, col, table);
+    p = q;
+
+    return get_cell_value(row0, col0, table);
 }
 
 //-------------------------------------------------------
@@ -1148,6 +1263,9 @@ long parse_factor(cell table[256][64])
             p++;
         return v;
     }
+
+    if (p[0] == 'S' && p[1] == 'U' && p[2] == 'M')
+        return parse_sum_function(table);
 
     if (*p >= 'A' && *p <= 'Z')
         return parse_cell(table);
