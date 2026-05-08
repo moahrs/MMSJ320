@@ -36,11 +36,11 @@ unsigned char vc_fgcolor = VC_COLOR_FG;
 unsigned char vc_bgcolor = VC_COLOR_BG;
 int curscr = 1;
 static unsigned char vc_reverse_on = 0;
+MGUI_SET_FONT addrSetFontUseG2;
 
 static unsigned char vc_font_w(void)
 {
 	unsigned char w = 6;
-	extern MGUI_SET_FONT addrSetFontUseG2;
 	if (addrSetFontUseG2.w > 0 && addrSetFontUseG2.w <= 8)
 		w = addrSetFontUseG2.w;
 	return w;
@@ -49,7 +49,6 @@ static unsigned char vc_font_w(void)
 static unsigned char vc_font_h(void)
 {
 	unsigned char h = 8;
-	extern MGUI_SET_FONT addrSetFontUseG2;
 	if (addrSetFontUseG2.h > 0 && addrSetFontUseG2.h <= 8)
 		h = addrSetFontUseG2.h;
 	return h;
@@ -73,13 +72,14 @@ void vc_gotoxy(int y, int x)
 {
 	unsigned char fw = vc_font_w();
 	unsigned char fh = vc_font_h();
+
 	vdp_set_cursor((unsigned short)(x * fw), (unsigned short)(y * fh));
 }
 
 void vc_getmaxyx(int screen, int *py, int *px)
 {
     *py = 24;
-    *px = 40;
+    *px = 50;
 }
 
 int vc_getkey(void)
@@ -113,7 +113,7 @@ void vc_attron(int attr)
 
     if (!vc_reverse_on)
     {
-        vdp_textcolor(vc_bgcolor, vc_fgcolor);
+        setColorVideoG2(vc_bgcolor, vc_fgcolor);
         vc_reverse_on = 1;
     }
 }
@@ -124,7 +124,7 @@ void vc_attroff(int attr)
 
     if (vc_reverse_on)
     {
-        vdp_textcolor(vc_fgcolor, vc_bgcolor);
+        setColorVideoG2(vc_fgcolor, vc_bgcolor);
         vc_reverse_on = 0;
     }
 }
@@ -158,9 +158,24 @@ static int y_pos = 0;
 static int x_real = 4;
 static int y_real = 4;
 
+static unsigned char sheet_recalc_visited[SHEET_ROWS][SHEET_COLS];
+static unsigned char sheet_screen_dirty[SHEET_ROWS][SHEET_COLS];
+
+static int sheet_formula_refs_cell(char *expr, int row1, int col1);
+static void sheet_recalc_dependents_rec(int src_row1, int src_col1, cell table[256][64], int depth);
+static void sheet_recalc_from_cell(int row1, int col1, cell table[256][64]);
+static void sheet_refresh_visible_dirty_cells(int top_row, int left_col, int max_y, int max_x, int draw_size, cell table[256][64]);
+
 void init_table(void)
 {
     memset(sheet_table, 0, sizeof(sheet_table));
+    memset(sheet_cell_used, 0, sizeof(sheet_cell_used));
+    memset(sheet_cell_pool, 0, sizeof(sheet_cell_pool));
+    memset(sheet_data_pool, 0, sizeof(sheet_data_pool));
+    memset(sheet_text_pool, 0, sizeof(sheet_text_pool));
+    memset(sheet_recalc_visited, 0, sizeof(sheet_recalc_visited));
+    memset(sheet_screen_dirty, 0, sizeof(sheet_screen_dirty));
+    sheet_text_next = 0;
     table = sheet_table;
 }
 
@@ -173,12 +188,39 @@ void vc_start() {
 
     memLoadFont = (unsigned long *)msmalloc(4096);
     memSaveFont = (unsigned long *)msmalloc(4096);
-    loadFontUseG2(0, "/MGUI/FONTS/EVE5X8.FON", memLoadFont, memSaveFont);
-    setFontUseG2(0);
-    getFontUseG2(&addrSetFontUseG2);
+
+    if (loadFontUseG2(0, "/MGUI/FONTS/EVE5X8.FON", memLoadFont, memSaveFont))
+    {
+        msfree(memLoadFont);
+        msfree(memSaveFont);
+        setModeVideoOS(VDP_MODE_TEXT);
+        clearScr();
+        mprintf("Failed to load font 5x8.");
+        return;
+    }
+
+    if (!setFontUseG2(0))
+    {
+        msfree(memLoadFont);
+        msfree(memSaveFont);
+        setModeVideoOS(VDP_MODE_TEXT);
+        clearScr();
+        mprintf("Failed to set font 5x8.");
+        return;
+    }
+
+    if (!getFontUseG2(&addrSetFontUseG2))
+    {
+        msfree(memLoadFont);
+        msfree(memSaveFont);
+        setModeVideoOS(VDP_MODE_TEXT);
+        clearScr();
+        mprintf("Failed to get font 5x8.");
+        return;
+    }
+
     msfree(memLoadFont);
 
-    
     draw_size = 8;
 	draw_screenyx();
 	//will need to be fixed once I implement column sizing
@@ -190,11 +232,11 @@ void vc_start() {
 	//char cursor[9] = "        ";
 	//draw_axes(20, 20);
 
-	move(4, 3);
+    x = SHEET_GRID_X;
+    y = SHEET_GRID_Y;
+    move(y, x);    
 	mprintf("        ");
-	move(4, 3);
-	x = 3;
-	y = 4;
+    move(y, x);    
 	row = 1;
 	col = 1;
 	vc_getmaxyx(curscr, &max_y, &max_x);
@@ -206,61 +248,62 @@ void vc_start() {
 	char ch = getch();
 
     msfree(memSaveFont);
-    vdp_init(VDP_MODE_TEXT, VDP_BLACK, 0, 0);
-    vdp_textcolor(VDP_WHITE, VDP_BLACK);
-
+    setModeVideoOS(VDP_MODE_TEXT);
     clearScr();
-
-    printText("Ok\r\n\0");
-    printText("#>");
-
-    showCursor();    
 }
 
+void set_icon(int row, int col)
+{
+    int i;
+    int p;
+    char letters[3];
+    char inside[128];
 
-void set_icon(int row, int col) {
-	int i;
+    memset(inside, 0, sizeof(inside));
 
-	color_on();
-	char letters[3];
+    color_on();
+
+    /* limpa linha 0 inteira */
+    move(0, 0);
+    for (i = 0; i < max_x; i++)
+        mprintf(" ");
+
+    /* endereço da célula */
     to_char(col - 1, letters);
-	//mprintf("%u", strlen(letters));
-	move(0, 1);
-	if (col < 27) {
-		mprintf(" ");
-	}
-	mprintf("%s", letters);
-	mprintf("%d  ", row); //padding to make sure any other numbers are overwritten
-	
-	//TODO add the indicator for <L> (label), <V> (value), etc
-	move(0, 6);
-	if (table[row-1][col-1] != NULL) {
-		mprintf("<");
-		if (table[row-1][col-1]->contents < 2)
-			mprintf("V");
-		else
-			mprintf("L");
-		mprintf(">");
-	} else {
-		mprintf("   ");
-	}
-	//TODO replace this with the data entry for the next thing, clear the rest
-	char inside[entry_size + 1];
-	get_raw(row, col, entry_size, table, inside);
-	if (inside[0] == '\0') {
-		for (i = 9; i < max_x; i++) {
-			mprintf(" ");
-		}
-	} else {
-		mprintf("  %s", inside);
-		for (i = 11; i < max_x; i++) {
-			mprintf(" ");
-		}
-	}
-	
-	color_off();
-}
 
+    move(0, 1);
+    if (col < 27)
+        mprintf(" ");
+
+    mprintf("%s%d", letters, row);
+
+    /* tipo */
+    move(0, 6);
+    if (table[row - 1][col - 1] != 0) {
+        mprintf("<");
+        if (table[row - 1][col - 1]->contents < 2)
+            mprintf("V");
+        else
+            mprintf("L");
+        mprintf(">");
+    } else {
+        mprintf("   ");
+    }
+
+    /* conteúdo bruto */
+    get_raw(row, col, entry_size, table, inside);
+
+    move(0, 10);
+    mprintf("%s", inside);
+
+    /* limpa resto da linha depois do conteúdo */
+    p = 10 + strlen(inside);
+    move(0, p);
+    for (i = p; i < max_x; i++)
+        mprintf(" ");
+
+    color_off();
+}
 
 ///Gets entry when anything besides the arrow keys are typed
 ///Handles screen sizing automatically, will not scroll past size of screen
@@ -286,7 +329,7 @@ void entry(int ch) {
 	}
 
 	while((ch = getch()) != 13) {
-		if (ch == 127) {
+		if (ch == 8 || ch == 127) {
 			if (typed > 0) {
 				move(2, typed);
 				mprintf(" ");
@@ -317,7 +360,9 @@ void entry(int ch) {
 	
 	move(y, x);
 	set_data(entry_line, row, col, table);
-	fill_in(y, x, row, col);
+    sheet_recalc_from_cell(row, col, table);
+    sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+    fill_in(y, x, row, col);
 	set_icon(row, col);
 }
 
@@ -349,7 +394,8 @@ void input() {
 	while(1) 
     {
         ch = getch();
-		if (ch >= 17 && ch <= 20) {
+		if (ch >= 17 && ch <= 20) 
+        {
 			getch(); //Arrow keys are in the form of [[A, this clears out the second bracket
 			if (ch == KEY_UP) { //up
 				if (row > 1 && row > corner_row) {
@@ -363,7 +409,7 @@ void input() {
 					move(y, x);         //But it broke everything when I tried it
 				} else if(corner_row > 1) {                             
 					draw_axes(corner_row-1, corner_col);
-					draw_cells(corner_row-1, corner_col, max_y, max_x, draw_size, &table);
+					draw_cells(corner_row-1, corner_col, max_y, max_x, draw_size, table);
 					row--;
 					corner_row--;
 					set_icon(row, col);
@@ -381,7 +427,7 @@ void input() {
 					move(y, x);
 				} else if (row < 254) {
 					draw_axes(corner_row + 1, corner_col);
-					draw_cells(corner_row + 1, corner_col, max_y, max_x, draw_size, &table);
+					draw_cells(corner_row + 1, corner_col, max_y, max_x, draw_size, table);
 					row++;
 					corner_row++;
 					fill_in(y, x, row, col);
@@ -400,7 +446,7 @@ void input() {
 					move(y, x);
 				} else if(col < 63) {
 					draw_axes(corner_row, corner_col + 1);
-					draw_cells(corner_row, corner_col + 1, max_y, max_x, draw_size, &table);
+					draw_cells(corner_row, corner_col + 1, max_y, max_x, draw_size, table);
 					col++;
 					corner_col++;
 					set_icon(row, col);
@@ -419,7 +465,7 @@ void input() {
 					move(y, x);
 				} else if(col > 1) {
 					draw_axes(corner_row, corner_col - 1);
-					draw_cells(corner_row, corner_col - 1, max_y, max_x, draw_size, &table);
+					draw_cells(corner_row, corner_col - 1, max_y, max_x, draw_size, table);
 					col--;
 					corner_col--;
 					set_icon(row, col);
@@ -427,20 +473,44 @@ void input() {
 					move(y, x);
 				}
 			}
-		} else if (ch != 0 && ch <= 127) {
+		} 
+        else if (ch != 0 && ch <= 127) 
+        {
 			entry(ch);
 			//refill(y, x);
-		} else if (ch & 0xFF00) {
+		} 
+        else if (ch & 0xFF00) 
+        {
             flag = (ch & 0xFF00) >> 8;
             ch = ch & 0x00FF;
-            if (flag == KEY_CTRL_ALT) {
-                if (ch == 'X' || ch == 'x') {
+            if (flag == KEY_CTRL_ALT) 
+            {
+                if (ch == 'X' || ch == 'x') 
+                {
                     break; // Exit on Ctrl + Alt + X
                 }
-                // Handle Ctrl + Alt + Key combinations here
-            } else if (flag == KEY_CTRL) {
-                // Handle Ctrl + Key combinations here
-            } else if (flag == KEY_ALT) {
+            } 
+            else if (flag == KEY_CTRL) 
+            {
+                if (ch == KEY_UP) // Go to A1 Cell
+                {
+                    // TBD                    
+                }
+                else if (ch == KEY_DOWN) // Go to last cell
+                {
+                    // TBD
+                }
+                else if (ch == KEY_LEFT) // Go to first column of current row
+                {
+                    // TBD
+                }
+                else if (ch == KEY_RIGHT) // Go to last column of current row
+                {
+                    // TBD
+                }
+            } 
+            else if (flag == KEY_ALT) 
+            {
                 // Handle Alt + Key combinations here
             }
         }
@@ -455,7 +525,7 @@ void initscr(void)
 	vc_fgcolor = VDP_WHITE;
 	vc_bgcolor = VDP_BLACK;
 
-    vdp_init(VDP_MODE_G2, vc_bgcolor, 0, 0);
+    setModeVideoOS(VDP_MODE_G2);
     vdp_set_bdcolor(vc_bgcolor);
 }
 
@@ -552,13 +622,17 @@ static char *sheet_store_text(char *src)
 }
 
 //should this be void? idk
-void set_data(char *input, int row, int col, cell table[256][64])
+void set_data(char *inputCell, int row, int col, cell table[256][64])
 {
     cell c;
     char *txt;
     long int num;
+    int i;
 
-    if (input == 0 || input[0] == 0)
+    while (*inputCell == ' ')
+        inputCell++;
+
+    if (inputCell == 0 || inputCell[0] == 0)
         return;
 
     c = sheet_get_or_create_cell(row, col, table);
@@ -566,14 +640,17 @@ void set_data(char *input, int row, int col, cell table[256][64])
     if (c == 0)
         return;
 
-    if (input[0] == 34) {
-        txt = sheet_store_text(input + 1);
+    // Labels
+    if (inputCell[0] == 34) {
+        txt = sheet_store_text(inputCell + 1);
 
         if (txt == 0)
             return;
 
         c->contents = CELL_LABEL;
         c->data->label = txt;
+        c->cache_valid = 0;
+        c->cached_value = 0;
 
         if (c->data->label[strlen(c->data->label) - 1] == '"')
             c->data->label[strlen(c->data->label) - 1] = 0;
@@ -581,11 +658,38 @@ void set_data(char *input, int row, int col, cell table[256][64])
         return;
     }
 
-    if (input[0] >= '0' && input[0] <= '9') {
-        num = strtol(input, 0, 10);
+    // Numbers
+    if (inputCell[0] >= 0x30 && inputCell[0] <= 0x39) {
+        num = my_atol(inputCell);
 
         c->contents = CELL_INT;
         c->data->num = num;
+        c->cache_valid = 0;
+        c->cached_value = num;
+
+        return;
+    }
+
+    // Formulas (not implemented yet, but this is where they would go)
+    if (inputCell[0] == 0x3D)     // =
+    {
+        txt = sheet_store_text(inputCell + 1);
+
+        if (txt == 0)
+            return;
+
+        /* normaliza a formula para maiusculas (A..Z) */
+        i = 0;
+        while (txt[i] != 0) {
+            if (txt[i] >= 'a' && txt[i] <= 'z')
+                txt[i] = txt[i] - ('a' - 'A');
+            i++;
+        }
+
+        c->contents = CELL_FORMULA;
+        c->data->label = txt;
+        c->cache_valid = 0;
+        c->cached_value = 0;
 
         return;
     }
@@ -618,7 +722,7 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
     }
 
     if (print->contents == CELL_INT) {
-        msprintf(create, sizeof(create), "%ld", print->data->num);
+        msprintf(create, "%ld", print->data->num);
 
         if ((int)strlen(create) > draw_size) {
             for (i = 0; i < draw_size - 3; i++)
@@ -631,6 +735,34 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
             strcat(out, " ");
 
         strcat(out, create);
+        return;
+    }
+
+    if (print->contents == CELL_FORMULA) {
+        long val;
+
+        if (print->cache_valid)
+            val = print->cached_value;
+        else {
+            val = eval_formula(print->data->label, table);
+            print->cached_value = val;
+            print->cache_valid = 1;
+        }
+
+        char tmp[16];
+        msprintf(tmp, "%ld", val);
+
+        if ((int)strlen(tmp) > draw_size) {
+            for (i = 0; i < draw_size - 3; i++)
+                strcat(out, " ");
+            strcat(out, ">>>");
+            return;
+        }
+
+        for (i = strlen(tmp); i < draw_size; i++)
+            strcat(out, " ");
+
+        strcat(out, tmp);
         return;
     }
 
@@ -649,13 +781,13 @@ void get_raw(int row, int col, int entry_size, cell (*table)[64], char *out)
     if (from == 0)
         return;
 
-    if (from->contents == CELL_LABEL) {
+    if (from->contents == CELL_LABEL || from->contents == CELL_FORMULA) {
         strncat(out, from->data->label, entry_size);
         return;
     }
 
     if (from->contents == CELL_INT) {
-        msprintf(out, entry_size, "%ld", from->data->num);
+        msprintf(out, "%ld", from->data->num);
         return;
     }
 }
@@ -667,11 +799,11 @@ void get_raw(int row, int col, int entry_size, cell (*table)[64], char *out)
 
 
 void color_on() {
-	attron(COLOR_PAIR(2));
+	attron(0);
 }
 
 void color_off() {
-	attroff(COLOR_PAIR(2));
+	attroff(0);
 }
 ///Draw the axes, with y as the starting row and x as the starting column (converted to letters)
 ///This function is a goddamn mess and I should never touch it once it works
@@ -686,7 +818,7 @@ void draw_axes(int yn, int xn) {
 	vc_getmaxyx(curscr, &max_y, &max_x);
 	move(4, 0);
 	int b = 4;
-	attron(COLOR_PAIR(2));
+	attron(0);
 	for (a = yn+1; a < max_y - 3 + yn; a++) {
 		if (a >= 100) {
 			mprintf("%d", a);
@@ -726,26 +858,47 @@ void draw_axes(int yn, int xn) {
 		}
 		k++;
 	}
+
+    // Fill last columns with " "
+    while ( ((k) * draw_size) + 3 < max_x) {
+        for (j = 0; j < draw_size; j++) {
+            mprintf(" ");
+        }
+        k++;
+    }
 	//move(4, 4);
 	//draw_cells(start_y, start_x);
 }
 
 ///Draws the data inside the cells  
-void draw_cells(int row, int col, int max_y, int max_x, int draw_size, cell (**table)[64]) {
-	//make sure to keep track of cursor position locally
-	int i;
-	int j;
-	int draw = (max_x - 3) / draw_size;
-	color_off();
-	for (i = 0; i < (max_y - 4); i++) {
-		move(4 + i, 3);
-		for (j = 0; j < draw; j++) {
-			char out[draw_size + 1];
-			print_data(row+i, col+j, draw_size, *table, out);
-			mprintf("%s", out);
-			//mprintf("AAAAAAAA");
-		}
-	}
+void draw_cells(int row, int col, int max_y, int max_x, int draw_size, cell table[256][64])
+{
+    int i;
+    int j;
+    int drawj;
+    char out[draw_size + 1];
+
+    color_on();
+    move(1,0);
+    mprintf("Processing...");
+    color_off();
+
+    drawj = vc_div_int(max_x - 3, draw_size);
+    //drawj = (max_x - 3) / draw_size;
+
+    for (i = 0; i < (max_y - 4); i++) {
+        move(4 + i, 4);
+
+        for (j = 0; j < drawj; j++) {
+            print_data(row + i, col + j, draw_size, table, out);
+            mprintf("%s", out);
+        }
+    }
+
+    color_on();
+    move(1,0);
+    mprintf("             ");
+    color_off();
 }
 
 
@@ -763,7 +916,7 @@ int draw_screenyx() {
 	init_color(VDP_DARK_BLUE, 334, 627, 845);
 	init_pair(2, VDP_BLACK, VDP_DARK_BLUE); //Light background
 	init_pair(1, VDP_DARK_BLUE, VDP_BLACK); //Dark background*/
-	attron(COLOR_PAIR(2));
+	attron(0);
 
 	mprintf("  A1      ");
 	vc_getmaxyx(curscr, &max_y, &max_x);
@@ -776,12 +929,14 @@ int draw_screenyx() {
 	for (x = 0; x < max_x; x++) {
 		mprintf(" ");
 	}
-	attroff(COLOR_PAIR(2));
+	attroff(0);
+	move(2, 0);
 	for (x = 0; x < max_x; x++) {
 		mprintf(" ");
 	}
-	attron(COLOR_PAIR(2));
+	attron(0);
 	
+	move(3, 0);
 	mprintf("   ");
 	draw_axes(1, 1);
 	refresh();
@@ -842,10 +997,10 @@ void parse_input() {
 						draw_axes(y_start - 1, x);
 					//draw cursor
 					move(x_real, y_real);
-					attron(COLOR_PAIR(2));
+					attron(0);
 					
 				} else {
-					attroff(COLOR_PAIR(2));
+					attroff(0);
 					for (i = 0; i < draw_size; i++) {
 						mprintf(" ");
 					}
@@ -877,4 +1032,356 @@ void parse_input() {
 }
 /* ===== end input.c ===== */
 
+//-------------------------------------------------------
+// Somente para divisoes pequenas
+//-------------------------------------------------------
+int vc_div_int(int n, int d)
+{
+    int q;
+    int neg;
 
+    q = 0;
+    neg = 0;
+
+    if (d == 0)
+        return 0;
+
+    if (n < 0) {
+        n = -n;
+        neg = !neg;
+    }
+
+    if (d < 0) {
+        d = -d;
+        neg = !neg;
+    }
+
+    while (n >= d) {
+        n -= d;
+        q++;
+    }
+
+    if (neg)
+        q = -q;
+
+    return q;
+}
+
+//-------------------------------------------------------
+long parse_number()
+{
+    long v = 0;
+
+    while (*p >= '0' && *p <= '9') {
+        v = v * 10 + (*p - '0');
+        p++;
+    }
+
+    return v;
+}
+
+//-------------------------------------------------------
+long get_cell_value(int row, int col, cell table[256][64])
+{
+    cell c;
+
+    if (row < 0 || row >= SHEET_ROWS || col < 0 || col >= SHEET_COLS)
+        return 0;
+
+    c = table[row][col];
+
+    if (!c)
+        return 0;
+
+    if (c->contents == CELL_INT)
+        return c->data->num;
+
+    if (c->contents == CELL_FORMULA) {
+        if (c->cache_valid)
+            return c->cached_value;
+
+        c->cached_value = eval_formula(c->data->label, table);
+        c->cache_valid = 1;
+        return c->cached_value;
+    }
+
+    return 0; // depois expandimos
+}
+
+//-------------------------------------------------------
+long parse_cell(cell table[256][64])
+{
+    int col = 0;
+    int row = 0;
+
+    // letra
+    if (*p >= 'A' && *p <= 'Z') {
+        col = *p - 'A';
+        p++;
+    }
+
+    // número
+    while (*p >= '0' && *p <= '9') {
+        row = row * 10 + (*p - '0');
+        p++;
+    }
+
+    if (row <= 0)
+        return 0;
+
+    return get_cell_value(row - 1, col, table);
+}
+
+//-------------------------------------------------------
+long parse_factor(cell table[256][64])
+{
+    long v;
+
+    skip_spaces();
+
+    if (*p == '(') {
+        p++;
+        v = parse_expr(table);
+        skip_spaces();
+        if (*p == ')')
+            p++;
+        return v;
+    }
+
+    if (*p >= 'A' && *p <= 'Z')
+        return parse_cell(table);
+
+    if (*p >= '0' && *p <= '9')
+        return parse_number();
+
+    /* caractere inválido: avança para não travar */
+    if (*p != 0)
+        p++;
+
+    return 0;
+}
+
+//-------------------------------------------------------
+long parse_term(cell table[256][64])
+{
+    long v;
+    long v2;
+    char op;
+
+    v = parse_factor(table);
+
+    while (1) {
+        skip_spaces();
+
+        if (*p != '*' && *p != '/')
+            break;
+
+        op = *p;
+        p++;
+
+        v2 = parse_factor(table);
+
+        if (op == '*')
+            v = v * v2;
+        else
+            v = (v2 != 0) ? vc_div_int(v, v2) : 0;
+    }
+
+    return v;
+}
+
+//-------------------------------------------------------
+long parse_expr(cell table[256][64])
+{
+    long v;
+    long v2;
+    char op;
+
+    v = parse_term(table);
+
+    while (1) {
+        skip_spaces();
+
+        if (*p != '+' && *p != '-')
+            break;
+
+        op = *p;
+        p++;
+
+        v2 = parse_term(table);
+
+        if (op == '+')
+            v += v2;
+        else
+            v -= v2;
+    }
+
+    return v;
+}
+
+//-------------------------------------------------------
+long eval_formula(char *expr, cell table[256][64])
+{
+    long r;
+    char *saved_p;
+
+    if (eval_depth > 8)
+        return 0;
+
+    eval_depth++;
+
+    saved_p = p;
+    p = expr;
+    r = parse_expr(table);
+    p = saved_p;
+
+    eval_depth--;
+
+    return r;
+}
+
+//-------------------------------------------------------
+void skip_spaces(void)
+{
+    while (*p == ' ')
+        p++;
+}
+
+//-------------------------------------------------------
+static int sheet_formula_refs_cell(char *expr, int row1, int col1)
+{
+    int i;
+
+    i = 0;
+
+    while (expr[i] != 0) {
+        if (expr[i] >= 'A' && expr[i] <= 'Z') {
+            int c;
+            int r;
+
+            c = 0;
+            while (expr[i] >= 'A' && expr[i] <= 'Z') {
+                c = (c * 26) + (expr[i] - 'A' + 1);
+                i++;
+            }
+
+            if (expr[i] >= '0' && expr[i] <= '9') {
+                r = 0;
+                while (expr[i] >= '0' && expr[i] <= '9') {
+                    r = (r * 10) + (expr[i] - '0');
+                    i++;
+                }
+
+                if (r == row1 && c == col1)
+                    return 1;
+
+                continue;
+            }
+        }
+
+        i++;
+    }
+
+    return 0;
+}
+
+//-------------------------------------------------------
+static void sheet_recalc_dependents_rec(int src_row1, int src_col1, cell table[256][64], int depth)
+{
+    int i;
+
+    if (depth > 16)
+        return;
+
+    for (i = 0; i < SHEET_MAX_CELLS; i++) {
+        cell c;
+        int rr;
+        int cc;
+
+        if (!sheet_cell_used[i])
+            continue;
+
+        c = &sheet_cell_pool[i];
+
+        if (c->contents != CELL_FORMULA)
+            continue;
+
+        if (!c->data || !c->data->label)
+            continue;
+
+        if (!sheet_formula_refs_cell(c->data->label, src_row1, src_col1))
+            continue;
+
+        rr = c->row;
+        cc = c->col;
+
+        if (rr < 1 || rr > SHEET_ROWS || cc < 1 || cc > SHEET_COLS)
+            continue;
+
+        if (sheet_recalc_visited[rr - 1][cc - 1])
+            continue;
+
+        sheet_recalc_visited[rr - 1][cc - 1] = 1;
+        c->cache_valid = 0;
+        c->cached_value = eval_formula(c->data->label, table);
+        c->cache_valid = 1;
+        sheet_screen_dirty[rr - 1][cc - 1] = 1;
+
+        sheet_recalc_dependents_rec(rr, cc, table, depth + 1);
+    }
+}
+
+//-------------------------------------------------------
+static void sheet_recalc_from_cell(int row1, int col1, cell table[256][64])
+{
+    cell c;
+
+    if (row1 < 1 || row1 > SHEET_ROWS || col1 < 1 || col1 > SHEET_COLS)
+        return;
+
+    memset(sheet_recalc_visited, 0, sizeof(sheet_recalc_visited));
+    memset(sheet_screen_dirty, 0, sizeof(sheet_screen_dirty));
+
+    c = table[row1 - 1][col1 - 1];
+    if (c && c->contents == CELL_FORMULA) {
+        c->cache_valid = 0;
+        c->cached_value = eval_formula(c->data->label, table);
+        c->cache_valid = 1;
+    }
+
+    sheet_screen_dirty[row1 - 1][col1 - 1] = 1;
+    sheet_recalc_dependents_rec(row1, col1, table, 0);
+}
+
+//-------------------------------------------------------
+static void sheet_refresh_visible_dirty_cells(int top_row, int left_col, int max_y, int max_x, int draw_size, cell table[256][64])
+{
+    int i;
+    int j;
+    int drawj;
+    char out[16];
+
+    drawj = vc_div_int(max_x - 3, draw_size);
+
+    for (i = 0; i < (max_y - 4); i++) {
+        int rr = top_row + i;
+
+        if (rr < 1 || rr > SHEET_ROWS)
+            continue;
+
+        for (j = 0; j < drawj; j++) {
+            int cc = left_col + j;
+
+            if (cc < 1 || cc > SHEET_COLS)
+                continue;
+
+            if (!sheet_screen_dirty[rr - 1][cc - 1])
+                continue;
+
+            move(4 + i, 4 + (j * draw_size));
+            print_data(rr, cc, draw_size, table, out);
+            mprintf("%s", out);
+            sheet_screen_dirty[rr - 1][cc - 1] = 0;
+        }
+    }
+}

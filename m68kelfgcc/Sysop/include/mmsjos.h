@@ -371,6 +371,9 @@ extern void msfree(void *ptr);
 #endif
 
 #ifdef USE_MSPRINTF_MMSJOS
+extern void setColorVideoG2(unsigned char fgcolor, unsigned char bgcolor);
+extern void setModeVideoOS(unsigned char mode);
+extern unsigned char getModeVideoOS(void);
 extern void msprintf_puts(char **dst, char *s);
 extern void msprintf_ulong_hex(char **dst, unsigned long v);
 extern void msprintf_ulong_dec(char **dst, unsigned long v);

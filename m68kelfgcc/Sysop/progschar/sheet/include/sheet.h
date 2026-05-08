@@ -26,6 +26,7 @@ void vc_refresh(void);
 void vc_attron(int attr);
 void vc_attroff(int attr);
 double vc_pow(double base, int exp);
+int vc_div_int(int n, int d);
 
 #define A_REVERSE  1
 #define COLOR_PAIR(n)  (n)
@@ -69,6 +70,8 @@ struct cell_s {
 	int col;
 	int contents;
 	union data_s *data;
+    long cached_value;
+    unsigned char cache_valid;
 };
 
 union data_s {
@@ -89,6 +92,22 @@ typedef union data_s *data;
 #define CELL_INT    0
 #define CELL_FLOAT  1
 #define CELL_LABEL  2
+#define CELL_FORMULA 3
+
+#define SHEET_GRID_X 4
+#define SHEET_GRID_Y 4
+
+char *p;  // ponteiro global da expressão
+static int eval_depth = 0;
+
+void skip_spaces(void);
+long parse_number();
+long get_cell_value(int row, int col, cell table[256][64]);
+long parse_cell(cell table[256][64]);
+long parse_factor(cell table[256][64]);
+long parse_term(cell table[256][64]);
+long eval_formula(char *expr, cell table[256][64]);
+long parse_expr(cell table[256][64]);
 
 static struct cell_s sheet_cell_pool[SHEET_MAX_CELLS];
 static union data_s sheet_data_pool[SHEET_MAX_CELLS];
@@ -119,7 +138,7 @@ extern static int y_start;*/
 
 int draw_screenyx();
 void draw_axes(int y, int x);
-void draw_cells(int row, int col, int max_y, int max_x, int draw_size, cell (**table)[64]);
+void draw_cells(int row, int col, int max_y, int max_x, int draw_size, cell table[256][64]);
 void setup();
 void color_on();
 void color_off();
@@ -156,8 +175,6 @@ void to_char(int i, char *out);
 void set_data(char *input, int row, int col, cell table[256][64]);
 void color_on(void);
 void color_off(void);
-void draw_axes(int yn, int xn);
-void draw_cells(int row, int col, int max_y, int max_x, int draw_size, cell (**table)[64]);
 int  draw_screenyx(void);
 void setup(void);
 void draw_input(void);
@@ -170,10 +187,28 @@ double strtod(const char *str, char **endptr)
     return dbnum;
 }
 
-long strtol(const char *nptr, char **endptr, int base)
+long my_atol(char *s)
 {
-    long int num = 0;
-    return num;
+    long v;
+    int neg;
+
+    v = 0;
+    neg = 0;
+
+    while (*s == ' ')
+        s++;
+
+    if (*s == '-') {
+        neg = 1;
+        s++;
+    }
+
+    while (*s >= '0' && *s <= '9') {
+        v = (v * 10) + (*s - '0');
+        s++;
+    }
+
+    return neg ? -v : v;
 }
 
 MGUI_SET_FONT addrSetFontUseG2; // Endereco da funcao setFontUseG2, para ser usada por programas externos

@@ -4,7 +4,7 @@
 // Function Shared Definitions
 #define MMSJOS_FUNC_TABLE    0x00800034
 #define MGUI_FUNC_TABLE      0x00803B24
-#define MMSJOS_UCOSII_TABLE  0x0080E52C
+#define MMSJOS_UCOSII_TABLE  0x0080E5A8
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);
@@ -82,6 +82,9 @@ typedef unsigned char (*loadFontUseG2Type)(unsigned char pos, unsigned char *nam
 typedef void (*msprintfType)(char *buffer, const char *fmt, ...);
 typedef void (*clearScrWType)(unsigned char vcolor);
 typedef int (*getFontUseG2Type)(MGUI_SET_FONT *fonInfo);
+typedef void (*setModeVideoOSType)(unsigned char mode);
+typedef unsigned char (*getModeVideoOSType)(void);
+typedef void (*setColorVideoG2Type)(unsigned char fgcolor, unsigned char bgcolor);
 
 // MMSJOS define functions
 #define fsGetDirAtuData ((fsGetDirAtuDataType *)(unsigned long)MMSJOS_FUNC_TABLE)[0] // Índice da função
@@ -158,6 +161,9 @@ typedef int (*getFontUseG2Type)(MGUI_SET_FONT *fonInfo);
 #define msprintf ((msprintfType *)(unsigned long)MMSJOS_UCOSII_TABLE)[8] // Índice da função
 #define clearScrW ((clearScrWType *)(unsigned long)MMSJOS_UCOSII_TABLE)[9] // Índice da função
 #define getFontUseG2 ((getFontUseG2Type *)(unsigned long)MMSJOS_UCOSII_TABLE)[10] // Índice da função
+#define setModeVideoOS ((setModeVideoOSType *)(unsigned long)MMSJOS_UCOSII_TABLE)[11] // Índice da função
+#define getModeVideoOS ((getModeVideoOSType *)(unsigned long)MMSJOS_UCOSII_TABLE)[12] // Índice da função
+#define setColorVideoG2 ((setColorVideoG2Type *)(unsigned long)MMSJOS_UCOSII_TABLE)[13] // Índice da função
 
 // Apoio
 const unsigned char strValidChars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ^&'@{}[],$=!-#()%.+~_";

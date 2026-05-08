@@ -4808,6 +4808,33 @@ unsigned int fsGetMfp(unsigned int Config)
 
 #ifdef USE_MSPRINTF_MMSJOS
 //-----------------------------------------------------------------------------
+void setColorVideoG2(unsigned char fgcolor, unsigned char bgcolor)
+{
+    fgcolorMgui = fgcolor;
+    bgcolorMgui = bgcolor;
+}
+
+//-----------------------------------------------------------------------------
+void setModeVideoOS(unsigned char mode)
+{
+    vdp_mode = mode;
+    vdp_init(mode, VDP_BLACK, 0, 0);
+
+    if (vdp_mode == VDP_MODE_TEXT)
+        vdp_colorize(VDP_WHITE, VDP_BLACK);
+    else    
+        vdp_set_bdcolor(VDP_BLACK);
+
+    vdp_get_cfg(&mgui_pattern_table, &mgui_color_table);
+}
+
+//-----------------------------------------------------------------------------
+unsigned char getModeVideoOS(void)
+{
+    return vdp_mode;
+}
+
+//-----------------------------------------------------------------------------
 void vdp_set_cursor_pos_G2(unsigned char direction)
 {
     unsigned char pMoveId = 1;
