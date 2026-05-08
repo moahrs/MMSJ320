@@ -364,11 +364,6 @@ extern unsigned char matches_wildcard(const char *pattern, const char *filename)
 extern unsigned char contains_wildcards(const char *pattern);
 extern void fsListDir(FILES_DIR * dir, unsigned char *param);
 
-extern void vdp_set_cursor_pos_G2(unsigned char direction);
-extern void vdp_writeG2(unsigned char chr);
-extern int setFontUseG2(unsigned char vpos);
-extern int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bufLoad, unsigned char *bufSave);
-
 #ifdef USE_MSMALLOC
 extern void *msmalloc(unsigned long size);
 extern void *msrealloc(void *ptr, unsigned long newSize);
@@ -409,6 +404,12 @@ typedef struct
 
 extern MGUI_SET_FONT addrSetFontUseG2; // Endereco da funcao setFontUseG2, para ser usada por programas externos
 extern MGUI_SET_FONT listFontsUseG2[4]; 
+
+extern void vdp_set_cursor_pos_G2(unsigned char direction);
+extern void vdp_writeG2(unsigned char chr);
+extern int getFontUseG2(MGUI_SET_FONT *fonInfo);
+extern int setFontUseG2(unsigned char vpos);
+extern int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bufLoad, unsigned char *bufSave);
 
 typedef struct
 {

@@ -8,4 +8,6 @@ mmsjos_ucosii_table:
             dc.l _setFontUseG2
             dc.l _loadFontUseG2
             dc.l _msprintf
+            dc.l _clearScrW
+            dc.l _getFontUseG2
             dc.l 0

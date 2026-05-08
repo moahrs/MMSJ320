@@ -16,11 +16,7 @@ LDLIBS = -lgcc
 SRC_C = \
 	src/libc_stub.c \
 	src/mmsj320mfp.c \
-	src/functions.c \
-	src/data.c \
-	src/layout.c \
-	src/input.c \
-	src/cursor.c
+	src/sheet.c
 
 SRC_S = \
 	src/sheet_inic.S
@@ -35,11 +31,7 @@ LINK_OBJ = \
 	src/sheet_inic.o \
 	src/libc_stub.o \
 	src/mmsj320mfp.o \
-	src/functions.o \
-	src/data.o \
-	src/layout.o \
-	src/input.o \
-	src/cursor.o
+	src/sheet.o
 
 all: $(TARGET) $(BIN) $(LST)
 

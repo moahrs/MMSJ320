@@ -268,6 +268,7 @@ void strncpy2( char* _dst, const char* _src, int _n );
 int isValidFilename(char *filename) ;
 unsigned char matches_wildcard(const char *pattern, const char *filename);
 unsigned char contains_wildcards(const char *pattern);
+int getFontUseG2(MGUI_SET_FONT *fonInfo);
 int setFontUseG2(unsigned char vpos);
 int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bufLoad, unsigned char *bufSave);
 
@@ -4961,10 +4962,10 @@ void printCharG2(unsigned char pchr, unsigned char pmove)
                 }
                 break;
             case 0xFF:  // Cursor
-                vdp_writeG2(0xFE);
+                vdp_write_gui(0xFE);
                 break;
             default:
-                vdp_writeG2(pchr);
+                vdp_write_gui(pchr);
 
                 if (vdp_mode == VDP_MODE_TEXT)
                     vdp_colorize(fgcolor, bgcolor);
@@ -5416,6 +5417,22 @@ void mprintf(const char *fmt, ...)
     va_end(ap);
 }
 #endif
+
+//-----------------------------------------------------------------------------
+int getFontUseG2(MGUI_SET_FONT *fonInfo)
+{
+    if (addrSetFontUseG2.name[0] == 0x00)
+        return 0;   // Fonte nao encontrada
+
+    strcpy(fonInfo->name, addrSetFontUseG2.name);
+    fonInfo->fc = addrSetFontUseG2.fc;
+    fonInfo->lc = addrSetFontUseG2.lc;
+    fonInfo->w  = addrSetFontUseG2.w;
+    fonInfo->h  = addrSetFontUseG2.h;
+    fonInfo->addr = addrSetFontUseG2.addr;
+
+    return 1;
+}
 
 //-----------------------------------------------------------------------------
 int setFontUseG2(unsigned char vpos)

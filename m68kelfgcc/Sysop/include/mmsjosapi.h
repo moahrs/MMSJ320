@@ -4,7 +4,7 @@
 // Function Shared Definitions
 #define MMSJOS_FUNC_TABLE    0x00800034
 #define MGUI_FUNC_TABLE      0x00803B24
-#define MMSJOS_UCOSII_TABLE  0x0080E4DC
+#define MMSJOS_UCOSII_TABLE  0x0080E52C
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);
@@ -18,7 +18,7 @@ typedef unsigned char (*fsCreateFileType)(char * vfilename);
 typedef unsigned char (*fsOpenFileType)(char * vfilename);
 typedef unsigned char (*fsCloseFileType)(char * vfilename, unsigned char vupdated);
 typedef unsigned long (*fsInfoFileType)(char * vfilename, unsigned char vtype);
-typedef unsigned char (*mprintfType)(unsigned long vAddress);
+typedef unsigned char (*mprintfType)(const char *fmt, ...);
 typedef unsigned short (*fsReadFileType)(char * vfilename, unsigned long voffset, unsigned char *buffer, unsigned short vsizebuffer);
 typedef unsigned char (*fsWriteFileType)(char * vfilename, unsigned long voffset, unsigned char *buffer, unsigned char vsizebuffer);
 typedef unsigned char (*fsDelFileType)(char * vfilename);
@@ -80,6 +80,8 @@ typedef void (*fsListDirType)(FILES_DIR * dir, unsigned char *param);
 typedef unsigned char (*setFontUseG2Type)(unsigned char *nameFile);
 typedef unsigned char (*loadFontUseG2Type)(unsigned char pos, unsigned char *nameFile, unsigned char *bufLoad, unsigned char *bufSave);
 typedef void (*msprintfType)(char *buffer, const char *fmt, ...);
+typedef void (*clearScrWType)(unsigned char vcolor);
+typedef int (*getFontUseG2Type)(MGUI_SET_FONT *fonInfo);
 
 // MMSJOS define functions
 #define fsGetDirAtuData ((fsGetDirAtuDataType *)(unsigned long)MMSJOS_FUNC_TABLE)[0] // Índice da função
@@ -154,6 +156,8 @@ typedef void (*msprintfType)(char *buffer, const char *fmt, ...);
 #define setFontUseG2 ((setFontUseG2Type *)(unsigned long)MMSJOS_UCOSII_TABLE)[6] // Índice da função
 #define loadFontUseG2 ((loadFontUseG2Type *)(unsigned long)MMSJOS_UCOSII_TABLE)[7] // Índice da função
 #define msprintf ((msprintfType *)(unsigned long)MMSJOS_UCOSII_TABLE)[8] // Índice da função
+#define clearScrW ((clearScrWType *)(unsigned long)MMSJOS_UCOSII_TABLE)[9] // Índice da função
+#define getFontUseG2 ((getFontUseG2Type *)(unsigned long)MMSJOS_UCOSII_TABLE)[10] // Índice da função
 
 // Apoio
 const unsigned char strValidChars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ^&'@{}[],$=!-#()%.+~_";
