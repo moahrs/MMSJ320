@@ -111,8 +111,8 @@ typedef union data_s *data;
 #define SHEET_GRID_X 4
 #define SHEET_GRID_Y 4
 
-static unsigned char defaultAlign = 0x00;
-static unsigned char defaultDisp = FORMAT_DISP_GENERAL;
+static unsigned char defaultAlign;
+static unsigned char defaultDisp;
 
 char *p;  // ponteiro global da expressão
 static int eval_depth = 0;

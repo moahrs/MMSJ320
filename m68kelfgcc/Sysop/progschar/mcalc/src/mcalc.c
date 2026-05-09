@@ -15,7 +15,7 @@
 #include "monitorapi.h"
 #include "mmsjosapi.h"
 
-#include "sheet.h"
+#include "mcalc.h"
 
 /* ===== MotoFFP bridge ===== */
 /* Variaveis globais usadas pelos stubs em sheet_fpp.S */
@@ -372,6 +372,9 @@ static unsigned char sheet_col_width[SHEET_COLS];
 
 static unsigned char sheet_recalc_visited[SHEET_ROWS][SHEET_COLS];
 static unsigned char sheet_screen_dirty[SHEET_ROWS][SHEET_COLS];
+static unsigned char mcalc_dirty = 0;
+static unsigned char mcalc_last_set_changed = 0;
+static unsigned char mcalc_file_name[128];
 
 static int sheet_clamp_col_width(int w)
 {
@@ -526,6 +529,8 @@ static void sheet_recalc_all_formulas(cell table[256][64]);
 static void sheet_recalc_from_cell(int row1, int col1, cell table[256][64]);
 static void sheet_refresh_visible_dirty_cells(int top_row, int left_col, int max_y, int max_x, int draw_size, cell table[256][64]);
 static cell sheet_get_or_create_cell(int row, int col, cell table[256][64]);
+static int mcalc_save_current_file(void);
+static int mcalc_load_file_by_name(char *fileName);
 
 static void sheet_menu_line_clear(void)
 {
@@ -609,6 +614,395 @@ static int sheet_parse_gc_cmd(char *cmd, int current_col, int *out_col, int *out
     return 1;
 }
 
+static void mcalc_mark_dirty(void)
+{
+    mcalc_dirty = 1;
+}
+
+static void mcalc_to_uppercase(char *text)
+{
+    while (*text) {
+        *text = (char)sheet_ascii_upper((unsigned char)*text);
+        text++;
+    }
+}
+
+static void mcalc_normalize_filename(char *fileName)
+{
+    int len;
+
+    mcalc_to_uppercase(fileName);
+
+    len = (int)strlen(fileName);
+    if (len <= 0)
+        return;
+
+    if (strchr(fileName, '.') == 0 && len < 124)
+        strcat(fileName, ".MCA");
+}
+
+static int mcalc_prompt_filename(char *prompt, char *outName, int outSize)
+{
+    int ok;
+
+    outName[0] = 0;
+    sheet_menu_line_show(prompt);
+    ok = entry('>', 1);
+    sheet_menu_line_clear();
+
+    if (!ok)
+        return 0;
+
+    strncpy(outName, (char *)bufCmd, outSize - 1);
+    outName[outSize - 1] = 0;
+    mcalc_normalize_filename(outName);
+
+    if (outName[0] == 0)
+        return 0;
+
+    return 1;
+}
+
+static int mcalc_confirm_yes_no(char *prompt)
+{
+    int key;
+
+    sheet_menu_line_show(prompt);
+    key = sheet_menu_read_key();
+    sheet_menu_line_clear();
+
+    if (key == 27)
+        return 0;
+
+    return (sheet_ascii_upper((unsigned char)key) == 'Y');
+}
+
+static void mcalc_escape_text(char *dst, int dstSize, char *src)
+{
+    int di;
+    int si;
+
+    di = 0;
+    si = 0;
+
+    while (src[si] != 0 && di < dstSize - 1) {
+        char ch;
+
+        ch = src[si++];
+
+        if (ch == '\\' && di < dstSize - 2) {
+            dst[di++] = '\\';
+            dst[di++] = '\\';
+        } else if (ch == '\t' && di < dstSize - 2) {
+            dst[di++] = '\\';
+            dst[di++] = 't';
+        } else if (ch == '\n' && di < dstSize - 2) {
+            dst[di++] = '\\';
+            dst[di++] = 'n';
+        } else if (ch == '\r' && di < dstSize - 2) {
+            dst[di++] = '\\';
+            dst[di++] = 'r';
+        } else {
+            dst[di++] = ch;
+        }
+    }
+
+    dst[di] = 0;
+}
+
+static void mcalc_unescape_text(char *text)
+{
+    int src;
+    int dst;
+
+    src = 0;
+    dst = 0;
+
+    while (text[src] != 0) {
+        if (text[src] == '\\' && text[src + 1] != 0) {
+            src++;
+
+            if (text[src] == 'n')
+                text[dst++] = '\n';
+            else if (text[src] == 'r')
+                text[dst++] = '\r';
+            else if (text[src] == 't')
+                text[dst++] = '\t';
+            else
+                text[dst++] = text[src];
+
+            src++;
+            continue;
+        }
+
+        text[dst++] = text[src++];
+    }
+
+    text[dst] = 0;
+}
+
+static int mcalc_write_bytes(char *fileName, unsigned long offset, unsigned char *buf, unsigned int size)
+{
+    unsigned int ix;
+    unsigned int chunkSize;
+    unsigned char chunk[128];
+    unsigned int iy;
+
+    for (ix = 0; ix < size; ix += 128) {
+        chunkSize = size - ix;
+        if (chunkSize > 128)
+            chunkSize = 128;
+
+        for (iy = 0; iy < chunkSize; iy++)
+            chunk[iy] = buf[ix + iy];
+
+        if (fsWriteFile(fileName, offset + ix, chunk, (unsigned char)chunkSize) != RETURN_OK)
+            return 0;
+    }
+
+    return 1;
+}
+
+static int mcalc_append_text(char *fileName, unsigned long *offset, char *text)
+{
+    unsigned int len;
+
+    len = (unsigned int)strlen(text);
+
+    if (!mcalc_write_bytes(fileName, *offset, (unsigned char *)text, len))
+        return 0;
+
+    *offset += len;
+    return 1;
+}
+
+static char *mcalc_next_field(char **pp)
+{
+    char *start;
+    char *q;
+
+    start = *pp;
+    q = start;
+
+    while (*q != 0 && *q != '\t')
+        q++;
+
+    if (*q == '\t') {
+        *q = 0;
+        *pp = q + 1;
+    } else {
+        *pp = q;
+    }
+
+    return start;
+}
+
+static int mcalc_save_to_file(char *fileName)
+{
+    int rr;
+    int cc;
+    unsigned long offset;
+    char line[256];
+
+    if (fsOpenFile(fileName) != RETURN_OK) {
+        if (fsCreateFile(fileName) != RETURN_OK)
+            return 0;
+    }
+
+    offset = 0;
+
+    if (!mcalc_append_text(fileName, &offset, "MCALC1\n"))
+        return 0;
+
+    msprintf(line, "D\t%u\t%u\n", (unsigned int)defaultAlign, (unsigned int)defaultDisp);
+    if (!mcalc_append_text(fileName, &offset, line))
+        return 0;
+
+    for (cc = 1; cc <= SHEET_COLS; cc++) {
+        msprintf(line, "W\t%d\t%d\n", cc, sheet_get_col_width(cc));
+        if (!mcalc_append_text(fileName, &offset, line))
+            return 0;
+    }
+
+    for (rr = 1; rr <= SHEET_ROWS; rr++) {
+        for (cc = 1; cc <= SHEET_COLS; cc++) {
+            cell c;
+            char raw[160];
+            char escaped[320];
+
+            c = table[rr - 1][cc - 1];
+            if (!c)
+                continue;
+
+            raw[0] = 0;
+            if (c->contents == CELL_LABEL || c->contents == CELL_FORMULA) {
+                strncpy(raw, c->data->label, sizeof(raw) - 1);
+                raw[sizeof(raw) - 1] = 0;
+            } else if (c->contents == CELL_INT) {
+                fppToCompactString((unsigned long)c->data->num, raw, sizeof(raw));
+            }
+
+            mcalc_escape_text(escaped, sizeof(escaped), raw);
+            msprintf(line, "C\t%d\t%d\t%d\t%u\t%u\t%s\n",
+                rr,
+                cc,
+                c->contents,
+                (unsigned int)c->formatAlign,
+                (unsigned int)c->formatDisp,
+                escaped);
+
+            if (!mcalc_append_text(fileName, &offset, line))
+                return 0;
+        }
+    }
+
+    fsCloseFile(fileName, 1);
+    strncpy((char *)mcalc_file_name, fileName, sizeof(mcalc_file_name) - 1);
+    mcalc_file_name[sizeof(mcalc_file_name) - 1] = 0;
+    mcalc_dirty = 0;
+    return 1;
+}
+
+static int mcalc_save_current_file(void)
+{
+    char fileName[128];
+
+    if (mcalc_file_name[0] == 0) {
+        if (!mcalc_prompt_filename("SAVE NAME:", fileName, sizeof(fileName)))
+            return 0;
+    } else {
+        strncpy(fileName, (char *)mcalc_file_name, sizeof(fileName) - 1);
+        fileName[sizeof(fileName) - 1] = 0;
+    }
+
+    return mcalc_save_to_file(fileName);
+}
+
+static int mcalc_load_file_by_name(char *fileName)
+{
+    unsigned long fileSize;
+    unsigned long loaded;
+    unsigned char *fileBuf;
+    char *cursor;
+
+    fileSize = fsInfoFile(fileName, INFO_SIZE);
+    if (fileSize == ERRO_D_NOT_FOUND || fileSize == ERRO_D_FILE_NOT_FOUND || fileSize == 0)
+        return 0;
+
+    fileBuf = (unsigned char *)msmalloc(fileSize + 1);
+    if (!fileBuf)
+        return 0;
+
+    loaded = loadFile((unsigned char *)fileName, fileBuf);
+    if (loaded == 0) {
+        msfree(fileBuf);
+        return 0;
+    }
+
+    fileBuf[loaded] = 0;
+
+    if (strncmp((char *)fileBuf, "MCALC1", 6) != 0) {
+        msfree(fileBuf);
+        return 0;
+    }
+
+    init_table();
+    cursor = (char *)fileBuf;
+
+    while (*cursor != 0) {
+        char *line;
+        char *next;
+
+        line = cursor;
+        next = strchr(cursor, '\n');
+        if (next) {
+            *next = 0;
+            cursor = next + 1;
+        } else {
+            cursor += strlen(cursor);
+        }
+
+        if (line[0] == 'M')
+            continue;
+
+        if (line[0] == 'D' && line[1] == '\t') {
+            char *fields;
+            char *a;
+            char *d;
+
+            fields = line + 2;
+            a = mcalc_next_field(&fields);
+            d = mcalc_next_field(&fields);
+            defaultAlign = (unsigned char)atoi(a);
+            defaultDisp = (unsigned char)atoi(d);
+        } else if (line[0] == 'W' && line[1] == '\t') {
+            char *fields;
+            char *colText;
+            char *widthText;
+
+            fields = line + 2;
+            colText = mcalc_next_field(&fields);
+            widthText = mcalc_next_field(&fields);
+            sheet_set_col_width(atoi(colText), atoi(widthText));
+        } else if (line[0] == 'C' && line[1] == '\t') {
+            char *fields;
+            int rr;
+            int cc;
+            int contents;
+            unsigned char align;
+            unsigned char disp;
+            char *payload;
+            char inputCell[192];
+            cell c;
+
+            fields = line + 2;
+            rr = atoi(mcalc_next_field(&fields));
+            cc = atoi(mcalc_next_field(&fields));
+            contents = atoi(mcalc_next_field(&fields));
+            align = (unsigned char)atoi(mcalc_next_field(&fields));
+            disp = (unsigned char)atoi(mcalc_next_field(&fields));
+            payload = fields;
+            mcalc_unescape_text(payload);
+
+            inputCell[0] = 0;
+            if (contents == CELL_FORMULA) {
+                inputCell[0] = '=';
+                strncpy(inputCell + 1, payload, sizeof(inputCell) - 2);
+                inputCell[sizeof(inputCell) - 1] = 0;
+            } else if (contents == CELL_LABEL) {
+                inputCell[0] = '"';
+                strncpy(inputCell + 1, payload, sizeof(inputCell) - 2);
+                inputCell[sizeof(inputCell) - 1] = 0;
+            } else {
+                strncpy(inputCell, payload, sizeof(inputCell) - 1);
+                inputCell[sizeof(inputCell) - 1] = 0;
+            }
+
+            set_data(inputCell, rr, cc, table);
+            c = table[rr - 1][cc - 1];
+            if (c) {
+                c->formatAlign = align;
+                c->formatDisp = disp;
+            }
+        }
+    }
+
+    msfree(fileBuf);
+    sheet_recalc_all_formulas(table);
+    strncpy((char *)mcalc_file_name, fileName, sizeof(mcalc_file_name) - 1);
+    mcalc_file_name[sizeof(mcalc_file_name) - 1] = 0;
+    mcalc_dirty = 0;
+    return 1;
+}
+
+static int mcalc_can_exit(void)
+{
+    if (!mcalc_dirty)
+        return 1;
+
+    return mcalc_confirm_yes_no("EXIT WITHOUT SAVING? Y N");
+}
+
 static void sheet_apply_format_to_current(unsigned char fmt)
 {
     cell c;
@@ -627,6 +1021,7 @@ static void sheet_apply_format_to_current(unsigned char fmt)
     if (row >= 1 && row <= SHEET_ROWS && col >= 1 && col <= SHEET_COLS)
         sheet_screen_dirty[row - 1][col - 1] = 1;
 
+    mcalc_mark_dirty();
     sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
     set_icon(row, col);
     fill_in(y, x, row, col);
@@ -639,6 +1034,7 @@ void init_table(void)
 
     defaultAlign = 0x00;
     defaultDisp = FORMAT_DISP_GENERAL;
+    mcalc_last_set_changed = 0;
 
     memset(sheet_table, 0, sizeof(sheet_table));
     memset(sheet_cell_used, 0, sizeof(sheet_cell_used));
@@ -699,6 +1095,8 @@ void vc_start() {
 
     draw_size = SHEET_COL_WIDTH_DEFAULT;
     init_table();
+    mcalc_file_name[0] = 0;
+    mcalc_dirty = 0;
     corner_row = 1;
     corner_col = 1;
     draw_screenyx();
@@ -844,6 +1242,8 @@ int entry(int ch, char tp) {
         set_icon(row, col);	
         move(y, x);
         set_data(entry_line, row, col, table);
+        if (mcalc_last_set_changed)
+            mcalc_mark_dirty();
         sheet_recalc_from_cell(row, col, table);
         sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
         fill_in(y, x, row, col);
@@ -997,7 +1397,7 @@ void input() {
         {
             int k;
 
-            sheet_menu_line_show("B C D F G");
+            sheet_menu_line_show("B C D F G S");
             k = sheet_menu_read_key();
 
             if (k == 27) {
@@ -1011,28 +1411,37 @@ void input() {
 
             if (k == 'B') {
                 // Function to Blank current Cell
-                set_data("", row, col, table);
-                sheet_recalc_from_cell(row, col, table);
-                sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
-                fill_in(y, x, row, col);
-                set_icon(row, col);
-                move(y, x);
+                if (table[row - 1][col - 1] != NULL) {
+                    table[row - 1][col - 1] = NULL;
+                    mcalc_mark_dirty();
+                    sheet_recalc_from_cell(row, col, table);
+                    sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+                    fill_in(y, x, row, col);
+                    set_icon(row, col);
+                    move(y, x);
+                }
+                sheet_menu_line_clear();
             }
             else if (k == 'C') {
                 // Clear all sheet, after confirm with Y
+                sheet_menu_line_clear();
                 sheet_menu_line_show("Y N");
                 k = sheet_menu_read_key();
                 if (k != 27 && sheet_ascii_upper((unsigned char)k) == 'Y') {
                     init_table();
+                    mcalc_mark_dirty();
                     draw_axes(corner_row, corner_col);
                     draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
                     set_icon(row, col);
                     fill_in(y, x, row, col);
                     move(y, x);
                 }
+                
+                sheet_menu_line_clear();
             }
             else if (k == 'D') {
                 // Delete current Row (R) or Column (C), after confirm with Y
+                sheet_menu_line_clear();
                 sheet_menu_line_show("R C");
                 k = sheet_menu_read_key();
                 if (k != 27) {
@@ -1073,6 +1482,7 @@ void input() {
                                 }
                             }
 
+                            mcalc_mark_dirty();
                             draw_axes(corner_row, corner_col);
                             draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
                             set_icon(row, col);
@@ -1081,6 +1491,8 @@ void input() {
                         }
                     }
                 }
+
+                sheet_menu_line_clear();
             }
             else if (k == 'F') {
                 int f;
@@ -1138,6 +1550,8 @@ void input() {
                             vret = 0;
 
                             if (sheet_parse_gc_cmd((char *)bufCmd, col, &cmd_col, &cmd_w)) {
+                                if (sheet_get_col_width(cmd_col) != sheet_clamp_col_width(cmd_w))
+                                    mcalc_mark_dirty();
                                 sheet_set_col_width(cmd_col, cmd_w);
 
                                 while (col < corner_col)
@@ -1184,7 +1598,55 @@ void input() {
                                 defaultAlign = 0x00;
                                 defaultDisp = FORMAT_DISP_GENERAL;
                             }
+
+                            mcalc_mark_dirty();
                         }
+                    }
+                }
+
+                sheet_menu_line_clear();
+                set_icon(row, col);
+                move(y, x);
+            } else if (k == 'S') {
+                // Rotinas de salvar e abrir arquivos
+                int f;
+
+                sheet_menu_line_show("A L S");
+                f = sheet_menu_read_key();
+
+                if (f != 27) {
+                    f = (int)sheet_ascii_upper((unsigned char)f);
+
+                    if (f == 'A')       // Save As = requires name file entries
+                    {
+                        char fileName[128];
+
+                        if (mcalc_prompt_filename("SAVE AS:", fileName, sizeof(fileName)))
+                            mcalc_save_to_file(fileName);
+                    }
+                    else if (f == 'L')  // Load - requires name file entries
+                    {
+                        char fileName[128];
+
+                        if (mcalc_prompt_filename("LOAD NAME:", fileName, sizeof(fileName))) {
+                            if (mcalc_load_file_by_name(fileName)) {
+                                row = 1;
+                                col = 1;
+                                corner_row = 1;
+                                corner_col = 1;
+                                x = sheet_col_to_screen_x(corner_col, col);
+                                y = SHEET_GRID_Y;
+                                draw_axes(corner_row, corner_col);
+                                draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+                                set_icon(row, col);
+                                fill_in(y, x, row, col);
+                                move(y, x);
+                            }
+                        }
+                    }
+                    else if (f == 'S')  // Save - requires name file entries, if name not defined
+                    {
+                        mcalc_save_current_file();
                     }
                 }
 
@@ -1281,7 +1743,8 @@ void input() {
             {
                 if (ch == 'X' || ch == 'x') 
                 {
-                    break; // Exit on Ctrl + Alt + X
+                    if (mcalc_can_exit())
+                        break;
                 }
             } 
             else if (flag == KEY_CTRL) 
@@ -1387,7 +1850,7 @@ static cell sheet_get_or_create_cell(int row, int col, cell table[256][64])
             sheet_cell_pool[i].col = col;
             sheet_cell_pool[i].data = &sheet_data_pool[i];
             sheet_cell_pool[i].formatAlign = 0;
-            sheet_cell_pool[i].formatDisp = FORMAT_DISP_GENERAL;
+            sheet_cell_pool[i].formatDisp = 0;
 
             table[row - 1][col - 1] = &sheet_cell_pool[i];
 
@@ -1425,6 +1888,8 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
     long int num;
     int i;
 
+    mcalc_last_set_changed = 0;
+
     while (*inputCell == ' ')
         inputCell++;
 
@@ -1456,6 +1921,7 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
         if (c->data->label[strlen(c->data->label) - 1] == '"')
             c->data->label[strlen(c->data->label) - 1] = 0;
 
+        mcalc_last_set_changed = 1;
         return;
     }
 
@@ -1474,6 +1940,7 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
         c->cache_valid = 0;
         c->cached_value = num;
 
+        mcalc_last_set_changed = 1;
         return;
     }
 
@@ -1502,6 +1969,7 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
         c->cache_valid = 0;
         c->cached_value = 0;
 
+        mcalc_last_set_changed = 1;
         return;
     }
 }

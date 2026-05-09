@@ -1,5 +1,5 @@
 @echo off
 setlocal
 cd /d %~dp0
-call build_sheet.bat %*
+call build_mcalc.bat %*
 exit /b %errorlevel%
