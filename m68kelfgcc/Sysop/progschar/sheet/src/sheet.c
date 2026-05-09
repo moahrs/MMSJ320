@@ -368,9 +368,129 @@ static int x_pos = 0;
 static int y_pos = 0;
 static int x_real = 4;
 static int y_real = 4;
+static unsigned char sheet_col_width[SHEET_COLS];
 
 static unsigned char sheet_recalc_visited[SHEET_ROWS][SHEET_COLS];
 static unsigned char sheet_screen_dirty[SHEET_ROWS][SHEET_COLS];
+
+static int sheet_clamp_col_width(int w)
+{
+    if (w < SHEET_COL_WIDTH_MIN)
+        return SHEET_COL_WIDTH_MIN;
+    if (w > SHEET_COL_WIDTH_MAX)
+        return SHEET_COL_WIDTH_MAX;
+    return w;
+}
+
+static int sheet_get_col_width(int col1)
+{
+    if (col1 < 1 || col1 > SHEET_COLS)
+        return SHEET_COL_WIDTH_DEFAULT;
+    return (int)sheet_col_width[col1 - 1];
+}
+
+static void sheet_set_col_width(int col1, int w)
+{
+    if (col1 < 1 || col1 > SHEET_COLS)
+        return;
+    sheet_col_width[col1 - 1] = (unsigned char)sheet_clamp_col_width(w);
+}
+
+static int sheet_col_to_screen_x(int left_col1, int col1)
+{
+    int xcur;
+    int cc;
+
+    xcur = SHEET_GRID_X;
+    for (cc = left_col1; cc < col1; cc++)
+        xcur += sheet_get_col_width(cc);
+
+    return xcur;
+}
+
+static int sheet_visible_col_count(int left_col1, int max_x)
+{
+    int xcur;
+    int cc;
+    int count;
+
+    xcur = SHEET_GRID_X;
+    cc = left_col1;
+    count = 0;
+
+    while (cc <= SHEET_COLS) {
+        int w = sheet_get_col_width(cc);
+        if (xcur + w > max_x)
+            break;
+        xcur += w;
+        count++;
+        cc++;
+    }
+
+    return count;
+}
+
+static void sheet_apply_numeric_format(char *numText, unsigned char formatDisp)
+{
+    if (formatDisp == FORMAT_DISP_INTEGER) {
+        char *dot = strchr(numText, '.');
+        if (dot)
+            *dot = 0;
+    } else if (formatDisp == FORMAT_DISP_CURRENCY) {
+        char tmp[32];
+        strncpy(tmp, numText, sizeof(tmp) - 1);
+        tmp[sizeof(tmp) - 1] = 0;
+        numText[0] = '$';
+        strncpy(numText + 1, tmp, 30);
+        numText[31] = 0;
+    }
+}
+
+static unsigned char sheet_effective_align(cell c)
+{
+    if (c->formatAlign == FORMAT_ALIGN_LEFT || c->formatAlign == FORMAT_ALIGN_RIGHT)
+        return c->formatAlign;
+
+    if (c->contents == CELL_LABEL)
+        return FORMAT_ALIGN_LEFT;
+
+    return FORMAT_ALIGN_RIGHT;
+}
+
+static unsigned char sheet_effective_disp(cell c)
+{
+    if (c->formatDisp == FORMAT_DISP_GENERAL ||
+        c->formatDisp == FORMAT_DISP_CURRENCY ||
+        c->formatDisp == FORMAT_DISP_INTEGER)
+        return c->formatDisp;
+
+    return FORMAT_DISP_GENERAL;
+}
+
+static void sheet_pad_aligned(char *out, int width, char *text, unsigned char align)
+{
+    int len;
+    int pad;
+    int i;
+
+    len = (int)strlen(text);
+    if (len > width)
+        len = width;
+
+    pad = width - len;
+
+    if (align == FORMAT_ALIGN_RIGHT) {
+        for (i = 0; i < pad; i++)
+            out[i] = ' ';
+        strncpy(out + pad, text, len);
+    } else {
+        strncpy(out, text, len);
+        for (i = len; i < width; i++)
+            out[i] = ' ';
+    }
+
+    out[width] = 0;
+}
 
 static int sheet_formula_refs_cell(char *expr, int row1, int col1);
 static void sheet_recalc_dependents_rec(int src_row1, int src_col1, cell table[256][64], int depth);
@@ -380,6 +500,8 @@ static void sheet_refresh_visible_dirty_cells(int top_row, int left_col, int max
 
 void init_table(void)
 {
+    int i;
+
     memset(sheet_table, 0, sizeof(sheet_table));
     memset(sheet_cell_used, 0, sizeof(sheet_cell_used));
     memset(sheet_cell_pool, 0, sizeof(sheet_cell_pool));
@@ -388,6 +510,10 @@ void init_table(void)
     memset(sheet_recalc_visited, 0, sizeof(sheet_recalc_visited));
     memset(sheet_screen_dirty, 0, sizeof(sheet_screen_dirty));
     sheet_text_next = 0;
+
+    for (i = 1; i <= SHEET_COLS; i++)
+        sheet_set_col_width(i, SHEET_COL_WIDTH_DEFAULT);
+
     table = sheet_table;
 }
 
@@ -433,18 +559,18 @@ void vc_start() {
 
     msfree(memLoadFont);
 
-    draw_size = 8;
-	draw_screenyx();
-	//will need to be fixed once I implement column sizing
-	draw_axes(1, 1);
-	corner_row = 1;
-	corner_col = 1;
+    draw_size = SHEET_COL_WIDTH_DEFAULT;
+    init_table();
+    corner_row = 1;
+    corner_col = 1;
+    draw_screenyx();
+    draw_axes(1, 1);
 	//draw_screenyx();
 	refresh();
 	//char cursor[9] = "        ";
 	//draw_axes(20, 20);
 
-    x = SHEET_GRID_X;
+    x = sheet_col_to_screen_x(corner_col, 1);
     y = SHEET_GRID_Y;
     move(y, x);    
 	mprintf("        ");
@@ -454,7 +580,6 @@ void vc_start() {
 	vc_getmaxyx(curscr, &max_y, &max_x);
 	entry_size = max_x - 12;
 	refresh();
-	init_table();
 	input();
 	
 	char ch = getch();
@@ -611,8 +736,8 @@ int entry(int ch, char tp) {
 void fill_in(int y, int x, int row, int col) {
 	color_on();
 	move(y, x);
-	char print[draw_size + 1];
-    print_data(row, col, draw_size, table, print);
+    char print[SHEET_COL_WIDTH_MAX + 1];
+    print_data(row, col, sheet_get_col_width(col), table, print);
 	mprintf("%s", print);
 	move(y, x);
 }
@@ -622,8 +747,8 @@ void fill_in(int y, int x, int row, int col) {
 void refill(int y, int x, int row, int col) {
 	color_off();
 	move(y, x);
-	char print[draw_size + 1];
-	print_data(row, col, draw_size, table, print);
+    char print[SHEET_COL_WIDTH_MAX + 1];
+    print_data(row, col, sheet_get_col_width(col), table, print);
 	mprintf("%s", print);
 	move(y, x);
 	color_on();
@@ -684,38 +809,46 @@ void input() {
 					//TODO
 				}
 			} else if (ch == KEY_RIGHT) { //right
-				if (x <= max_x - (2 * draw_size)) {
+                if (col < SHEET_COLS) {
+                    int cw = sheet_get_col_width(col);
+                    int nextw = sheet_get_col_width(col + 1);
+                    int nextx = x + cw;
+
+                    if (nextx + nextw <= max_x) {
 					refill(y, x, row, col);
-					move(y, x+draw_size);
 					col++;
-					x+=draw_size;
+                    x = nextx;
+                    move(y, x);
 					fill_in(y, x, row, col);
 					set_icon(row, col);
 					move(y, x);
-				} else if(col < 63) {
-					draw_axes(corner_row, corner_col + 1);
-					draw_cells(corner_row, corner_col + 1, max_y, max_x, draw_size, table);
-					col++;
-					corner_col++;
-					set_icon(row, col);
-					fill_in(y, x, row, col);
-					move(y, x);
+                    } else {
+                        col++;
+                        corner_col++;
+                        draw_axes(corner_row, corner_col);
+                        draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+                        x = sheet_col_to_screen_x(corner_col, col);
+                        set_icon(row, col);
+                        fill_in(y, x, row, col);
+                        move(y, x);
+                    }
 				}
 			} else if (ch == KEY_LEFT) { //left
-				if (x >= draw_size) {
+                if (col > 1 && col > corner_col) {
+                    int prevw = sheet_get_col_width(col - 1);
 					refill(y, x, row, col);
-					move(y, x-draw_size);
-					//mprintf("        ");
 					col--;
-					x-=draw_size;
+                    x -= prevw;
+                    move(y, x);
 					set_icon(row, col);
 					fill_in(y, x, row, col);
 					move(y, x);
-				} else if(col > 1) {
-					draw_axes(corner_row, corner_col - 1);
-					draw_cells(corner_row, corner_col - 1, max_y, max_x, draw_size, table);
+                } else if(col > 1) {
 					col--;
 					corner_col--;
+                    draw_axes(corner_row, corner_col);
+                    draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+                    x = sheet_col_to_screen_x(corner_col, col);
 					set_icon(row, col);
 					fill_in(y, x, row, col);
 					move(y, x);
@@ -740,12 +873,18 @@ void input() {
             if (row < corner_row || row > corner_row + (max_y - 5))
                 corner_row = (row < (max_y - 5)) ? 1 : (row - (max_y - 5) / 2);
 
-            if (col < corner_col || col > corner_col + vc_div_int(max_x - 4, draw_size))
-                corner_col = (col < 10) ? 1 : (col - 10);
+            while (col < corner_col)
+                corner_col--;
+
+            while (sheet_col_to_screen_x(corner_col, col) + sheet_get_col_width(col) > max_x) {
+                corner_col++;
+                if (corner_col > col)
+                    break;
+            }
 
             draw_axes(corner_row, corner_col);
             draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
-            x = SHEET_GRID_X + ((col - corner_col) * draw_size);
+            x = sheet_col_to_screen_x(corner_col, col);
             y = SHEET_GRID_Y + ((row - corner_row));
             move(y, x);
             set_icon(row, col);
@@ -776,12 +915,18 @@ void input() {
                     if (row < corner_row || row > corner_row + (max_y - 5))
                         corner_row = (row < (max_y - 5)) ? 1 : (row - (max_y - 5) / 2);
 
-                    if (col < corner_col || col > corner_col + vc_div_int(max_x - 4, draw_size))
-                        corner_col = (col < 10) ? 1 : (col - 10);
+                    while (col < corner_col)
+                        corner_col--;
+
+                    while (sheet_col_to_screen_x(corner_col, col) + sheet_get_col_width(col) > max_x) {
+                        corner_col++;
+                        if (corner_col > col)
+                            break;
+                    }
 
                     draw_axes(corner_row, corner_col);
                     draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
-                    x = SHEET_GRID_X + ((col - corner_col) * draw_size);
+                    x = sheet_col_to_screen_x(corner_col, col);
                     y = SHEET_GRID_Y + ((row - corner_row));
                     move(y, x);
                     set_icon(row, col);
@@ -908,6 +1053,8 @@ static cell sheet_get_or_create_cell(int row, int col, cell table[256][64])
             sheet_cell_pool[i].row = row;
             sheet_cell_pool[i].col = col;
             sheet_cell_pool[i].data = &sheet_data_pool[i];
+            sheet_cell_pool[i].formatAlign = 0;
+            sheet_cell_pool[i].formatDisp = FORMAT_DISP_GENERAL;
 
             table[row - 1][col - 1] = &sheet_cell_pool[i];
 
@@ -968,6 +1115,8 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
 
         c->contents = CELL_LABEL;
         c->data->label = txt;
+        if (c->formatAlign != FORMAT_ALIGN_LEFT && c->formatAlign != FORMAT_ALIGN_RIGHT)
+            c->formatAlign = FORMAT_ALIGN_LEFT;
         c->cache_valid = 0;
         c->cached_value = 0;
 
@@ -985,6 +1134,8 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
         num = (long)floatStringToFpp(inputCell);   // my_atol(inputCell);
         c->contents = CELL_INT;
         c->data->num = num;
+        if (c->formatAlign != FORMAT_ALIGN_LEFT && c->formatAlign != FORMAT_ALIGN_RIGHT)
+            c->formatAlign = FORMAT_ALIGN_RIGHT;
         c->cache_valid = 0;
         c->cached_value = num;
 
@@ -1009,6 +1160,8 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
 
         c->contents = CELL_FORMULA;
         c->data->label = txt;
+        if (c->formatAlign != FORMAT_ALIGN_LEFT && c->formatAlign != FORMAT_ALIGN_RIGHT)
+            c->formatAlign = FORMAT_ALIGN_RIGHT;
         c->cache_valid = 0;
         c->cached_value = 0;
 
@@ -1021,7 +1174,9 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
 {
     int i;
     cell print;
-    char create[16];
+    char create[32];
+    unsigned char align;
+    unsigned char disp;
 
     memset(out, 0, draw_size + 1);
 
@@ -1033,17 +1188,20 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
         return;
     }
 
-    if (print->contents == CELL_LABEL) {
-        strncat(out, print->data->label, draw_size);
+    align = sheet_effective_align(print);
+    disp = sheet_effective_disp(print);
 
-        while ((int)strlen(out) < draw_size)
-            strcat(out, " ");
+    if (print->contents == CELL_LABEL) {
+        strncpy(create, print->data->label, sizeof(create) - 1);
+        create[sizeof(create) - 1] = 0;
+        sheet_pad_aligned(out, draw_size, create, align);
 
         return;
     }
 
     if (print->contents == CELL_INT) {
         fppToCompactString((unsigned long)print->data->num, create, sizeof(create));
+        sheet_apply_numeric_format(create, disp);
         fitNumberToWidth(create, draw_size);
 
         if ((int)strlen(create) > draw_size) {
@@ -1053,10 +1211,7 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
             return;
         }
 
-        for (i = strlen(create); i < draw_size; i++)
-            strcat(out, " ");
-
-        strcat(out, create);
+        sheet_pad_aligned(out, draw_size, create, align);
         return;
     }
 
@@ -1071,8 +1226,9 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
             print->cache_valid = 1;
         }
 
-        char tmp[16];
+        char tmp[32];
         fppToCompactString((unsigned long)val, tmp, sizeof(tmp));
+        sheet_apply_numeric_format(tmp, disp);
         fitNumberToWidth(tmp, draw_size);
 
         if ((int)strlen(tmp) > draw_size) {
@@ -1082,10 +1238,7 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
             return;
         }
 
-        for (i = strlen(tmp); i < draw_size; i++)
-            strcat(out, " ");
-
-        strcat(out, tmp);
+        sheet_pad_aligned(out, draw_size, tmp, align);
         return;
     }
 
@@ -1132,12 +1285,13 @@ void color_off() {
 ///This function is a goddamn mess and I should never touch it once it works
 void draw_axes(int yn, int xn) {
 	int a;
-	int j;
 	xn--; //don't
 	yn--; //ask
 	x_start = xn;
 	y_start = yn;
 	int max_x, max_y;
+    int xcur;
+    int cc;
 	vc_getmaxyx(curscr, &max_y, &max_x);
 	move(4, 0);
 	int b = 4;
@@ -1155,39 +1309,41 @@ void draw_axes(int yn, int xn) {
 		b++;
 	}
 	
-	move(3, 3);
-	
-	int k = 0;
-    char letters[3];
-	while ( ((k+1) * draw_size) + 3 < max_x) {
-		for (j = 0; j < draw_size; j++) {
-			if (k + xn < 26) {
-				if (j != ((draw_size / 2)) )
-					mprintf(" ");
-				else {
-                    to_char(k + xn, letters);
-					mprintf("%s", letters);
-				}			
-			} else {
-				if (j != (int) ((draw_size - 0.5) / 2)) {
-					mprintf(" ");
-				} else {
-                    to_char(k + xn, letters);
-					mprintf("%s", letters);
-					j++;
-				}
-			}
+    xcur = SHEET_GRID_X;
+    cc = xn + 1;
 
-		}
-		k++;
-	}
+    while (cc <= SHEET_COLS) {
+        int cw;
+        char letters[3];
+        int len;
+        int labelPos;
+        int jj;
 
-    // Fill last columns with " "
-    while ( ((k) * draw_size) + 3 < max_x) {
-        for (j = 0; j < draw_size; j++) {
+        cw = sheet_get_col_width(cc);
+        if (xcur + cw > max_x)
+            break;
+
+        move(3, xcur);
+        for (jj = 0; jj < cw; jj++)
             mprintf(" ");
-        }
-        k++;
+
+        to_char(cc - 1, letters);
+        len = (int)strlen(letters);
+        if (len > cw)
+            len = cw;
+
+        labelPos = xcur + ((cw - len) / 2);
+        move(3, labelPos);
+        mprintf("%s", letters);
+
+        xcur += cw;
+        cc++;
+    }
+
+    move(3, xcur);
+    while (xcur < max_x) {
+        mprintf(" ");
+        xcur++;
     }
 	//move(4, 4);
 	//draw_cells(start_y, start_x);
@@ -1199,22 +1355,33 @@ void draw_cells(int row, int col, int max_y, int max_x, int draw_size, cell tabl
     int i;
     int j;
     int drawj;
-    char out[draw_size + 1];
+    char out[SHEET_COL_WIDTH_MAX + 1];
 
     color_on();
     move(1,0);
     mprintf("Processing...");
     color_off();
 
-    drawj = vc_div_int(max_x - 3, draw_size);
-    //drawj = (max_x - 3) / draw_size;
+    (void)draw_size;
+    drawj = sheet_visible_col_count(col, max_x);
 
     for (i = 0; i < (max_y - 4); i++) {
-        move(4 + i, 4);
+        int xcur = SHEET_GRID_X;
 
         for (j = 0; j < drawj; j++) {
-            print_data(row + i, col + j, draw_size, table, out);
+            int cc = col + j;
+            int cw = sheet_get_col_width(cc);
+
+            move(4 + i, xcur);
+            print_data(row + i, cc, cw, table, out);
             mprintf("%s", out);
+            xcur += cw;
+        }
+
+        move(4 + i, xcur);
+        while (xcur < max_x) {
+            mprintf(" ");
+            xcur++;
         }
     }
 
@@ -1909,9 +2076,10 @@ static void sheet_refresh_visible_dirty_cells(int top_row, int left_col, int max
     int i;
     int j;
     int drawj;
-    char out[16];
+    char out[SHEET_COL_WIDTH_MAX + 1];
 
-    drawj = vc_div_int(max_x - 3, draw_size);
+    (void)draw_size;
+    drawj = sheet_visible_col_count(left_col, max_x);
 
     for (i = 0; i < (max_y - 4); i++) {
         int rr = top_row + i;
@@ -1921,6 +2089,8 @@ static void sheet_refresh_visible_dirty_cells(int top_row, int left_col, int max
 
         for (j = 0; j < drawj; j++) {
             int cc = left_col + j;
+            int xcur = sheet_col_to_screen_x(left_col, cc);
+            int cw = sheet_get_col_width(cc);
 
             if (cc < 1 || cc > SHEET_COLS)
                 continue;
@@ -1928,8 +2098,8 @@ static void sheet_refresh_visible_dirty_cells(int top_row, int left_col, int max
             if (!sheet_screen_dirty[rr - 1][cc - 1])
                 continue;
 
-            move(4 + i, 4 + (j * draw_size));
-            print_data(rr, cc, draw_size, table, out);
+            move(4 + i, xcur);
+            print_data(rr, cc, cw, table, out);
             mprintf("%s", out);
             sheet_screen_dirty[rr - 1][cc - 1] = 0;
         }

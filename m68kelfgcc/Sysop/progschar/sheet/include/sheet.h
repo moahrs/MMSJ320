@@ -72,6 +72,8 @@ struct cell_s {
 	union data_s *data;
     long cached_value;
     unsigned char cache_valid;
+    unsigned char formatAlign;
+    unsigned char formatDisp;
 };
 
 union data_s {
@@ -93,6 +95,17 @@ typedef union data_s *data;
 #define CELL_FLOAT  1
 #define CELL_LABEL  2
 #define CELL_FORMULA 3
+
+#define FORMAT_ALIGN_LEFT  'L'
+#define FORMAT_ALIGN_RIGHT 'R'
+
+#define FORMAT_DISP_GENERAL 'G'
+#define FORMAT_DISP_CURRENCY '$'
+#define FORMAT_DISP_INTEGER 'I'
+
+#define SHEET_COL_WIDTH_MIN 3
+#define SHEET_COL_WIDTH_MAX 25
+#define SHEET_COL_WIDTH_DEFAULT 8
 
 #define SHEET_GRID_X 4
 #define SHEET_GRID_Y 4
