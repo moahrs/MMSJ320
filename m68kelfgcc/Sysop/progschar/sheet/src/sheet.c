@@ -629,12 +629,16 @@ static void sheet_apply_format_to_current(unsigned char fmt)
 
     sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
     set_icon(row, col);
+    fill_in(y, x, row, col);
     move(y, x);
 }
 
 void init_table(void)
 {
     int i;
+
+    defaultAlign = 0x00;
+    defaultDisp = FORMAT_DISP_GENERAL;
 
     memset(sheet_table, 0, sizeof(sheet_table));
     memset(sheet_cell_used, 0, sizeof(sheet_cell_used));
@@ -993,7 +997,7 @@ void input() {
         {
             int k;
 
-            sheet_menu_line_show("F G");
+            sheet_menu_line_show("B C D F G");
             k = sheet_menu_read_key();
 
             if (k == 27) {
@@ -1005,10 +1009,83 @@ void input() {
 
             k = (int)sheet_ascii_upper((unsigned char)k);
 
-            if (k == 'F') {
+            if (k == 'B') {
+                // Function to Blank current Cell
+                set_data("", row, col, table);
+                sheet_recalc_from_cell(row, col, table);
+                sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+                fill_in(y, x, row, col);
+                set_icon(row, col);
+                move(y, x);
+            }
+            else if (k == 'C') {
+                // Clear all sheet, after confirm with Y
+                sheet_menu_line_show("Y N");
+                k = sheet_menu_read_key();
+                if (k != 27 && sheet_ascii_upper((unsigned char)k) == 'Y') {
+                    init_table();
+                    draw_axes(corner_row, corner_col);
+                    draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+                    set_icon(row, col);
+                    fill_in(y, x, row, col);
+                    move(y, x);
+                }
+            }
+            else if (k == 'D') {
+                // Delete current Row (R) or Column (C), after confirm with Y
+                sheet_menu_line_show("R C");
+                k = sheet_menu_read_key();
+                if (k != 27) {
+                    k = (int)sheet_ascii_upper((unsigned char)k);
+                    if (k == 'R' || k == 'C') {
+                        sheet_menu_line_show("Y N");
+                        int confirm = sheet_menu_read_key();
+                        if (confirm != 27 && sheet_ascii_upper((unsigned char)confirm) == 'Y') {
+                            if (k == 'R') {
+                                // Shift rows up
+                                int r, c;
+                                for (r = row; r < SHEET_ROWS; r++) {
+                                    for (c = 1; c <= SHEET_COLS; c++) {
+                                        cell temp = table[r - 1][c - 1];
+                                        table[r - 1][c - 1] = table[r][c - 1];
+                                        table[r][c - 1] = temp;
+                                    }
+                                }
+                                // Clear last row
+                                for (c = 1; c <= SHEET_COLS; c++) {
+                                    table[SHEET_ROWS - 1][c - 1] = NULL;
+                                    sheet_screen_dirty[SHEET_ROWS - 1][c - 1] = 1;
+                                }
+                            } else {
+                                // Shift columns left
+                                int r, c;
+                                for (c = col; c < SHEET_COLS; c++) {
+                                    for (r = 1; r <= SHEET_ROWS; r++) {
+                                        cell temp = table[r - 1][c - 1];
+                                        table[r - 1][c - 1] = table[r - 1][c];
+                                        table[r - 1][c] = temp;
+                                    }
+                                }
+                                // Clear last column
+                                for (r = 1; r <= SHEET_ROWS; r++) {
+                                    table[r - 1][SHEET_COLS - 1] = NULL;
+                                    sheet_screen_dirty[r - 1][SHEET_COLS - 1] = 1;
+                                }
+                            }
+
+                            draw_axes(corner_row, corner_col);
+                            draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+                            set_icon(row, col);
+                            fill_in(y, x, row, col);
+                            move(y, x);
+                        }
+                    }
+                }
+            }
+            else if (k == 'F') {
                 int f;
 
-                sheet_menu_line_show("L R G I $ F");
+                sheet_menu_line_show("L R G I $ F D");
                 f = sheet_menu_read_key();
 
                 if (f != 27) {
@@ -1026,6 +1103,15 @@ void input() {
                         sheet_apply_format_to_current(FORMAT_DISP_FIXED);
                     else if (f == '$')
                         sheet_apply_format_to_current(FORMAT_DISP_CURRENCY);
+                    else if (f == 'D')
+                    {
+                        sheet_apply_format_to_current(FORMAT_DISP_GENERAL);
+
+                        if (table[row - 1][col - 1]->contents != 2)
+                            sheet_apply_format_to_current(FORMAT_ALIGN_RIGHT);
+                        else
+                            sheet_apply_format_to_current(FORMAT_ALIGN_LEFT);
+                    }
                 }
 
                 sheet_menu_line_clear();
@@ -1034,7 +1120,7 @@ void input() {
             } else if (k == 'G') {
                 int g;
 
-                sheet_menu_line_show("C");
+                sheet_menu_line_show("C F");
                 g = sheet_menu_read_key();
 
                 if (g != 27) {
@@ -1046,6 +1132,7 @@ void input() {
 
                         sheet_menu_line_show("GC: [COL ]LARGURA (3..25)");
                         vret = entry('>', 1);
+                        sheet_menu_line_clear();
 
                         if (vret) {
                             vret = 0;
@@ -1070,6 +1157,32 @@ void input() {
                                 set_icon(row, col);
                                 fill_in(y, x, row, col);
                                 move(y, x);
+                            }
+                        }
+                    }
+                    else if (g == 'F') {
+                        sheet_menu_line_clear();
+                        sheet_menu_line_show("L R G I $ F D");
+                        g = sheet_menu_read_key();
+                        if (g != 27) {
+                            g = (int)sheet_ascii_upper((unsigned char)g);
+
+                            if (g == 'L')
+                                defaultAlign = FORMAT_ALIGN_LEFT;
+                            else if (g == 'R')
+                                defaultAlign = FORMAT_ALIGN_RIGHT;
+                            else if (g == 'G')
+                                defaultDisp = FORMAT_DISP_GENERAL;
+                            else if (g == 'I')
+                                defaultDisp = FORMAT_DISP_INTEGER;
+                            else if (g == 'F')
+                                defaultDisp = FORMAT_DISP_FIXED;
+                            else if (g == '$')
+                                defaultDisp = FORMAT_DISP_CURRENCY;
+                            else if (g == 'D')
+                            {
+                                defaultAlign = 0x00;
+                                defaultDisp = FORMAT_DISP_GENERAL;
                             }
                         }
                     }
@@ -1336,7 +1449,7 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
         c->contents = CELL_LABEL;
         c->data->label = txt;
         if (c->formatAlign != FORMAT_ALIGN_LEFT && c->formatAlign != FORMAT_ALIGN_RIGHT)
-            c->formatAlign = FORMAT_ALIGN_LEFT;
+            c->formatAlign = (defaultAlign == 0 ? FORMAT_ALIGN_LEFT : defaultAlign);
         c->cache_valid = 0;
         c->cached_value = 0;
 
@@ -1355,7 +1468,9 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
         c->contents = CELL_INT;
         c->data->num = num;
         if (c->formatAlign != FORMAT_ALIGN_LEFT && c->formatAlign != FORMAT_ALIGN_RIGHT)
-            c->formatAlign = FORMAT_ALIGN_RIGHT;
+            c->formatAlign = (defaultAlign == 0 ? FORMAT_ALIGN_RIGHT : defaultAlign);
+        if (c->formatDisp == 0x00)
+            c->formatDisp = defaultDisp;
         c->cache_valid = 0;
         c->cached_value = num;
 
@@ -1381,7 +1496,9 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
         c->contents = CELL_FORMULA;
         c->data->label = txt;
         if (c->formatAlign != FORMAT_ALIGN_LEFT && c->formatAlign != FORMAT_ALIGN_RIGHT)
-            c->formatAlign = FORMAT_ALIGN_RIGHT;
+            c->formatAlign = (defaultAlign == 0 ? FORMAT_ALIGN_RIGHT : defaultAlign);
+        if (c->formatDisp == 0x00)
+            c->formatDisp = defaultDisp;
         c->cache_valid = 0;
         c->cached_value = 0;
 
