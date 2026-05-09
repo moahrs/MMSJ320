@@ -17,6 +17,210 @@
 
 #include "sheet.h"
 
+/* ===== MotoFFP bridge ===== */
+/* Variaveis globais usadas pelos stubs em sheet_fpp.S */
+unsigned long  sheet_fppD7;          /* valor D7 (FFP) */
+unsigned long  sheet_fppD6;          /* valor D6 (FFP) */
+unsigned char *sheet_fppBuf;         /* ponteiro para buffer string */
+
+/* Declaracoes dos stubs assembly (sheet_fpp.S) */
+extern void FP_TO_STR(void);
+extern void STR_TO_FP(void);
+extern void FPP_SUM(void);
+extern void FPP_SUB(void);
+extern void FPP_MUL(void);
+extern void FPP_DIV(void);
+extern void FPP_PWR(void);
+extern void FPP_CMP(void);
+extern void FPP_INT(void);
+extern void FPP_FPP(void);
+extern void FPP_SIN(void);
+extern void FPP_COS(void);
+extern void FPP_TAN(void);
+extern void FPP_SINH(void);
+extern void FPP_COSH(void);
+extern void FPP_TANH(void);
+extern void FPP_SQRT(void);
+extern void FPP_LN(void);
+extern void FPP_EXP(void);
+extern void FPP_ABS(void);
+extern void FPP_NEG(void);
+
+/* Converte string ASCII para FFP 32-bit */
+unsigned long floatStringToFpp(const char *pFloat)
+{
+    sheet_fppBuf = (unsigned char *)pFloat;
+    STR_TO_FP();
+    return sheet_fppD7;
+}
+
+/* Converte FFP 32-bit para string ASCII (formato +.DDDDDDDDEsDD) */
+int fppTofloatString(unsigned long pFpp, unsigned char *buf)
+{
+    sheet_fppBuf = buf;
+    sheet_fppD7  = pFpp;
+    FP_TO_STR();
+    return 0;
+}
+
+unsigned long fppSum(unsigned long d7, unsigned long d6)
+{
+    sheet_fppD7 = d7; sheet_fppD6 = d6;
+    FPP_SUM();
+    return sheet_fppD7;
+}
+
+unsigned long fppSub(unsigned long d7, unsigned long d6)
+{
+    sheet_fppD7 = d7; sheet_fppD6 = d6;
+    FPP_SUB();
+    return sheet_fppD7;
+}
+
+unsigned long fppMul(unsigned long d7, unsigned long d6)
+{
+    sheet_fppD7 = d7; sheet_fppD6 = d6;
+    FPP_MUL();
+    return sheet_fppD7;
+}
+
+unsigned long fppDiv(unsigned long d7, unsigned long d6)
+{
+    sheet_fppD7 = d7; sheet_fppD6 = d6;
+    FPP_DIV();
+    return sheet_fppD7;
+}
+
+unsigned long fppReal(long v)
+{
+    sheet_fppD7 = (unsigned long)v;
+    FPP_FPP();
+    return sheet_fppD7;
+}
+
+static void fppToCompactString(unsigned long pFpp, char *out, int outSize)
+{
+    char sci[16];
+    char digits[9];
+    char temp[32];
+    int exponent;
+    int decimalPos;
+    int digitCount;
+    int outPos;
+    int i;
+    int firstNonZero;
+
+    if (outSize <= 0)
+        return;
+
+    out[0] = 0;
+    memset(sci, 0, sizeof(sci));
+    fppTofloatString(pFpp, (unsigned char *)sci);
+
+    if (sci[0] == 0) {
+        strncpy(out, "0", outSize - 1);
+        out[outSize - 1] = 0;
+        return;
+    }
+
+    for (i = 0; i < 8; i++)
+        digits[i] = sci[2 + i];
+    digits[8] = 0;
+
+    exponent = ((sci[12] - '0') * 10) + (sci[13] - '0');
+    if (sci[11] == '-')
+        exponent = -exponent;
+
+    digitCount = 8;
+    while (digitCount > 1 && digits[digitCount - 1] == '0')
+        digitCount--;
+
+    decimalPos = exponent;
+    outPos = 0;
+
+    if (sci[0] == '-' && outPos < (int)sizeof(temp) - 1)
+        temp[outPos++] = '-';
+
+    if (decimalPos <= 0) {
+        if (outPos < (int)sizeof(temp) - 1)
+            temp[outPos++] = '0';
+        if (digitCount > 0 && outPos < (int)sizeof(temp) - 1)
+            temp[outPos++] = '.';
+
+        while (decimalPos < 0 && outPos < (int)sizeof(temp) - 1) {
+            temp[outPos++] = '0';
+            decimalPos++;
+        }
+
+        for (i = 0; i < digitCount && outPos < (int)sizeof(temp) - 1; i++)
+            temp[outPos++] = digits[i];
+    } else {
+        firstNonZero = 0;
+        while (firstNonZero < digitCount - 1 && digits[firstNonZero] == '0')
+            firstNonZero++;
+
+        if (decimalPos < firstNonZero + 1)
+            decimalPos = firstNonZero + 1;
+
+        for (i = firstNonZero; i < decimalPos && outPos < (int)sizeof(temp) - 1; i++) {
+            if (i < digitCount)
+                temp[outPos++] = digits[i];
+            else
+                temp[outPos++] = '0';
+        }
+
+        if (decimalPos < digitCount && outPos < (int)sizeof(temp) - 1) {
+            temp[outPos++] = '.';
+            for (i = decimalPos; i < digitCount && outPos < (int)sizeof(temp) - 1; i++)
+                temp[outPos++] = digits[i];
+        }
+    }
+
+    while (outPos > 1 && temp[outPos - 1] == '0' && temp[outPos - 2] != '.')
+        outPos--;
+    if (outPos > 1 && temp[outPos - 1] == '.')
+        outPos--;
+
+    temp[outPos] = 0;
+    strncpy(out, temp, outSize - 1);
+    out[outSize - 1] = 0;
+}
+
+static void fitNumberToWidth(char *s, int width)
+{
+    char *dot;
+    int len;
+
+    if (width <= 0)
+        return;
+
+    len = (int)strlen(s);
+    if (len <= width)
+        return;
+
+    dot = strchr(s, '.');
+    if (dot) {
+        while ((int)strlen(s) > width) {
+            len = (int)strlen(s);
+            if (len <= 0)
+                break;
+
+            if (s[len - 1] == '.') {
+                s[len - 1] = 0;
+                break;
+            }
+
+            s[len - 1] = 0;
+
+            len = (int)strlen(s);
+            if (len > 0 && s[len - 1] == '.') {
+                s[len - 1] = 0;
+                break;
+            }
+        }
+    }
+}
+
 /* mscalloc: equivalente a mscalloc usando msmalloc */
 void *mscalloc(unsigned int nmemb, unsigned int size)
 {
@@ -52,6 +256,13 @@ static unsigned char vc_font_h(void)
 	if (addrSetFontUseG2.h > 0 && addrSetFontUseG2.h <= 8)
 		h = addrSetFontUseG2.h;
 	return h;
+}
+
+static unsigned char sheet_ascii_upper(unsigned char c)
+{
+    if (c >= 'a' && c <= 'z')
+        return (unsigned char)(c - ('a' - 'A'));
+    return c;
 }
 
 double vc_pow(double base, int exp) {
@@ -377,10 +588,18 @@ int entry(int ch, char tp) {
     }
     else
     {
-        if (entry_line[0] == '>')        
-            strcpy(bufCmd, (entry_line + 1));
-        else
-            strcpy(bufCmd, entry_line);
+        int src = 0;
+        int dst = 0;
+
+        if (entry_line[0] == '>')
+            src = 1;
+
+        while (entry_line[src] && dst < (int)sizeof(bufCmd) - 1) {
+            bufCmd[dst] = sheet_ascii_upper((unsigned char)entry_line[src]);
+            src++;
+            dst++;
+        }
+        bufCmd[dst] = 0;
 
         vret = 1;
     }
@@ -503,6 +722,15 @@ void input() {
 				}
 			}
 		}
+        else if (ch == '/') 
+        {
+            // Menu mode
+
+            // List letters menu in the row 1 (inverted)
+
+            // Letter is Valid
+            
+        }
         else if (ch == KEY_HOME) 
         {
             // Go to A1 Cell
@@ -634,7 +862,7 @@ int to_num(char c) {
 	int n = -1;
 
 	static const char *const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-	char *p = strchr(alphabet, toupper((unsigned char) c));
+    char *p = strchr(alphabet, (int)sheet_ascii_upper((unsigned char)c));
 
 	if (p != NULL) {
 		n = p - alphabet;
@@ -750,9 +978,11 @@ void set_data(char *inputCell, int row, int col, cell table[256][64])
     }
 
     // Numbers
-    if (inputCell[0] >= 0x30 && inputCell[0] <= 0x39) {
-        num = my_atol(inputCell);
-
+    if ((inputCell[0] >= '0' && inputCell[0] <= '9') ||
+        ((inputCell[0] == '+' || inputCell[0] == '-') &&
+         ((inputCell[1] >= '0' && inputCell[1] <= '9') || inputCell[1] == '.')) ||
+        (inputCell[0] == '.' && (inputCell[1] >= '0' && inputCell[1] <= '9'))) {
+        num = (long)floatStringToFpp(inputCell);   // my_atol(inputCell);
         c->contents = CELL_INT;
         c->data->num = num;
         c->cache_valid = 0;
@@ -813,7 +1043,8 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
     }
 
     if (print->contents == CELL_INT) {
-        msprintf(create, "%ld", print->data->num);
+        fppToCompactString((unsigned long)print->data->num, create, sizeof(create));
+        fitNumberToWidth(create, draw_size);
 
         if ((int)strlen(create) > draw_size) {
             for (i = 0; i < draw_size - 3; i++)
@@ -841,7 +1072,8 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
         }
 
         char tmp[16];
-        msprintf(tmp, "%ld", val);
+        fppToCompactString((unsigned long)val, tmp, sizeof(tmp));
+        fitNumberToWidth(tmp, draw_size);
 
         if ((int)strlen(tmp) > draw_size) {
             for (i = 0; i < draw_size - 3; i++)
@@ -878,7 +1110,7 @@ void get_raw(int row, int col, int entry_size, cell (*table)[64], char *out)
     }
 
     if (from->contents == CELL_INT) {
-        msprintf(out, "%ld", from->data->num);
+        fppToCompactString((unsigned long)from->data->num, out, entry_size + 1);
         return;
     }
 }
@@ -1129,6 +1361,7 @@ void parse_input() {
 int sheet_parse_cell_ref(char *cellref, int *out_row1, int *out_col1)
 {
     char *q;
+    char cq;
     int col1;
     int row1;
 
@@ -1139,9 +1372,20 @@ int sheet_parse_cell_ref(char *cellref, int *out_row1, int *out_col1)
     col1 = 0;
     row1 = 0;
 
-    while (*q >= 'A' && *q <= 'Z') {
-        col1 = (col1 * 26) + (*q - 'A' + 1);
+    while (*q == ' ' || *q == '\t')
         q++;
+
+    if (*q == '>' || *q == '/')
+        q++;
+
+    while (*q == ' ' || *q == '\t')
+        q++;
+
+    cq = (char)sheet_ascii_upper((unsigned char)*q);
+    while (cq >= 'A' && cq <= 'Z') {
+        col1 = (col1 * 26) + (cq - 'A' + 1);
+        q++;
+        cq = (char)sheet_ascii_upper((unsigned char)*q);
     }
 
     while (*q >= '0' && *q <= '9') {
@@ -1240,7 +1484,7 @@ static long parse_sum_function(cell table[256][64])
     int c2;
     int rr;
     int cc;
-    long sum;
+    long sum, numVal;
 
     q = p;
 
@@ -1307,7 +1551,8 @@ static long parse_sum_function(cell table[256][64])
 
     for (rr = r1; rr <= r2; rr++) {
         for (cc = c1; cc <= c2; cc++) {
-            sum += get_cell_value(rr, cc, table);
+            numVal = get_cell_value(rr, cc, table);
+            sum = (long)fppSum((unsigned long)sum, (unsigned long)numVal); //sum += get_cell_value(rr, cc, table);
         }
     }
 
@@ -1318,14 +1563,35 @@ static long parse_sum_function(cell table[256][64])
 //-------------------------------------------------------
 long parse_number()
 {
-    long v = 0;
+    char numBuf[32];
+    int ix;
+    int seenDot;
 
-    while (*p >= '0' && *p <= '9') {
-        v = v * 10 + (*p - '0');
+    ix = 0;
+    seenDot = 0;
+
+    if ((*p == '+' || *p == '-') && ix < (int)sizeof(numBuf) - 1) {
+        numBuf[ix++] = *p;
         p++;
     }
 
-    return v;
+    while (((*p >= '0' && *p <= '9') || (*p == '.')) && ix < (int)sizeof(numBuf) - 1) {
+        if (*p == '.') {
+            if (seenDot)
+                break;
+            seenDot = 1;
+        }
+
+        numBuf[ix++] = *p;
+        p++;
+    }
+
+    numBuf[ix] = 0;
+
+    if (ix == 0)
+        return 0;
+
+    return (long)floatStringToFpp(numBuf);
 }
 
 //-------------------------------------------------------
@@ -1398,6 +1664,13 @@ long parse_factor(cell table[256][64])
     if (*p >= '0' && *p <= '9')
         return parse_number();
 
+    if (*p == '.' && p[1] >= '0' && p[1] <= '9')
+        return parse_number();
+
+    if ((*p == '+' || *p == '-') &&
+        ((p[1] >= '0' && p[1] <= '9') || (p[1] == '.' && p[2] >= '0' && p[2] <= '9')))
+        return parse_number();
+
     /* caractere inválido: avança para não travar */
     if (*p != 0)
         p++;
@@ -1426,9 +1699,9 @@ long parse_term(cell table[256][64])
         v2 = parse_factor(table);
 
         if (op == '*')
-            v = v * v2;
+            v = (long)fppMul((unsigned long)v, (unsigned long)v2); // v *= v2;
         else
-            v = (v2 != 0) ? vc_div_int(v, v2) : 0;
+            v = (v2 != 0) ? (long)fppDiv((unsigned long)v, (unsigned long)v2) /*vc_div_int(v, v2)*/ : 0;
     }
 
     return v;
@@ -1455,9 +1728,9 @@ long parse_expr(cell table[256][64])
         v2 = parse_term(table);
 
         if (op == '+')
-            v += v2;
+            v = (long)fppSum((unsigned long)v, (unsigned long)v2); // v += v2;
         else
-            v -= v2;
+            v = (long)fppSub((unsigned long)v, (unsigned long)v2); // v -= v2;
     }
 
     return v;

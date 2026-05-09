@@ -9,29 +9,40 @@ MAP = sheet.map
 LST = sheet.lst
 TEXT_ORIGIN ?= 0x00000000
 
+# Biblioteca local do MotoFFP
+LIB_DIR = lib
+
 CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -Iinclude -I../../include -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
+ASFLAGS_MRI = -m68000 -M --register-prefix-optional --bitwise-or
 LDFLAGS = -T linker_sheet.ld -nostdlib -Wl,--emit-relocs -Wl,-Map=$(MAP)
 LDLIBS = -lgcc
 
 SRC_C = \
 	src/libc_stub.c \
 	src/mmsj320mfp.c \
+	src/softf32.c \
 	src/sheet.c
 
 SRC_S = \
 	src/sheet_inic.S
 
-OBJ = $(SRC_C:.c=.o) $(SRC_S:.S=.o)
+OBJ = $(SRC_C:.c=.o) $(SRC_S:.S=.o) lib/motoffp_all.o lib/sheet_fpp.o
 
-# Ordem de link baseada no padrao do edit (obrigatoria)
-# 1) monitorapi.a68 -> sheet_inic.S
+# Ordem de link:
+# 1) sheet_inic.S
 # 2) mmsj320mfp.c
-# 3) fontes do programa
+# 3) softf32.c (mantido para referencia futura)
+# 4) sheet.c (usa MotoFFP via wrappers)
+# 5) motoffp_all.S (MotoFFP library)
+# 6) sheet_fpp.S (bridge FPP->C)
 LINK_OBJ = \
 	src/sheet_inic.o \
 	src/libc_stub.o \
 	src/mmsj320mfp.o \
-	src/sheet.o
+	src/softf32.o \
+	src/sheet.o \
+	lib/motoffp_all.o \
+	lib/sheet_fpp.o
 
 all: $(TARGET) $(BIN) $(LST)
 
@@ -56,7 +67,13 @@ src/%.o: src/%.c
 src/sheet_inic.o: src/sheet_inic.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
+lib/sheet_fpp.o: lib/sheet_fpp.S
+	$(CC) $(CFLAGS) -c $< -o $@
+
+lib/motoffp_all.o: lib/motoffp_all.S
+	$(AS) $(ASFLAGS_MRI) -I $(LIB_DIR) -o $@ $<
+
 clean:
-	-cmd /c "del /q /f src\*.o *.o *.elf *.bin *.map *.lst 2>nul"
+	-cmd /c "del /q /f src\*.o lib\*.o *.o *.elf *.bin *.map *.lst 2>nul"
 
 .PHONY: all clean flash ram
