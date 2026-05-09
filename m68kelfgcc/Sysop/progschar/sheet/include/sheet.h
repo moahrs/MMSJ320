@@ -102,6 +102,7 @@ typedef union data_s *data;
 #define FORMAT_DISP_GENERAL 'G'
 #define FORMAT_DISP_CURRENCY '$'
 #define FORMAT_DISP_INTEGER 'I'
+#define FORMAT_DISP_FIXED 'F'
 
 #define SHEET_COL_WIDTH_MIN 3
 #define SHEET_COL_WIDTH_MAX 25

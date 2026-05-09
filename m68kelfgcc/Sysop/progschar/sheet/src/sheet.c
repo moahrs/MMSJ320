@@ -432,8 +432,35 @@ static int sheet_visible_col_count(int left_col1, int max_x)
 
 static void sheet_apply_numeric_format(char *numText, unsigned char formatDisp)
 {
+    char *dot;
+
+    dot = strchr(numText, '.');
+
+    if (formatDisp == FORMAT_DISP_CURRENCY || formatDisp == FORMAT_DISP_FIXED) {
+        if (!dot) {
+            size_t len = strlen(numText);
+            if (len < 28) {
+                numText[len] = '.';
+                numText[len + 1] = '0';
+                numText[len + 2] = '0';
+                numText[len + 3] = 0;
+            }
+        } else {
+            int fracLen = (int)strlen(dot + 1);
+            if (fracLen == 0) {
+                dot[1] = '0';
+                dot[2] = '0';
+                dot[3] = 0;
+            } else if (fracLen == 1) {
+                dot[2] = '0';
+                dot[3] = 0;
+            } else {
+                dot[3] = 0;
+            }
+        }
+    }
+
     if (formatDisp == FORMAT_DISP_INTEGER) {
-        char *dot = strchr(numText, '.');
         if (dot)
             *dot = 0;
     } else if (formatDisp == FORMAT_DISP_CURRENCY) {
@@ -461,7 +488,8 @@ static unsigned char sheet_effective_disp(cell c)
 {
     if (c->formatDisp == FORMAT_DISP_GENERAL ||
         c->formatDisp == FORMAT_DISP_CURRENCY ||
-        c->formatDisp == FORMAT_DISP_INTEGER)
+        c->formatDisp == FORMAT_DISP_INTEGER ||
+        c->formatDisp == FORMAT_DISP_FIXED)
         return c->formatDisp;
 
     return FORMAT_DISP_GENERAL;
@@ -497,6 +525,112 @@ static void sheet_recalc_dependents_rec(int src_row1, int src_col1, cell table[2
 static void sheet_recalc_all_formulas(cell table[256][64]);
 static void sheet_recalc_from_cell(int row1, int col1, cell table[256][64]);
 static void sheet_refresh_visible_dirty_cells(int top_row, int left_col, int max_y, int max_x, int draw_size, cell table[256][64]);
+static cell sheet_get_or_create_cell(int row, int col, cell table[256][64]);
+
+static void sheet_menu_line_clear(void)
+{
+    int i;
+
+    color_on();
+    move(1, 0);
+    for (i = 0; i < max_x; i++)
+        mprintf(" ");
+    color_off();
+}
+
+static void sheet_menu_line_show(char *text)
+{
+    sheet_menu_line_clear();
+    color_on();
+    move(1, 1);
+    mprintf("%s", text);
+    color_off();
+}
+
+static int sheet_menu_read_key(void)
+{
+    int k;
+
+    while (1) {
+        k = getch();
+
+        if (k == 27)
+            return 27;
+
+        if (k >= 32 && k <= 126)
+            return k;
+    }
+}
+
+static int sheet_parse_gc_cmd(char *cmd, int current_col, int *out_col, int *out_width)
+{
+    char *q;
+    int col;
+    int width;
+
+    q = cmd;
+    col = current_col;
+    width = 0;
+
+    while (*q == ' ' || *q == '\t')
+        q++;
+
+    if (*q >= 'A' && *q <= 'Z') {
+        col = 0;
+        while (*q >= 'A' && *q <= 'Z') {
+            col = (col * 26) + (*q - 'A' + 1);
+            q++;
+        }
+
+        while (*q == ' ' || *q == '\t' || *q == ',')
+            q++;
+    }
+
+    if (!(*q >= '0' && *q <= '9'))
+        return 0;
+
+    while (*q >= '0' && *q <= '9') {
+        width = (width * 10) + (*q - '0');
+        q++;
+    }
+
+    while (*q == ' ' || *q == '\t')
+        q++;
+
+    if (*q != 0)
+        return 0;
+
+    if (col < 1 || col > SHEET_COLS)
+        return 0;
+
+    *out_col = col;
+    *out_width = width;
+
+    return 1;
+}
+
+static void sheet_apply_format_to_current(unsigned char fmt)
+{
+    cell c;
+
+    c = sheet_get_or_create_cell(row, col, table);
+    if (!c)
+        return;
+
+    if (fmt == FORMAT_ALIGN_LEFT || fmt == FORMAT_ALIGN_RIGHT)
+        c->formatAlign = fmt;
+    else if (fmt == FORMAT_DISP_GENERAL || fmt == FORMAT_DISP_CURRENCY || fmt == FORMAT_DISP_INTEGER || fmt == FORMAT_DISP_FIXED)
+        c->formatDisp = fmt;
+    else
+        return;
+
+    if (row >= 1 && row <= SHEET_ROWS && col >= 1 && col <= SHEET_COLS)
+        sheet_screen_dirty[row - 1][col - 1] = 1;
+
+    sheet_refresh_visible_dirty_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+    set_icon(row, col);
+    move(y, x);
+}
 
 void init_table(void)
 {
@@ -857,12 +991,98 @@ void input() {
 		}
         else if (ch == '/') 
         {
-            // Menu mode
+            int k;
 
-            // List letters menu in the row 1 (inverted)
+            sheet_menu_line_show("F G");
+            k = sheet_menu_read_key();
 
-            // Letter is Valid
-            
+            if (k == 27) {
+                sheet_menu_line_clear();
+                set_icon(row, col);
+                move(y, x);
+                continue;
+            }
+
+            k = (int)sheet_ascii_upper((unsigned char)k);
+
+            if (k == 'F') {
+                int f;
+
+                sheet_menu_line_show("L R G I $ F");
+                f = sheet_menu_read_key();
+
+                if (f != 27) {
+                    f = (int)sheet_ascii_upper((unsigned char)f);
+
+                    if (f == 'L')
+                        sheet_apply_format_to_current(FORMAT_ALIGN_LEFT);
+                    else if (f == 'R')
+                        sheet_apply_format_to_current(FORMAT_ALIGN_RIGHT);
+                    else if (f == 'G')
+                        sheet_apply_format_to_current(FORMAT_DISP_GENERAL);
+                    else if (f == 'I')
+                        sheet_apply_format_to_current(FORMAT_DISP_INTEGER);
+                    else if (f == 'F')
+                        sheet_apply_format_to_current(FORMAT_DISP_FIXED);
+                    else if (f == '$')
+                        sheet_apply_format_to_current(FORMAT_DISP_CURRENCY);
+                }
+
+                sheet_menu_line_clear();
+                set_icon(row, col);
+                move(y, x);
+            } else if (k == 'G') {
+                int g;
+
+                sheet_menu_line_show("C");
+                g = sheet_menu_read_key();
+
+                if (g != 27) {
+                    g = (int)sheet_ascii_upper((unsigned char)g);
+
+                    if (g == 'C') {
+                        int cmd_col;
+                        int cmd_w;
+
+                        sheet_menu_line_show("GC: [COL ]LARGURA (3..25)");
+                        vret = entry('>', 1);
+
+                        if (vret) {
+                            vret = 0;
+
+                            if (sheet_parse_gc_cmd((char *)bufCmd, col, &cmd_col, &cmd_w)) {
+                                sheet_set_col_width(cmd_col, cmd_w);
+
+                                while (col < corner_col)
+                                    corner_col--;
+
+                                while (sheet_col_to_screen_x(corner_col, col) + sheet_get_col_width(col) > max_x) {
+                                    corner_col++;
+                                    if (corner_col > col)
+                                        break;
+                                }
+
+                                draw_axes(corner_row, corner_col);
+                                draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+                                x = sheet_col_to_screen_x(corner_col, col);
+                                y = SHEET_GRID_Y + ((row - corner_row));
+                                move(y, x);
+                                set_icon(row, col);
+                                fill_in(y, x, row, col);
+                                move(y, x);
+                            }
+                        }
+                    }
+                }
+
+                sheet_menu_line_clear();
+                set_icon(row, col);
+                move(y, x);
+            } else {
+                sheet_menu_line_clear();
+                set_icon(row, col);
+                move(y, x);
+            }
         }
         else if (ch == KEY_HOME) 
         {
@@ -1202,7 +1422,8 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
     if (print->contents == CELL_INT) {
         fppToCompactString((unsigned long)print->data->num, create, sizeof(create));
         sheet_apply_numeric_format(create, disp);
-        fitNumberToWidth(create, draw_size);
+        if (disp != FORMAT_DISP_CURRENCY && disp != FORMAT_DISP_FIXED)
+            fitNumberToWidth(create, draw_size);
 
         if ((int)strlen(create) > draw_size) {
             for (i = 0; i < draw_size - 3; i++)
@@ -1229,7 +1450,8 @@ void print_data(int row, int col, int draw_size, cell table[256][64], char *out)
         char tmp[32];
         fppToCompactString((unsigned long)val, tmp, sizeof(tmp));
         sheet_apply_numeric_format(tmp, disp);
-        fitNumberToWidth(tmp, draw_size);
+        if (disp != FORMAT_DISP_CURRENCY && disp != FORMAT_DISP_FIXED)
+            fitNumberToWidth(tmp, draw_size);
 
         if ((int)strlen(tmp) > draw_size) {
             for (i = 0; i < draw_size - 3; i++)
