@@ -35,6 +35,7 @@
 ; * 20/04/2026  1.4a03  Moacir Jr.   Alterar loadso e runso to loados e runos
 ; * 24/04/2026  1.4a04  Moacir Jr.   Ajustes nas variaveis basic e prepara para LOADBAS
 ; * 02/05/2026  1.4a05  Moacir Jr.   Ajuste endereco loadbas
+; * 09/05/2026  1.4a06  Moacir Jr.   Ajuste Tela vermelha da morte - stack error
 ; *--------------------------------------------------------------------------------
 ; *
 ; * Mapa de Memoria
@@ -108,8 +109,20 @@
 ; #include "mmsj320vdp.h"
 ; #include "mmsj320mfp.h"
 ; #include "monitor.h"
-; #define versionBios "1.4a04"
+; #define versionBios "1.4a06"
 ; HEADER *_allocp;
+; #define ERR_MAGIC       (*(volatile unsigned long  *)0x0060E200)
+; #define ERR_VERSION     (*(volatile unsigned short *)0x0060E204)
+; #define ERR_TYPE        (*(volatile unsigned short *)0x0060E206)
+; #define ERR_FRAME_WORDS (*(volatile unsigned short *)0x0060E208)
+; #define ERR_SR          (*(volatile unsigned short *)0x0060E20A)
+; #define ERR_PC          (*(volatile unsigned long  *)0x0060E20C)
+; #define ERR_IR          (*(volatile unsigned short *)0x0060E210)
+; #define ERR_SSW         (*(volatile unsigned short *)0x0060E212)
+; #define ERR_FAULT_ADDR  (*(volatile unsigned long  *)0x0060E214)
+; #define ERR_DREG        ((volatile unsigned long *)0x0060E218)
+; #define ERR_AREG        ((volatile unsigned long *)0x0060E238)
+; #define ERR_RAW_FRAME   ((volatile unsigned short *)0x0060E258)
 ; unsigned long runMemory;
 ; unsigned char kbdKeyPtrR; // Contador do ponteiro das teclas colocadas no buffer
 ; unsigned char kbdKeyPtrW; // Contador do ponteiro das teclas colocadas no buffer
@@ -2750,6 +2763,8 @@ processCmd_53:
        cmp.w     #5,D2
        bne.s     processCmd_55
 ; {
+; carregaOSDisk();
+       jsr       _carregaOSDisk
 ; runSystemOper();
        jsr       _runSystemOper
        bra       processCmd_73
@@ -2780,6 +2795,8 @@ processCmd_57:
        cmp.w     #6,D2
        bne.s     processCmd_59
 ; {
+; carregaBasDisk();
+       jsr       _carregaBasDisk
 ; vEndLoad = 0x00870000;
        move.l    #8847360,D5
 ; runMem(vEndLoad);
@@ -7783,28 +7800,135 @@ funcZeroesLeft_8:
 ; }
 ; }
 ; //-----------------------------------------------------------------------------
+; unsigned long readErrReg(unsigned long base, unsigned int index)
+; {
+       xdef      _readErrReg
+_readErrReg:
+       link      A6,#-8
+       movem.l   D2/D3,-(A7)
+       move.l    12(A6),D3
+; unsigned long addr;
+; unsigned long *p;
+; unsigned long v;
+; addr = base;
+       move.l    8(A6),D2
+; addr += (unsigned long)index;
+       add.l     D3,D2
+; addr += (unsigned long)index;
+       add.l     D3,D2
+; addr += (unsigned long)index;
+       add.l     D3,D2
+; addr += (unsigned long)index;
+       add.l     D3,D2
+; p = (unsigned long *)addr;
+       move.l    D2,-8(A6)
+; v = *p;
+       move.l    -8(A6),A0
+       move.l    (A0),-4(A6)
+; return v;
+       move.l    -4(A6),D0
+       movem.l   (A7)+,D2/D3
+       unlk      A6
+       rts
+; }
+; void printHexWord(unsigned short v)
+; {
+       xdef      _printHexWord
+_printHexWord:
+       link      A6,#-20
+       move.l    A2,-(A7)
+       lea       -20(A6),A2
+; unsigned char sqtdtam[20];
+; itoa(v, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.w    10(A6),D1
+       and.l     #65535,D1
+       move.l    D1,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; funcZeroesLeft(&sqtdtam, 4);
+       pea       4
+       move.l    A2,-(A7)
+       jsr       _funcZeroesLeft
+       addq.w    #8,A7
+; printText(sqtdtam);
+       move.l    A2,-(A7)
+       jsr       _printText
+       addq.w    #4,A7
+       move.l    (A7)+,A2
+       unlk      A6
+       rts
+; }
+; void printHexLong(unsigned long v)
+; {
+       xdef      _printHexLong
+_printHexLong:
+       link      A6,#-20
+       move.l    A2,-(A7)
+       lea       -20(A6),A2
+; unsigned char sqtdtam[20];
+; itoa((unsigned short)(v >> 16), sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    8(A6),D1
+       lsr.l     #8,D1
+       lsr.l     #8,D1
+       and.l     #65535,D1
+       move.l    D1,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; funcZeroesLeft(&sqtdtam, 4);
+       pea       4
+       move.l    A2,-(A7)
+       jsr       _funcZeroesLeft
+       addq.w    #8,A7
+; printText(sqtdtam);
+       move.l    A2,-(A7)
+       jsr       _printText
+       addq.w    #4,A7
+; itoa((unsigned short)(v & 0xFFFF), sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.l    8(A6),D1
+       and.l     #65535,D1
+       and.l     #65535,D1
+       move.l    D1,-(A7)
+       jsr       _itoa
+       add.w     #12,A7
+; funcZeroesLeft(&sqtdtam, 4);
+       pea       4
+       move.l    A2,-(A7)
+       jsr       _funcZeroesLeft
+       addq.w    #8,A7
+; printText(sqtdtam);
+       move.l    A2,-(A7)
+       jsr       _printText
+       addq.w    #4,A7
+       move.l    (A7)+,A2
+       unlk      A6
+       rts
+; }
 ; void funcErrorBusAddr(void)
 ; {
        xdef      _funcErrorBusAddr
 _funcErrorBusAddr:
-       link      A6,#-20
-       movem.l   D2/D3/D4/A2/A3/A4/A5,-(A7)
-       lea       _printText.L,A2
-       lea       _printChar.L,A3
-       lea       -20(A6),A4
-       lea       _funcZeroesLeft.L,A5
-; unsigned int ix = 0, iz;
-       clr.l     D2
-; unsigned char sqtdtam[20];
-; unsigned short vOP = 0;
-       clr.w     D4
+       link      A6,#-4
+       movem.l   D2/D3/A2/A3/A4/A5,-(A7)
+       lea       _printChar.L,A2
+       lea       _printText.L,A3
+       lea       _printHexLong.L,A4
+       lea       _printHexWord.L,A5
+; unsigned int ix;
+; unsigned int iz;
+; unsigned short vOP;
 ; videoCursorPosColX = 0;
        clr.w     _videoCursorPosColX.L
 ; videoCursorPosRowY = 0;
        clr.w     _videoCursorPosRowY.L
-; videoScroll = 1;       // Ativo
+; videoScroll = 1;
        move.b    #1,_videoScroll.L
-; videoScrollDir = 1;    // Pra Cima
+; videoScrollDir = 1;
        move.b    #1,_videoScrollDir.L
 ; videoCursorBlink = 1;
        move.b    #1,_videoCursorBlink.L
@@ -7824,82 +7948,83 @@ _funcErrorBusAddr:
 ; printChar(218,1);
        pea       1
        pea       218
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; for (ix = 0; ix < 36; ix++)
-       clr.l     D2
+       clr.l     D3
 funcErrorBusAddr_1:
-       cmp.l     #36,D2
+       cmp.l     #36,D3
        bhs.s     funcErrorBusAddr_3
 ; printChar(196,1);
        pea       1
        pea       196
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
-       addq.l    #1,D2
+       addq.l    #1,D3
        bra       funcErrorBusAddr_1
 funcErrorBusAddr_3:
 ; printChar(191,1);
        pea       1
        pea       191
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText("          EXCEPTION OCCURRED        ");
        pea       @monitor_87.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(195,1);
        pea       1
        pea       195
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; for (ix = 0; ix < 36; ix++)
-       clr.l     D2
+       clr.l     D3
 funcErrorBusAddr_4:
-       cmp.l     #36,D2
+       cmp.l     #36,D3
        bhs.s     funcErrorBusAddr_6
 ; printChar(196,1);
        pea       1
        pea       196
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
-       addq.l    #1,D2
+       addq.l    #1,D3
        bra       funcErrorBusAddr_4
 funcErrorBusAddr_6:
 ; printChar(180,1);
        pea       1
        pea       180
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
-; vOP = *errorBufferAddrBus;
-       move.l    _errorBufferAddrBus.L,A0
-       move.w    (A0),D4
+; vOP = ERR_TYPE;
+       move.w    6349318,-2(A6)
 ; switch (vOP)
-       and.l     #65535,D4
-       move.l    D4,D0
-       cmp.l     #6,D0
+       move.w    -2(A6),D0
+       and.l     #65535,D0
+       subq.l    #2,D0
+       blo       funcErrorBusAddr_7
+       cmp.l     #10,D0
        bhs       funcErrorBusAddr_7
        asl.l     #1,D0
        move.w    funcErrorBusAddr_9(PC,D0.L),D0
@@ -7911,179 +8036,250 @@ funcErrorBusAddr_9:
        dc.w      funcErrorBusAddr_13-funcErrorBusAddr_9
        dc.w      funcErrorBusAddr_14-funcErrorBusAddr_9
        dc.w      funcErrorBusAddr_15-funcErrorBusAddr_9
+       dc.w      funcErrorBusAddr_16-funcErrorBusAddr_9
+       dc.w      funcErrorBusAddr_17-funcErrorBusAddr_9
+       dc.w      funcErrorBusAddr_18-funcErrorBusAddr_9
+       dc.w      funcErrorBusAddr_19-funcErrorBusAddr_9
 funcErrorBusAddr_10:
 ; {
-; case 0x0000:
+; case 2:
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("      BUS ERROR / ADDRESS ERROR     ");
-       pea       @monitor_88.L
        jsr       (A2)
+       addq.w    #8,A7
+; printText("              BUS ERROR             ");
+       pea       @monitor_88.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; break;
        bra       funcErrorBusAddr_8
 funcErrorBusAddr_11:
-; case 0x0001:
+; case 3:
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("         ILLEGAL INSTRUCTION        ");
-       pea       @monitor_89.L
        jsr       (A2)
+       addq.w    #8,A7
+; printText("            ADDRESS ERROR           ");
+       pea       @monitor_89.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; break;
        bra       funcErrorBusAddr_8
 funcErrorBusAddr_12:
-; case 0x0002:
+; case 4:
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("             ZERO DIVIDE            ");
-       pea       @monitor_90.L
        jsr       (A2)
+       addq.w    #8,A7
+; printText("         ILLEGAL INSTRUCTION        ");
+       pea       @monitor_90.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; break;
        bra       funcErrorBusAddr_8
 funcErrorBusAddr_13:
-; case 0x0003:
+; case 5:
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("           CHK INSTRUCTION          ");
-       pea       @monitor_91.L
        jsr       (A2)
+       addq.w    #8,A7
+; printText("             ZERO DIVIDE            ");
+       pea       @monitor_91.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; break;
        bra       funcErrorBusAddr_8
 funcErrorBusAddr_14:
-; case 0x0004:
+; case 6:
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("                TRAPV               ");
-       pea       @monitor_92.L
        jsr       (A2)
+       addq.w    #8,A7
+; printText("           CHK INSTRUCTION          ");
+       pea       @monitor_92.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; break;
        bra       funcErrorBusAddr_8
 funcErrorBusAddr_15:
-; case 0x0005:
+; case 7:
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("         PRIVILEGE VIOLATION        ");
-       pea       @monitor_93.L
        jsr       (A2)
+       addq.w    #8,A7
+; printText("                TRAPV               ");
+       pea       @monitor_93.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; break;
        bra       funcErrorBusAddr_8
+funcErrorBusAddr_16:
+; case 8:
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText("         PRIVILEGE VIOLATION        ");
+       pea       @monitor_94.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText(" \r\n");
+       pea       @monitor_86.L
+       jsr       (A3)
+       addq.w    #4,A7
+; break;
+       bra       funcErrorBusAddr_8
+funcErrorBusAddr_17:
+; case 9:
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText("              TRACE ERROR           ");
+       pea       @monitor_95.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText(" \r\n");
+       pea       @monitor_86.L
+       jsr       (A3)
+       addq.w    #4,A7
+; break;
+       bra       funcErrorBusAddr_8
+funcErrorBusAddr_18:
+; case 10:
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText("            LINE A EMULATOR         ");
+       pea       @monitor_96.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText(" \r\n");
+       pea       @monitor_86.L
+       jsr       (A3)
+       addq.w    #4,A7
+; break;
+       bra       funcErrorBusAddr_8
+funcErrorBusAddr_19:
+; case 11:
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText("            LINE F EMULATOR         ");
+       pea       @monitor_97.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText(" \r\n");
+       pea       @monitor_86.L
+       jsr       (A3)
+       addq.w    #4,A7
+; break;
+       bra.s     funcErrorBusAddr_8
 funcErrorBusAddr_7:
 ; default:
-; itoa(errorBufferAddrBus,sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 8);
-       pea       8
-       move.l    A4,-(A7)
-       jsr       (A5)
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
        addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
+; printText("           UNKNOWN EXCEPTION        ");
+       pea       @monitor_98.L
+       jsr       (A3)
        addq.w    #4,A7
-; printText(" : ");
-       pea       @monitor_94.L
+; printChar(179,1);
+       pea       1
+       pea       179
        jsr       (A2)
-       addq.w    #4,A7
-; itoa(vOP,sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       and.l     #65535,D4
-       move.l    D4,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
        addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; printText("\r\n");
-       pea       @monitor_2.L
-       jsr       (A2)
+; printText(" \r\n");
+       pea       @monitor_86.L
+       jsr       (A3)
        addq.w    #4,A7
 ; break;
 funcErrorBusAddr_8:
@@ -8091,889 +8287,564 @@ funcErrorBusAddr_8:
 ; printChar(195,1);
        pea       1
        pea       195
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; for (ix = 0; ix < 36; ix++)
-       clr.l     D2
-funcErrorBusAddr_17:
-       cmp.l     #36,D2
-       bhs.s     funcErrorBusAddr_19
+       clr.l     D3
+funcErrorBusAddr_21:
+       cmp.l     #36,D3
+       bhs.s     funcErrorBusAddr_23
 ; printChar(196,1);
        pea       1
        pea       196
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
-       addq.l    #1,D2
-       bra       funcErrorBusAddr_17
-funcErrorBusAddr_19:
+       addq.l    #1,D3
+       bra       funcErrorBusAddr_21
+funcErrorBusAddr_23:
 ; printChar(180,1);
        pea       1
        pea       180
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; // Mostra Registradores: 2 words by register
+; /* D0-D3 */
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" D0       D1       D2       D3      ");
-       pea       @monitor_95.L
-       jsr       (A2)
+       pea       @monitor_99.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printChar(' ',1);
        pea       1
        pea       32
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
-; for (iz = 0; iz < 4; iz++)  // Mostra d0-d3
-       clr.l     D3
-funcErrorBusAddr_20:
-       cmp.l     #4,D3
-       bhs       funcErrorBusAddr_22
+; for (iz = 0; iz < 4; iz++)
+       clr.l     D2
+funcErrorBusAddr_24:
+       cmp.l     #4,D2
+       bhs       funcErrorBusAddr_26
 ; {
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
+; printHexLong(readErrReg(0x0060E218, iz));
+       move.l    D0,-(A7)
+       move.l    D2,-(A7)
+       pea       6349336
+       jsr       _readErrReg
        addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
+       move.l    D0,D1
+       move.l    (A7)+,D0
        move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
+       jsr       (A4)
        addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
 ; if (iz < 3)
-       cmp.l     #3,D3
-       bhs.s     funcErrorBusAddr_23
+       cmp.l     #3,D2
+       bhs.s     funcErrorBusAddr_27
 ; printText(" ");
        pea       @monitor_61.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
-funcErrorBusAddr_23:
-       addq.l    #1,D3
-       bra       funcErrorBusAddr_20
-funcErrorBusAddr_22:
+funcErrorBusAddr_27:
+       addq.l    #1,D2
+       bra       funcErrorBusAddr_24
+funcErrorBusAddr_26:
 ; }
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText("\r\n");
        pea       @monitor_2.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
+; /* D4-D7 */
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" D4       D5       D6       D7      ");
-       pea       @monitor_96.L
-       jsr       (A2)
+       pea       @monitor_100.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printChar(' ',1);
        pea       1
        pea       32
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
-; for (iz = 0; iz < 4; iz++)  // Mostra d4-d7
-       clr.l     D3
-funcErrorBusAddr_25:
-       cmp.l     #4,D3
-       bhs       funcErrorBusAddr_27
+; for (iz = 4; iz < 8; iz++)
+       moveq     #4,D2
+funcErrorBusAddr_29:
+       cmp.l     #8,D2
+       bhs       funcErrorBusAddr_31
 ; {
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
+; printHexLong(readErrReg(0x0060E218, iz));
+       move.l    D0,-(A7)
+       move.l    D2,-(A7)
+       pea       6349336
+       jsr       _readErrReg
        addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
+       move.l    D0,D1
+       move.l    (A7)+,D0
        move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
+       jsr       (A4)
        addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; if (iz < 3)
-       cmp.l     #3,D3
-       bhs.s     funcErrorBusAddr_28
+; if (iz < 7)
+       cmp.l     #7,D2
+       bhs.s     funcErrorBusAddr_32
 ; printText(" ");
        pea       @monitor_61.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
-funcErrorBusAddr_28:
-       addq.l    #1,D3
-       bra       funcErrorBusAddr_25
-funcErrorBusAddr_27:
+funcErrorBusAddr_32:
+       addq.l    #1,D2
+       bra       funcErrorBusAddr_29
+funcErrorBusAddr_31:
 ; }
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText("\r\n");
        pea       @monitor_2.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
+; /* A0-A3 */
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" A0       A1       A2       A3      ");
-       pea       @monitor_97.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText(" \r\n");
-       pea       @monitor_86.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printChar(' ',1);
-       pea       1
-       pea       32
-       jsr       (A3)
-       addq.w    #8,A7
-; for (iz = 0; iz < 4; iz++)  // Mostra d0-d3
-       clr.l     D3
-funcErrorBusAddr_30:
-       cmp.l     #4,D3
-       bhs       funcErrorBusAddr_32
-; {
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; if (iz < 3)
-       cmp.l     #3,D3
-       bhs.s     funcErrorBusAddr_33
-; printText(" ");
-       pea       @monitor_61.L
-       jsr       (A2)
-       addq.w    #4,A7
-funcErrorBusAddr_33:
-       addq.l    #1,D3
-       bra       funcErrorBusAddr_30
-funcErrorBusAddr_32:
-; }
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText(" \r\n");
-       pea       @monitor_86.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText(" A4       A5       A6               ");
-       pea       @monitor_98.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText(" \r\n");
-       pea       @monitor_86.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printChar(' ',1);
-       pea       1
-       pea       32
-       jsr       (A3)
-       addq.w    #8,A7
-; for (iz = 0; iz < 3; iz++)  // Mostra d4-d7
-       clr.l     D3
-funcErrorBusAddr_35:
-       cmp.l     #3,D3
-       bhs       funcErrorBusAddr_37
-; {
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; printText(" ");
-       pea       @monitor_61.L
-       jsr       (A2)
-       addq.w    #4,A7
-       addq.l    #1,D3
-       bra       funcErrorBusAddr_35
-funcErrorBusAddr_37:
-; }
-; printText("        ");
-       pea       @monitor_99.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("\r\n");
-       pea       @monitor_2.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("                                    ");
-       pea       @monitor_100.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText("\r\n");
-       pea       @monitor_2.L
-       jsr       (A2)
-       addq.w    #4,A7
-; printChar(179,1);
-       pea       1
-       pea       179
-       jsr       (A3)
-       addq.w    #8,A7
-; printText(" SR   PC       OffSet Special_Word  ");
        pea       @monitor_101.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printChar(' ',1);
        pea       1
        pea       32
+       jsr       (A2)
+       addq.w    #8,A7
+; for (iz = 0; iz < 4; iz++)
+       clr.l     D2
+funcErrorBusAddr_34:
+       cmp.l     #4,D2
+       bhs       funcErrorBusAddr_36
+; {
+; printHexLong(readErrReg(0x0060E238, iz));
+       move.l    D0,-(A7)
+       move.l    D2,-(A7)
+       pea       6349368
+       jsr       _readErrReg
+       addq.w    #8,A7
+       move.l    D0,D1
+       move.l    (A7)+,D0
+       move.l    D1,-(A7)
+       jsr       (A4)
+       addq.w    #4,A7
+; if (iz < 3)
+       cmp.l     #3,D2
+       bhs.s     funcErrorBusAddr_37
+; printText(" ");
+       pea       @monitor_61.L
        jsr       (A3)
-       addq.w    #8,A7
-; // Mostra SR: 1 word
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
        addq.w    #4,A7
-; ix++;
+funcErrorBusAddr_37:
        addq.l    #1,D2
-; printText(" ");
-       pea       @monitor_61.L
+       bra       funcErrorBusAddr_34
+funcErrorBusAddr_36:
+; }
+; printChar(179,1);
+       pea       1
+       pea       179
        jsr       (A2)
-       addq.w    #4,A7
-; // Mostra PC to Return: 2 words
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
        addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
+; printText(" \r\n");
+       pea       @monitor_86.L
+       jsr       (A3)
        addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
+; /* A4-A7 */
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
        addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; printText(" ");
-       pea       @monitor_61.L
-       jsr       (A2)
-       addq.w    #4,A7
-; // Mostra Vector offset: 1 word
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; printText("   ");
-       pea       @monitor_74.L
-       jsr       (A2)
-       addq.w    #4,A7
-; // Mostra Special Status Word: 1 word
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; printText("          ");
+; printText(" A4       A5       A6       A7      ");
        pea       @monitor_102.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText(" \r\n");
+       pea       @monitor_86.L
        jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printChar(' ',1);
+       pea       1
+       pea       32
+       jsr       (A2)
+       addq.w    #8,A7
+; for (iz = 4; iz < 8; iz++)
+       moveq     #4,D2
+funcErrorBusAddr_39:
+       cmp.l     #8,D2
+       bhs       funcErrorBusAddr_41
+; {
+; printHexLong(readErrReg(0x0060E238, iz));
+       move.l    D0,-(A7)
+       move.l    D2,-(A7)
+       pea       6349368
+       jsr       _readErrReg
+       addq.w    #8,A7
+       move.l    D0,D1
+       move.l    (A7)+,D0
+       move.l    D1,-(A7)
+       jsr       (A4)
+       addq.w    #4,A7
+; if (iz < 7)
+       cmp.l     #7,D2
+       bhs.s     funcErrorBusAddr_42
+; printText(" ");
+       pea       @monitor_61.L
+       jsr       (A3)
+       addq.w    #4,A7
+funcErrorBusAddr_42:
+       addq.l    #1,D2
+       bra       funcErrorBusAddr_39
+funcErrorBusAddr_41:
+; }
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
        addq.w    #8,A7
 ; printText("\r\n");
        pea       @monitor_2.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText("                                    ");
-       pea       @monitor_100.L
-       jsr       (A2)
+       pea       @monitor_103.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText("\r\n");
        pea       @monitor_2.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
+; /* SR / PC / IR / SSW */
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
-; printText(" FaultAddr OutB InB  Instr.InB      ");
-       pea       @monitor_103.L
-       jsr       (A2)
+; printText(" SR   PC       IR   Special_Word    ");
+       pea       @monitor_104.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printChar(' ',1);
        pea       1
        pea       32
+       jsr       (A2)
+       addq.w    #8,A7
+; printHexWord(ERR_SR);
+       move.w    6349322,D1
+       and.l     #65535,D1
+       move.l    D1,-(A7)
+       jsr       (A5)
+       addq.w    #4,A7
+; printText(" ");
+       pea       @monitor_61.L
        jsr       (A3)
-       addq.w    #8,A7
-; // Mostra Fault Address: 2 words
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
        addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
+; printHexLong(ERR_PC);
+       move.l    6349324,-(A7)
+       jsr       (A4)
        addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; printText("  ");
-       pea       @monitor_104.L
-       jsr       (A2)
-       addq.w    #4,A7
-; // unused: 1 word
-; ix++;
-       addq.l    #1,D2
-; // Mostra output buffer: 1 word
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
-       and.l     #65535,D1
-       move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
-       jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
-       addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
 ; printText(" ");
        pea       @monitor_61.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
-; // unused: 1 word
-; ix++;
-       addq.l    #1,D2
-; // Mostra input buffer: 1 word
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
+; printHexWord(ERR_IR);
+       move.w    6349328,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
        jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
        addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
 ; printText(" ");
        pea       @monitor_61.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
-; // unused: 1 word
-; ix++;
-       addq.l    #1,D2
-; // Mostra instruction input buffer: 1 word
-; itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-       pea       16
-       move.l    A4,-(A7)
-       move.l    _errorBufferAddrBus.L,A0
-       move.l    D2,D1
-       lsl.l     #1,D1
-       move.w    0(A0,D1.L),D1
+; printHexWord(ERR_SSW);
+       move.w    6349330,D1
        and.l     #65535,D1
        move.l    D1,-(A7)
-       jsr       _itoa
-       add.w     #12,A7
-; funcZeroesLeft(&sqtdtam, 4);
-       pea       4
-       move.l    A4,-(A7)
        jsr       (A5)
-       addq.w    #8,A7
-; printText(sqtdtam);
-       move.l    A4,-(A7)
-       jsr       (A2)
        addq.w    #4,A7
-; ix++;
-       addq.l    #1,D2
-; printText("           ");
+; printText("          ");
        pea       @monitor_105.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText("\r\n");
        pea       @monitor_2.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
-; // Halt
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText("                                    ");
+       pea       @monitor_103.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText("\r\n");
+       pea       @monitor_2.L
+       jsr       (A3)
+       addq.w    #4,A7
+; /* Fault address / frame words */
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText(" FaultAddr Frame Type Magic         ");
+       pea       @monitor_106.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText(" \r\n");
+       pea       @monitor_86.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printChar(' ',1);
+       pea       1
+       pea       32
+       jsr       (A2)
+       addq.w    #8,A7
+; printHexLong(ERR_FAULT_ADDR);
+       move.l    6349332,-(A7)
+       jsr       (A4)
+       addq.w    #4,A7
+; printText("  ");
+       pea       @monitor_107.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printHexWord(ERR_FRAME_WORDS);
+       move.w    6349320,D1
+       and.l     #65535,D1
+       move.l    D1,-(A7)
+       jsr       (A5)
+       addq.w    #4,A7
+; printText("  ");
+       pea       @monitor_107.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printHexWord(ERR_TYPE);
+       move.w    6349318,D1
+       and.l     #65535,D1
+       move.l    D1,-(A7)
+       jsr       (A5)
+       addq.w    #4,A7
+; printText("  ");
+       pea       @monitor_107.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printHexLong(ERR_MAGIC);
+       move.l    6349312,-(A7)
+       jsr       (A4)
+       addq.w    #4,A7
+; printText("     ");
+       pea       @monitor_108.L
+       jsr       (A3)
+       addq.w    #4,A7
+; printChar(179,1);
+       pea       1
+       pea       179
+       jsr       (A2)
+       addq.w    #8,A7
+; printText("\r\n");
+       pea       @monitor_2.L
+       jsr       (A3)
+       addq.w    #4,A7
 ; printChar(195,1);
        pea       1
        pea       195
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; for (ix = 0; ix < 36; ix++)
-       clr.l     D2
-funcErrorBusAddr_38:
-       cmp.l     #36,D2
-       bhs.s     funcErrorBusAddr_40
+       clr.l     D3
+funcErrorBusAddr_44:
+       cmp.l     #36,D3
+       bhs.s     funcErrorBusAddr_46
 ; printChar(196,1);
        pea       1
        pea       196
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
-       addq.l    #1,D2
-       bra       funcErrorBusAddr_38
-funcErrorBusAddr_40:
+       addq.l    #1,D3
+       bra       funcErrorBusAddr_44
+funcErrorBusAddr_46:
 ; printChar(180,1);
        pea       1
        pea       180
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText("            SYSTEM HALTED           ");
-       pea       @monitor_106.L
-       jsr       (A2)
+       pea       @monitor_109.L
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
        pea       1
        pea       179
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; printChar(192,1);
        pea       1
        pea       192
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; for (ix = 0; ix < 36; ix++)
-       clr.l     D2
-funcErrorBusAddr_41:
-       cmp.l     #36,D2
-       bhs.s     funcErrorBusAddr_43
+       clr.l     D3
+funcErrorBusAddr_47:
+       cmp.l     #36,D3
+       bhs.s     funcErrorBusAddr_49
 ; printChar(196,1);
        pea       1
        pea       196
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
-       addq.l    #1,D2
-       bra       funcErrorBusAddr_41
-funcErrorBusAddr_43:
+       addq.l    #1,D3
+       bra       funcErrorBusAddr_47
+funcErrorBusAddr_49:
 ; printChar(217,1);
        pea       1
        pea       217
-       jsr       (A3)
+       jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
        pea       @monitor_86.L
-       jsr       (A2)
+       jsr       (A3)
        addq.w    #4,A7
 ; for(;;);
-funcErrorBusAddr_44:
-       bra       funcErrorBusAddr_44
+funcErrorBusAddr_50:
+       bra       funcErrorBusAddr_50
 ; }
        section   const
 @monitor_1:
        dc.b      77,77,83,74,45,51,50,48,32,66,73,79,83,32,118
-       dc.b      49,46,52,97,48,52,0
+       dc.b      49,46,52,97,48,54,0
 @monitor_2:
        dc.b      13,10,0
 @monitor_3:
@@ -9220,68 +9091,84 @@ funcErrorBusAddr_44:
        dc.b      84,73,79,78,32,79,67,67,85,82,82,69,68,32,32
        dc.b      32,32,32,32,32,32,0
 @monitor_88:
-       dc.b      32,32,32,32,32,32,66,85,83,32,69,82,82,79,82
-       dc.b      32,47,32,65,68,68,82,69,83,83,32,69,82,82,79
-       dc.b      82,32,32,32,32,32,0
+       dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,66
+       dc.b      85,83,32,69,82,82,79,82,32,32,32,32,32,32,32
+       dc.b      32,32,32,32,32,32,0
 @monitor_89:
+       dc.b      32,32,32,32,32,32,32,32,32,32,32,32,65,68,68
+       dc.b      82,69,83,83,32,69,82,82,79,82,32,32,32,32,32
+       dc.b      32,32,32,32,32,32,0
+@monitor_90:
        dc.b      32,32,32,32,32,32,32,32,32,73,76,76,69,71,65
        dc.b      76,32,73,78,83,84,82,85,67,84,73,79,78,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_90:
+@monitor_91:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,90,69
        dc.b      82,79,32,68,73,86,73,68,69,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_91:
+@monitor_92:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,67,72,75,32
        dc.b      73,78,83,84,82,85,67,84,73,79,78,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_92:
+@monitor_93:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,84,82,65,80,86,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_93:
+@monitor_94:
        dc.b      32,32,32,32,32,32,32,32,32,80,82,73,86,73,76
        dc.b      69,71,69,32,86,73,79,76,65,84,73,79,78,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_94:
-       dc.b      32,58,32,0
 @monitor_95:
+       dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,84
+       dc.b      82,65,67,69,32,69,82,82,79,82,32,32,32,32,32
+       dc.b      32,32,32,32,32,32,0
+@monitor_96:
+       dc.b      32,32,32,32,32,32,32,32,32,32,32,32,76,73,78
+       dc.b      69,32,65,32,69,77,85,76,65,84,79,82,32,32,32
+       dc.b      32,32,32,32,32,32,0
+@monitor_97:
+       dc.b      32,32,32,32,32,32,32,32,32,32,32,32,76,73,78
+       dc.b      69,32,70,32,69,77,85,76,65,84,79,82,32,32,32
+       dc.b      32,32,32,32,32,32,0
+@monitor_98:
+       dc.b      32,32,32,32,32,32,32,32,32,32,32,85,78,75,78
+       dc.b      79,87,78,32,69,88,67,69,80,84,73,79,78,32,32
+       dc.b      32,32,32,32,32,32,0
+@monitor_99:
        dc.b      32,68,48,32,32,32,32,32,32,32,68,49,32,32,32
        dc.b      32,32,32,32,68,50,32,32,32,32,32,32,32,68,51
        dc.b      32,32,32,32,32,32,0
-@monitor_96:
+@monitor_100:
        dc.b      32,68,52,32,32,32,32,32,32,32,68,53,32,32,32
        dc.b      32,32,32,32,68,54,32,32,32,32,32,32,32,68,55
        dc.b      32,32,32,32,32,32,0
-@monitor_97:
+@monitor_101:
        dc.b      32,65,48,32,32,32,32,32,32,32,65,49,32,32,32
        dc.b      32,32,32,32,65,50,32,32,32,32,32,32,32,65,51
        dc.b      32,32,32,32,32,32,0
-@monitor_98:
-       dc.b      32,65,52,32,32,32,32,32,32,32,65,53,32,32,32
-       dc.b      32,32,32,32,65,54,32,32,32,32,32,32,32,32,32
-       dc.b      32,32,32,32,32,32,0
-@monitor_99:
-       dc.b      32,32,32,32,32,32,32,32,0
-@monitor_100:
-       dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
-       dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
-       dc.b      32,32,32,32,32,32,0
-@monitor_101:
-       dc.b      32,83,82,32,32,32,80,67,32,32,32,32,32,32,32
-       dc.b      79,102,102,83,101,116,32,83,112,101,99,105,97
-       dc.b      108,95,87,111,114,100,32,32,0
 @monitor_102:
-       dc.b      32,32,32,32,32,32,32,32,32,32,0
+       dc.b      32,65,52,32,32,32,32,32,32,32,65,53,32,32,32
+       dc.b      32,32,32,32,65,54,32,32,32,32,32,32,32,65,55
+       dc.b      32,32,32,32,32,32,0
 @monitor_103:
-       dc.b      32,70,97,117,108,116,65,100,100,114,32,79,117
-       dc.b      116,66,32,73,110,66,32,32,73,110,115,116,114
-       dc.b      46,73,110,66,32,32,32,32,32,32,0
+       dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
+       dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
+       dc.b      32,32,32,32,32,32,0
 @monitor_104:
-       dc.b      32,32,0
+       dc.b      32,83,82,32,32,32,80,67,32,32,32,32,32,32,32
+       dc.b      73,82,32,32,32,83,112,101,99,105,97,108,95,87
+       dc.b      111,114,100,32,32,32,32,0
 @monitor_105:
-       dc.b      32,32,32,32,32,32,32,32,32,32,32,0
+       dc.b      32,32,32,32,32,32,32,32,32,32,0
 @monitor_106:
+       dc.b      32,70,97,117,108,116,65,100,100,114,32,70,114
+       dc.b      97,109,101,32,84,121,112,101,32,77,97,103,105
+       dc.b      99,32,32,32,32,32,32,32,32,32,0
+@monitor_107:
+       dc.b      32,32,0
+@monitor_108:
+       dc.b      32,32,32,32,32,0
+@monitor_109:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,83,89,83
        dc.b      84,69,77,32,72,65,76,84,69,68,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0

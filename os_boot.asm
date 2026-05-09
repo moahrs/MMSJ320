@@ -41,16 +41,16 @@
 
            dc.l        $0063FFFE       ; Vector #  0, 0x00000000: Initial SP - Original: __stack
            dc.l        $400            ; Vector #  1, 0x00000004: Initial PC - Original: _main
-           dc.l        _errorBusAddr   ; Vector #  2, 0x00000008: Bus Error
-           dc.l        _errorBusAddr   ; Vector #  3, 0x0000000C: Address Error
-           dc.l        _errorIllegalInst   ; Vector #  4, 0x00000010: Illegal Instruction
-           dc.l        _errorZeroDivide  ; Vector #  5, 0x00000014: Zero Division
-           dc.l        _errorChkInst             ; Vector #  6, 0x00000018: CHK, CHK2 Instruction
-           dc.l        _errorTrapV             ; Vector #  7, 0x0000001C: TRAPxx, TRAPV Instructions
-           dc.l        _errorPrivV             ; Vector #  8, 0x00000020: Privilege Violation
-           dc.l        _traceDebug             ; Vector #  9, 0x00000024: Trace
-           dc.l        $24             ; Vector # 10, 0x00000028: Line 1010 Emulator
-           dc.l        $28             ; Vector # 11, 0x0000002C: Line 1111 Emulator
+           dc.l        _erroBus        ; Vector #  2, 0x00000008: Bus Error
+           dc.l        _erroAddress    ; Vector #  3, 0x0000000C: Address Error
+           dc.l        _erroIllegal    ; Vector #  4, 0x00000010: Illegal Instruction
+           dc.l        _erroZeroDivide ; Vector #  5, 0x00000014: Zero Division
+           dc.l        _erroChk        ; Vector #  6, 0x00000018: CHK, CHK2 Instruction
+           dc.l        _erroTrapv      ; Vector #  7, 0x0000001C: TRAPxx, TRAPV Instructions
+           dc.l        _erroPrivilege  ; Vector #  8, 0x00000020: Privilege Violation
+           dc.l        _traceDebug     ; Vector #  9, 0x00000024: Trace
+           dc.l        _erroLineA      ; Vector # 10, 0x00000028: Line 1010 Emulator
+           dc.l        _erroLineF      ; Vector # 11, 0x0000002C: Line 1111 Emulator
            dc.l        $2C             ; Vector # 12, 0x00000030: Hardware Breakpoint
            dc.l        $2C             ; Vector # 13, 0x00000034: Coprocessor Protocol Violation
            dc.l        $2C             ; Vector # 14, 0x00000038: Format error

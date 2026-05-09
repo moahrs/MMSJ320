@@ -168,37 +168,149 @@ _intMfpGpi7:
        jsr       _funcIntMfpGpi7
        movem.l   (A7)+,D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5      ; movem.l (a7)+,a1/d0       ; restore registers
        rte
-_errorBusAddr:
-       move.w #$0000,($0060E208)
-       jmp _errorProc
-_errorIllegalInst:
-       move.w #$0001,($0060E208)
-       jmp _errorProc
-_errorZeroDivide:
-       move.w #$0002,($0060E208)
-       jmp _errorProc
-_errorChkInst:
-       move.w #$0003,($0060E208)
-       jmp _errorProc
-_errorTrapV:
-       move.w #$0004,($0060E208)
-       jmp _errorProc
-_errorPrivV:
-       move.w #$0005,($0060E208)
-       jmp _errorProc
+
+; ==========================================================
+; Error debug structure
+; ==========================================================
+
+ERR_BASE        EQU $0060E200
+
+ERR_MAGIC       EQU ERR_BASE+$00
+ERR_VERSION     EQU ERR_BASE+$04
+ERR_TYPE        EQU ERR_BASE+$06
+ERR_FRAME_WORDS EQU ERR_BASE+$08
+ERR_SR          EQU ERR_BASE+$0A
+ERR_PC          EQU ERR_BASE+$0C
+ERR_IR          EQU ERR_BASE+$10
+ERR_SSW         EQU ERR_BASE+$12
+ERR_FAULT_ADDR  EQU ERR_BASE+$14
+
+ERR_D0          EQU ERR_BASE+$18
+ERR_D1          EQU ERR_BASE+$1C
+ERR_D2          EQU ERR_BASE+$20
+ERR_D3          EQU ERR_BASE+$24
+ERR_D4          EQU ERR_BASE+$28
+ERR_D5          EQU ERR_BASE+$2C
+ERR_D6          EQU ERR_BASE+$30
+ERR_D7          EQU ERR_BASE+$34
+
+ERR_A0          EQU ERR_BASE+$38
+ERR_A1          EQU ERR_BASE+$3C
+ERR_A2          EQU ERR_BASE+$40
+ERR_A3          EQU ERR_BASE+$44
+ERR_A4          EQU ERR_BASE+$48
+ERR_A5          EQU ERR_BASE+$4C
+ERR_A6          EQU ERR_BASE+$50
+ERR_A7          EQU ERR_BASE+$54
+
+ERR_RAW_FRAME   EQU ERR_BASE+$58
+
+_erroBus:
+       move.w  #2,ERR_TYPE
+       bra     _errorProc
+
+_erroAddress:
+       move.w  #3,ERR_TYPE
+       bra     _errorProc
+
+_erroIllegal:
+       move.w  #4,ERR_TYPE
+       bra     _errorProc
+
+_erroZeroDivide:
+       move.w  #5,ERR_TYPE
+       bra     _errorProc
+
+_erroChk:
+       move.w  #6,ERR_TYPE
+       bra     _errorProc
+
+_erroTrapv:
+       move.w  #7,ERR_TYPE
+       bra     _errorProc
+
+_erroPrivilege:
+       move.w  #8,ERR_TYPE
+       bra     _errorProc
+
+_erroTrace:
+       move.w  #9,ERR_TYPE
+       bra     _errorProc
+
+_erroLineA:
+       move.w  #10,ERR_TYPE
+       bra     _errorProc
+
+_erroLineF:
+       move.w  #11,ERR_TYPE
+       bra     _errorProc
        nop
        nop
+
 _errorProc:
-       movem.l   D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5/A6,-(A7)      ; movem.l a1/d0,-(a7)       ; save registers
-       MOVE #65,D0               ; 30 bytes to read (15 words)
-       MOVE.l #$0060E20A,A0     ; error buffer (*errorBufferAddrBus)
-ERRORLOOP:
-       MOVE.w (A7)+,(A0)+        ; SP to error buffer
-       DBRA D0,ERRORLOOP         ; until all bytes copied to buffer error (A0)
-       move.l  #_fontesMatrix,D1   ; colocar endereco da variavel que vai ser de ponteiro para a posicao das fontes apos a compilacao
-       move.l  D1,($00611816)              ; colocar endereco apos a compilacao de onde estao as fontes para VGA
-       jmp      _funcErrorBusAddr
-       rte
+    move.w  #$2700,SR
+
+    move.l  #$45525230,ERR_MAGIC     ; "ERR0"
+    move.w  #$0001,ERR_VERSION
+
+    move.l  D0,ERR_D0
+    move.l  D1,ERR_D1
+    move.l  D2,ERR_D2
+    move.l  D3,ERR_D3
+    move.l  D4,ERR_D4
+    move.l  D5,ERR_D5
+    move.l  D6,ERR_D6
+    move.l  D7,ERR_D7
+
+    move.l  A0,ERR_A0
+    move.l  A1,ERR_A1
+    move.l  A2,ERR_A2
+    move.l  A3,ERR_A3
+    move.l  A4,ERR_A4
+    move.l  A5,ERR_A5
+    move.l  A6,ERR_A6
+    move.l  A7,ERR_A7
+
+    move.w  (A7),ERR_SR
+    move.l  2(A7),ERR_PC
+
+    move.w  ERR_TYPE,D0
+
+    cmp.w   #2,D0             ; bus error
+    beq     ERROR_LONG_FRAME
+
+    cmp.w   #3,D0             ; address error
+    beq     ERROR_LONG_FRAME
+
+ERROR_SHORT_FRAME:
+    move.w  #3,ERR_FRAME_WORDS
+    clr.w   ERR_IR
+    clr.w   ERR_SSW
+    clr.l   ERR_FAULT_ADDR
+    bra     ERROR_COPY_FRAME
+
+ERROR_LONG_FRAME:
+    move.w  #7,ERR_FRAME_WORDS
+
+    move.w  6(A7),ERR_IR
+    move.w  8(A7),ERR_SSW
+    move.l  10(A7),ERR_FAULT_ADDR
+
+ERROR_COPY_FRAME:
+    move.l  A7,A0
+    move.l  #ERR_RAW_FRAME,A1
+    move.w  ERR_FRAME_WORDS,D0
+    subq.w  #1,D0
+
+ERROR_COPY_LOOP:
+    move.w  (A0)+,(A1)+
+    dbra    D0,ERROR_COPY_LOOP
+
+    move.l  #_fontesMatrix,D1
+    move.l  D1,($00611816)
+
+    jmp     _funcErrorBusAddr
+
 _traceDebug:
        MOVE.l A7,($0060E692)      ; SP to A7 temp buffer
        movem.l   D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5,-(A7)      ; movem.l a1/d0,-(a7)       ; save registers

@@ -375,6 +375,7 @@ static unsigned char sheet_screen_dirty[SHEET_ROWS][SHEET_COLS];
 static unsigned char mcalc_dirty = 0;
 static unsigned char mcalc_last_set_changed = 0;
 static unsigned char mcalc_file_name[128];
+static unsigned char mcalc_start_file[128];
 
 static int sheet_clamp_col_width(int w)
 {
@@ -1034,6 +1035,8 @@ void init_table(void)
 
     defaultAlign = 0x00;
     defaultDisp = FORMAT_DISP_GENERAL;
+    defaultMove = ' ';
+
     mcalc_last_set_changed = 0;
 
     memset(sheet_table, 0, sizeof(sheet_table));
@@ -1097,6 +1100,10 @@ void vc_start() {
     init_table();
     mcalc_file_name[0] = 0;
     mcalc_dirty = 0;
+
+    if (mcalc_start_file[0] != 0)
+        mcalc_load_file_by_name((char *)mcalc_start_file);
+
     corner_row = 1;
     corner_col = 1;
     draw_screenyx();
@@ -1116,6 +1123,22 @@ void vc_start() {
 	vc_getmaxyx(curscr, &max_y, &max_x);
 	entry_size = max_x - 12;
 	refresh();
+
+    if (mcalc_start_file[0] != 0)
+    {
+        row = 1;
+        col = 1;
+        corner_row = 1;
+        corner_col = 1;
+        x = sheet_col_to_screen_x(corner_col, col);
+        y = SHEET_GRID_Y;
+        draw_axes(corner_row, corner_col);
+        draw_cells(corner_row, corner_col, max_y, max_x, draw_size, table);
+        set_icon(row, col);
+        fill_in(y, x, row, col);
+        move(y, x);
+    }
+
 	input();
 	
 	char ch = getch();
@@ -1150,15 +1173,38 @@ void set_icon(int row, int col)
 
     mprintf("%s%d", letters, row);
 
-    /* tipo */
+    /* tipo e formato */
     move(0, 6);
+
+    // Formato - /F + formato da célula
     if (table[row - 1][col - 1] != 0) {
-        mprintf("(");
+        mprintf("/F");
+
+        if (table[row - 1][col - 1]->formatAlign == FORMAT_ALIGN_LEFT)
+            mprintf("L");
+        else if (table[row - 1][col - 1]->formatAlign == FORMAT_ALIGN_RIGHT)
+            mprintf("R");
+            
+        if (table[row - 1][col - 1]->formatDisp == FORMAT_DISP_GENERAL)
+            mprintf("G");
+        else if (table[row - 1][col - 1]->formatDisp == FORMAT_DISP_CURRENCY)
+            mprintf("$");
+        else if (table[row - 1][col - 1]->formatDisp == FORMAT_DISP_INTEGER)
+            mprintf("I");
+        else if (table[row - 1][col - 1]->formatDisp == FORMAT_DISP_FIXED)
+            mprintf("F");
+
+        mprintf(" ");
+    } 
+
+    // Tipo
+    if (table[row - 1][col - 1] != 0) {
+        mprintf("<");
         if (table[row - 1][col - 1]->contents != 2)
             mprintf("V");
         else
             mprintf("L");
-        mprintf(")");
+        mprintf(">");
     } else {
         mprintf("   ");
     }
@@ -1166,14 +1212,20 @@ void set_icon(int row, int col)
     /* conteúdo bruto */
     get_raw(row, col, entry_size, table, inside);
 
-    move(0, 10);
+    move(0, 15);
     mprintf("%s", inside);
 
     /* limpa resto da linha depois do conteúdo */
-    p = 10 + strlen(inside);
+    p = 15 + strlen(inside);
     move(0, p);
-    for (i = p; i < max_x; i++)
+    for (i = p; i < (max_x - 1); i++)
         mprintf(" ");
+
+    if (defaultMove != ' ')
+    {
+        move(0, max_x - 1);
+        mprintf("%c", defaultMove);
+    }
 
     color_off();
 }
@@ -1299,10 +1351,20 @@ void input() {
 	while(1) 
     {
         if (!vret)
+        {
+            move(0,49);
+            mprintf(" ");
             ch = getch();
+        }
         else
         {
             ch = vret;
+
+            if (ch == KEY_UP || ch == KEY_DOWN)
+                defaultMove = '!';
+            else if (ch == KEY_LEFT || ch == KEY_RIGHT)
+                defaultMove = '-';
+                
             vret = 0;
         }
 
@@ -1352,15 +1414,17 @@ void input() {
                     int nextw = sheet_get_col_width(col + 1);
                     int nextx = x + cw;
 
-                    if (nextx + nextw <= max_x) {
-					refill(y, x, row, col);
-					col++;
-                    x = nextx;
-                    move(y, x);
-					fill_in(y, x, row, col);
-					set_icon(row, col);
-					move(y, x);
-                    } else {
+                    if (nextx + nextw <= max_x) 
+                    {
+                        refill(y, x, row, col);
+                        col++;
+                        x = nextx;
+                        move(y, x);
+                        fill_in(y, x, row, col);
+                        set_icon(row, col);
+                        move(y, x);
+                    } 
+                    else {
                         col++;
                         corner_col++;
                         draw_axes(corner_row, corner_col);
@@ -1611,7 +1675,7 @@ void input() {
                 // Rotinas de salvar e abrir arquivos
                 int f;
 
-                sheet_menu_line_show("A L S");
+                sheet_menu_line_show("S A L");
                 f = sheet_menu_read_key();
 
                 if (f != 27) {
@@ -1787,6 +1851,24 @@ void initscr(void)
 }
 
 void main(char *argc, char **argv) {
+    char *comma;
+
+    (void)argc;
+    (void)argv;
+
+    mcalc_start_file[0] = 0;
+    if (*paramBasic != 0)
+    {
+        strncpy((char *)mcalc_start_file, (char *)paramBasic, sizeof(mcalc_start_file) - 1);
+        mcalc_start_file[sizeof(mcalc_start_file) - 1] = 0;
+
+        comma = strchr((char *)mcalc_start_file, ',');
+        if (comma)
+            *comma = 0;
+
+        mcalc_normalize_filename((char *)mcalc_start_file);
+    }
+
 	initscr();
 	refresh();
 	setup();

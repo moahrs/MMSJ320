@@ -34,6 +34,7 @@
 * 20/04/2026  1.4a03  Moacir Jr.   Alterar loadso e runso to loados e runos
 * 24/04/2026  1.4a04  Moacir Jr.   Ajustes nas variaveis basic e prepara para LOADBAS
 * 02/05/2026  1.4a05  Moacir Jr.   Ajuste endereco loadbas
+* 09/05/2026  1.4a06  Moacir Jr.   Ajuste Tela vermelha da morte - stack error
 *--------------------------------------------------------------------------------
 *
 * Mapa de Memoria
@@ -109,9 +110,23 @@
 #include "mmsj320mfp.h"
 #include "monitor.h"
 
-#define versionBios "1.4a04"
+#define versionBios "1.4a06"
 
 HEADER *_allocp;
+
+#define ERR_MAGIC       (*(volatile unsigned long  *)0x0060E200)
+#define ERR_VERSION     (*(volatile unsigned short *)0x0060E204)
+#define ERR_TYPE        (*(volatile unsigned short *)0x0060E206)
+#define ERR_FRAME_WORDS (*(volatile unsigned short *)0x0060E208)
+#define ERR_SR          (*(volatile unsigned short *)0x0060E20A)
+#define ERR_PC          (*(volatile unsigned long  *)0x0060E20C)
+#define ERR_IR          (*(volatile unsigned short *)0x0060E210)
+#define ERR_SSW         (*(volatile unsigned short *)0x0060E212)
+#define ERR_FAULT_ADDR  (*(volatile unsigned long  *)0x0060E214)
+
+#define ERR_DREG        ((volatile unsigned long *)0x0060E218)
+#define ERR_AREG        ((volatile unsigned long *)0x0060E238)
+#define ERR_RAW_FRAME   ((volatile unsigned short *)0x0060E258)
 
 unsigned long runMemory;
 unsigned char kbdKeyPtrR; // Contador do ponteiro das teclas colocadas no buffer
@@ -1253,6 +1268,7 @@ int processCmd(void)
         }
         else if (!strcmp(linhacomando,"RUNOS") && iy == 5)
         {
+            carregaOSDisk();
             runSystemOper();
         }
         else if (!strcmp(linhacomando,"LOADBAS") && iy == 7)
@@ -1261,6 +1277,7 @@ int processCmd(void)
         }
         else if (!strcmp(linhacomando,"RUNBAS") && iy == 6)
         {
+            carregaBasDisk();
             vEndLoad = 0x00870000;
             runMem(vEndLoad);
         }
@@ -3566,16 +3583,56 @@ void funcZeroesLeft(unsigned char* buffer, unsigned char vTam)
 }
 
 //-----------------------------------------------------------------------------
+unsigned long readErrReg(unsigned long base, unsigned int index)
+{
+    unsigned long addr;
+    unsigned long *p;
+    unsigned long v;
+
+    addr = base;
+    addr += (unsigned long)index;
+    addr += (unsigned long)index;
+    addr += (unsigned long)index;
+    addr += (unsigned long)index;
+
+    p = (unsigned long *)addr;
+    v = *p;
+
+    return v;
+}
+
+void printHexWord(unsigned short v)
+{
+    unsigned char sqtdtam[20];
+
+    itoa(v, sqtdtam, 16);
+    funcZeroesLeft(&sqtdtam, 4);
+    printText(sqtdtam);
+}
+
+void printHexLong(unsigned long v)
+{
+    unsigned char sqtdtam[20];
+
+    itoa((unsigned short)(v >> 16), sqtdtam, 16);
+    funcZeroesLeft(&sqtdtam, 4);
+    printText(sqtdtam);
+
+    itoa((unsigned short)(v & 0xFFFF), sqtdtam, 16);
+    funcZeroesLeft(&sqtdtam, 4);
+    printText(sqtdtam);
+}
+
 void funcErrorBusAddr(void)
 {
-    unsigned int ix = 0, iz;
-    unsigned char sqtdtam[20];
-    unsigned short vOP = 0;
+    unsigned int ix;
+    unsigned int iz;
+    unsigned short vOP;
 
     videoCursorPosColX = 0;
     videoCursorPosRowY = 0;
-    videoScroll = 1;       // Ativo
-    videoScrollDir = 1;    // Pra Cima
+    videoScroll = 1;
+    videoScrollDir = 1;
     videoCursorBlink = 1;
     videoCursorShow = 0;
     vdpMaxCols = 39;
@@ -3583,81 +3640,113 @@ void funcErrorBusAddr(void)
     vdp_init_textmode(VDP_WHITE, VDP_DARK_RED);
 
     clearScr();
+
     printChar(218,1);
     for (ix = 0; ix < 36; ix++)
         printChar(196,1);
     printChar(191,1);
     printText(" \r\n");
+
     printChar(179,1);
     printText("          EXCEPTION OCCURRED        ");
     printChar(179,1);
     printText(" \r\n");
+
     printChar(195,1);
     for (ix = 0; ix < 36; ix++)
         printChar(196,1);
     printChar(180,1);
     printText(" \r\n");
 
-    vOP = *errorBufferAddrBus;
+    vOP = ERR_TYPE;
 
     switch (vOP)
     {
-        case 0x0000:
+        case 2:
             printChar(179,1);
-            printText("      BUS ERROR / ADDRESS ERROR     ");
+            printText("              BUS ERROR             ");
             printChar(179,1);
             printText(" \r\n");
             break;
-        case 0x0001:
+
+        case 3:
+            printChar(179,1);
+            printText("            ADDRESS ERROR           ");
+            printChar(179,1);
+            printText(" \r\n");
+            break;
+
+        case 4:
             printChar(179,1);
             printText("         ILLEGAL INSTRUCTION        ");
             printChar(179,1);
             printText(" \r\n");
             break;
-        case 0x0002:
+
+        case 5:
             printChar(179,1);
             printText("             ZERO DIVIDE            ");
             printChar(179,1);
             printText(" \r\n");
             break;
-        case 0x0003:
+
+        case 6:
             printChar(179,1);
             printText("           CHK INSTRUCTION          ");
             printChar(179,1);
             printText(" \r\n");
             break;
-        case 0x0004:
+
+        case 7:
             printChar(179,1);
             printText("                TRAPV               ");
             printChar(179,1);
             printText(" \r\n");
             break;
-        case 0x0005:
+
+        case 8:
             printChar(179,1);
             printText("         PRIVILEGE VIOLATION        ");
             printChar(179,1);
             printText(" \r\n");
             break;
+
+        case 9:
+            printChar(179,1);
+            printText("              TRACE ERROR           ");
+            printChar(179,1);
+            printText(" \r\n");
+            break;
+
+        case 10:
+            printChar(179,1);
+            printText("            LINE A EMULATOR         ");
+            printChar(179,1);
+            printText(" \r\n");
+            break;
+
+        case 11:
+            printChar(179,1);
+            printText("            LINE F EMULATOR         ");
+            printChar(179,1);
+            printText(" \r\n");
+            break;
+
         default:
-            itoa(errorBufferAddrBus,sqtdtam,16);
-            funcZeroesLeft(&sqtdtam, 8);
-            printText(sqtdtam);
-            printText(" : ");
-            itoa(vOP,sqtdtam,16);
-            funcZeroesLeft(&sqtdtam, 4);
-            printText(sqtdtam);
-            printText("\r\n");
+            printChar(179,1);
+            printText("           UNKNOWN EXCEPTION        ");
+            printChar(179,1);
+            printText(" \r\n");
             break;
     }
+
     printChar(195,1);
     for (ix = 0; ix < 36; ix++)
         printChar(196,1);
     printChar(180,1);
     printText(" \r\n");
 
-    ix++;
-
-    // Mostra Registradores: 2 words by register
+    /* D0-D3 */
     printChar(179,1);
     printText(" D0       D1       D2       D3      ");
     printChar(179,1);
@@ -3665,16 +3754,9 @@ void funcErrorBusAddr(void)
 
     printChar(179,1);
     printChar(' ',1);
-    for (iz = 0; iz < 4; iz++)  // Mostra d0-d3
+    for (iz = 0; iz < 4; iz++)
     {
-        itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-        funcZeroesLeft(&sqtdtam, 4);
-        printText(sqtdtam);
-        ix++;
-        itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-        funcZeroesLeft(&sqtdtam, 4);
-        printText(sqtdtam);
-        ix++;
+        printHexLong(readErrReg(0x0060E218, iz));
 
         if (iz < 3)
             printText(" ");
@@ -3682,6 +3764,7 @@ void funcErrorBusAddr(void)
     printChar(179,1);
     printText("\r\n");
 
+    /* D4-D7 */
     printChar(179,1);
     printText(" D4       D5       D6       D7      ");
     printChar(179,1);
@@ -3689,23 +3772,17 @@ void funcErrorBusAddr(void)
 
     printChar(179,1);
     printChar(' ',1);
-    for (iz = 0; iz < 4; iz++)  // Mostra d4-d7
+    for (iz = 4; iz < 8; iz++)
     {
-        itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-        funcZeroesLeft(&sqtdtam, 4);
-        printText(sqtdtam);
-        ix++;
-        itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-        funcZeroesLeft(&sqtdtam, 4);
-        printText(sqtdtam);
-        ix++;
+        printHexLong(readErrReg(0x0060E218, iz));
 
-        if (iz < 3)
+        if (iz < 7)
             printText(" ");
     }
     printChar(179,1);
     printText("\r\n");
 
+    /* A0-A3 */
     printChar(179,1);
     printText(" A0       A1       A2       A3      ");
     printChar(179,1);
@@ -3713,16 +3790,9 @@ void funcErrorBusAddr(void)
 
     printChar(179,1);
     printChar(' ',1);
-    for (iz = 0; iz < 4; iz++)  // Mostra d0-d3
+    for (iz = 0; iz < 4; iz++)
     {
-        itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-        funcZeroesLeft(&sqtdtam, 4);
-        printText(sqtdtam);
-        ix++;
-        itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-        funcZeroesLeft(&sqtdtam, 4);
-        printText(sqtdtam);
-        ix++;
+        printHexLong(readErrReg(0x0060E238, iz));
 
         if (iz < 3)
             printText(" ");
@@ -3730,144 +3800,98 @@ void funcErrorBusAddr(void)
     printChar(179,1);
     printText(" \r\n");
 
+    /* A4-A7 */
     printChar(179,1);
-    printText(" A4       A5       A6               ");
+    printText(" A4       A5       A6       A7      ");
     printChar(179,1);
     printText(" \r\n");
 
     printChar(179,1);
     printChar(' ',1);
-    for (iz = 0; iz < 3; iz++)  // Mostra d4-d7
+    for (iz = 4; iz < 8; iz++)
     {
-        itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-        funcZeroesLeft(&sqtdtam, 4);
-        printText(sqtdtam);
-        ix++;
-        itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-        funcZeroesLeft(&sqtdtam, 4);
-        printText(sqtdtam);
-        ix++;
+        printHexLong(readErrReg(0x0060E238, iz));
 
-        printText(" ");
+        if (iz < 7)
+            printText(" ");
     }
-    printText("        ");
     printChar(179,1);
     printText("\r\n");
+
     printChar(179,1);
     printText("                                    ");
     printChar(179,1);
     printText("\r\n");
 
+    /* SR / PC / IR / SSW */
     printChar(179,1);
-    printText(" SR   PC       OffSet Special_Word  ");
+    printText(" SR   PC       IR   Special_Word    ");
     printChar(179,1);
     printText(" \r\n");
 
     printChar(179,1);
     printChar(' ',1);
 
-    // Mostra SR: 1 word
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
+    printHexWord(ERR_SR);
     printText(" ");
 
-    // Mostra PC to Return: 2 words
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
+    printHexLong(ERR_PC);
     printText(" ");
 
-    // Mostra Vector offset: 1 word
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
-    printText("   ");
+    printHexWord(ERR_IR);
+    printText(" ");
 
-    // Mostra Special Status Word: 1 word
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
+    printHexWord(ERR_SSW);
     printText("          ");
+
     printChar(179,1);
     printText("\r\n");
+
     printChar(179,1);
     printText("                                    ");
     printChar(179,1);
     printText("\r\n");
 
+    /* Fault address / frame words */
     printChar(179,1);
-    printText(" FaultAddr OutB InB  Instr.InB      ");
+    printText(" FaultAddr Frame Type Magic         ");
     printChar(179,1);
     printText(" \r\n");
 
     printChar(179,1);
     printChar(' ',1);
 
-    // Mostra Fault Address: 2 words
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
+    printHexLong(ERR_FAULT_ADDR);
     printText("  ");
 
-    // unused: 1 word
-    ix++;
+    printHexWord(ERR_FRAME_WORDS);
+    printText("  ");
 
-    // Mostra output buffer: 1 word
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
-    printText(" ");
+    printHexWord(ERR_TYPE);
+    printText("  ");
 
-    // unused: 1 word
-    ix++;
+    printHexLong(ERR_MAGIC);
+    printText("     ");
 
-    // Mostra input buffer: 1 word
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
-    printText(" ");
-
-    // unused: 1 word
-    ix++;
-    // Mostra instruction input buffer: 1 word
-    itoa(*(errorBufferAddrBus + ix),sqtdtam,16);
-    funcZeroesLeft(&sqtdtam, 4);
-    printText(sqtdtam);
-    ix++;
-    printText("           ");
     printChar(179,1);
     printText("\r\n");
 
-    // Halt
     printChar(195,1);
     for (ix = 0; ix < 36; ix++)
         printChar(196,1);
     printChar(180,1);
     printText(" \r\n");
+
     printChar(179,1);
     printText("            SYSTEM HALTED           ");
     printChar(179,1);
     printText(" \r\n");
+
     printChar(192,1);
     for (ix = 0; ix < 36; ix++)
         printChar(196,1);
     printChar(217,1);
     printText(" \r\n");
+
     for(;;);
 }
