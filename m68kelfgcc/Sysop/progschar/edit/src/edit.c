@@ -1244,7 +1244,7 @@ void edLoop(char *filename)
                         else
                             edSaveFile();
                     }
-                    if (key == 'A' || key == 'a')   // Save As
+                    else if (key == 'A' || key == 'a')   // Save As
                     {
                         edSaveFileAs((unsigned char*)filename);
                     }
@@ -1508,6 +1508,7 @@ int edSaveFileAs(unsigned char* vParamName)
     {
         edDirty = 0;
         strcpy((char*)vParamName, (char*)newFileName);
+        strcpy((char*)edFileName, (char*)newFileName);
         return 1;
     }
 
@@ -1568,6 +1569,7 @@ int edOpenFile(unsigned char* vParamName)
     edDirty = 0;
 
     strcpy((char*)vParamName, (char*)openFileName);
+    strcpy((char*)edFileName, (char*)openFileName);
     
     edCurLine = 0;
     edCurCol = 0;

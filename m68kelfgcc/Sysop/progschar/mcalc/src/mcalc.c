@@ -1103,7 +1103,16 @@ void vc_start() {
     mcalc_dirty = 0;
 
     if (mcalc_start_file[0] != 0)
-        mcalc_load_file_by_name((char *)mcalc_start_file);
+    {
+        if (!mcalc_load_file_by_name((char *)mcalc_start_file))
+        {
+            msfree(memSaveFont);
+            setModeVideoOS(VDP_MODE_TEXT);
+            clearScr();
+            printText("Erro carregando arquivo\r\n");
+            return;
+        }        
+    }
 
     corner_row = 1;
     corner_col = 1;
