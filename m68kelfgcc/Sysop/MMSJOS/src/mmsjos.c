@@ -302,6 +302,8 @@ HEADER *_allocp;
 
 #define versionMMSJOS "1.0a05"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
+#define FS_SECTOR_RETRY_COUNT 3
+#define FS_ENABLE_WRITE_VERIFY 1
 
 #define STACKSIZE  16384
 #define STACKSIZEMGUI  2048
@@ -2222,6 +2224,131 @@ unsigned char fsRecByte(unsigned char pType)
         vByte = *vdskd;
 
     return vByte;
+}
+
+//-----------------------------------------------------------------------------
+// Raw sector read/write (single attempt)
+//-----------------------------------------------------------------------------
+static unsigned char fsSectorReadRaw(unsigned long vsector, unsigned char* vbuffer)
+{
+    unsigned char vbytes[4], vByte = 0;
+    unsigned int cc;
+    unsigned long vsectorok;
+
+    if (!vbuffer)
+        return 0;
+
+    vsectorok = (vsector & 0xFF000000) >> 24;
+    vbytes[0] = (unsigned char)vsectorok;
+    vsectorok = (vsector & 0x00FF0000) >> 16;
+    vbytes[1] = (unsigned char)vsectorok;
+    vsectorok = (vsector & 0x0000FF00) >> 8;
+    vbytes[2] = (unsigned char)vsectorok;
+    vsectorok = vsector & 0x000000FF;
+    vbytes[3] = (unsigned char)vsectorok;
+
+    // Envia comando resetar e abortar tudo
+    fsSendByte('a', FS_CMD);
+
+    // Comando recebido ok ?
+    vByte = fsRecByte(FS_CMD);
+    if (vByte != ALL_OK)
+        return 0;
+
+    // Envia Cluster
+    fsSendByte(vbytes[0], FS_PAR);
+    fsSendByte(vbytes[1], FS_PAR);
+    fsSendByte(vbytes[2], FS_PAR);
+    fsSendByte(vbytes[3], FS_PAR);
+    // Envia offset
+    fsSendByte(0x00, FS_PAR);
+    fsSendByte(0x00, FS_PAR);
+    // Envia Qtd (512)
+    fsSendByte(0x02, FS_PAR);
+    fsSendByte(0x00, FS_PAR);
+
+    // Envia comando
+    fsSendByte('r', FS_CMD);
+
+    // Comando recebido ok ?
+    vByte = fsRecByte(FS_CMD);
+    if (vByte != ALL_OK)
+        return 0;
+
+    // Comando Executado ok ?
+    vByte = fsRecByte(FS_CMD);
+    if (vByte != ALL_OK)
+        return 0;
+
+    // Carrega Dados Recebidos
+    for (cc = 0; cc < MEDIA_SECTOR_SIZE ; cc++)
+        vbuffer[cc] = fsRecByte(FS_DATA);
+
+    return 1;
+}
+
+static int fsBufferEquals(unsigned char *a, unsigned char *b, unsigned short size)
+{
+    unsigned short i;
+
+    for (i = 0; i < size; i++) {
+        if (a[i] != b[i])
+            return 0;
+    }
+
+    return 1;
+}
+
+static unsigned char fsSectorWriteRaw(unsigned long vsector, unsigned char* vbuffer)
+{
+    unsigned char vbytes[4], vByte = 0;
+    unsigned int cc;
+    unsigned long vsectorok;
+
+    if (!vbuffer)
+        return 0;
+
+    vsectorok = (vsector & 0xFF000000) >> 24;
+    vbytes[0] = (unsigned char)vsectorok;
+    vsectorok = (vsector & 0x00FF0000) >> 16;
+    vbytes[1] = (unsigned char)vsectorok;
+    vsectorok = (vsector & 0x0000FF00) >> 8;
+    vbytes[2] = (unsigned char)vsectorok;
+    vsectorok = vsector & 0x000000FF;
+    vbytes[3] = (unsigned char)vsectorok;
+
+    // Envia comando resetar e abortar tudo
+    fsSendByte('a', FS_CMD);
+
+    // Comando recebido ok ?
+    vByte = fsRecByte(FS_CMD);
+    if (vByte != ALL_OK)
+        return 0;
+
+    // Envia Buffer
+    for (cc = 0; cc < MEDIA_SECTOR_SIZE ; cc++)
+        fsSendByte(vbuffer[cc], FS_DATA);
+
+    // Envia Cluster
+    fsSendByte(vbytes[0], FS_PAR);
+    fsSendByte(vbytes[1], FS_PAR);
+    fsSendByte(vbytes[2], FS_PAR);
+    fsSendByte(vbytes[3], FS_PAR);
+
+    // Envia comando
+    fsSendByte('w', FS_CMD);
+
+    // Comando recebido ok ?
+    vByte = fsRecByte(FS_CMD);
+    if (vByte != ALL_OK)
+        return 0;
+
+    // Comando Executado ok ?
+    vByte = fsRecByte(FS_CMD);
+    if (vByte != ALL_OK)
+        return 0;
+
+    return 1;
 }
 
 //-----------------------------------------------------------------------------
@@ -4238,7 +4365,7 @@ unsigned char fsFormat (long int serialNumber, char * volumeID)
 			return ERRO_B_WRITE_DISK;
     }
 
-    memset (gDataBuffer, 0x00, 12);
+    memset (gDataBuffer, 0x00, MEDIA_SECTOR_SIZE);
 
     for (Index = fat + 1; Index < (fat + fatsize); Index++)
     {
@@ -4257,6 +4384,7 @@ unsigned char fsFormat (long int serialNumber, char * volumeID)
     }
 
     // Create a drive name entry in the root dir
+    memset(gDataBuffer, 0x00, MEDIA_SECTOR_SIZE);
     Index = 0;
     while ((*(volumeID + Index) != 0) && (Index < 11))
     {
@@ -4280,120 +4408,39 @@ unsigned char fsFormat (long int serialNumber, char * volumeID)
 
 //-------------------------------------------------------------------------
 unsigned char fsSectorRead(unsigned long vsector, unsigned char* vbuffer){
-    unsigned char vbytes[4], dd, vByte = 0;
-    unsigned int ix, cc;
-    unsigned long vsectorok;
-    unsigned char sqtdtam[11];
+    unsigned char attempt;
 
-    vsectorok = (vsector & 0xFF000000) >> 24;
-    vbytes[0] = (unsigned char)vsectorok;
-    vsectorok = (vsector & 0x00FF0000) >> 16;
-    vbytes[1] = (unsigned char)vsectorok;
-    vsectorok = (vsector & 0x0000FF00) >> 8;
-    vbytes[2] = (unsigned char)vsectorok;
-    vsectorok = vsector & 0x000000FF;
-    vbytes[3] = (unsigned char)vsectorok;
-
-    // Envia comando resetar e abortar tudo
-    fsSendByte('a', FS_CMD);
-
-    // Comando recebido ok ?
-    vByte = fsRecByte(FS_CMD);
-
-    if (vByte != ALL_OK)
-        return 0;
-
-    // Envia Cluster
-    fsSendByte(vbytes[0], FS_PAR);
-    fsSendByte(vbytes[1], FS_PAR);
-    fsSendByte(vbytes[2], FS_PAR);
-    fsSendByte(vbytes[3], FS_PAR);
-    // Envia offset
-    fsSendByte(0x00, FS_PAR);
-    fsSendByte(0x00, FS_PAR);
-    // Envia Qtd (512)
-    fsSendByte(0x02, FS_PAR);
-    fsSendByte(0x00, FS_PAR);
-
-    // Envia comando
-    fsSendByte('r', FS_CMD);
-
-    // Comando recebido ok ?
-    vByte = fsRecByte(FS_CMD);
-
-    if (vByte != ALL_OK)
-        return 0;
-
-    // Comando Executado ok ?
-    vByte = fsRecByte(FS_CMD);
-
-    if (vByte != ALL_OK)
-        return 0;
-
-    // Carrega Dados Recebidos
-    for (cc = 0; cc < 512 ; cc++)
-    {
-        vByte = fsRecByte(FS_DATA);
-        *(vbuffer + cc) = vByte;
+    for (attempt = 0; attempt < FS_SECTOR_RETRY_COUNT; attempt++) {
+        if (fsSectorReadRaw(vsector, vbuffer))
+            return 1;
     }
 
-    return 1;
+    return 0;
 }
 
 //-------------------------------------------------------------------------
 unsigned char fsSectorWrite(unsigned long vsector, unsigned char* vbuffer, unsigned char vtipo){
-    unsigned char vbytes[4], dd, vByte = 0;
-    unsigned int ix, cc;
-    unsigned long vsectorok;
-    unsigned char sqtdtam[11];
+    unsigned char attempt;
+    static unsigned char vSectorVerify[MEDIA_SECTOR_SIZE];
 
-    vsectorok = (vsector & 0xFF000000) >> 24;
-    vbytes[0] = (unsigned char)vsectorok;
-    vsectorok = (vsector & 0x00FF0000) >> 16;
-    vbytes[1] = (unsigned char)vsectorok;
-    vsectorok = (vsector & 0x0000FF00) >> 8;
-    vbytes[2] = (unsigned char)vsectorok;
-    vsectorok = vsector & 0x000000FF;
-    vbytes[3] = (unsigned char)vsectorok;
+    (void)vtipo;
 
-    // Envia comando resetar e abortar tudo
-    fsSendByte('a', FS_CMD);
+    for (attempt = 0; attempt < FS_SECTOR_RETRY_COUNT; attempt++) {
+        if (!fsSectorWriteRaw(vsector, vbuffer))
+            continue;
 
-    // Comando recebido ok ?
-    vByte = fsRecByte(FS_CMD);
+#if FS_ENABLE_WRITE_VERIFY
+        if (!fsSectorReadRaw(vsector, vSectorVerify))
+            continue;
 
-    if (vByte != ALL_OK)
-        return 0;
+        if (!fsBufferEquals(vbuffer, vSectorVerify, MEDIA_SECTOR_SIZE))
+            continue;
+#endif
 
-    // Envia Buffer
-    for (cc = 0; cc < 512 ; cc++)
-    {
-        vByte = *(vbuffer + cc);
-        fsSendByte(vByte, FS_DATA);
+        return 1;
     }
 
-    // Envia Cluster
-    fsSendByte(vbytes[0], FS_PAR);
-    fsSendByte(vbytes[1], FS_PAR);
-    fsSendByte(vbytes[2], FS_PAR);
-    fsSendByte(vbytes[3], FS_PAR);
-
-    // Envia comando
-    fsSendByte('w', FS_CMD);
-
-    // Comando recebido ok ?
-    vByte = fsRecByte(FS_CMD);
-
-    if (vByte != ALL_OK)
-        return 0;
-
-    // Comando Executado ok ?
-    vByte = fsRecByte(FS_CMD);
-
-    if (vByte != ALL_OK)
-        return 0;
-
-    return 1;
+    return 0;
 }
 
 //-----------------------------------------------------------------------------

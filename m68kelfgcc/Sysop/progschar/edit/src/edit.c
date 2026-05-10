@@ -92,6 +92,8 @@ void main(void)
         if (ret == 0)
         {
             printText("Erro carregando arquivo\r\n");
+            msfree(edFileBuf);
+            edFileBuf = 0;
             return;
         }
 
@@ -114,6 +116,9 @@ void main(void)
 
     clearScr();
 
+    msfree(edFileBuf);
+    edFileBuf = 0;
+
     //OSTaskResume(TASK_MMSJOS_MAIN);
 
     return;
@@ -122,6 +127,21 @@ void main(void)
 //-------------------------------------------------------------------
 int edGetCursorOffset(void)
 {
+    if (edNumLines <= 0)
+        return 0;
+
+    if (edCurLine < 0)
+        edCurLine = 0;
+
+    if (edCurLine >= edNumLines)
+        edCurLine = edNumLines - 1;
+
+    if (edCurCol < 0)
+        edCurCol = 0;
+
+    if (edCurCol > edLineLen(edCurLine))
+        edCurCol = edLineLen(edCurLine);
+
     return (int)((edLinePtr[edCurLine] + edCurCol) - edFileBuf);
 }
 
@@ -280,6 +300,7 @@ void edBuildLines(void)
 {
     char *p;
     char *end;
+    char lastCh;
 
     edNumLines = 0;
     p = edFileBuf;
@@ -323,6 +344,18 @@ void edBuildLines(void)
         else
         {
             p++;
+        }
+    }
+
+    /* Mantem uma ultima linha vazia quando arquivo termina em CR/LF */
+    if (edFileSize > 0 && edNumLines < EDIT_MAX_LINES)
+    {
+        lastCh = edFileBuf[edFileSize - 1];
+
+        if (lastCh == 13 || lastCh == 10)
+        {
+            edLinePtr[edNumLines] = end;
+            edNumLines++;
         }
     }
 }
@@ -1054,13 +1087,18 @@ int edDelete(void)
 //-------------------------------------------------------------------
 int edInsertEnter(void)
 {
-    edInsertChar(13);   /* CR */
+    int pos;
+
+    pos = edGetCursorOffset();
+
+    if (edInsertChar(13) != 0)   /* CR */
+        return -1;
 
     /* opcional: LF também */
-    edInsertChar(10);
+    if (edInsertChar(10) != 0)
+        return -1;
 
-    edCurCol = 0;
-    edCurLine++;
+    edSetCursorFromOffset((unsigned long)pos + 2UL);
 
     return 0;
 }
@@ -1824,16 +1862,25 @@ int edSaveToFile(char* vfilename, unsigned char* buf, int size)
     edSetMessage("Saving File...");                  
     edDrawStatus();
 
-    // Tenta Abrir Arquivo
-    if (fsOpenFile(vfilename) != RETURN_OK)
+    /*
+       Faz truncate real: remove arquivo antigo e cria novo,
+       para evitar lixo no final quando o novo conteudo e menor.
+    */
+    if (fsFindInDir(vfilename, TYPE_FILE) < ERRO_D_START)
     {
-        // Se nao conseguir, cria o Arquivo
-        if (fsCreateFile(vfilename) != RETURN_OK)
+        if (fsDelFile(vfilename) != RETURN_OK)
         {
-            edSetMessage("Save File Error!");                  
+            edSetMessage("Save File Error!");
             edDrawStatus();
-            return ERRO_B_CREATE_FILE;
+            return ERRO_B_APAGAR_ARQUIVO;
         }
+    }
+
+    if (fsCreateFile(vfilename) != RETURN_OK)
+    {
+        edSetMessage("Save File Error!");
+        edDrawStatus();
+        return ERRO_B_CREATE_FILE;
     }
 
     // Grava no Arquivo
