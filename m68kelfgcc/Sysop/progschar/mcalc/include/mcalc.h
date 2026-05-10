@@ -114,6 +114,7 @@ typedef union data_s *data;
 static unsigned char defaultAlign;
 static unsigned char defaultDisp;
 static unsigned char defaultMove;
+static unsigned char defaultMoveCh;
 
 char *p;  // ponteiro global da expressão
 static int eval_depth = 0;

@@ -43,6 +43,7 @@ unsigned long runOSMemory;
 
 #define MMSJ_HEAP_LIMIT 0x008CFFFFUL
 #define MPRINTF_BUF_SIZE 128
+//#define ENABLE_UPDATE_LAST_ACCESS 1
 
 #ifdef USE_MSMALLOC
 #define HEAP_START  ((unsigned char*)0x00820000)
@@ -2405,8 +2406,10 @@ unsigned char fsOpenFile(char * vfilename)
 	// Grava nova data no lastaccess
 	vdir.LastAccessDate  = vdirdate;
 
+#ifdef ENABLE_UPDATE_LAST_ACCESS              
  	if (fsUpdateDir() != RETURN_OK)
 		return ERRO_B_UPDATE_DIR;
+#endif
 
 	return RETURN_OK;
 }
@@ -2438,8 +2441,10 @@ unsigned char fsCloseFile(char * vfilename, unsigned char vupdated)
 			vdir.UpdateTime = vdirtime;
 			vdir.UpdateDate = vdirdate;
 
+#ifdef ENABLE_UPDATE_LAST_ACCESS              
 			if (fsUpdateDir() != RETURN_OK)
 				return ERRO_B_UPDATE_DIR;
+#endif                
 		}
 	}
 	else
