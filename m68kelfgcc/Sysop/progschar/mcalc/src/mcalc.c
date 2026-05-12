@@ -98,6 +98,130 @@ unsigned long fppReal(long v)
     return sheet_fppD7;
 }
 
+/* ===== FFP Single-Value Function Wrappers ===== */
+unsigned long fppAbs(unsigned long value)
+{
+    sheet_fppD7 = value;
+    FPP_ABS();
+    return sheet_fppD7;
+}
+
+unsigned long fppInt(unsigned long value)
+{
+    sheet_fppD7 = value;
+    FPP_INT();
+    return sheet_fppD7;
+}
+
+unsigned long fppExp(unsigned long value)
+{
+    sheet_fppD7 = value;
+    FPP_EXP();
+    return sheet_fppD7;
+}
+
+unsigned long fppLn(unsigned long value)
+{
+    sheet_fppD7 = value;
+    FPP_LN();
+    return sheet_fppD7;
+}
+
+unsigned long fppSin(unsigned long value)
+{
+    sheet_fppD7 = value;
+    FPP_SIN();
+    return sheet_fppD7;
+}
+
+unsigned long fppCos(unsigned long value)
+{
+    sheet_fppD7 = value;
+    FPP_COS();
+    return sheet_fppD7;
+}
+
+unsigned long fppTan(unsigned long value)
+{
+    sheet_fppD7 = value;
+    FPP_TAN();
+    return sheet_fppD7;
+}
+
+unsigned long fppSqrt(unsigned long value)
+{
+    sheet_fppD7 = value;
+    FPP_SQRT();
+    return sheet_fppD7;
+}
+
+unsigned long fppComp(unsigned long d7, unsigned long d6)
+{
+    sheet_fppD7 = d7;
+    sheet_fppD6 = d6;
+    FPP_CMP();
+    return sheet_fppD7;
+}
+
+/* PI as FFP: 0x41490FDB (3.14159265...) */
+unsigned long fppPi(void)
+{
+    return 0x41490FDB;
+}
+
+/* ===== Function Dispatch Framework ===== */
+typedef enum {
+    FUNC_NONE = -1,
+    FUNC_SUM = 0, FUNC_MIN, FUNC_MAX, FUNC_COUNT, FUNC_AVG,
+    FUNC_ABS, FUNC_INT, FUNC_EXP, FUNC_LN,
+    FUNC_SIN, FUNC_COS, FUNC_TAN, FUNC_SQRT, FUNC_PI
+} FunctionType;
+
+static const struct {
+    const char *name;
+    int name_len;
+    FunctionType type;
+    unsigned char accepts_range;
+} functionRegistry[] = {
+    {"SUM", 3, FUNC_SUM, 1},
+    {"MIN", 3, FUNC_MIN, 1},
+    {"MAX", 3, FUNC_MAX, 1},
+    {"COUNT", 5, FUNC_COUNT, 1},
+    {"AVG", 3, FUNC_AVG, 1},
+    {"ABS", 3, FUNC_ABS, 0},
+    {"INT", 3, FUNC_INT, 0},
+    {"EXP", 3, FUNC_EXP, 0},
+    {"LN", 2, FUNC_LN, 0},
+    {"SIN", 3, FUNC_SIN, 0},
+    {"COS", 3, FUNC_COS, 0},
+    {"TAN", 3, FUNC_TAN, 0},
+    {"SQRT", 4, FUNC_SQRT, 0},
+    {"PI", 2, FUNC_PI, 0},
+    {NULL, 0, FUNC_NONE, 0}
+};
+
+static FunctionType detect_function_name(void)
+{
+    int i;
+    const char *q = p;
+
+    for (i = 0; functionRegistry[i].name != NULL; i++) {
+        const char *name = functionRegistry[i].name;
+        int name_len = functionRegistry[i].name_len;
+        int j;
+
+        for (j = 0; j < name_len; j++) {
+            if (q[j] != name[j])
+                break;
+        }
+
+        if (j == name_len)
+            return functionRegistry[i].type;
+    }
+
+    return FUNC_NONE;
+}
+
 static void fppToCompactString(unsigned long pFpp, char *out, int outSize)
 {
     char sci[16];
@@ -176,8 +300,10 @@ static void fppToCompactString(unsigned long pFpp, char *out, int outSize)
         }
     }
 
-    while (outPos > 1 && temp[outPos - 1] == '0' && temp[outPos - 2] != '.')
-        outPos--;
+    if (strchr(temp, '.') != NULL) {
+        while (outPos > 1 && temp[outPos - 1] == '0' && temp[outPos - 2] != '.')
+            outPos--;
+    }
     if (outPos > 1 && temp[outPos - 1] == '.')
         outPos--;
 
@@ -2651,6 +2777,245 @@ static int parse_cell_ref_ptr(char **pp, int *out_row0, int *out_col0)
 }
 
 //-------------------------------------------------------
+static long parse_range_function(FunctionType func, cell table[256][64])
+{
+    char *q;
+    int r1, c1, r2, c2;
+    int rr, cc;
+    long result = 0;
+    long cellVal;
+    long count = 0;
+    int hasValue = 0;
+
+    q = p;
+
+    /* Find function name end */
+    while (*q && ((*q >= 'A' && *q <= 'Z') || (*q >= '0' && *q <= '9')))
+        q++;
+
+    while (*q == ' ')
+        q++;
+
+    if (*q != '(') {
+        p = q;
+        return 0;
+    }
+
+    q++;
+
+    while (*q == ' ')
+        q++;
+
+    if (!parse_cell_ref_ptr(&q, &r1, &c1)) {
+        p = q;
+        return 0;
+    }
+
+    while (*q == ' ')
+        q++;
+
+    if (*q == ':') {
+        q++;
+        while (*q == ' ')
+            q++;
+        if (!parse_cell_ref_ptr(&q, &r2, &c2)) {
+            p = q;
+            return 0;
+        }
+    } else {
+        r2 = r1;
+        c2 = c1;
+    }
+
+    while (*q == ' ')
+        q++;
+
+    if (*q == ')')
+        q++;
+
+    /* Normalize range */
+    if (r1 > r2) { int tmp = r1; r1 = r2; r2 = tmp; }
+    if (c1 > c2) { int tmp = c1; c1 = c2; c2 = tmp; }
+
+    /* Execute range function */
+    switch (func) {
+        case FUNC_SUM:
+            result = 0;
+            for (rr = r1; rr <= r2; rr++) {
+                for (cc = c1; cc <= c2; cc++) {
+                    cellVal = get_cell_value(rr, cc, table);
+                    result = (long)fppSum((unsigned long)result, (unsigned long)cellVal);
+                }
+            }
+            break;
+
+        case FUNC_MIN:
+            for (rr = r1; rr <= r2; rr++) {
+                for (cc = c1; cc <= c2; cc++) {
+                    cellVal = get_cell_value(rr, cc, table);
+                    if (!hasValue) {
+                        result = cellVal;
+                        hasValue = 1;
+                    } else {
+                        unsigned long ccr = fppComp((unsigned long)cellVal, (unsigned long)result);
+                        if ((ccr & 0x08) && !(ccr & 0x04))
+                            result = cellVal;
+                    }
+                }
+            }
+            if (!hasValue)
+                result = 0;
+            break;
+
+        case FUNC_MAX:
+            for (rr = r1; rr <= r2; rr++) {
+                for (cc = c1; cc <= c2; cc++) {
+                    cellVal = get_cell_value(rr, cc, table);
+                    if (!hasValue) {
+                        result = cellVal;
+                        hasValue = 1;
+                    } else {
+                        unsigned long ccr = fppComp((unsigned long)cellVal, (unsigned long)result);
+                        if (!(ccr & 0x08) && !(ccr & 0x04))
+                            result = cellVal;
+                    }
+                }
+            }
+            if (!hasValue)
+                result = 0;
+            break;
+
+        case FUNC_COUNT:
+            count = 0;
+            for (rr = r1; rr <= r2; rr++) {
+                for (cc = c1; cc <= c2; cc++) {
+                    if (get_cell_value(rr, cc, table) != 0)
+                        count++;
+                }
+            }
+            result = fppReal(count);
+            break;
+
+        case FUNC_AVG:
+            result = 0;
+            count = 0;
+            for (rr = r1; rr <= r2; rr++) {
+                for (cc = c1; cc <= c2; cc++) {
+                    cellVal = get_cell_value(rr, cc, table);
+                    if (cellVal != 0) {
+                        result = (long)fppSum((unsigned long)result, (unsigned long)cellVal);
+                        count++;
+                    }
+                }
+            }
+            if (count > 0)
+                result = (long)fppDiv((unsigned long)result, (unsigned long)fppReal(count));
+            break;
+
+        default:
+            result = 0;
+            break;
+    }
+
+    p = q;
+    return result;
+}
+
+//-------------------------------------------------------
+static long parse_value_function(FunctionType func, cell table[256][64])
+{
+    char *q;
+    long value = 0;
+
+    q = p;
+
+    /* Skip function name */
+    while (*q && ((*q >= 'A' && *q <= 'Z') || (*q >= '0' && *q <= '9')))
+        q++;
+
+    while (*q == ' ')
+        q++;
+
+    /* Handle PI (no parameters) */
+    if (func == FUNC_PI) {
+        if (*q == '(')
+            q++;
+        while (*q == ' ')
+            q++;
+        if (*q == ')')
+            q++;
+        p = q;
+        return (long)fppPi();
+    }
+
+    /* Parse (param) for other functions */
+    if (*q != '(') {
+        p = q;
+        return 0;
+    }
+
+    q++;
+
+    while (*q == ' ')
+        q++;
+
+    /* Try to parse as cell reference */
+    if (*q >= 'A' && *q <= 'Z') {
+        int row, col;
+        if (parse_cell_ref_ptr(&q, &row, &col)) {
+            value = get_cell_value(row, col, table);
+        }
+    } else {
+        /* Parse as number */
+        char numBuf[32];
+        int ix = 0;
+        int seenDot = 0;
+
+        if ((*q == '+' || *q == '-') && ix < (int)sizeof(numBuf) - 1)
+            numBuf[ix++] = *q++;
+
+        while ((*q >= '0' && *q <= '9' || (*q == '.' && !seenDot)) && ix < (int)sizeof(numBuf) - 1) {
+            if (*q == '.')
+                seenDot = 1;
+            numBuf[ix++] = *q++;
+        }
+
+        numBuf[ix] = 0;
+        value = (long)floatStringToFpp(numBuf);
+    }
+
+    while (*q == ' ')
+        q++;
+
+    if (*q == ')')
+        q++;
+
+    p = q;
+
+    /* Apply function to value */
+    switch (func) {
+        case FUNC_ABS:
+            return (long)fppAbs((unsigned long)value);
+        case FUNC_INT:
+            return (long)fppInt((unsigned long)value);
+        case FUNC_EXP:
+            return (long)fppExp((unsigned long)value);
+        case FUNC_LN:
+            return (long)fppLn((unsigned long)value);
+        case FUNC_SIN:
+            return (long)fppSin((unsigned long)value);
+        case FUNC_COS:
+            return (long)fppCos((unsigned long)value);
+        case FUNC_TAN:
+            return (long)fppTan((unsigned long)value);
+        case FUNC_SQRT:
+            return (long)fppSqrt((unsigned long)value);
+        default:
+            return 0;
+    }
+}
+
+//-------------------------------------------------------
 static long parse_sum_function(cell table[256][64])
 {
     char *q;
@@ -2819,6 +3184,7 @@ long parse_cell(cell table[256][64])
 long parse_factor(cell table[256][64])
 {
     long v;
+    FunctionType funcType;
 
     skip_spaces();
 
@@ -2831,8 +3197,14 @@ long parse_factor(cell table[256][64])
         return v;
     }
 
-    if (p[0] == 'S' && p[1] == 'U' && p[2] == 'M')
-        return parse_sum_function(table);
+    /* Check for functions using new framework */
+    funcType = detect_function_name();
+    if (funcType != FUNC_NONE) {
+        if (functionRegistry[funcType].accepts_range)
+            return parse_range_function(funcType, table);
+        else
+            return parse_value_function(funcType, table);
+    }
 
     if (*p >= 'A' && *p <= 'Z')
         return parse_cell(table);
@@ -2949,27 +3321,72 @@ static int sheet_formula_refs_cell(char *expr, int row1, int col1)
 
     while (expr[i] != 0) {
         if (expr[i] >= 'A' && expr[i] <= 'Z') {
-            int c;
-            int r;
+            int c1, r1;
+            int c2, r2;
+            int j;
 
-            c = 0;
+            c1 = 0;
             while (expr[i] >= 'A' && expr[i] <= 'Z') {
-                c = (c * 26) + (expr[i] - 'A' + 1);
+                c1 = (c1 * 26) + (expr[i] - 'A' + 1);
                 i++;
             }
 
-            if (expr[i] >= '0' && expr[i] <= '9') {
-                r = 0;
-                while (expr[i] >= '0' && expr[i] <= '9') {
-                    r = (r * 10) + (expr[i] - '0');
-                    i++;
-                }
-
-                if (r == row1 && c == col1)
-                    return 1;
-
+            if (!(expr[i] >= '0' && expr[i] <= '9')) {
+                i++;
                 continue;
             }
+
+            r1 = 0;
+            while (expr[i] >= '0' && expr[i] <= '9') {
+                r1 = (r1 * 10) + (expr[i] - '0');
+                i++;
+            }
+
+            if (r1 == row1 && c1 == col1)
+                return 1;
+
+            j = i;
+            while (expr[j] == ' ')
+                j++;
+
+            if (expr[j] == ':') {
+                j++;
+                while (expr[j] == ' ')
+                    j++;
+
+                c2 = 0;
+                while (expr[j] >= 'A' && expr[j] <= 'Z') {
+                    c2 = (c2 * 26) + (expr[j] - 'A' + 1);
+                    j++;
+                }
+
+                if (expr[j] >= '0' && expr[j] <= '9') {
+                    r2 = 0;
+                    while (expr[j] >= '0' && expr[j] <= '9') {
+                        r2 = (r2 * 10) + (expr[j] - '0');
+                        j++;
+                    }
+
+                    if (r1 > r2) {
+                        int tr = r1;
+                        r1 = r2;
+                        r2 = tr;
+                    }
+                    if (c1 > c2) {
+                        int tc = c1;
+                        c1 = c2;
+                        c2 = tc;
+                    }
+
+                    if (row1 >= r1 && row1 <= r2 && col1 >= c1 && col1 <= c2)
+                        return 1;
+
+                    i = j;
+                    continue;
+                }
+            }
+
+            continue;
         }
 
         i++;
@@ -3050,32 +3467,51 @@ static void sheet_recalc_from_cell(int row1, int col1, cell table[256][64])
 //-------------------------------------------------------
 static void sheet_recalc_all_formulas(cell table[256][64])
 {
-    int i;
+    int pass;
+    int changed;
 
     /*
      * Safety pass: keeps off-screen formula chains consistent.
      * We recalc only formula cells (no full draw), then repaint only dirty visibles.
      */
-    for (i = 0; i < SHEET_MAX_CELLS; i++) {
-        cell c;
+    for (pass = 0; pass < 8; pass++) {
+        int cc;
+        int rr;
 
-        if (!sheet_cell_used[i])
-            continue;
+        changed = 0;
 
-        c = &sheet_cell_pool[i];
+        /* Column-major recalculation: C1 top->bottom, then next column. */
+        for (cc = 0; cc < SHEET_COLS; cc++) {
+            for (rr = 0; rr < SHEET_ROWS; rr++) {
+                cell c = table[rr][cc];
+                long oldVal;
+                long newVal;
 
-        if (c->contents != CELL_FORMULA)
-            continue;
+                if (!c)
+                    continue;
 
-        if (!c->data || !c->data->label)
-            continue;
+                if (c->contents != CELL_FORMULA)
+                    continue;
 
-        c->cache_valid = 0;
-        c->cached_value = eval_formula(c->data->label, table);
-        c->cache_valid = 1;
+                if (!c->data || !c->data->label)
+                    continue;
 
-        if (c->row >= 1 && c->row <= SHEET_ROWS && c->col >= 1 && c->col <= SHEET_COLS)
-            sheet_screen_dirty[c->row - 1][c->col - 1] = 1;
+                oldVal = c->cached_value;
+                c->cache_valid = 0;
+                newVal = eval_formula(c->data->label, table);
+                c->cached_value = newVal;
+                c->cache_valid = 1;
+
+                if (newVal != oldVal)
+                    changed = 1;
+
+                if (c->row >= 1 && c->row <= SHEET_ROWS && c->col >= 1 && c->col <= SHEET_COLS)
+                    sheet_screen_dirty[c->row - 1][c->col - 1] = 1;
+            }
+        }
+
+        if (!changed)
+            break;
     }
 }
 
