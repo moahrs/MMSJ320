@@ -45,7 +45,7 @@ mmsjos_func_table:
             dc.l _fsMakeDir
             dc.l _fsChangeDir
             dc.l _fsRemoveDir
-            dc.l 0
+            dc.l _saveFile
             dc.l _fsFindInDir
             dc.l _mmsjKeyGet
             dc.l _fsFindNextCluster

@@ -253,6 +253,7 @@ unsigned char fsRenameFile(char * vfilename, char * vnewname);
 void runFromOsCmd(unsigned long vEnderExec);
 unsigned long loadFile(unsigned char *parquivo, void* xaddress);
 unsigned long loadFileSize(unsigned char *parquivo, void* xaddress, unsigned long xsize);
+unsigned char saveFile(unsigned char *parquivo, void* xaddress, unsigned long xsize);
 void catFile(unsigned char *parquivo);
 unsigned char fsLoadSerialToFile(char * vfilename);
 unsigned char fsLoadSerialToRun(char * vfilename);
@@ -4078,6 +4079,70 @@ void catFile(unsigned char *parquivo) {
     vclusterdir = vclusterdiratu;
 
     printText("\r\n\0");
+}
+
+//-----------------------------------------------------------------------------
+unsigned char saveFile(unsigned char *parquivo, void* xaddress, unsigned long xsize)
+{
+    unsigned char *xaddressb = (unsigned char *)xaddress;
+    unsigned char vbuffer[128];
+    unsigned long ix;
+    unsigned short iy;
+    unsigned short vChunkSize;
+    unsigned long vclusterdiratuaux;
+
+    if (!parquivo || !xaddress)
+        return ERRO_B_WRITE_FILE;
+
+    vclusterdiratuaux = vclusterdir;
+
+    // Resolve caminho (aceita pasta + nome), e usa somente o nome final para criar/gravar.
+    if (fsFindDirPath(parquivo, FIND_PATH_LAST) == FIND_PATH_RET_ERROR)
+        return ERRO_B_NOT_FOUND;
+
+    if (!isValidFilename(vretpath.Name))
+        return ERRO_B_INVALID_NAME;
+
+    vclusterdir = vretpath.ClusterDir;
+
+    // Truncate real: se existir, remove para nao deixar lixo no final.
+    if (fsOpenFile(vretpath.Name) == RETURN_OK)
+    {
+        if (fsDelFile(vretpath.Name) != RETURN_OK)
+        {
+            vclusterdir = vretpath.ClusterDirAtu;
+            return ERRO_B_APAGAR_ARQUIVO;
+        }
+    }
+
+    if (fsCreateFile(vretpath.Name) != RETURN_OK)
+    {
+        vclusterdir = vretpath.ClusterDirAtu;
+        return ERRO_B_CREATE_FILE;
+    }
+
+    for (ix = 0; ix < xsize; ix += 128)
+    {
+        vChunkSize = (unsigned short)(xsize - ix);
+        if (vChunkSize > 128)
+            vChunkSize = 128;
+
+        for (iy = 0; iy < vChunkSize; iy++)
+            vbuffer[iy] = *xaddressb++;
+
+        if (fsWriteFile(vretpath.Name, ix, vbuffer, (unsigned char)vChunkSize) != RETURN_OK)
+        {
+            fsCloseFile(vretpath.Name, 0);
+            vclusterdir = vretpath.ClusterDirAtu;
+            return ERRO_B_WRITE_FILE;
+        }
+    }
+
+    fsCloseFile(vretpath.Name, 1);
+
+    vclusterdir = vclusterdiratuaux;
+
+    return RETURN_OK;
 }
 
 //-----------------------------------------------------------------------------

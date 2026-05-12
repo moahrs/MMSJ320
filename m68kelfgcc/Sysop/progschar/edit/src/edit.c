@@ -1854,60 +1854,18 @@ static char edToUpper(char c)
 //-------------------------------------------------------------------
 int edSaveToFile(char* vfilename, unsigned char* buf, int size)
 {
-    unsigned int ix, vChunkSize, iy;
-    unsigned char vBuffer[128];
+    unsigned char ret;
 
     edSetMessage("Saving File...");                  
     edDrawStatus();
 
-    /*
-       Faz truncate real: remove arquivo antigo e cria novo,
-       para evitar lixo no final quando o novo conteudo e menor.
-    */
-    if (fsFindInDir(vfilename, TYPE_FILE) < ERRO_D_START)
-    {
-        if (fsDelFile(vfilename) != RETURN_OK)
-        {
-            edSetMessage("Save File Error!");
-            edDrawStatus();
-            return ERRO_B_APAGAR_ARQUIVO;
-        }
-    }
-
-    if (fsCreateFile(vfilename) != RETURN_OK)
+    ret = saveFile((unsigned char*)vfilename, buf, (unsigned long)size);
+    if (ret != RETURN_OK)
     {
         edSetMessage("Save File Error!");
         edDrawStatus();
-        return ERRO_B_CREATE_FILE;
+        return ret;
     }
-
-    // Grava no Arquivo
-    for (ix = 0; ix < size; ix += 128)
-    {
-        vChunkSize = (unsigned short)(size - ix);
-        if (vChunkSize > 128)
-            vChunkSize = 128;
-
-        for (iy = 0; iy < 128; iy++)
-        {
-            if (iy < vChunkSize)
-            {
-                vBuffer[iy] = *buf;
-                buf += 1;
-            }
-        }
-
-        if (fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize) != RETURN_OK)
-        {
-            edSetMessage("Save File Error!");                  
-            edDrawStatus();
-
-            return ERRO_B_WRITE_FILE;
-        }
-    }
-
-    // Fecha Arquivo e atualiza metadata de escrita
-    fsCloseFile(vfilename, 1);
 
     edDrawStatus();
 

@@ -27,6 +27,7 @@ typedef unsigned long (*loadFileType)(unsigned char *parquivo, void* xaddress);
 typedef unsigned char (*fsMakeDirType)(char * vdirname);
 typedef unsigned char (*fsChangeDirType)(char * vdirname);
 typedef unsigned char (*fsRemoveDirType)(char * vdirname);
+typedef unsigned char (*saveFileType)(unsigned char *parquivo, void* xaddress, unsigned long xsize);
 typedef unsigned char (*fsPwdDirType)(unsigned char *vdirpath);
 typedef unsigned long (*fsFindInDirType)(char * vname, unsigned char vtype);
 typedef unsigned long (*mmsjKeyGetType)(MMSJ_KEYEVENT *k);
@@ -106,7 +107,7 @@ typedef unsigned char (*buttonType)(unsigned char id, unsigned char* title, unsi
 #define fsMakeDir ((fsMakeDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[17] // Índice da função
 #define fsChangeDir ((fsChangeDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[18] // Índice da função
 #define fsRemoveDir ((fsRemoveDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[19] // Índice da função
-// 20 Reservado
+#define saveFile ((saveFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[20] // Índice da função
 #define fsFindInDir ((fsFindInDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[21] // Índice da função
 #define mmsjKeyGet ((mmsjKeyGetType *)(unsigned long)MMSJOS_FUNC_TABLE)[22] // Índice da função
 #define fsFindNextCluster ((fsFindNextClusterType *)(unsigned long)MMSJOS_FUNC_TABLE)[23] // Índice da função

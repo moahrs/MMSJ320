@@ -929,26 +929,45 @@ static int mcalc_save_to_file(char *fileName)
     int rr;
     int cc;
     unsigned long offset;
+    unsigned long maxOut;
+    unsigned char *saveBuf;
     char line[256];
+    int ret;
 
-    if (fsOpenFile(fileName) != RETURN_OK) {
-        if (fsCreateFile(fileName) != RETURN_OK)
-            return 0;
-    }
+    /*
+     * saveFile() grava de uma vez no destino resolvendo caminho + overwrite.
+     * Como a planilha e limitada (SHEET_MAX_CELLS), um buffer temporario e viavel.
+     */
+    maxOut = 1024UL + (unsigned long)SHEET_COLS * 32UL + (unsigned long)SHEET_MAX_CELLS * 320UL;
+    saveBuf = (unsigned char *)msmalloc(maxOut);
+    if (!saveBuf)
+        return 0;
 
     offset = 0;
 
-    if (!mcalc_append_text(fileName, &offset, "MCALC1\n"))
+    if (offset + strlen("MCALC1\n") >= maxOut) {
+        msfree(saveBuf);
         return 0;
+    }
+    strcpy((char *)saveBuf + offset, "MCALC1\n");
+    offset += (unsigned long)strlen("MCALC1\n");
 
     msprintf(line, "D\t%u\t%u\n", (unsigned int)defaultAlign, (unsigned int)defaultDisp);
-    if (!mcalc_append_text(fileName, &offset, line))
+    if (offset + strlen(line) >= maxOut) {
+        msfree(saveBuf);
         return 0;
+    }
+    strcpy((char *)saveBuf + offset, line);
+    offset += (unsigned long)strlen(line);
 
     for (cc = 1; cc <= SHEET_COLS; cc++) {
         msprintf(line, "W\t%d\t%d\n", cc, sheet_get_col_width(cc));
-        if (!mcalc_append_text(fileName, &offset, line))
+        if (offset + strlen(line) >= maxOut) {
+            msfree(saveBuf);
             return 0;
+        }
+        strcpy((char *)saveBuf + offset, line);
+        offset += (unsigned long)strlen(line);
     }
 
     for (rr = 1; rr <= SHEET_ROWS; rr++) {
@@ -978,12 +997,20 @@ static int mcalc_save_to_file(char *fileName)
                 (unsigned int)c->formatDisp,
                 escaped);
 
-            if (!mcalc_append_text(fileName, &offset, line))
+            if (offset + strlen(line) >= maxOut) {
+                msfree(saveBuf);
                 return 0;
+            }
+            strcpy((char *)saveBuf + offset, line);
+            offset += (unsigned long)strlen(line);
         }
     }
 
-    fsCloseFile(fileName, 1);
+    ret = (saveFile((unsigned char *)fileName, saveBuf, offset) == RETURN_OK);
+    msfree(saveBuf);
+    if (!ret)
+        return 0;
+
     strncpy((char *)mcalc_file_name, fileName, sizeof(mcalc_file_name) - 1);
     mcalc_file_name[sizeof(mcalc_file_name) - 1] = 0;
     mcalc_dirty = 0;
