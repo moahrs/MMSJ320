@@ -1106,11 +1106,11 @@ void vc_start() {
     {
         if (!mcalc_load_file_by_name((char *)mcalc_start_file))
         {
-            msfree(memSaveFont);
-            setModeVideoOS(VDP_MODE_TEXT);
-            clearScr();
-            printText("Erro carregando arquivo\r\n");
-            return;
+            mcalc_start_file[0] = 0;
+            draw_size = SHEET_COL_WIDTH_DEFAULT;
+            init_table();
+            mcalc_file_name[0] = 0;
+            mcalc_dirty = 0;
         }        
     }
 
@@ -1154,8 +1154,12 @@ void vc_start() {
 	char ch = getch();
 
     msfree(memSaveFont);
-    setModeVideoOS(VDP_MODE_TEXT);
-    clearScr();
+
+    if (*startBasic == 1)
+    {
+        setModeVideoOS(VDP_MODE_TEXT);
+        clearScr();
+    }
 }
 
 void set_icon(int row, int col)

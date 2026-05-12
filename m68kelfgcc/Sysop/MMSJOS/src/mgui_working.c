@@ -10,7 +10,6 @@
 * 03/01/2025  0.5a    Moacir Jr.   Troca de cores e ajustes de tela
 * 19/01/2025  0.6     Moacir Jr.   Adaptar para rodar junto com o MMSJOS
 * 13/04/2026  0.7a03  Moacir Jr.   Ajustes para o mouse e o sprite do ponteiro
-* 10/05/2026  0.7a04  Moacir Jr.   Remover uC/OS-II - RTOS
 *--------------------------------------------------------------------------------
 *
 *--------------------------------------------------------------------------------
@@ -19,6 +18,7 @@
 *--------------------------------------------------------------------------------
 *
 *********************************************************************************/
+#include <ucos_ii.h>
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
@@ -73,7 +73,7 @@ extern unsigned char *mguiIdRequest;
 extern unsigned long *mguiRunTask;
 extern LIST_WINDOWS *mguiListWindows;
 
-#define versionMgui "0.7a04"
+#define versionMgui "0.7a03"
 #define __EM_OBRAS__ 1
 
 unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
@@ -119,35 +119,6 @@ unsigned char bgcolorMgui;
 unsigned short mx, my, menyi[8], menyf[8];
 MGUI_SAVESCR endSaveMenu;
 unsigned char vIndicaDialog = 0;
-unsigned char bufOut[128];
-unsigned int timeToDoubleClick = 0xFFFF;
-
-//=============================================================================
-// DESKTOP ICONS
-//=============================================================================
-#define DESK_ICON_MAX    20      /* 5 cols x 4 rows                          */
-#define DESK_ICON_COLS   5
-#define DESK_ICON_ROWS   4
-#define DESK_ICON_W      48      /* pixel width of each icon cell            */
-#define DESK_ICON_H      40      /* pixel height of each icon cell           */
-#define DESK_ICON_IMG_W  16      /* icon image width in pixels               */
-#define DESK_ICON_IMG_H  16      /* icon image height in pixels              */
-#define DESK_START_Y     25      /* desktop area starts below menu bar       */
-#define DESK_CFG_FILE    "/MGUI/MGUIDESK.CFG"
-#define DESK_ICON_BUF_SZ 512    /* temp PBM buffer; avoid header/comment overrun */
-#define DESK_CFG_SIZE    1024   /* max MGUIDESK.CFG size                     */
-
-typedef struct {
-    char filename[9];   /* up to 8 chars of name, zero-terminated           */
-    char ext[4];        /* extension 3 chars + null                         */
-    char path[20];      /* directory path, e.g. "/" or "/DOCS"              */
-    char active;        /* 1 = occupied                                     */
-} DESK_ICON;
-
-static DESK_ICON  deskIcons[DESK_ICON_MAX];
-static unsigned char *memDeskCfg = 0;          /* MGUIDESK.CFG text buffer   */
-static unsigned char deskIconBuf[DESK_ICON_BUF_SZ]; /* temp per-icon image   */
-static unsigned char deskSelected = 0xFF;      /* selected slot 0..24, 0xFF=none */
 
 #define MGUI_WT_FILLIN   1
 #define MGUI_WT_BUTTON   2
@@ -295,12 +266,18 @@ extern HEADER *_allocp;
 #define STACKSIZEMOUSE  2048
 #define STACKSIZEMENU  1024
 
-void mouseFunc (void *pData);
-void menuFunc (void *pData);
-void messageFunc (void *pData);
+extern OS_STK StkInput[STACKSIZE];
+OS_STK StkFiles[STACKSIZEMGUI];
+OS_STK StkMouse[STACKSIZEMOUSE];
+OS_STK StkMenu[STACKSIZEMENU];
+OS_STK StkMessage[STACKSIZE];   // Dialog, só pode ter uma por vez
+
+extern OS_EVENT *shared_sem;
+
+void mouseTask (void *pData);
+void menuTask (void *pData);
+void messageTask (void *pData);
 void runBin(void);
-void redrawScreen(void);
-void restoreMGUI(void);
 
 //-----------------------------------------------------------------------------
 void clearScrW(unsigned char color)
@@ -1532,61 +1509,58 @@ unsigned char read_status_reg_gui(void)
 //-----------------------------------------------------------------------------
 char mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax)
 {
-    return mguiCfgGetBuf(memPosConfig, section, key, vOutBuf, vOutMax);
-}
-
-//-----------------------------------------------------------------------------
-// Config INI - Busca direta no buffer de memoria
-// Busca 'key' dentro de '[section]' em memPosConfig; copia o valor em vOutBuf como string.
-// Retorna vOutBuf em caso de sucesso, NULL se nao encontrado.
-// vOutMax: tamanho do vOutBuf incluindo '\0'
-//-----------------------------------------------------------------------------
-// Like mguiCfgGetBuf but reads from an arbitrary NUL-terminated buffer instead
-// of the global memPosConfig.
-//-----------------------------------------------------------------------------
-static char mguiCfgGetBuf(unsigned char *buf, char *section, char *key, char *vOutBuf, unsigned char vOutMax)
-{
     unsigned char slen = (unsigned char)strlen(section);
     unsigned char klen = (unsigned char)strlen(key);
-    unsigned char *p = buf;
+    unsigned char *p = memPosConfig;
     unsigned char i;
     unsigned char inSection = 0;
+    unsigned char sqtdtam[20];
 
     if (!p || !section || !slen || !key || !klen || !vOutBuf || vOutMax == 0)
         return 0;
 
+    // Ignore UTF-8 BOM no inicio do arquivo, se existir.
     if (p[0] == 0xEF && p[1] == 0xBB && p[2] == 0xBF)
         p += 3;
 
     while (*p)
     {
+        // Pula espacos e tabulacoes no inicio da linha
         while (*p == ' ' || *p == '\t') p++;
 
+        // Ignora linhas vazias e comentarios
         if (*p == '\r' || *p == '\n' || *p == ';' || *p == '#')
         {
             while (*p == '\r' || *p == '\n') p++;
             continue;
         }
 
+        // Verifica cabecalho de secao [NOME]
         if (*p == '[')
         {
             unsigned char *q = p + 1;
+
             inSection = (strncmp((char *)q, section, slen) == 0 && q[slen] == ']') ? 1 : 0;
         }
         else if (inSection)
         {
+            // Verifica se a chave bate nessa linha
             if (strncmp((char *)p, key, klen) == 0 &&
                 (p[klen] == ' ' || p[klen] == '\t' || p[klen] == '='))
             {
                 unsigned char *q = p + klen;
+                // Pula espacos antes do '='
                 while (*q == ' ' || *q == '\t') q++;
                 if (*q == '=')
                 {
                     q++;
+                    // Pula espacos apos o '='
                     while (*q == ' ' || *q == '\t') q++;
+
                     i = 0;
                     while (*q && *q != '\n' && *q != '\r' && i < (unsigned char)(vOutMax - 1))
                         vOutBuf[i++] = (char)*q++;
+                    // Remove espacos no final
                     while (i > 0 && (vOutBuf[i-1] == ' ' || vOutBuf[i-1] == '\t'))
                         i--;
                     vOutBuf[i] = '\0';
@@ -1595,657 +1569,12 @@ static char mguiCfgGetBuf(unsigned char *buf, char *section, char *key, char *vO
             }
         }
 
+        // Avanca ate o proximo fim de linha (aceita CR, LF e CRLF)
         while (*p && *p != '\n' && *p != '\r') p++;
         while (*p == '\n' || *p == '\r') p++;
     }
 
     return 0;
-}
-
-//=============================================================================
-// DESKTOP ICON FUNCTIONS
-//=============================================================================
-
-//-----------------------------------------------------------------------------
-// Translate icon slot (0..19) to pixel (x,y) top-left corner of cell.
-//-----------------------------------------------------------------------------
-static void deskSlotXY(unsigned char slot, unsigned short *px, unsigned char *py)
-{
-    *px = (unsigned short)(slot / DESK_ICON_ROWS) * DESK_ICON_W;
-    *py = DESK_START_Y + (unsigned char)(slot % DESK_ICON_ROWS) * DESK_ICON_H;
-}
-
-//-----------------------------------------------------------------------------
-// Parse MGUIDESK.CFG (stored in memDeskCfg) into deskIcons[].
-// Entry format in [ICONS]: NN=FILENAME.EXT,/PATH
-//   e.g.  00=NOTES.TXT,/
-//         01=HELLO.BAS,/BASIC
-//-----------------------------------------------------------------------------
-static void deskLoadConfig(void)
-{
-    unsigned char slot;
-    char key[3], val[32], *comma, *dot, *p;
-    unsigned char i;
-
-    memset(deskIcons, 0, sizeof(deskIcons));
-
-    if (!memDeskCfg || !memDeskCfg[0])
-        return;
-
-    for (slot = 0; slot < DESK_ICON_MAX; slot++)
-    {
-        key[0] = (char)('0' + slot / 10);
-        key[1] = (char)('0' + slot % 10);
-        key[2] = '\0';
-        val[0] = '\0';
-
-        if (!mguiCfgGetBuf(memDeskCfg, "ICONS", key, val, sizeof(val)))
-            continue;
-
-        /* val = "FILENAME.EXT,/PATH" */
-        comma = strchr(val, ',');
-        if (!comma)
-            continue;
-        *comma = '\0';
-
-        /* Find extension dot */
-        dot = strchr(val, '.');
-        if (dot)
-        {
-            *dot = '\0';
-            /* copy extension (up to 3 chars) */
-            for (i = 0; i < 3 && dot[1 + i]; i++)
-                deskIcons[slot].ext[i] = dot[1 + i];
-            deskIcons[slot].ext[i] = '\0';
-        }
-
-        /* copy filename (up to 8 chars) */
-        for (i = 0; i < 8 && val[i]; i++)
-            deskIcons[slot].filename[i] = val[i];
-        deskIcons[slot].filename[i] = '\0';
-
-        /* copy path (up to 19 chars) */
-        p = comma + 1;
-        for (i = 0; i < 19 && p[i]; i++)
-            deskIcons[slot].path[i] = p[i];
-        deskIcons[slot].path[i] = '\0';
-        if (!deskIcons[slot].path[0])
-        {
-            deskIcons[slot].path[0] = '/';
-            deskIcons[slot].path[1] = '\0';
-        }
-
-        deskIcons[slot].active = 1;
-    }
-}
-
-//-----------------------------------------------------------------------------
-// Save deskIcons[] to MGUIDESK.CFG on disk.
-//-----------------------------------------------------------------------------
-static void deskSaveConfig(void)
-{
-    unsigned char slot, i, offset;
-    unsigned char linebuf[48];
-    char *p;
-    unsigned char vErro;
-
-    /* Delete and recreate file */
-    fsFindInDir(DESK_CFG_FILE, 1 /*TYPE_FILE*/);
-    fsDelFile(DESK_CFG_FILE);
-
-    vErro = fsCreateFile(DESK_CFG_FILE);
-    if (vErro != 0 /*RETURN_OK*/)
-        return;
-
-    vErro = fsOpenFile(DESK_CFG_FILE);
-    if (vErro != 0)
-        return;
-
-    /* Write [ICONS] header */
-    {
-        unsigned char hdr[] = "[ICONS]\r\n";
-        fsWriteFile(DESK_CFG_FILE, 0, hdr, (unsigned char)(sizeof(hdr) - 1));
-    }
-
-    {
-        unsigned long fileOffset = 9; /* after header */
-        for (slot = 0; slot < DESK_ICON_MAX; slot++)
-        {
-            if (!deskIcons[slot].active)
-                continue;
-            /* Format: NN=FILENAME.EXT,/PATH\r\n */
-            offset = 0;
-            linebuf[offset++] = (unsigned char)('0' + slot / 10);
-            linebuf[offset++] = (unsigned char)('0' + slot % 10);
-            linebuf[offset++] = '=';
-            for (i = 0; deskIcons[slot].filename[i] && offset < 40; i++)
-                linebuf[offset++] = deskIcons[slot].filename[i];
-            if (deskIcons[slot].ext[0])
-            {
-                linebuf[offset++] = '.';
-                for (i = 0; deskIcons[slot].ext[i] && offset < 44; i++)
-                    linebuf[offset++] = deskIcons[slot].ext[i];
-            }
-            linebuf[offset++] = ',';
-            for (i = 0; deskIcons[slot].path[i] && offset < 46; i++)
-                linebuf[offset++] = deskIcons[slot].path[i];
-            linebuf[offset++] = '\r';
-            linebuf[offset++] = '\n';
-
-            fsWriteFile(DESK_CFG_FILE, fileOffset, linebuf, offset);
-            fileOffset += offset;
-        }
-    }
-
-    fsCloseFile(DESK_CFG_FILE, 1 /*updated*/);
-
-    /* Refresh memory buffer */
-    if (memDeskCfg)
-    {
-        unsigned long sz = loadFile(DESK_CFG_FILE, (unsigned short*)memDeskCfg);
-        if (sz > DESK_CFG_SIZE) sz = DESK_CFG_SIZE;
-        memDeskCfg[sz] = '\0';
-    }
-}
-
-//-----------------------------------------------------------------------------
-// Given a file extension (e.g. "TXT"), look up the icon name in MGUI.CFG
-// [ICONTYPE] section. Returns the icon name without extension.
-// If not found, uses "BLANK" as default.
-//-----------------------------------------------------------------------------
-static void deskGetIconName(char *name, char *ext, char *outName)
-{
-    outName[0] = '\0';
-
-    // Procura no ICONTYPE com a Ext
-    if (ext[0] && mguiCfgGetBuf(memPosConfig, "ICONTYPE", ext, outName, 9))
-        return;
-
-    // Procura no ICONFILE com o Nome
-    if (name[0] && mguiCfgGetBuf(memPosConfig, "ICONFILE", name, outName, 9))
-            return;
-
-    strcpy(outName, "BLANK");
-}
-
-//-----------------------------------------------------------------------------
-// Draw a single icon at its grid slot. Clears cell first.
-//-----------------------------------------------------------------------------
-static void deskDrawIcon(unsigned char slot)
-{
-    DESK_ICON *d = &deskIcons[slot];
-    unsigned short ix;
-    unsigned char  iy;
-    char iconname[9];
-    char iconpath[32];
-    unsigned char namebuf[9];
-    unsigned char i, nlen;
-    unsigned char hlColor;
-
-    deskSlotXY(slot, &ix, &iy);
-
-    /* Use a dark highlight; white was polluting the text bands visually. */
-    hlColor = (deskSelected == slot) ? VDP_DARK_BLUE : bgcolorMgui;
-
-    /*if (d->active)
-        FillRect((unsigned char)ix, iy, DESK_ICON_W, DESK_ICON_H, hlColor);
-    else
-        return;*/
-
-    if (!d->active)
-        return;
-
-    /* Load icon image from /MGUI/ICONS/<NAME>.PBM */
-    deskGetIconName(d->filename, d->ext, iconname);
-    strcpy(iconpath, "/MGUI/ICONS/");
-    strcat(iconpath, iconname);
-    strcat(iconpath, ".PBM");
-
-    if (loadFile((unsigned char*)iconpath, (unsigned short*)deskIconBuf) > 0)
-        putImagePbmP4((unsigned long*)deskIconBuf, ix + (DESK_ICON_W - DESK_ICON_IMG_W) / 2, iy);
-
-    /* Name (up to 8 chars) centred in 48px cell */
-    nlen = 0;
-    for (i = 0; d->filename[i] && nlen < 8; i++)
-        namebuf[nlen++] = d->filename[i];
-
-    namebuf[nlen] = '\0';
-
-    /* 5px/char: row of 8 chars = 40px; left pad = (48-40)/2 = 4px */
-    writesxy(ix + 4, iy + DESK_ICON_IMG_H + 1, 1, (unsigned char*)namebuf, vcorwf, hlColor);
-
-    /* Extension (up to 3 chars) – centred: 3*5=15px, pad=(48-15)/2=16px*/
-    if (d->ext[0])
-        writesxy(ix + 16, iy + DESK_ICON_IMG_H + 9, 1, (unsigned char*)d->ext, vcorwf, hlColor);
-}
-
-//-----------------------------------------------------------------------------
-// Redraw all desktop icons.
-//-----------------------------------------------------------------------------
-static void deskDrawAll(void)
-{
-    unsigned char i;
-    for (i = 0; i < DESK_ICON_MAX; i++)
-        deskDrawIcon(i);
-}
-
-//-----------------------------------------------------------------------------
-// Return the icon slot (0..DESK_ICON_MAX-1) at pixel (hx,hy), or 0xFF if none.
-//-----------------------------------------------------------------------------
-static unsigned char deskHitTest(unsigned char hx, unsigned char hy)
-{
-    unsigned char slot;
-
-    if (hy < DESK_START_Y)
-        return 0xFF;
-
-    if (hy > DESK_START_Y && hy < (DESK_START_Y + DESK_ICON_H))   
-    {
-        if (hx < DESK_ICON_W) slot = 0;
-        else if (hx < (DESK_ICON_W * 2)) slot = 4;
-        else if (hx < (DESK_ICON_W * 3)) slot = 8;
-        else if (hx < (DESK_ICON_W * 4)) slot = 12;
-        else if (hx < (DESK_ICON_W * 5)) slot = 16;
-        else return 0xFF;
-    } 
-    else if (hy > (DESK_START_Y + DESK_ICON_H) && hy < (DESK_START_Y + (DESK_ICON_H * 2)))   
-    {
-        if (hx < DESK_ICON_W) slot = 1;
-        else if (hx < (DESK_ICON_W * 2)) slot = 5;
-        else if (hx < (DESK_ICON_W * 3)) slot = 9;
-        else if (hx < (DESK_ICON_W * 4)) slot = 13;
-        else if (hx < (DESK_ICON_W * 5)) slot = 17;
-        else return 0xFF;
-    } 
-    else if (hy > (DESK_START_Y + (DESK_ICON_H * 2)) && hy < (DESK_START_Y + (DESK_ICON_H * 3)))   
-    {
-        if (hx < DESK_ICON_W) slot = 2;
-        else if (hx < (DESK_ICON_W * 2)) slot = 6;
-        else if (hx < (DESK_ICON_W * 3)) slot = 10;
-        else if (hx < (DESK_ICON_W * 4)) slot = 14;
-        else if (hx < (DESK_ICON_W * 5)) slot = 18;
-        else return 0xFF;
-    } 
-    else if (hy > (DESK_START_Y + (DESK_ICON_H * 3)) && hy < (DESK_START_Y + (DESK_ICON_H * 4)))   
-    {
-        if (hx < DESK_ICON_W) slot = 3;
-        else if (hx < (DESK_ICON_W * 2)) slot = 7;
-        else if (hx < (DESK_ICON_W * 3)) slot = 11;
-        else if (hx < (DESK_ICON_W * 4)) slot = 15;
-        else if (hx < (DESK_ICON_W * 5)) slot = 19;
-        else return 0xFF;
-    } 
-
-/*    unsigned char col, row, slot;
-    unsigned char DESKICONROWS = DESK_ICON_ROWS;
-    if (hy < DESK_START_Y) 
-        return 0xFF;
-
-    row = (hy - DESK_START_Y) / DESK_ICON_H;
-    col = hx / DESK_ICON_W;
-    
-    if (row >= DESK_ICON_ROWS || col >= DESK_ICON_COLS) 
-        return 0xFF;
-
-    slot = col * DESKICONROWS + row;
-
-    if (slot >= DESK_ICON_MAX) 
-        return 0xFF;*/
-
-    return slot;
-}
-
-//-----------------------------------------------------------------------------
-// Open the file represented by deskIcons[slot] using the same EXEC rules as
-// files.c: look up [EXEC] in MGUI.CFG, set paramBasic, then run the program.
-//-----------------------------------------------------------------------------
-static void deskOpenIcon(unsigned char slot)
-{
-    DESK_ICON *d = &deskIcons[slot];
-    char execProg[64];
-    char vnomefile[48];
-    char vtmpparam[64];
-    unsigned char *vEndExec;
-    unsigned long vsizefile;
-    MGUI_SAVESCR vsavescr;
-
-    if (!d->active) return;
-
-    execProg[0] = '\0';
-    SaveScreenNew(&vsavescr, 0, 0, 255, 192);
-
-    /* Build full path: path + "/" + filename + "." + ext */
-    strcpy(vnomefile, d->path);
-    if (d->path[0] != '\0' && !(d->path[0] == '/' && d->path[1] == '\0'))
-        strcat(vnomefile, "/");
-    strcat(vnomefile, d->filename);
-    if (d->ext[0])
-    {
-        strcat(vnomefile, ".");
-        strcat(vnomefile, d->ext);
-    }
-
-    /* Lookup [EXEC] association for this extension */
-    if (d->ext[0])
-        mguiCfgGetBuf(memPosConfig, "EXEC", d->ext, execProg, sizeof(execProg));
-
-    TrocaSpriteMouse(MOUSE_HOURGLASS);
-
-    if (!execProg[0])
-    {
-        /* No association – if it looks like an EXE just run it */
-        if (strcmp(d->ext, "EXE") == 0)
-        {
-            #ifdef USE_RELOC_LOAD_PROGS
-                paramBasic[0] = '\0';
-                if (loadMbinAndRun(vnomefile, 2) != 0)
-                {
-                    TrocaSpriteMouse(MOUSE_POINTER);
-                    message("Error Executing File\0", BTCLOSE, 0);
-                }
-            #else
-                vsizefile = loadFile((unsigned char*)vnomefile,
-                                     (unsigned short*)ADDR_EXEC_PROG);
-                if (vsizefile > 0 && vsizefile < ERRO_D_START)
-                {
-                    paramBasic[0] = '\0';
-                    runFromMGUI((unsigned long)ADDR_EXEC_PROG);
-                }
-                else
-                    message("Loading Error...\0", BTCLOSE, 0);
-            #endif
-        }
-        else if (strcmp(vnomefile, "BASIC") == 0)
-        {
-            /* Special case: if the file is literally "BASIC" with no path or extension, just run BASIC */
-            char bascmd[] = "BASIC";
-            fsOsCommand((unsigned char*)bascmd);
-            restoreMGUI(); // in case BASIC doesn't return to caller
-        }
-        else
-            message("No association for this file type.\0", BTCLOSE, 0);
-    }
-    else if (strcmp(execProg, "BASIC") == 0)
-    {
-        /* Run BASIC with file as argument */
-        char bascmd[48];
-        strcpy(bascmd, "BASIC ");
-        strcat(bascmd, vnomefile);
-        fsOsCommand((unsigned char*)bascmd);
-        restoreMGUI(); // in case BASIC doesn't return to caller
-    }
-    else
-    {
-        /* execProg is a full path to an EXE/BIN that should open this file */
-        strcpy(paramBasic, d->path);
-        if (d->path[0] != '\0' && !(d->path[0] == '/' && d->path[1] == '\0'))
-            strcat(paramBasic, "/");
-        strcat(paramBasic, d->filename);
-        if (d->ext[0])
-        {
-            strcat(paramBasic, ".");
-            strcat(paramBasic, d->ext);
-        }
-
-        #ifdef USE_RELOC_LOAD_PROGS
-            if (loadMbinAndRun(execProg, 2) != 0)
-            {
-                TrocaSpriteMouse(MOUSE_POINTER);
-                message("Error Executing File\0", BTCLOSE, 0);
-            }
-        #else
-            vsizefile = loadFile((unsigned char*)execProg,
-                                 (unsigned short*)ADDR_EXEC_PROG);
-            if (vsizefile > 0 && vsizefile < ERRO_D_START)
-                runFromMGUI((unsigned long)ADDR_EXEC_PROG);
-            else
-                message("Loading Error...\0", BTCLOSE, 0);
-        #endif
-    }
-
-    RestoreScreen(&vsavescr);
-
-    TrocaSpriteMouse(MOUSE_POINTER);
-    deskSelected = 0xFF;
-    deskDrawAll();
-}
-
-//-----------------------------------------------------------------------------
-// Dialog to add a new icon.  Prompts for filename (with path) and writes to
-// deskIcons[] into the first free slot, then saves config.
-//-----------------------------------------------------------------------------
-static void deskAddIconDialog(void)
-{
-    MGUI_SAVESCR vsavescr;
-    unsigned char vstring[40];
-    unsigned char wmode = WINFULL;
-    unsigned char vwb = BTCANCEL;
-    unsigned char slot, i;
-    char *dot, *slash;
-    char vpath[20], vname[9], vext[4];
-    unsigned char namelen;
-
-    /* Find a free slot */
-    slot = 0xFF;
-    for (i = 0; i < DESK_ICON_MAX; i++)
-    {
-        if (!deskIcons[i].active) { slot = i; break; }
-    }
-    if (slot == 0xFF)
-    {
-        message("Desktop is full (25 icons max).\0", BTCLOSE, 0);
-        return;
-    }
-
-    SaveScreenNew(&vsavescr, 10, 40, 236, 60);
-    showWindow((unsigned char*)"Add Desktop Icon", 10, 40, 236, 60, BTNONE);
-    writesxy(12, 57, 1, (unsigned char*)"File (full path):", vcorwf, vcorwb);
-
-    vstring[0] = '\0';
-    wmode = WINFULL;
-
-    while (1)
-    {
-        fillin(0, vstring, 100, 57, 140, wmode);
-
-        if (button(1, (unsigned char*)"OK",     18, 78, 44, 10, wmode)) { vwb = BTOK;     break; }
-        if (button(2, (unsigned char*)"CANCEL",  66, 78, 44, 10, wmode)) { vwb = BTCANCEL; break; }
-
-        wmode = WINOPER;
-    }
-
-    RestoreScreen(&vsavescr);
-
-    if (vwb != BTOK || !vstring[0])
-        return;
-
-    /* Convert to uppercase */
-    for (i = 0; vstring[i]; i++)
-        vstring[i] = (unsigned char)toupper(vstring[i]);
-
-    /* Parse path, name, extension from vstring */
-    /* Last '/' separates path from filename */
-    slash = strrchr((char*)vstring, '/');
-    if (slash)
-    {
-        /* path = everything up to (and including) slash */
-        i = (unsigned char)(slash - (char*)vstring);
-        if (i == 0) { vpath[0] = '/'; vpath[1] = '\0'; }
-        else
-        {
-            if (i > 19) i = 19;
-            strncpy(vpath, (char*)vstring, i);
-            vpath[i] = '\0';
-        }
-        slash++;
-    }
-    else
-    {
-        vpath[0] = '/'; vpath[1] = '\0';
-        slash = (char*)vstring;
-    }
-
-    /* extension after last '.' */
-    dot = strrchr(slash, '.');
-    if (dot)
-    {
-        for (i = 0; i < 3 && dot[1 + i]; i++)
-            vext[i] = dot[1 + i];
-        vext[i] = '\0';
-        namelen = (unsigned char)(dot - slash);
-    }
-    else
-    {
-        vext[0] = '\0';
-        namelen = (unsigned char)strlen(slash);
-    }
-    if (namelen > 8) namelen = 8;
-    strncpy(vname, slash, namelen);
-    vname[namelen] = '\0';
-
-    /* Write to slot */
-    strncpy(deskIcons[slot].filename, vname, 8);
-    deskIcons[slot].filename[8] = '\0';
-    strncpy(deskIcons[slot].ext, vext, 3);
-    deskIcons[slot].ext[3] = '\0';
-    strncpy(deskIcons[slot].path, vpath, 19);
-    deskIcons[slot].path[19] = '\0';
-    deskIcons[slot].active = 1;
-
-    deskSaveConfig();
-    deskDrawIcon(slot);
-}
-
-//-----------------------------------------------------------------------------
-// Delete the icon at 'slot' (with confirmation), save config, redraw.
-//-----------------------------------------------------------------------------
-static void deskDeleteIcon(unsigned char slot)
-{
-    unsigned char mpos;
-    char mbuf[40];
-
-    if (!deskIcons[slot].active) return;
-
-    strcpy(mbuf, "Remove icon\n");
-    strcat(mbuf, deskIcons[slot].filename);
-    if (deskIcons[slot].ext[0])
-    {
-        strcat(mbuf, ".");
-        strcat(mbuf, deskIcons[slot].ext);
-    }
-    strcat(mbuf, " ?");
-
-    mpos = message((char*)mbuf, BTYES | BTNO, 0);
-    if (mpos != BTYES) return;
-
-    memset(&deskIcons[slot], 0, sizeof(DESK_ICON));
-    if (deskSelected == slot) deskSelected = 0xFF;
-
-    deskSaveConfig();
-    deskDrawIcon(slot);
-}
-
-//-----------------------------------------------------------------------------
-// Right-click context menu for the desktop.
-// If 'slot' is valid (0..DESK_ICON_MAX-1) and active, shows Add/Delete.
-// If 'slot' is empty, shows only Add.
-//-----------------------------------------------------------------------------
-static void deskContextMenu(unsigned char slot)
-{
-    MGUI_SAVESCR vsavescr;
-    unsigned short mx_m, my_m;
-    unsigned char vopc = 0xFF;
-    unsigned char showDel;
-
-    /* Position menu near click */
-    mx_m = (vpostx + 60 > 256) ? (unsigned short)(vpostx - 60) : vpostx;
-    my_m = (vposty + 30 > 189) ? (unsigned char)(vposty - 30) : vposty;
-
-    showDel = (slot < DESK_ICON_MAX && deskIcons[slot].active) ? 1 : 0;
-
-    SaveScreenNew(&vsavescr, (unsigned short)mx_m, my_m, 60, showDel ? 26 : 14);
-
-    FillRect((unsigned char)mx_m, (unsigned char)my_m, 60, showDel ? 24 : 12, vcorwb);
-    DrawRect((unsigned short)mx_m, my_m, 60, showDel ? 24 : 12, vcorwf);
-
-    writesxy(mx_m + 4, my_m + 2, 1, (unsigned char*)"Add Icon", vcorwf, vcorwb);
-    if (showDel)
-        writesxy(mx_m + 4, my_m + 12, 1, (unsigned char*)"Delete Icon", vcorwf, vcorwb);
-
-    while (1)
-    {
-        MGUI_MOUSE md;
-        getMouseData(0, &md);
-
-        if (md.mouseButton == 0x01) /* left click inside menu */
-        {
-            if (md.vpostx >= mx_m && md.vpostx <= mx_m + 59)
-            {
-                if (md.vposty >= my_m + 2 && md.vposty <= my_m + 10)
-                    { vopc = 0; break; }
-                if (showDel && md.vposty >= my_m + 12 && md.vposty <= my_m + 21)
-                    { vopc = 1; break; }
-            }
-            break; /* click outside = dismiss */
-        }
-    }
-
-    RestoreScreen(&vsavescr);
-
-    if (vopc == 0)
-        deskAddIconDialog();
-    else if (vopc == 1)
-        deskDeleteIcon(slot);
-}
-
-//-----------------------------------------------------------------------------
-void restoreMGUI(void)
-{
-    vdp_init(VDP_MODE_G2, vcorwb2, 0, 0);
-    vdp_set_bdcolor(vcorwb2);
-
-    TrocaSpriteMouse(MOUSE_POINTER);
-    spthdlmouse = vdp_sprite_init(0, 0, VDP_DARK_RED);
-    statusVdpSprite = vdp_sprite_set_position(spthdlmouse, mouseX, mouseY);
-
-    vIndicaDialog = 0;
-
-    if (!setFontUseG2(0) )   // Seta fonte 0 = 5x8 
-        setFontUseG2(99);    // Fonte default 6x8, caso nao tenha conseguido carregar a fonte 0
-}
-
-//-----------------------------------------------------------------------------
-void redrawScreen(void)
-{
-    char tmp[32];
-
-    memset(tmp, 0x00, sizeof(tmp));
-    if (mguiCfgGetBuf(memPosConfig, "START", "COLOR_F", tmp, sizeof(tmp)))
-        vcorwf = atoi(tmp);
-    memset(tmp, 0x00, sizeof(tmp));
-    if (mguiCfgGetBuf(memPosConfig, "START", "COLOR_B", tmp, sizeof(tmp)))
-        vcorwb = atoi(tmp);
-    memset(tmp, 0x00, sizeof(tmp));
-    if (mguiCfgGetBuf(memPosConfig, "START", "COLOR_B2", tmp, sizeof(tmp)))
-        vcorwb2 = atoi(tmp);
-
-    vdp_init(VDP_MODE_G2, vcorwb2, 0, 0);
-    vdp_set_bdcolor(vcorwb2);
-
-    mouseX = 128;
-    mouseY = 96;
-    redrawMain();
-
-    TrocaSpriteMouse(MOUSE_POINTER);
-    spthdlmouse = vdp_sprite_init(0, 0, VDP_DARK_RED);
-    statusVdpSprite = vdp_sprite_set_position(spthdlmouse, mouseX, mouseY);
-    
-    vIndicaDialog = 0;
-
-    if (!setFontUseG2(0) )   // Seta fonte 0 = 5x8 
-        setFontUseG2(99);    // Fonte default 6x8, caso nao tenha conseguido carregar a fonte 0
-
-    mouseBtnPresDouble = 0; 
 }
 
 //-----------------------------------------------------------------------------
@@ -2259,10 +1588,12 @@ void startMGI(void) {
     char errorMalloc;
     VDP_COLOR cores;
     VDP_COORD cursor;
+    unsigned int error_code = OS_ERR_NONE;
     int iy;
     char tmp[32];
-    char bufOut[128];
     FILES_DIR *pDir;
+
+    OSTaskSuspend(TASK_MMSJOS_MAIN);
 
     *startBasic = 2;    // Inicia Basic vindo do MGUI sem mensagens e textos
     *mguiRunTask = 0x00;
@@ -2346,26 +1677,6 @@ void startMGI(void) {
         memPosConfig = 0;
     }
 
-    /* Load MGUIDESK.CFG (desktop icon layout) */
-    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-        #ifdef USE_MALLOC
-            memDeskCfg = malloc(DESK_CFG_SIZE + 1);
-        #else
-            memDeskCfg = msmalloc(DESK_CFG_SIZE + 1);
-        #endif
-    #else
-        memDeskCfg = msmalloc(DESK_CFG_SIZE + 1);
-    #endif
-
-    if (memDeskCfg)
-    {
-        unsigned long deskSz = loadFile(DESK_CFG_FILE, (unsigned short*)memDeskCfg);
-        if (deskSz > DESK_CFG_SIZE) deskSz = DESK_CFG_SIZE;
-        memDeskCfg[deskSz] = '\0';
-        deskLoadConfig();
-    }
-    deskSelected = 0xFF;
-
     writesxy(53,170,1,"Loading Icons ",vcorwf,vcorwb);
 
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
@@ -2398,6 +1709,7 @@ void startMGI(void) {
     }
 
     writesxy(53,170,1,"Loading Font's ",vcorwf,vcorwb);
+
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         #ifdef USE_MALLOC
             memVideoFonts = malloc(SIZE_LOAD_FONTS_MEM);
@@ -2459,8 +1771,27 @@ void startMGI(void) {
 
     if (!errorMalloc)
     {
-        redrawScreen();        
+        memset(tmp, 0x00, sizeof(tmp));
+        if (mguiCfgGet("START", "COLOR_F", tmp, sizeof(tmp)))
+            vcorwf = atoi(tmp);
+        memset(tmp, 0x00, sizeof(tmp));
+        if (mguiCfgGet("START", "COLOR_B", tmp, sizeof(tmp)))
+            vcorwb = atoi(tmp);
+        memset(tmp, 0x00, sizeof(tmp));
+        if (mguiCfgGet("START", "COLOR_B2", tmp, sizeof(tmp)))
+            vcorwb2 = atoi(tmp);
 
+        vdp_init(VDP_MODE_G2, vcorwb2, 0, 0);
+        vdp_set_bdcolor(vcorwb2);
+
+        mouseX = 128;
+        mouseY = 96;
+        redrawMain();
+
+        TrocaSpriteMouse(MOUSE_POINTER);
+        spthdlmouse = vdp_sprite_init(0, 0, VDP_DARK_RED);
+        statusVdpSprite = vdp_sprite_set_position(spthdlmouse, mouseX, mouseY);
+        
         for (iy = 0; iy <= 6; iy++)
         {
             mguiListWindows[iy].id = 0;
@@ -2473,13 +1804,23 @@ void startMGI(void) {
         mguiListWindows[6].zOrder = 0;
         mguiListWindows[6].active = 1;
 
+        OSTaskCreate(mouseTask, OS_NULL, &StkMouse[STACKSIZEMOUSE], TASK_MGUI_MOUSE);
+
+        vIndicaDialog = 0;
+
+        if (!setFontUseG2(0) )   // Seta fonte 0 = 5x8 
+            setFontUseG2(99);    // Fonte default 6x8, caso nao tenha conseguido carregar a fonte 0
+
         // Inicia Controles de Tela (Mouse e Teclado)
         while(1)
         {
-            mouseFunc(NULL);
+            if (vIndicaDialog)
+                OSTaskSuspend(OS_PRIO_SELF);
 
             if (!editortela())
                 break;
+
+            OSTimeDly(1); // OSTimeDlyHMSM(0, 0, 0, 15);
         }
 
         #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
@@ -2492,19 +1833,6 @@ void startMGI(void) {
             #endif
         #endif
         /* memPosConfig usa buffer fixo (0x008EF800), nao vem de malloc. */
-        if (memDeskCfg)
-        {
-            #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-                #ifdef USE_MALLOC
-                    free(memDeskCfg);
-                #else
-                    msfree(memDeskCfg);
-                #endif
-            #else
-                msfree(memDeskCfg);
-            #endif
-            memDeskCfg = 0;
-        }
     }
 
     vdp_init(VDP_MODE_TEXT, VDP_BLACK, 0, 0);
@@ -2513,44 +1841,55 @@ void startMGI(void) {
 
     clearScr();
 
+    OSTaskDel(TASK_MGUI_MOUSE);
+
     if (errorMalloc)
         printText("Error allocating memory. Process aborted.\r\n\0");
 
-    printText("\r\n\0");
+    printText("Ok\r\n\0");
+    printText("#>");
 
     showCursor();
 
     *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
+
+    OSTaskResume(TASK_MMSJOS_MAIN);
 }
 
 //-------------------------------------------------------------------------
-void mouseFunc (void *pData)
+void mouseTask (void *pData)
 {
     unsigned char valter;
+    unsigned char timeToDoubleClick = 0xFF;
 
-    if (readMouse(&mouseStat, &mouseMoveX, &mouseMoveY))
+    mouseBtnPresDouble = 0;
+
+    while(1)
     {
-        VerifyMouse();
-
-        if (mouseBtnPres == 0x01 && timeToDoubleClick == 0xFFFF)
+        if (readMouse(&mouseStat, &mouseMoveX, &mouseMoveY))
         {
+            VerifyMouse();
+
+            if (mouseBtnPres == 0x01 && timeToDoubleClick == 0xFF)
+            {
+                mouseBtnPresDouble = 0;
+                timeToDoubleClick = 0;
+            }
+
+            if (mouseBtnPres == 0x01 && timeToDoubleClick > 0 && timeToDoubleClick <= 34)
+                mouseBtnPresDouble = 1;
+        }
+
+        if (mouseBtnPres == 0x00 && timeToDoubleClick != 0xFF)
+            timeToDoubleClick = timeToDoubleClick + 1;
+
+        if (timeToDoubleClick > 34 && timeToDoubleClick != 0xFF)
+        {
+            timeToDoubleClick = 0xFF;
             mouseBtnPresDouble = 0;
-            timeToDoubleClick = 0;
         }
 
-        if (mouseBtnPres == 0x01 && timeToDoubleClick > 0 && timeToDoubleClick <= 5000)
-        {
-            mouseBtnPresDouble = 1;
-        }
-    }
-
-    if (mouseBtnPres == 0x00 && timeToDoubleClick != 0xFFFF)
-        timeToDoubleClick = timeToDoubleClick + 1;
-
-    if (timeToDoubleClick > 5000 && timeToDoubleClick != 0xFFFF)
-    {
-        timeToDoubleClick = 0xFFFF;
-        mouseBtnPresDouble = 0;
+        OSTimeDly(1); // OSTimeDlyHMSM(0, 0, 0, 15);
     }
 }
 
@@ -2705,9 +2044,6 @@ void redrawMain(void) {
     // Desenhar Barra Menu Principal / Status
     desenhaMenu();
 
-    // Desenhar icones do desktop
-    deskDrawAll();
-
     TrocaSpriteMouse(MOUSE_POINTER);
 }
 
@@ -2781,37 +2117,6 @@ unsigned char editortela(void)
         {
             if (vposty <= 22)
                 vresp = new_menu();
-            else
-            {
-                /* Desktop area */
-                unsigned char hit = deskHitTest(vpostx, (unsigned char)vposty);
-
-                if (mouseBtnPresDouble)
-                {
-                    /* Double-click: open icon */
-                    if (hit < DESK_ICON_MAX && deskIcons[hit].active)
-                        deskOpenIcon(hit);
-                }
-                else
-                {
-                    // Single-click: select icon
-                /*    unsigned char prev = deskSelected;
-                    deskSelected = (hit < DESK_ICON_MAX) ? hit : 0xFF;
-                    if (prev != deskSelected)
-                    {
-                        if (prev < DESK_ICON_MAX) deskDrawIcon(prev);
-                        if (deskSelected < DESK_ICON_MAX) deskDrawIcon(deskSelected);
-                    }*/
-                }
-            }
-        }
-        else if (mouseBtnPres == 0x02)  // Direito
-        {
-            if (vposty > 22)
-            {
-                unsigned char hit = deskHitTest(vpostx, (unsigned char)vposty);
-                deskContextMenu(hit);
-            }
         }
     }
 
@@ -2880,7 +2185,7 @@ void getMouseData(char ptipo, MGUI_MOUSE *pmouseData)
     int key;
     MMSJ_KEYEVENT k;
 
-    ix = 0;
+    ix = *mguiIdRequest;
     if (ix > MGUI_LOCAL_MAX_SLOT)
     {
         if (ptipo == 0x01)
@@ -2895,27 +2200,42 @@ void getMouseData(char ptipo, MGUI_MOUSE *pmouseData)
         return;
     }
 
-    if (ptipo == 0x01)  // Apenas Teclado
+    if (mguiListWindows[ix].active)
     {
-        key = KEY_NONE;
-        
-        if (mmsjKeyGet(&k))
+        if (ptipo == 0x01)  // Apenas Teclado
         {
-            key = k.raw;
+            key = KEY_NONE;
+            
+            if (mmsjKeyGet(&k))
+            {
+                key = k.raw;
+            }
+
+            mguiListWindows[ix].keyTec = key;
         }
-
-        mguiListWindows[ix].keyTec = key;
+        else if (ptipo == 0x00)
+        {
+            pmouseData->mouseButton = mouseBtnPres;
+            pmouseData->mouseBtnDouble = mouseBtnPresDouble;
+            pmouseData->vpostx = vpostx;
+            pmouseData->vposty = vposty;
+            pmouseData->mouseX = mouseX;
+            pmouseData->mouseY = mouseY;
+        }
     }
-    else if (ptipo == 0x00)
+    else
     {
-        mouseFunc(NULL);
-
-        pmouseData->mouseButton = mouseBtnPres;
-        pmouseData->mouseBtnDouble = mouseBtnPresDouble;
-        pmouseData->vpostx = vpostx;
-        pmouseData->vposty = vposty;
-        pmouseData->mouseX = mouseX;
-        pmouseData->mouseY = mouseY;
+        if (ptipo == 0x01)  // Apenas Teclado
+            mguiListWindows[ix].keyTec = 0x00;
+        else if (ptipo == 0x00)
+        {
+            pmouseData->mouseButton = 0;
+            pmouseData->mouseBtnDouble = 0;
+            pmouseData->vpostx = 0;
+            pmouseData->vposty = 0;
+            pmouseData->mouseX = 0;
+            pmouseData->mouseY = 0;
+        }
     }
 }
 
@@ -2960,6 +2280,8 @@ unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime)
     unsigned char slinha[7][26];
     MGUI_SAVESCR vsavescr;
     unsigned char vbuttonmess[16];
+    unsigned int error_code = OS_ERR_NONE;
+    OS_TCB *ptcb;
 
     cursor = vdp_get_cursor_safe();
 
@@ -3061,14 +2383,16 @@ unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime)
 
     if (!btime)
     {
-        vbuttonmess[14] = 0;
+        vbuttonmess[14] = OSTCBCur->OSTCBPrio;
         vbuttonmess[15] = vbty;
 
         TrocaSpriteMouse(MOUSE_POINTER);
 
+        OSTaskCreate(messageTask, (void *)&vbuttonmess, &StkMessage[STACKSIZE], TASK_MGUI_MESSAGE);
+
         vIndicaDialog = 1;
 
-        messageFunc((void *)&vbuttonmess);  // Executa a task de mensagem diretamente, sem criar uma nova task, para evitar overhead de criar task e suspender a task chamadora. A task de mensagem vai rodar no contexto da task chamadora, e quando terminar, vai retornar para a task chamadora.
+        OSTaskSuspend(OS_PRIO_SELF);
 
         ii = vbuttonmess[0];
 
@@ -3087,7 +2411,7 @@ unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime)
 }
 
 //-----------------------------------------------------------------------------
-void messageFunc(void *pData)
+void messageTask(void *pData)
 {
     unsigned char i, ii = 0, iii;
     unsigned char key = KEY_NONE;
@@ -3101,6 +2425,7 @@ void messageFunc(void *pData)
     unsigned char callerPrio;
     MMSJ_KEYEVENT k;
     unsigned char *vbutton = (unsigned char *)pData;
+    OS_TCB *ptcb;
 
     vbty = vbutton[15];
     callerPrio = vbutton[14];
@@ -3133,7 +2458,6 @@ void messageFunc(void *pData)
     }
 
     while (!ii) {
-        mouseFunc(NULL);        
         if (mouseBtnPres == 0x01)  // Esquerdo
         {
             for (i = 1; i <= 7; i++) {
@@ -3188,11 +2512,40 @@ void messageFunc(void *pData)
                     ii *= 2;
             }
         }
+
+        OSTimeDly(1);  // OSTimeDlyHMSM(0, 0, 0, 30);
     }
 
     vbutton[0] = ii;
 
+    // Resume task chamadora e a tela do MGUI, sem despertar tasks alheias.
+    if (callerPrio < (OS_LOWEST_PRIO + 1u))
+    {
+        ptcb = OSTCBPrioTbl[callerPrio];
+        if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
+        {
+            if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
+                OSTaskResume(callerPrio);
+        }
+    }
+
+    ptcb = OSTCBPrioTbl[TASK_MGUI_TELA];
+    if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
+    {
+        if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
+            OSTaskResume(TASK_MGUI_TELA);
+    }
+
+    ptcb = OSTCBPrioTbl[TASK_MGUI_MOUSE];
+    if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
+    {
+        if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
+            OSTaskResume(TASK_MGUI_MOUSE);
+    }
+
     vIndicaDialog = 0;
+
+    OSTaskDel(OS_PRIO_SELF);
 }
 
 //-----------------------------------------------------------------------------
@@ -3257,12 +2610,18 @@ unsigned char new_menu(void)
 {
     unsigned short lc;
     unsigned char vresp, mpos, mtqresp;
+    OS_TCB tcb;
 
     vresp = 1;
 
     if (vpostx >= COLMENU && vpostx <= (COLMENU + 16))
     {
-        menuFunc(NULL);
+        // Verifica se a Task ja existe. Se nao, cria
+        mtqresp = OSTaskQuery(20, &tcb);
+        if (mtqresp != OS_ERR_NONE)
+        {
+            OSTaskCreate(menuTask, OS_NULL, &StkMenu[STACKSIZEMENU], 20);
+        }
     }
     else {
         for (lc = 1; lc <= 4; lc++) {
@@ -3295,7 +2654,7 @@ unsigned char new_menu(void)
 }
 
 //-----------------------------------------------------------------------------
-void menuFunc(void *pData)
+void menuTask(void *pData)
 {
     unsigned char vpos = 0, mpos;
     unsigned short vx, vy, vposicony;
@@ -3309,26 +2668,34 @@ void menuFunc(void *pData)
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
 
-    SaveScreenNew(&endSaveMenu, mx,my,128,36);
+    SaveScreenNew(&endSaveMenu, mx,my,128,44);
 
-    FillRect(mx,my,128,34,vcorwb);
-    DrawRect(mx,my,128,34,vcorwf);
+    FillRect(mx,my,128,42,vcorwb);
+    DrawRect(mx,my,128,42,vcorwf);
 
     mpos += 2;
     menyi[0] = my + mpos;
-    writesxy(mx + 8,my + mpos,1,"Import File",vcorwf,vcorwb);
+    writesxy(mx + 8,my + mpos,1,"Files",vcorwf,vcorwb);
     mpos += 12;
     menyf[0] = my + mpos;
     DrawLine(mx,my + mpos,mx+128,my + mpos,vcorwf);
+
     mpos += 2;
     menyi[1] = my + mpos;
+    writesxy(mx + 8,my + mpos,1,"Import File",vcorwf,vcorwb);
+    mpos += 12;
+    menyf[1] = my + mpos;
+    mpos += 2;
+    menyi[2] = my + mpos;
     writesxy(mx + 8,my + mpos,1,"About",vcorwf,vcorwb);
+    mpos += 12;
+    menyf[2] = my + mpos;
+    DrawLine(mx,my + mpos,mx+128,my + mpos,vcorwf);
 
     TrocaSpriteMouse(MOUSE_POINTER);
 
     while (1)
     {
-        mouseFunc(NULL);
         if (mouseBtnPres == 0x01)  // Esquerdo
         {
             if ((vposty >= my && vposty <= my + 42) && (vpostx >= mx && vpostx <= mx + 128))
@@ -3349,7 +2716,7 @@ void menuFunc(void *pData)
 
                 switch (vpos)
                 {
-                    /*case 0: // Call "Files" Program from Disk
+                    case 0: // Call "Files" Program from Disk
                         #ifdef USE_RELOC_LOAD_PROGS
                             TrocaSpriteMouse(MOUSE_HOURGLASS);
                             paramBasic[0] = '\0';
@@ -3377,11 +2744,11 @@ void menuFunc(void *pData)
                                 message("File not found...\n/MGUI/PROGS/FILES.BIN\0", BTCLOSE, 0);
                         #endif
 
-                        break;*/
-                    case 0: // Import File via Serial
+                        break;
+                    case 1: // Import File via Serial
                         importFile();
                         break;
-                    case 1: // About
+                    case 2: // About
                         message("MGUI v"versionMgui"\nGraphical User Interface\n \nwww.utilityinf.com.br\0", BTCLOSE, 0);
                         break;
                 }
@@ -3389,9 +2756,13 @@ void menuFunc(void *pData)
 
             break;
         }
+
+        OSTimeDly(1); // OSTimeDlyHMSM(0, 0, 0, 50);
     }
 
     RestoreScreen(&endSaveMenu);
+
+    OSTaskDel(OS_PRIO_SELF);
 }
 
 //-----------------------------------------------------------------------------
@@ -3436,6 +2807,8 @@ void runBin(void)
 
             if (vwb == BTOK || vwb == BTCANCEL)
                 break;
+
+            OSTimeDly(1);  // OSTimeDlyHMSM(0, 0, 0, 30);
         }
     }
 
@@ -3591,6 +2964,8 @@ void importFile(void)
 
             if (vwb == BTOK || vwb == BTCANCEL)
                 break;
+
+            OSTimeDly(1); // OSTimeDlyHMSM(0, 0, 0, 30);
         }
     }
 
@@ -3741,6 +3116,8 @@ void importFile(void)
 
                 if (vwb == BTCLOSE)
                     break;
+
+                OSTimeDly(1);  // OSTimeDlyHMSM(0, 0, 0, 30);
             }
 
             RestoreScreen(&vsavescr);

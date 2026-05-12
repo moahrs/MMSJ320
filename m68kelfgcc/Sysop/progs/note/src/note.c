@@ -6,6 +6,7 @@
 *--------------------------------------------------------------------------------
 * Data        Versao  Responsavel  Motivo
 * 26/04/2026  0.1     Moacir Jr.   Criacao - Visualizacao somente, scroll mouse/teclado
+* 10/05/2026  0.2     Moacir Jr.   Remover uC/OS-II
 *--------------------------------------------------------------------------------
 *
 * Uso: chamar com paramBasic = nome do arquivo a abrir
@@ -68,7 +69,6 @@ void main(void)
     unsigned char ix;
     unsigned char *vComma;
     unsigned long vaddress;
-    unsigned char winFound;
 
     memset(vParamName, 0x00, sizeof(vParamName));
     if (*paramBasic != 0x00)
@@ -81,22 +81,6 @@ void main(void)
         *vComma = 0x00;
         vaddress = atol((char*)(vComma + 1));
     }
-
-    // Define o ID do window
-    windowsId = 0xFF;
-    winFound = 0;
-    for(ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
-    {
-        if (mguiListWindows[ix].active && mguiListWindows[ix].loadAddress == vaddress)
-        {
-            windowsId = ix;
-            winFound = 1;
-            break;
-        }
-    }
-
-    if (!winFound)
-        return;
 
     // --- Inicializa variaveis ---
     getColorData(&vdpcolor);
@@ -203,10 +187,9 @@ void main(void)
 
         while (1)
         {
-            *mguiIdRequest = windowsId;
             getMouseData(0, &mouseData);    // Mouse
             getMouseData(1, &mouseData);    // Teclado
-            vtec = mguiListWindows[windowsId].keyTec;
+            vtec = mguiListWindows[0].keyTec;
 
             // --- Tratamento de Teclado ---
             if (vtec == 0x1B)               // ESC: fecha
@@ -304,12 +287,7 @@ void main(void)
                     drawScrollBarH();
                 }
             }
-
-            OSTimeDlyHMSM(0, 0, 0, 50);
         } // while(1) inner
-
-        if (vcont)
-            OSTimeDlyHMSM(0, 0, 0, 50);
     } // while(vcont)
 
     // --- Encerra ---

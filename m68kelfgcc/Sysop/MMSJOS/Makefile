@@ -9,22 +9,19 @@ MAP = mmsjos.map
 LST = mmsjos.lst
 TEXT_ORIGIN ?= 0x00800000
 
-CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -fleading-underscore -I../include -I../uCOSII -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
+CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -fleading-underscore -I../include -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
 ASFLAGS_MRI = -m68000 -M --register-prefix-optional --bitwise-or
 LDFLAGS = -T linker_mmsjos.ld -nostdlib -Wl,--defsym=__TEXT_ORIGIN=$(TEXT_ORIGIN)
 LDLIBS = -lgcc
 
 SRC_C = \
 	src/libc_stub.c \
-	../uCOSII/os_cpu_c.c \
-	../uCOSII/ucos_ii.c \
 	src/mmsj320mfp.c \
 	src/mmsjos.c \
 	src/mgui.c
 
 SRC_A68 = \
 	src/mmsjos_boot.a68 \
-	../uCOSII/os_cpu_a.asm \
 	src/mguifunc.a68 \
 	src/mmsjos_ram.a68 \
 	src/mgui_sprite.a68 \
@@ -51,9 +48,6 @@ OBJ := $(OBJ:.asm=.o)
 # 12) std68k.lib (substituida por libc_stub.c + -lgcc)
 LINK_OBJ = \
 	src/mmsjos_boot.o \
-	../uCOSII/os_cpu_a.o \
-	../uCOSII/os_cpu_c.o \
-	../uCOSII/ucos_ii.o \
 	src/mguifunc.o \
 	src/libc_stub.o \
 	src/gcc_builtins_shim.o \
@@ -87,16 +81,10 @@ src/%.o: src/%.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
 
-../uCOSII/%.o: ../uCOSII/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
 src/%.o: src/%.a68
 	$(AS) $(ASFLAGS_MRI) -I src -o $@ $<
 
-../uCOSII/%.o: ../uCOSII/%.asm
-	$(AS) $(ASFLAGS_MRI) -I ../uCOSII -o $@ $<
-
 clean:
-	-cmd /c "del /q /f src\*.o ..\uCOSII\*.o *.o *.elf *.bin *.map *.lst 2>nul"
+	-cmd /c "del /q /f src\*.o *.o *.elf *.bin *.map *.lst 2>nul"
 
 .PHONY: all clean flash ram

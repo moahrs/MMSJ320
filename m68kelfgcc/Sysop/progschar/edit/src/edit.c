@@ -47,8 +47,6 @@ void main(void)
     unsigned char ix;
     unsigned char sqtdtam[20];
 
-    //OSTaskSuspend(TASK_MMSJOS_MAIN);
-
     memset(vParamName, 0x00, sizeof(vParamName));
     if (*paramBasic != 0x00)
         strcpy((char*)vParamName, (char*)paramBasic);
@@ -118,8 +116,6 @@ void main(void)
 
     msfree(edFileBuf);
     edFileBuf = 0;
-
-    //OSTaskResume(TASK_MMSJOS_MAIN);
 
     return;
 }

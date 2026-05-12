@@ -247,8 +247,6 @@ extern MEM_ALOC vMemAloc;
 
 #define RETURN_OK             0x00
 
-#define TASK_MMSJOS_MAIN    10
-
 #define KEY_ESC     27
 #define KEY_ENTER   13
 

@@ -13,7 +13,7 @@
            xref      _main
 
 start:
-             or.w      #$0700,SR
+             ; or.w      #$0700,SR
              move.l    #_spritePointer,D1
              move.l    D1,_mousePointer
              move.l    #_spriteHourGlass,D1
@@ -22,6 +22,7 @@ start:
              move.l    D1,_iconesMenuSys
              clr.l     __allocp
              bra       _main
+             dc.l    0 
 
 mmsjos_func_table:
             dc.l _fsGetDirAtuData
@@ -44,21 +45,36 @@ mmsjos_func_table:
             dc.l _fsMakeDir
             dc.l _fsChangeDir
             dc.l _fsRemoveDir
-            dc.l _OSTimeDlyHMSM
+            dc.l 0
             dc.l _fsFindInDir
             dc.l _mmsjKeyGet
             dc.l _fsFindNextCluster
             dc.l _fsFindClusterFree
             dc.l _OSTaskSuspend
             dc.l _OSTaskResume
-
+            dc.l _msmalloc
+            dc.l _msrealloc
+            dc.l _msfree
+            dc.l _loadMbinAndRun
+            dc.l _readFontStruct
+            dc.l _fsListDir
+            dc.l _setFontUseG2
+            dc.l _loadFontUseG2
+            dc.l _msprintf
+            dc.l _clearScrW
+            dc.l _getFontUseG2
+            dc.l _setModeVideoOS
+            dc.l _getModeVideoOS
+            dc.l _setColorVideoG2
+            dc.l 0
+            
 __exit:
 _exit:
 ;           dc.w        0
            jsr         _main
 
 _uCOSII_TICK:
-           dc.l _OSTickISR
+           dc.l 0 ; _OSTickISR
 
            section     const
            align

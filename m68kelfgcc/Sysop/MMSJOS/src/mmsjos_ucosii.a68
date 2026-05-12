@@ -1,16 +1,2 @@
 mmsjos_ucosii_table:
-            dc.l _msmalloc
-            dc.l _msrealloc
-            dc.l _msfree
-            dc.l _loadMbinAndRun
-            dc.l _readFontStruct
-            dc.l _fsListDir
-            dc.l _setFontUseG2
-            dc.l _loadFontUseG2
-            dc.l _msprintf
-            dc.l _clearScrW
-            dc.l _getFontUseG2
-            dc.l _setModeVideoOS
-            dc.l _getModeVideoOS
-            dc.l _setColorVideoG2
             dc.l 0

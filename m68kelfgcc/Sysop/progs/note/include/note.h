@@ -42,7 +42,6 @@ unsigned short  noteTopLine;     // Linha do topo da tela (scroll vertical)
 unsigned short  noteHOffset;     // Offset horizontal (scroll horizontal)
 unsigned char   nvcorfg;         // Cor do texto
 unsigned char   nvcorbg;         // Cor do fundo
-unsigned char windowsId;
 
 // Prototipos das funcoes locais (definicao real em note.c)
 #ifndef USE_REALOCABLE_CODE

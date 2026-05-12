@@ -8,6 +8,7 @@
 * 25/12/2024  0.1     Moacir Jr.   Criacao Versao Beta
 * 23/01/2025  0.2     Moacir Jr.   Adaptação nova estrutura e uC/OS-II
 * 25/04/2026  0.3a01  Moacir Jr.   Ajustes para rodar bin e basic do monitor
+* 10/05/2026  0.3a02  Moacir Jr.   Remover uC/OS-II
 *--------------------------------------------------------------------------------*/
 
 #include <ctype.h>
@@ -50,7 +51,6 @@ void main(void)
     unsigned long vworkbase;
     unsigned char *vComma;
     unsigned long vaddress;
-    unsigned char winFound;
     VDP_COLOR vdpcolor;
     MGUI_SAVESCR vsavescr;
     MGUI_MOUSE mouseData;
@@ -62,23 +62,6 @@ void main(void)
     {
         *vComma = 0x00;
         vaddress = atol((char*)(vComma + 1));
-    }
-
-    windowsId = 0xFF;
-    winFound = 0;
-    for(ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
-    {
-        if (mguiListWindows[ix].active && mguiListWindows[ix].loadAddress == vaddress)
-        {
-            windowsId = ix;
-            winFound = 1;
-            break;
-        }
-    }
-
-    if (!winFound)
-    {
-        return;
     }
 
     // Pega as cores atuais
@@ -112,7 +95,6 @@ void main(void)
 
         while (1)
         {
-            *mguiIdRequest = windowsId;
             getMouseData(0, &mouseData);
 
             if (mouseData.mouseButton == 0x02 || mouseData.mouseBtnDouble == 0x01)  // Direito ou DoubleClick Esquerdo
@@ -259,8 +241,6 @@ void main(void)
                                     }
                                 }
                             }
-
-                            OSTimeDlyHMSM(0, 0, 0, 100);
                         }
 
                         RestoreScreen(&vsavescr);
@@ -372,7 +352,6 @@ void main(void)
                             }
 
                             wmode = WINOPER;
-                            OSTimeDlyHMSM(0, 0, 0, 100);
                         }
                         }
 
@@ -633,12 +612,7 @@ void main(void)
                     }
                 }
             }
-
-            OSTimeDlyHMSM(0, 0, 0, 100);
         }
-
-        if (vcont)
-            OSTimeDlyHMSM(0, 0, 0, 100);
     }
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
@@ -654,7 +628,7 @@ void main(void)
 void drawWindow(void)
 {
     // Cria a Janela
-    showWindow("File Explorer v0.3a01\0", 0, 0, 255, 191, BTNONE);
+    showWindow("File Explorer v0.3a02\0", 0, 0, 255, 191, BTNONE);
 
     // Prepara Cabeçalho
     FillRect(0,18,255,10,vcorbg);

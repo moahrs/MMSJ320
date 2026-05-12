@@ -15,8 +15,8 @@
 *                                  Ajustes no cat, fat, rd, rm e prompt
 * 20/04/2026  1.0a04  Moacir Jr.   Ajustes chamar basic com malloc e passagem de parametros
 * 28/04/2026  1.0a05  Moacir Jr.   Convertido para m68k-elf-gcc e retirada do malloc/realloc/free
+* 10/05/2026  1.0a06  Moacir Jr.   Remover uC/OS-II - RTOS
 ********************************************************************************/
-#include <ucos_ii.h>
 #include <ctype.h>
 #include <string.h>
 #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
@@ -57,6 +57,20 @@ typedef struct MEMBLOCK {
 
 static MEMBLOCK *heapFirst = 0;
 #endif
+
+//---------------------------------
+// Compatibilidade com Basic
+//---------------------------------
+void OSTaskSuspend(int taskId)
+{
+
+}
+
+void OSTaskResume(int taskId)
+{
+
+}
+//---------------------------------
 
 unsigned char vdp_mode; // Modo de video 0 = caracter (32 x 24), 1 = grafico (256 x 192)
 
@@ -183,6 +197,8 @@ int loadMbinAndRun(char *filename, char porig)
         runFromMGUI((unsigned long)vEnderExec, (unsigned long)fileBuf);
     }
 
+    printText("\r\n\0");
+
     return 0;
 }
 #endif
@@ -200,7 +216,7 @@ RET_PATH vretpath;
 RET_PATH vretpath2;
 MEM_ALOC vMemAloc;
 
-//--- KeyBOardTAsks Functions
+//--- KeyBOard Functions
 int mmsjKeyHit(void);
 int mmsjKeyPost(MMSJ_KEYEVENT *k);
 int mmsjKeyGet(MMSJ_KEYEVENT *k);
@@ -300,51 +316,18 @@ void memInit(void);
 
 HEADER *_allocp;
 
-#define versionMMSJOS "1.0a05"
+#define versionMMSJOS "1.0a06"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 #define FS_SECTOR_RETRY_COUNT 3
 #define FS_ENABLE_WRITE_VERIFY 1
 
-#define STACKSIZE  16384
-#define STACKSIZEMGUI  2048
-#define STACKSIZEBASIC  32768
+static unsigned char basicFuncArg[64];
 
-OS_STK StkKbd[STACKSIZE];
-OS_STK StkInput[STACKSIZE];
-OS_STK StkMgui[STACKSIZEMGUI];
-OS_STK StkBasic[STACKSIZEBASIC];
-OS_STK StkTask01[STACKSIZEMGUI];
-OS_STK StkTask02[STACKSIZEMGUI];
-OS_STK StkTask03[STACKSIZEMGUI];
-OS_STK StkTask04[STACKSIZEMGUI];
-OS_STK StkTask05[STACKSIZEMGUI];
-OS_STK StkTask06[STACKSIZEMGUI];
-static unsigned char basicTaskArg[64];
-
-OS_EVENT *shared_sem;
-OS_EVENT *heap_sem;
-
-#define TASK_KBD_MAP       9
-#define TASK_INPUT_KBD    10
-#define TASK_MGUI         11
-#define TASK_BASIC        13
-#define TASK_Prog01       25
-#define TASK_Prog02       26
-#define TASK_Prog03       27
-#define TASK_Prog04       28
-#define TASK_Prog05       29
-#define TASK_Prog06       30
-
-void keyboardTask(void *pdata); // Prio: 09
-void inputTask(void *pdata);    // Prio: 10
-void mguiTask(void *pdata);     // Prio: 11
-void basicTask(void *pdata);    // Prio: 13
-void prog01Task(void *pdata);   // Prio: 25
-void prog02Task(void *pdata);   // Prio: 26
-void prog03Task(void *pdata);   // Prio: 27
-void prog04Task(void *pdata);   // Prio: 28
-void prog05Task(void *pdata);   // Prio: 29
-void prog06Task(void *pdata);   // Prio: 30
+void keyboardFunc(void *pdata);
+void inputFunc(void *pdata);   
+void mguiFunc(void *pdata);    
+void basicFunc(void *pdata);   
+void prog01Func(void *pdata);   
 
 //-----------------------------------------------------------------------------
 // FAT16 Functions
@@ -374,7 +357,6 @@ void fsVer(void)
     printText("\r\n\0");
     printText("MMSJ-OS v"versionMMSJOS);
     printText("\r\n\0");
-    printText("Powered by uC/OS-II v2.91\0");
 }
 
 //-----------------------------------------------------------------------------
@@ -421,8 +403,6 @@ void main(void)
 {
     unsigned char vRetInput;
     int vRetProcCmd;
-    INT8U osErr;
-    unsigned char sOsErr[10];
     unsigned long ixxx;
 
     *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
@@ -432,7 +412,6 @@ void main(void)
     clearScr();
     printText("MMSJ-OS v"versionMMSJOS);
     printText("\r\n\0");
-    printText("Powered by uC/OS-II v2.91\r\n\0");
     printText("Utility (c) 2014-2026\r\n\0");
 
     fsInit();
@@ -449,42 +428,9 @@ void main(void)
 
     showCursor();
 
-    // Cria duas Tasks
-    OSInit();
-    shared_sem = OSSemCreate(1);
-    heap_sem = OSSemCreate(1);
-
-    if (!shared_sem || !heap_sem)
-    {
-        printText("uC/OS-II semaphore init error\r\n\0");
-        for (;;) { }
-    }
-
     mmsjKeyClear();
 
-    osErr = OSTaskCreate(keyboardTask, OS_NULL, &StkKbd[STACKSIZE - 1], TASK_KBD_MAP);
-    if (osErr != OS_ERR_NONE)
-    {
-        printText("uC/OS-II task create error keytask: \0");
-        itoa(osErr, sOsErr, 10);
-        printText(sOsErr);
-        printText("\r\n\0");
-        for (;;) { }
-    }
-
-    osErr = OSTaskCreate(inputTask, OS_NULL, &StkInput[STACKSIZE - 1], TASK_INPUT_KBD);
-    if (osErr != OS_ERR_NONE)
-    {
-        printText("uC/OS-II task create error inputtask: \0");
-        itoa(osErr, sOsErr, 10);
-        printText(sOsErr);
-        printText("\r\n\0");
-        for (;;) { }
-    }
-
-    *(vmfp + Reg_IERA) |= 0x01; // Timer B 10ms - Tick OS
-    *(vmfp + Reg_IMRA) |= 0x01; // Timer B 10ms - Tick OS
-    OSStart();
+    inputFunc(0);
 }
 
 //-----------------------------------------------------------------------------
@@ -509,6 +455,8 @@ int mmsjKeyPost(MMSJ_KEYEVENT *k)
 //-----------------------------------------------------------------------------
 int mmsjKeyGet(MMSJ_KEYEVENT *k)
 {
+    keyboardFunc(0);
+
     if (keyHead == keyTail)
         return 0;
 
@@ -545,52 +493,43 @@ void mmsjKeyClear(void)
 }
 
 //-----------------------------------------------------------------------------
-void keyboardTask(void *pdata)
+void keyboardFunc(void *pdata)
 {
     unsigned char keytec;
     MMSJ_KEYEVENT k;
+    keytec = readChar();
 
-    while (1)
+    if (keytec != 0x00)
     {
-        keytec = readChar();
-
-        if (keytec != 0x00)
+        if (keytec == 0xEF) // CTRL/ALT/SHIFT + Tecla
         {
-            if (keytec == 0xEF) // CTRL/ALT/SHIFT + Tecla
-            {
-                k.flags = readChar();
-                k.code = readChar();
-                k.ascii = k.code;
-                k.raw = (k.flags << 8) | k.code;
-            }
-            else // Char Normal Printavel ASCII ou Control (Backspace, Enter, etc)
-            {
-                k.flags = 0x00;
-                k.code = keytec;
-                k.ascii = keytec;
-                k.raw = k.code & 0xFF;
-            }
-            mmsjKeyPost(&k);
+            k.flags = readChar();
+            k.code = readChar();
+            k.ascii = k.code;
+            k.raw = (k.flags << 8) | k.code;
         }
-
-        OSTimeDlyHMSM(0, 0, 0, 15);
+        else // Char Normal Printavel ASCII ou Control (Backspace, Enter, etc)
+        {
+            k.flags = 0x00;
+            k.code = keytec;
+            k.ascii = keytec;
+            k.raw = k.code & 0xFF;
+        }
+        mmsjKeyPost(&k);
     }
 }
 
 //-----------------------------------------------------------------------------
-void inputTask(void *pdata)
+void inputFunc(void *pdata)
 {
     unsigned char vtec, vtecant = 0;
     unsigned long vRetProcCmd;
     int countCursor = 0;
     unsigned char vbufptr = 0;
-    unsigned int error_code = OS_ERR_NONE;
     MMSJ_KEYEVENT k;
     
     while (1)
     {
-        OSSemPend(shared_sem, 0, &error_code);
-
         vtec = 0x00;
         
         if (mmsjKeyGet(&k))
@@ -652,34 +591,24 @@ void inputTask(void *pdata)
         }
 
         vtecant = vtec;
-
-        OSSemPost(shared_sem);
-
-        OSTimeDlyHMSM(0, 0, 0, 15);
     }
 }
 
 //-----------------------------------------------------------------------------
-void mguiTask(void *pData)
+void mguiFunc(void *pData)
 {
-    while(1)
-    {
-        startMGI();
-        break;
-    }
-
-    OSTaskDel(OS_PRIO_SELF);
+    startMGI();
 }
 
 //-----------------------------------------------------------------------------
-void basicTask(void *pData)
+void basicFunc(void *pData)
 {
     unsigned char *linhaarg = (unsigned char*)pData;
     unsigned short ix;
-    unsigned char kbdTaskSuspended;
+    unsigned char kbdFuncSuspended;
 
-    // Area fixa para dados do BASIC: 0x00890000..0x008E0000
-    *startBasic0 = 0x00890000;
+    // Aloca espaço pro Basic // Area fixa para dados do BASIC: 0x00890000..0x008E0000
+    *startBasic0 = msmalloc(262144); // 256 KBytes para o Basic, o suficiente para a maioria dos programas, e ainda sobra para o heap do MMSJOS
 
     if (!*startBasic0)
     {
@@ -691,7 +620,7 @@ void basicTask(void *pData)
     }
     else
     {
-        kbdTaskSuspended = 0;
+        kbdFuncSuspended = 0;
 
         // Carrega parametros pro Basic
         memcpy(paramBasic, linhaarg, 64);
@@ -706,100 +635,17 @@ void basicTask(void *pData)
             *paramBasic = 0x00;
 
         // Run Basic
-        while(1)
-        {
-            if (OSTaskSuspend(TASK_KBD_MAP) == OS_ERR_NONE)
-                kbdTaskSuspended = 1;
+        runFromOsCmd(0x00020000); // Testes = 0x00870000, Producao = 0x00020000
 
-            runFromOsCmd(0x00020000); // Testes = 0x00870000, Producao = 0x00020000
-
-            if (kbdTaskSuspended)
-                OSTaskResume(TASK_KBD_MAP);
-
-            break;
-        }
+        msfree(*startBasic0);
 
         *startBasic0 = 0;
         *paramBasic = 0;
     }
-
-    OSTaskDel(OS_PRIO_SELF);
 }
 
 //-----------------------------------------------------------------------------
-void verifyWindows(char pTask)
-{
-    unsigned char ix;
-    unsigned char topIdx;
-    signed int topZ;
-    OS_TCB tcb;
-    OS_TCB *ptcb;
-
-    topIdx = 0xFF;
-    topZ = -32768;
-
-    for (ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
-    {
-        if (mguiListWindows[ix].id == pTask)
-        {
-            mguiListWindows[ix].id = 0;
-            mguiListWindows[ix].loadAddress = 0;
-            mguiListWindows[ix].zOrder = 0;
-            mguiListWindows[ix].active = 0;
-            mguiListWindows[ix].keyTec = 0;
-            continue;
-        }
-
-        if (mguiListWindows[ix].id == 0)
-            continue;
-
-        if (OSTaskQuery((INT8U)mguiListWindows[ix].id, &tcb) != OS_ERR_NONE)
-        {
-            mguiListWindows[ix].id = 0;
-            mguiListWindows[ix].loadAddress = 0;
-            mguiListWindows[ix].zOrder = 0;
-            mguiListWindows[ix].active = 0;
-            mguiListWindows[ix].keyTec = 0;
-            continue;
-        }
-
-        if ((signed int)mguiListWindows[ix].zOrder >= topZ)
-        {
-            topZ = (signed int)mguiListWindows[ix].zOrder;
-            topIdx = ix;
-        }
-    }
-
-    for (ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
-        mguiListWindows[ix].active = 0;
-
-    if (topIdx != 0xFF)
-    {
-        mguiListWindows[topIdx].active = 1;
-        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 0;
-    }
-    else
-    {
-        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 1;
-    }
-
-    ptcb = OSTCBPrioTbl[TASK_MGUI_TELA];
-    if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
-    {
-        if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
-            OSTaskResume(TASK_MGUI_TELA);
-    }
-
-    ptcb = OSTCBPrioTbl[TASK_MGUI_MOUSE];
-    if (ptcb != (OS_TCB *)0 && ptcb != OS_TCB_RESERVED)
-    {
-        if ((ptcb->OSTCBStat & OS_STAT_SUSPEND) != 0u)
-            OSTaskResume(TASK_MGUI_MOUSE);
-    }
-}
-
-//-----------------------------------------------------------------------------
-void prog01Task(void *pdata)
+void prog01Func(void *pdata)
 {
     unsigned long vAddrExec = ((unsigned long*)pdata)[0];
     unsigned long vFileBuf = ((unsigned long*)pdata)[1];
@@ -807,183 +653,25 @@ void prog01Task(void *pdata)
 
     if (vAddrExec)
     {
-        while(1)
-        {
-            runFromOsCmd(vAddrExec);
-            break;
-        }
+        runFromOsCmd(vAddrExec);
+    }
 
 #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-        if (vAddrExec <= MMSJ_HEAP_LIMIT)
-        {
-            #ifdef USE_MALLOC
-                if (!vFileBuf)
-                    free(vAddrExec);
-                else
-                    free(vFileBuf);
-            #else
-                if (!vFileBuf)
-                    msfree(vAddrExec);
-                else
-                    msfree(vFileBuf);
-            #endif
-        }
+    if (vAddrExec <= MMSJ_HEAP_LIMIT)
+    {
+        #ifdef USE_MALLOC
+            if (!vFileBuf)
+                free(vAddrExec);
+            else
+                free(vFileBuf);
+        #else
+            if (!vFileBuf)
+                msfree(vAddrExec);
+            else
+                msfree(vFileBuf);
+        #endif
+    }
 #endif            
-    }
-
-    verifyWindows(TASK_Prog01);
-
-    OSTaskDel(OS_PRIO_SELF);
-}
-
-//-----------------------------------------------------------------------------
-void prog02Task(void *pdata)
-{
-    unsigned long vAddrExec = (unsigned long*)pdata;
-
-    if (vAddrExec)
-    {
-        while(1)
-        {
-            runFromOsCmd(vAddrExec);
-            break;
-        }
-
-#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-        if (vAddrExec <= MMSJ_HEAP_LIMIT)
-        {
-            #ifdef USE_MALLOC
-                free(vAddrExec);
-            #else
-                msfree(vAddrExec);
-            #endif
-        }
-#endif  
-    }
-
-    verifyWindows(TASK_Prog02);
-
-    OSTaskDel(OS_PRIO_SELF);
-}
-
-//-----------------------------------------------------------------------------
-void prog03Task(void *pdata)
-{
-    unsigned long vAddrExec = (unsigned long*)pdata;
-
-    if (vAddrExec)
-    {
-        while(1)
-        {
-            runFromOsCmd(vAddrExec);
-            break;
-        }
-
-#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-        if (vAddrExec <= MMSJ_HEAP_LIMIT)
-        {
-            #ifdef USE_MALLOC
-                free(vAddrExec);
-            #else
-                msfree(vAddrExec);
-            #endif
-        }
-#endif            
-    }
-
-    verifyWindows(TASK_Prog03);
-
-    OSTaskDel(OS_PRIO_SELF);
-}
-
-//-----------------------------------------------------------------------------
-void prog04Task(void *pdata)
-{
-    unsigned long vAddrExec = (unsigned long*)pdata;
-
-    if (vAddrExec)
-    {
-        while(1)
-        {
-            runFromOsCmd(vAddrExec);
-            break;
-        }
-
-#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-        if (vAddrExec <= MMSJ_HEAP_LIMIT)
-        {
-            #ifdef USE_MALLOC
-                free(vAddrExec);
-            #else
-                msfree(vAddrExec);
-            #endif
-        }
-#endif
-    }
-
-    verifyWindows(TASK_Prog04);
-
-    OSTaskDel(OS_PRIO_SELF);
-}
-
-//-----------------------------------------------------------------------------
-void prog05Task(void *pdata)
-{
-    unsigned long vAddrExec = (unsigned long*)pdata;
-
-    if (vAddrExec)
-    {
-        while(1)
-        {
-            runFromOsCmd(vAddrExec);
-            break;
-        }
-
-#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-        if (vAddrExec <= MMSJ_HEAP_LIMIT)
-        {
-            #ifdef USE_MALLOC
-                free(vAddrExec);
-            #else
-                msfree(vAddrExec);
-            #endif
-        }
-#endif
-    }
-
-    verifyWindows(TASK_Prog05);
-
-    OSTaskDel(OS_PRIO_SELF);
-}
-
-//-----------------------------------------------------------------------------
-void prog06Task(void *pdata)
-{
-    unsigned long vAddrExec = (unsigned long*)pdata;
-
-    if (vAddrExec)
-    {
-        while(1)
-        {
-            runFromOsCmd(vAddrExec);
-            break;
-        }
-
-/*#if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-        if (vAddrExec <= MMSJ_HEAP_LIMIT)
-        {
-            #ifdef USE_MALLOC
-                free(vAddrExec);
-            #else
-                msfree(vAddrExec);
-            #endif
-        }
-#endif           */ 
-    }
-
-    verifyWindows(TASK_Prog06);
-
-    OSTaskDel(OS_PRIO_SELF);
 }
 
 //-----------------------------------------------------------------------------
@@ -1136,7 +824,8 @@ writeLongSerial("\r\n\0");*/
         }
         else if (!strcmp(linhacomando,"MGUI") && iy == 4)
         {
-            OSTaskCreate(mguiTask, OS_NULL, &StkMgui[STACKSIZEMGUI - 1], TASK_MGUI);
+            mguiFunc(0);
+            printText("\r\n\0");
         }
         else if (!strcmp(linhacomando,"PWD") && iy == 3)
         {
@@ -1723,11 +1412,14 @@ writeLongSerial("\r\n\0");*/
             }
             else if (!strcmp(linhacomando,"BASIC") && iy == 5)
             {
-                memset(basicTaskArg, 0x00, sizeof(basicTaskArg));
+                memset(basicFuncArg, 0x00, sizeof(basicFuncArg));
                 if (linhaarg[0] != 0x00)
-                    memcpy(basicTaskArg, linhaarg, sizeof(basicTaskArg) - 1);
+                    memcpy(basicFuncArg, linhaarg, sizeof(basicFuncArg) - 1);
 
-                OSTaskCreate(basicTask, (void *)basicTaskArg, &StkBasic[STACKSIZEBASIC - 1], TASK_BASIC);
+                basicFunc((void *)basicFuncArg);
+                
+                if (*startBasic == 1)
+                    printText("\r\n\0");
             }
             else
             {
@@ -1850,122 +1542,10 @@ void runFromMGUI(unsigned long vEnderExec, unsigned long vFileBuf)
     signed int nextZ;
     signed int topZ;
     unsigned long vAddressExec[2];
-    INT8U osErr;
-    OS_TCB dataTask;
-    OS_TCB tcb;
 
-    *mguiRunTask = 0x00;
-
-    // Verifica qual task esta liberada
-    for (ix = 0; ix < MGUI_APP_WINDOW_SLOTS; ix++)
-    {
-        // Se nao existir essa task, usa ela
-        if (OSTaskQuery((TASK_Prog01 + ix), &dataTask) != OS_ERR_NONE)
-            break;
-    }
-
-    // Cria Janela
-    if (ix < MGUI_APP_WINDOW_SLOTS)
-    {
-        nextZ = 0;
-        for (iy = 0; iy < MGUI_APP_WINDOW_SLOTS; iy++)
-        {
-            if (mguiListWindows[iy].id != 0)
-            {
-                if ((signed int)mguiListWindows[iy].zOrder >= nextZ)
-                    nextZ = (signed int)mguiListWindows[iy].zOrder + 1;
-            }
-
-            mguiListWindows[iy].active = 0;
-            mguiListWindows[iy].keyTec = 0;
-        }
-
-        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 0;
-        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].keyTec = 0;
-
-        // Ativa a janela que sera chamada
-        mguiListWindows[ix].id = ix + TASK_Prog01;
-        mguiListWindows[ix].loadAddress = vEnderExec;
-        mguiListWindows[ix].zOrder = (char)nextZ;
-        mguiListWindows[ix].active = 1;
-    }
-    else
-    {
-        mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 1;
-        return;
-    }
-
-    // Cria a task
-    osErr = OS_ERR_NONE;
     vAddressExec[0] = vEnderExec;
     vAddressExec[1] = vFileBuf;
-    switch (ix)
-    {
-        case 0:
-            osErr = OSTaskCreate(prog01Task, (void *)vAddressExec, &StkTask01[STACKSIZEMGUI - 1], TASK_Prog01);
-            break;
-        case 1:
-            osErr = OSTaskCreate(prog02Task, (void *)vEnderExec, &StkTask02[STACKSIZEMGUI - 1], TASK_Prog02);
-            break;
-        case 2:
-            osErr = OSTaskCreate(prog03Task, (void *)vEnderExec, &StkTask03[STACKSIZEMGUI - 1], TASK_Prog03);
-            break;
-        case 3:
-            osErr = OSTaskCreate(prog04Task, (void *)vEnderExec, &StkTask04[STACKSIZEMGUI - 1], TASK_Prog04);
-            break;
-        case 4:
-            osErr = OSTaskCreate(prog05Task, (void *)vEnderExec, &StkTask05[STACKSIZEMGUI - 1], TASK_Prog05);
-            break;
-        case 5:
-            osErr = OSTaskCreate(prog06Task, (void *)vEnderExec, &StkTask06[STACKSIZEMGUI - 1], TASK_Prog06);
-            break;
-        default:
-            break;
-    }
-
-    if (osErr != OS_ERR_NONE)
-    {
-        mguiListWindows[ix].id = 0;
-        mguiListWindows[ix].loadAddress = 0;
-        mguiListWindows[ix].zOrder = 0;
-        mguiListWindows[ix].active = 0;
-        mguiListWindows[ix].keyTec = 0;
-
-        topIdx = 0xFF;
-        topZ = -32768;
-        for (iy = 0; iy < MGUI_APP_WINDOW_SLOTS; iy++)
-        {
-            if (mguiListWindows[iy].id == 0)
-                continue;
-
-            if (OSTaskQuery((INT8U)mguiListWindows[iy].id, &tcb) != OS_ERR_NONE)
-                continue;
-
-            if ((signed int)mguiListWindows[iy].zOrder >= topZ)
-            {
-                topZ = (signed int)mguiListWindows[iy].zOrder;
-                topIdx = (unsigned char)iy;
-            }
-        }
-
-        if (topIdx != 0xFF)
-        {
-            mguiListWindows[topIdx].active = 1;
-            mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 0;
-        }
-        else
-        {
-            mguiListWindows[MGUI_WINDOW_MGUI_SLOT].active = 1;
-        }
-
-        return;
-    }
-
-    // Se for um programa de execucao exclusiva, suspende o SO
-    if (0)
-    {
-        OSTaskSuspend(OS_PRIO_SELF);
-    }
+    prog01Func((void *)vAddressExec);
 }
 
 //-----------------------------------------------------------------------------
@@ -4795,13 +4375,8 @@ unsigned long fsMalloc(unsigned long vMemSize)
     unsigned long mMemDef;
 
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)    
-        unsigned int error_code = OS_ERR_NONE;
-
         if (!vMemSize)
             return 0;
-
-        if (heap_sem)
-            OSSemPend(heap_sem, 0, &error_code);
 
         mMemDef = (unsigned long)malloc(vMemSize);
 
@@ -4810,9 +4385,6 @@ unsigned long fsMalloc(unsigned long vMemSize)
             free((void *)mMemDef);
             mMemDef = 0;
         }
-
-        if (heap_sem)
-            OSSemPost(heap_sem);
     #else
         mMemDef = 0;
     #endif
@@ -4823,18 +4395,10 @@ unsigned long fsMalloc(unsigned long vMemSize)
 //-----------------------------------------------------------------------------
 void fsFree(unsigned long vAddress)
 {
-    unsigned int error_code = OS_ERR_NONE;
-
     if (!vAddress)
         return;
 
-    if (heap_sem)
-        OSSemPend(heap_sem, 0, &error_code);
-
     free((void *)vAddress);
-
-    if (heap_sem)
-        OSSemPost(heap_sem);
 }
 
 #ifdef __SO_ST_MFP__

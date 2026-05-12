@@ -124,13 +124,17 @@ extern unsigned char *memVideoFonts; // Fontes para Video, formato igual ao do V
 #define TASK_MGUI_MOUSE   12
 #define TASK_MGUI_MESSAGE 19
 
-// -------------------------------------------------------------------------------
-// Config INI - Busca direta no buffer
-// mguiCfgGet: busca 'key' dentro de '[section]' em 'buf', copia valor em vOutBuf.
+//-----------------------------------------------------------------------------
+// Config INI - Busca direta no buffer de memoria
+// Busca 'key' dentro de '[section]' em memPosConfig; copia o valor em vOutBuf como string.
 // Retorna vOutBuf em caso de sucesso, NULL se nao encontrado.
-// Para usar como int: atoi(mguiCfgGet(buf, "SEC", "KEY", tmp, sizeof(tmp)))
-// -------------------------------------------------------------------------------
+// vOutMax: tamanho do vOutBuf incluindo '\0'
+//-----------------------------------------------------------------------------
+// Like mguiCfgGet but reads from an arbitrary NUL-terminated buffer instead
+// of the global memPosConfig.
+//-----------------------------------------------------------------------------
 char mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax);
+static char mguiCfgGetBuf(unsigned char *buf, char *section, char *key, char *vOutBuf, unsigned char vOutMax);
 
 // -------------------------------------------------------------------------------
 // Funcoes Graficas
