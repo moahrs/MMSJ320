@@ -11,7 +11,7 @@ TEXT_ORIGIN ?= 0x00870000
 
 CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -Iinclude -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
 ASFLAGS_MRI = -m68000 -M --register-prefix-optional --bitwise-or
-LDFLAGS = -T linker_basic.ld -nostdlib -Wl,--defsym=__TEXT_ORIGIN=$(TEXT_ORIGIN)
+LDFLAGS = -m68000 -T linker_basic.ld -nostdlib -Wl,--defsym=__TEXT_ORIGIN=$(TEXT_ORIGIN)
 LDLIBS = -lgcc
 
 SRC_C = \

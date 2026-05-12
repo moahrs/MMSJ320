@@ -65,6 +65,7 @@ static unsigned short noteMousePrevBtn;
 static unsigned char noteDirty;
 static unsigned char noteSelActive;
 static unsigned char noteSelSelecting;
+static unsigned char noteBlockArmed;
 
 static void noteSetMessage(const unsigned char *msg);
 static void noteIndexLines(void);
@@ -100,41 +101,13 @@ static void noteDrawScrollBarV(void);
 static void noteDrawScrollBarH(void);
 static void noteDrawSelectionOverlay(void);
 static void noteDrawCursorBar(void);
+static void noteDrawTextCell(unsigned short line, unsigned short col);
+static unsigned char noteIsCellSelected(unsigned short line, unsigned short col);
+static unsigned char noteCharAt(unsigned short line, unsigned short col);
 static unsigned char noteGetMouseTextPos(unsigned short mx, unsigned short my, unsigned short *line, unsigned short *col);
 static unsigned char noteHandleKey(unsigned int keyRaw);
 static unsigned char notePopupMenu(unsigned char menuId);
 static unsigned char noteExecCommand(unsigned char cmd);
-static unsigned long noteDivU32(unsigned long num, unsigned long den);
-
-//-----------------------------------------------------------------------------
-static unsigned long noteDivU32(unsigned long num, unsigned long den)
-{
-    unsigned long quot;
-    unsigned long rem;
-    unsigned long bit;
-
-    if (den == 0)
-        return 0;
-
-    quot = 0;
-    rem = 0;
-
-    for (bit = 0x80000000UL; bit != 0; bit >>= 1)
-    {
-        rem <<= 1;
-        if (num & bit)
-            rem |= 1;
-
-        quot <<= 1;
-        if (rem >= den)
-        {
-            rem -= den;
-            quot |= 1;
-        }
-    }
-
-    return quot;
-}
 
 //-----------------------------------------------------------------------------
 void main(void)
@@ -190,6 +163,7 @@ void main(void)
     noteDirty = 0;
     noteSelActive = 0;
     noteSelSelecting = 0;
+    noteBlockArmed = 0;
     noteClipSize = 0;
     noteMousePrevBtn = 0;
     noteSearchText[0] = 0;
@@ -242,6 +216,10 @@ void main(void)
         {
             unsigned short oldTopLine = noteTopLine;
             unsigned short oldHOffset = noteHOffset;
+            unsigned short oldCurLine = noteCurLine;
+            unsigned short oldCurCol = noteCurCol;
+            unsigned char oldSelActive = noteSelActive;
+            unsigned char oldSelSelecting = noteSelSelecting;
             
             if (!noteHandleKey(keyRaw))
                 running = 0;
@@ -249,6 +227,23 @@ void main(void)
             if (oldTopLine != noteTopLine || oldHOffset != noteHOffset)
             {
                 noteDrawEditorPage(1);
+            }
+            else
+            {
+                if (oldSelActive == noteSelActive &&
+                    oldSelSelecting == noteSelSelecting &&
+                    !noteSelActive &&
+                    !noteSelSelecting &&
+                    (oldCurLine != noteCurLine || oldCurCol != noteCurCol))
+                {
+                    noteDrawTextCell(oldCurLine, oldCurCol);
+                    noteDrawCursorBar();
+                }
+                else
+                {
+                    noteDrawEditorContent(1);
+                }
+                noteDrawStatus();
             }
         }
 
@@ -285,7 +280,7 @@ void main(void)
                 if (noteLineCount > NOTE_VISIBLE)
                 {
                     range = noteLineCount - NOTE_VISIBLE;
-                    clickLine = (unsigned short)noteDivU32((unsigned long)(mouseData.vposty - NOTE_SCRL_Y) * (unsigned long)range, (unsigned long)NOTE_SCRL_H);
+                    clickLine = (unsigned short)((unsigned long)(mouseData.vposty - NOTE_SCRL_Y) * range / NOTE_SCRL_H);
                     if (clickLine > range)
                         clickLine = range;
                     noteTopLine = clickLine;
@@ -304,7 +299,7 @@ void main(void)
                 if (noteMaxLineLen > NOTE_CHARS_LINE)
                 {
                     rangeH = noteMaxLineLen - NOTE_CHARS_LINE;
-                    clickCol = (unsigned short)noteDivU32((unsigned long)(mouseData.vpostx - NOTE_SCRL_H_X) * (unsigned long)rangeH, (unsigned long)NOTE_SCRL_H_W);
+                    clickCol = (unsigned short)((unsigned long)(mouseData.vpostx - NOTE_SCRL_H_X) * rangeH / NOTE_SCRL_H_W);
                     if (clickCol > rangeH)
                         clickCol = rangeH;
                     noteHOffset = clickCol;
@@ -313,40 +308,89 @@ void main(void)
             }
             else if (noteGetMouseTextPos(mouseData.vpostx, mouseData.vposty, &lpos, &cpos))
             {
-                noteSelSelecting = 1;
-                noteSelActive = 0;
-                noteSelStartLine = lpos;
-                noteSelStartCol = cpos;
-                noteSelEndLine = lpos;
-                noteSelEndCol = cpos;
-                noteCurLine = lpos;
-                noteCurCol = cpos;
-                noteDrawEditorContent(1);
+                unsigned short oldTopLine = noteTopLine;
+                unsigned short oldHOffset = noteHOffset;
+                unsigned short oldCurLine = noteCurLine;
+                unsigned short oldCurCol = noteCurCol;
+                unsigned char hadSelection = noteSelActive;
+                unsigned char needFullContent = 0;
+
+                if (noteSelSelecting)
+                {
+                    noteCurLine = lpos;
+                    noteCurCol = cpos;
+                    noteSelEndLine = lpos;
+                    noteSelEndCol = cpos;
+                    noteSelSelecting = 0;
+
+                    if (noteSelStartLine == noteSelEndLine && noteSelStartCol == noteSelEndCol)
+                    {
+                        noteSelActive = 0;
+                        noteSetMessage((unsigned char *)"Block canceled");
+                    }
+                    else
+                    {
+                        noteSelActive = 1;
+//                        noteSetMessage((unsigned char *)"BEnd");
+                    }
+
+                    noteBlockArmed = 0;
+                    needFullContent = 1;
+                }
+                else
+                {
+                    if (noteSelActive)
+                    {
+                        noteSelActive = 0;
+                        needFullContent = 1;
+                    }
+
+                    if (noteCurLine == lpos && noteCurCol == cpos && noteBlockArmed)
+                    {
+                        noteSelSelecting = 1;
+                        noteSelStartLine = lpos;
+                        noteSelStartCol = cpos;
+                        noteSelEndLine = lpos;
+                        noteSelEndCol = cpos;
+                        noteBlockArmed = 0;
+//                        noteSetMessage((unsigned char *)"BIni");
+                    }
+                    else
+                    {
+                        noteCurLine = lpos;
+                        noteCurCol = cpos;
+                        noteBlockArmed = 1;
+//                        noteSetMessage((unsigned char *)"Click again for BIni");
+                    }
+                }
+
+                noteEnsureCursorVisible();
+                if (oldTopLine != noteTopLine || oldHOffset != noteHOffset)
+                {
+                    noteDrawEditorPage(1);
+                }
+                else
+                {
+                    if (needFullContent || hadSelection || noteSelActive || noteSelSelecting)
+                    {
+                        noteDrawEditorContent(1);
+                    }
+                    else if (oldCurLine != noteCurLine || oldCurCol != noteCurCol)
+                    {
+                        noteDrawTextCell(oldCurLine, oldCurCol);
+                        noteDrawCursorBar();
+                    }
+                    noteDrawStatus();
+                }
             }
         }
         else if (mouseData.mouseButton == 0x01 && noteMousePrevBtn == 0x01)
         {
-            if (noteSelSelecting && noteGetMouseTextPos(mouseData.vpostx, mouseData.vposty, &lpos, &cpos))
-            {
-                if (!noteSelActive && (lpos != noteSelStartLine || cpos != noteSelStartCol))
-                    noteSelActive = 1;
-
-                noteSelEndLine = lpos;
-                noteSelEndCol = cpos;
-                noteCurLine = lpos;
-                noteCurCol = cpos;
-                noteDrawEditorContent(1);
-            }
+            /* Selecao por dois cliques: sem arrasto continuo para manter fluidez */
         }
         else if (mouseData.mouseButton != 0x01 && noteMousePrevBtn == 0x01)
         {
-            if (noteSelSelecting)
-            {
-                noteSelSelecting = 0;
-                if (noteSelStartLine == noteSelEndLine && noteSelStartCol == noteSelEndCol)
-                    noteSelActive = 0;
-                noteDrawEditorContent(1);
-            }
+            /* Nada a fazer no release no modo de selecao por dois cliques */
         }
 
         noteMousePrevBtn = mouseData.mouseButton;
@@ -524,6 +568,7 @@ static void noteClearSelection(void)
 {
     noteSelActive = 0;
     noteSelSelecting = 0;
+    noteBlockArmed = 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -1135,6 +1180,15 @@ static void noteDrawStatus(void)
     if (noteDirty)
         strcat((char *)line, " *");
 
+    if (noteSelSelecting)
+    {
+        strcat((char *)line, "  BIni");
+    }
+    else if (noteSelActive)
+    {
+        strcat((char *)line, "  BSel");
+    }
+
     if (noteStatusMsg[0] != 0)
     {
         strcat((char *)line, "  ");
@@ -1154,6 +1208,8 @@ static void noteDrawEditorContent(unsigned char drawCursor)
     unsigned long pos;
     unsigned char ch;
     unsigned short y;
+
+    FillRect(NOTE_TEXT_X, NOTE_Y_TEXT, NOTE_CHARS_LINE * NOTE_CHAR_W, NOTE_VISIBLE * NOTE_LINE_H, nvcorbg);
 
     for (row = 0; row < NOTE_VISIBLE; row++)
     {
@@ -1228,12 +1284,17 @@ static void noteDrawSelectionOverlay(void)
     unsigned short visTo;
     unsigned short y;
     unsigned short x;
-    unsigned short w;
+    unsigned short drawCount;
+    unsigned short i;
+    unsigned char selBuf[NOTE_CHARS_LINE + 1];
 
-    if (!noteSelActive)
+    if (!noteSelActive || noteSelSelecting)
         return;
 
     noteNormalizeSelection(&sl, &sc, &el, &ec);
+
+    if (noteLineCount == 0 || sl >= noteLineCount || el >= noteLineCount)
+        return;
 
     for (ln = sl; ln <= el; ln++)
     {
@@ -1269,9 +1330,19 @@ static void noteDrawSelectionOverlay(void)
 
         x = NOTE_TEXT_X + (unsigned short)((visFrom - noteHOffset) * NOTE_CHAR_W);
         y = NOTE_Y_TEXT + (unsigned short)((ln - noteTopLine) * NOTE_LINE_H);
-        w = (unsigned short)((visTo - visFrom) * NOTE_CHAR_W);
 
-        InvertRect(x, y, w, NOTE_CHAR_H);
+        drawCount = (unsigned short)(visTo - visFrom);
+        if (drawCount == 0)
+            continue;
+
+        if (drawCount > NOTE_CHARS_LINE)
+            drawCount = NOTE_CHARS_LINE;
+
+        for (i = 0; i < drawCount; i++)
+            selBuf[i] = noteCharAt(ln, (unsigned short)(visFrom + i));
+        selBuf[drawCount] = 0;
+
+        writesxy(x, y, 8, selBuf, nvcorbg, nvcorfg);
 
         if (ln == el)
             break;
@@ -1294,9 +1365,102 @@ static void noteDrawCursorBar(void)
     sx = NOTE_TEXT_X + (unsigned short)((noteCurCol - noteHOffset) * NOTE_CHAR_W);
     sy = NOTE_Y_TEXT + (unsigned short)((noteCurLine - noteTopLine) * NOTE_LINE_H);
 
-    cursorChar[0] = 0xFE;
+    if (sx >= 252 || sy >= NOTE_STATUS_Y)
+        return;
+
+    FillRect(sx, sy, NOTE_CHAR_W, NOTE_CHAR_H, nvcorfg);
+    cursorChar[0] = noteCharAt(noteCurLine, noteCurCol);
     cursorChar[1] = 0;
     writesxy(sx, sy, 8, cursorChar, nvcorbg, nvcorfg);
+}
+
+//-----------------------------------------------------------------------------
+static void noteDrawTextCell(unsigned short line, unsigned short col)
+{
+    unsigned short sx;
+    unsigned short sy;
+    unsigned char chbuf[2];
+    unsigned char invert;
+
+    if (line < noteTopLine || line >= (unsigned short)(noteTopLine + NOTE_VISIBLE))
+        return;
+
+    if (col < noteHOffset || col > (unsigned short)(noteHOffset + NOTE_CHARS_LINE))
+        return;
+
+    sx = NOTE_TEXT_X + (unsigned short)((col - noteHOffset) * NOTE_CHAR_W);
+    sy = NOTE_Y_TEXT + (unsigned short)((line - noteTopLine) * NOTE_LINE_H);
+
+    if (sx >= 252 || sy >= NOTE_STATUS_Y)
+        return;
+
+    chbuf[0] = noteCharAt(line, col);
+    chbuf[1] = 0;
+    invert = noteIsCellSelected(line, col);
+
+    FillRect(sx, sy, NOTE_CHAR_W, NOTE_CHAR_H, nvcorbg);
+    if (invert)
+        writesxy(sx, sy, 8, chbuf, nvcorbg, nvcorfg);
+    else
+        writesxy(sx, sy, 8, chbuf, nvcorfg, nvcorbg);
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char noteIsCellSelected(unsigned short line, unsigned short col)
+{
+    unsigned short sl;
+    unsigned short sc;
+    unsigned short el;
+    unsigned short ec;
+
+    if (!noteSelActive || noteSelSelecting)
+        return 0;
+
+    noteNormalizeSelection(&sl, &sc, &el, &ec);
+
+    if (line < sl || line > el)
+        return 0;
+
+    if (line == sl && col < sc)
+        return 0;
+
+    if (line == el && col >= ec)
+        return 0;
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char noteCharAt(unsigned short line, unsigned short col)
+{
+    unsigned long pos;
+    unsigned short i;
+    unsigned char ch;
+
+    if (!noteTextBuf || !noteLines)
+        return ' ';
+
+    if (line >= noteLineCount || line >= NOTE_MAX_LINES)
+        return ' ';
+
+    pos = noteLines[line];
+
+    for (i = 0; i < col && pos < noteBufSize; i++)
+    {
+        ch = noteTextBuf[pos];
+        if (ch == 0x0D || ch == 0x0A || ch == 0)
+            return ' ';
+        pos++;
+    }
+
+    if (pos >= noteBufSize)
+        return ' ';
+
+    ch = noteTextBuf[pos];
+    if (ch == 0x0D || ch == 0x0A || ch == 0 || ch == '\t' || ch < 0x20 || ch >= 0x7F)
+        return ' ';
+
+    return ch;
 }
 
 //-----------------------------------------------------------------------------
@@ -1315,7 +1479,7 @@ static void noteDrawScrollBarV(void)
 
     range = noteLineCount - NOTE_VISIBLE;
 
-    thumbH = (unsigned short)noteDivU32((unsigned long)NOTE_VISIBLE * (unsigned long)NOTE_SCRL_H, (unsigned long)noteLineCount);
+    thumbH = (unsigned short)(((unsigned long)NOTE_VISIBLE * NOTE_SCRL_H) / noteLineCount);
     if (thumbH < 8)
         thumbH = 8;
     if (thumbH > NOTE_SCRL_H)
@@ -1323,7 +1487,7 @@ static void noteDrawScrollBarV(void)
 
     ltmp = noteTopLine;
     ltmp = ltmp * (NOTE_SCRL_H - thumbH);
-    ltmp = noteDivU32(ltmp, (unsigned long)range);
+    ltmp = ltmp / range;
     thumbY = NOTE_SCRL_Y + (unsigned short)ltmp;
 
     FillRect(NOTE_SCRL_X + 1, thumbY, NOTE_SCRL_W - 2, thumbH, nvcorfg);
@@ -1345,7 +1509,7 @@ static void noteDrawScrollBarH(void)
 
     range = noteMaxLineLen - NOTE_CHARS_LINE;
 
-    thumbW = (unsigned short)noteDivU32((unsigned long)NOTE_CHARS_LINE * (unsigned long)NOTE_SCRL_H_W, (unsigned long)noteMaxLineLen);
+    thumbW = (unsigned short)(((unsigned long)NOTE_CHARS_LINE * NOTE_SCRL_H_W) / noteMaxLineLen);
     if (thumbW < 8)
         thumbW = 8;
     if (thumbW > NOTE_SCRL_H_W)
@@ -1353,7 +1517,7 @@ static void noteDrawScrollBarH(void)
 
     ltmp = noteHOffset;
     ltmp = ltmp * (NOTE_SCRL_H_W - thumbW);
-    ltmp = noteDivU32(ltmp, (unsigned long)range);
+    ltmp = ltmp / range;
     thumbX = NOTE_SCRL_H_X + (unsigned short)ltmp;
 
     FillRect(thumbX, NOTE_SCRL_H_Y + 1, thumbW, NOTE_SCRL_H_H - 2, nvcorfg);
@@ -1376,7 +1540,7 @@ static unsigned char noteGetMouseTextPos(unsigned short mx, unsigned short my, u
     if (!noteTextBuf || !noteLines || noteLineCount == 0)
         return 0;
 
-    row = (unsigned short)noteDivU32((unsigned long)(my - NOTE_Y_TEXT), (unsigned long)NOTE_LINE_H);
+    row = (unsigned short)((my - NOTE_Y_TEXT) / NOTE_LINE_H);
     ln = noteTopLine + row;
     
     if (ln >= noteLineCount)
@@ -1385,7 +1549,7 @@ static unsigned char noteGetMouseTextPos(unsigned short mx, unsigned short my, u
     if (ln >= NOTE_MAX_LINES)
         ln = NOTE_MAX_LINES - 1;
 
-    c = (unsigned short)noteDivU32((unsigned long)(mx - NOTE_TEXT_X), (unsigned long)NOTE_CHAR_W);
+    c = (unsigned short)((mx - NOTE_TEXT_X) / NOTE_CHAR_W);
     c = c + noteHOffset;
 
     ll = noteLineLen(ln);
@@ -1457,7 +1621,16 @@ static unsigned char noteHandleKey(unsigned int keyRaw)
         return 1;
 
     if (code == KEY_ESC)
+    {
+        if (noteSelSelecting || noteSelActive || noteBlockArmed)
+        {
+            noteClearSelection();
+            noteSetMessage((unsigned char *)"Block canceled");
+            return 1;
+        }
+
         return noteExecCommand(CMD_EXIT);
+    }
 
     if (code == KEY_LEFT)
     {
@@ -1654,7 +1827,7 @@ static unsigned char notePopupMenu(unsigned char menuId)
         {
             if (m.vpostx >= x && m.vpostx <= x + w && m.vposty >= y && m.vposty <= y + h)
             {
-                i = (unsigned short)noteDivU32((unsigned long)(m.vposty - y - 3), 10UL);
+                i = (unsigned short)((m.vposty - y - 3) / 10);
                 if (i < count)
                 {
                     if (menuId == MENU_FILES)

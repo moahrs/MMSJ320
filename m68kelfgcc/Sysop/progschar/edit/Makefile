@@ -10,7 +10,7 @@ LST = edit.lst
 TEXT_ORIGIN ?= 0x00000000
 
 CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -Iinclude -I../../include -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
-LDFLAGS = -T linker_edit.ld -nostdlib  -Wl,--emit-relocs -Wl,-Map=$(MAP)
+LDFLAGS = -m68000 -T linker_edit.ld -nostdlib  -Wl,--emit-relocs -Wl,-Map=$(MAP)
 LDLIBS = -lgcc
 
 SRC_C = \

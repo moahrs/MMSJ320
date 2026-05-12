@@ -14,7 +14,7 @@ LIB_DIR = lib
 
 CFLAGS = -m68000 -Wall -Os -std=gnu89 -ffreestanding -nostdlib -w -fcommon -Iinclude -I../../include -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-strict-aliasing
 ASFLAGS_MRI = -m68000 -M --register-prefix-optional --bitwise-or
-LDFLAGS = -T linker_mcalc.ld -nostdlib -Wl,--emit-relocs -Wl,-Map=$(MAP)
+LDFLAGS = -m68000 -T linker_mcalc.ld -nostdlib -Wl,--emit-relocs -Wl,-Map=$(MAP)
 LDLIBS = -lgcc
 
 SRC_C = \
