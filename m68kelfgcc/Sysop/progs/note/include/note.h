@@ -1,69 +1,34 @@
-// Note Viewer - Definicoes, Globais e Ponteiros de Funcao
-// Padrao: todas as funcoes locais sao chamadas via ponteiro (compatibilidade IDE68K)
+// Note Editor - Definicoes e globais
 
-// Layout de Tela (255x191)
-// Titulo   : y=0..12  (showWindow)
-// Texto    : y=15..164 (15 linhas x 10px)
-// Separador: y=173
-// Botao    : y=178..188 (Close)
-// Scrollbar: x=246..253, y=15..164
+#define NOTE_MENU_Y      14
+#define NOTE_MENU_H      10
 
-//#define USE_REALOCABLE_CODE
+#define NOTE_Y_TEXT      28
+#define NOTE_LINE_H      10
+#define NOTE_VISIBLE     13
+#define NOTE_TEXT_X      3
+#define NOTE_CHARS_LINE  39
 
-#define NOTE_Y_TEXT      15      // Y de inicio da area de texto
-#define NOTE_LINE_H      10      // Altura de cada linha em pixels
-#define NOTE_VISIBLE     15      // Numero de linhas visiveis
-#define NOTE_TEXT_X       3      // X de inicio do texto
-#define NOTE_CHARS_LINE  39      // Maximo de caracteres por linha visivel
-#define NOTE_MAX_LINES   500     // Maximo de linhas indexadas
+#define NOTE_CHAR_W      6
+#define NOTE_CHAR_H      8
 
-#define NOTE_SCRL_X     246      // X inicial da barra de rolagem
-#define NOTE_SCRL_Y      15      // Y inicial da barra de rolagem
-#define NOTE_SCRL_H     150      // Altura da trilha da barra de rolagem
-#define NOTE_SCRL_W       7      // Largura da barra de rolagem
+#define NOTE_SCRL_X      246
+#define NOTE_SCRL_Y      28
+#define NOTE_SCRL_H      130
+#define NOTE_SCRL_W      7
 
-#define NOTE_SCRL_H_X       2      // X inicial da barra de rolagem
-#define NOTE_SCRL_H_Y     167      // Y inicial da barra de rolagem
-#define NOTE_SCRL_H_H       6      // Altura da trilha da barra de rolagem
-#define NOTE_SCRL_H_W     244      // Largura da barra de rolagem
+#define NOTE_SCRL_H_X    2
+#define NOTE_SCRL_H_Y    162
+#define NOTE_SCRL_H_H    6
+#define NOTE_SCRL_H_W    244
 
-#define NOTE_CLOSE_X    100      // X do botao Close
-#define NOTE_CLOSE_Y    178      // Y do botao Close
-#define NOTE_CLOSE_W     56      // Largura do botao Close
-#define NOTE_CLOSE_H     10      // Altura do botao Close
+#define NOTE_STATUS_Y    178
 
-// Variaveis Globais
-unsigned char  *noteTextBuf;     // Buffer com o conteudo do arquivo
-unsigned long   noteBufSize;     // Tamanho do arquivo em bytes
-unsigned long  *noteLines;       // Array (dinamico) de offsets de inicio de cada linha
-unsigned short  noteLineCount;   // Total de linhas no arquivo
-unsigned short  noteMaxLineLen;  // Tamanho da linha mais longa (para scroll horizontal)
-unsigned short  noteTopLine;     // Linha do topo da tela (scroll vertical)
-unsigned short  noteHOffset;     // Offset horizontal (scroll horizontal)
-unsigned char   nvcorfg;         // Cor do texto
-unsigned char   nvcorbg;         // Cor do fundo
-
-// Prototipos das funcoes locais (definicao real em note.c)
-#ifndef USE_REALOCABLE_CODE
-void drawNote(void);
-void displayNotePage(void);
-void drawScrollBarV(void);
-void drawScrollBarH(void);
-void calcNoteMaxLineLen(unsigned long fileSize);
-#else
-void drawNoteDef(void);
-void displayNotePageDef(void);
-void drawScrollBarVDef(void);
-void drawScrollBarHDef(void);
-
-// Ponteiros de funcao locais (padrao IDE68K)
-void (*drawNote)(void);
-void (*displayNotePage)(void);
-void (*drawScrollBarV)(void);
-void (*drawScrollBarH)(void);
-
-// Ponteiros para funcoes da stdlib (chamadas via ponteiro para evitar problemas IDE68K)
-char * (*nmystrcpy)(char *, char *);
-void * (*nmymemset)(void *, int, int);
-char * (*nmyitoa)(int, char *, int);
-#endif
+unsigned char  *noteTextBuf;
+unsigned long   noteBufSize;
+unsigned long  *noteLines;
+unsigned short  noteLineCount;
+unsigned short  noteTopLine;
+unsigned short  noteHOffset;
+unsigned char   nvcorfg;
+unsigned char   nvcorbg;
