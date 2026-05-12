@@ -70,7 +70,7 @@ void main(void)
 
     if (!edFileBuf)
     {
-        printText("Sem memoria para edFileBuf\r\n");
+        printText("No memory for edFileBuf\r\n");
         return;
     }
 
@@ -89,7 +89,7 @@ void main(void)
 
         if (ret == 0)
         {
-            printText("Erro carregando arquivo\r\n");
+            printText("Error Loading File\r\n");
             msfree(edFileBuf);
             edFileBuf = 0;
             return;

@@ -2123,11 +2123,9 @@ void initscr(void)
     vdp_set_bdcolor(vc_bgcolor);
 }
 
-void main(char *argc, char **argv) {
+void main(void) {
     char *comma;
-
-    (void)argc;
-    (void)argv;
+    char tempName[128];
 
     mcalc_start_file[0] = 0;
     if (*paramBasic != 0)

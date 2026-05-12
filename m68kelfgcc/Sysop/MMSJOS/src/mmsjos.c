@@ -323,6 +323,14 @@ HEADER *_allocp;
 #define FS_ENABLE_WRITE_VERIFY 1
 
 static unsigned char basicFuncArg[64];
+static unsigned char mmsjosExecPath[256];
+
+static void mmsjosSetDefaultExecPath(void);
+static unsigned char mmsjosSaveConfig(void);
+static void mmsjosLoadConfig(void);
+static void mmsjosBuildExeName(const unsigned char *cmd, unsigned char *out, unsigned short outSize);
+static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char *outName, unsigned long *outCluster);
+static void mmsjosBuildArgPath(const unsigned char *arg, unsigned char *out, unsigned short outSize);
 
 void keyboardFunc(void *pdata);
 void inputFunc(void *pdata);   
@@ -358,6 +366,244 @@ void fsVer(void)
     printText("\r\n\0");
     printText("MMSJ-OS v"versionMMSJOS);
     printText("\r\n\0");
+}
+
+//-----------------------------------------------------------------------------
+static void mmsjosSetDefaultExecPath(void)
+{
+    strcpy((char *)mmsjosExecPath, "/;/EDIT;/MCALC");
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char mmsjosSaveConfig(void)
+{
+    unsigned char cfg[384];
+    unsigned long len;
+
+    cfg[0] = 0;
+    strcat((char *)cfg, "PATH=");
+    strcat((char *)cfg, (char *)mmsjosExecPath);
+    strcat((char *)cfg, "\n");
+
+    len = (unsigned long)strlen((char *)cfg);
+    if (saveFile((unsigned char *)"MMSJOS.CFG", cfg, len) != RETURN_OK)
+        return 0;
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+static void mmsjosLoadConfig(void)
+{
+    unsigned char cfg[384];
+    unsigned long sz;
+    char *line;
+    char *next;
+
+    mmsjosSetDefaultExecPath();
+
+    sz = loadFile((unsigned char *)"MMSJOS.CFG", cfg);
+    if (sz == 0)
+    {
+        mmsjosSaveConfig();
+        return;
+    }
+
+    if (sz >= sizeof(cfg))
+        sz = sizeof(cfg) - 1;
+
+    cfg[sz] = 0;
+    line = (char *)cfg;
+
+    while (*line)
+    {
+        unsigned int i;
+
+        next = strchr(line, '\n');
+        if (next)
+        {
+            *next = 0;
+            if (next > line && *(next - 1) == '\r')
+                *(next - 1) = 0;
+        }
+
+        if (!strncmp(line, "PATH=", 5))
+        {
+            strncpy((char *)mmsjosExecPath, line + 5, sizeof(mmsjosExecPath) - 1);
+            mmsjosExecPath[sizeof(mmsjosExecPath) - 1] = 0;
+
+            for (i = 0; mmsjosExecPath[i] != 0; i++)
+                mmsjosExecPath[i] = (unsigned char)toupper(mmsjosExecPath[i]);
+        }
+
+        if (!next)
+            break;
+
+        line = next + 1;
+    }
+
+    if (mmsjosExecPath[0] == 0)
+        mmsjosSetDefaultExecPath();
+}
+
+//-----------------------------------------------------------------------------
+static void mmsjosBuildExeName(const unsigned char *cmd, unsigned char *out, unsigned short outSize)
+{
+    unsigned short i;
+    unsigned char hasDot;
+
+    hasDot = 0;
+    i = 0;
+    while (cmd[i] != 0)
+    {
+        if (cmd[i] == '.')
+            hasDot = 1;
+
+        if (i < (unsigned short)(outSize - 1))
+            out[i] = cmd[i];
+
+        i++;
+    }
+
+    if (i >= (unsigned short)(outSize - 1))
+        i = (unsigned short)(outSize - 1);
+
+    out[i] = 0;
+
+    if (!hasDot && i < (unsigned short)(outSize - 5))
+    {
+        out[i++] = '.';
+        out[i++] = 'E';
+        out[i++] = 'X';
+        out[i++] = 'E';
+        out[i] = 0;
+    }
+}
+
+//-----------------------------------------------------------------------------
+static void mmsjosBuildArgPath(const unsigned char *arg, unsigned char *out, unsigned short outSize)
+{
+    unsigned short pos;
+
+    if (outSize == 0)
+        return;
+
+    out[0] = 0;
+
+    if (!arg || arg[0] == 0)
+        return;
+
+    if (arg[0] == '/')
+    {
+        strncpy((char *)out, (const char *)arg, outSize - 1);
+        out[outSize - 1] = 0;
+        return;
+    }
+
+    strncpy((char *)out, (const char *)vdiratu, outSize - 1);
+    out[outSize - 1] = 0;
+
+    pos = (unsigned short)strlen((char *)out);
+    if (pos == 0)
+    {
+        out[0] = '/';
+        out[1] = 0;
+        pos = 1;
+    }
+
+    if (pos > 0 && out[pos - 1] != '/' && pos < (unsigned short)(outSize - 1))
+    {
+        out[pos++] = '/';
+        out[pos] = 0;
+    }
+
+    strncat((char *)out, (const char *)arg, outSize - 1 - pos);
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char *outName, unsigned long *outCluster)
+{
+    unsigned long curCluster;
+    unsigned char pathBuf[256];
+    unsigned char token[128];
+    unsigned short i;
+
+    curCluster = vclusterdir;
+
+    if (strchr((char *)progName, '/'))
+    {
+        if (fsFindDirPath((char *)progName, FIND_PATH_LAST) != FIND_PATH_RET_ERROR)
+        {
+            vclusterdir = vretpath.ClusterDir;
+            if (fsFindInDir(vretpath.Name, TYPE_FILE) < ERRO_D_START)
+            {
+                strcpy((char *)outName, vretpath.Name);
+                *outCluster = vretpath.ClusterDir;
+                vclusterdir = curCluster;
+                return 1;
+            }
+        }
+
+        vclusterdir = curCluster;
+        return 0;
+    }
+
+    if (fsFindInDir((char *)progName, TYPE_FILE) < ERRO_D_START)
+    {
+        strcpy((char *)outName, (char *)progName);
+        *outCluster = vclusterdir;
+        vclusterdir = curCluster;
+        return 1;
+    }
+
+    strncpy((char *)pathBuf, (char *)mmsjosExecPath, sizeof(pathBuf) - 1);
+    pathBuf[sizeof(pathBuf) - 1] = 0;
+
+    i = 0;
+    while (pathBuf[i] != 0)
+    {
+        unsigned short t = 0;
+        unsigned char candidate[160];
+        unsigned short c = 0;
+
+        while (pathBuf[i] == ';')
+            i++;
+
+        if (pathBuf[i] == 0)
+            break;
+
+        while (pathBuf[i] != 0 && pathBuf[i] != ';' && t < (unsigned short)(sizeof(token) - 1))
+            token[t++] = pathBuf[i++];
+
+        token[t] = 0;
+
+        if (token[0] == 0)
+            continue;
+
+        strcpy((char *)candidate, (char *)token);
+        c = (unsigned short)strlen((char *)candidate);
+        if (c > 0 && candidate[c - 1] != '/')
+        {
+            candidate[c++] = '/';
+            candidate[c] = 0;
+        }
+        strcat((char *)candidate, (char *)progName);
+
+        if (fsFindDirPath((char *)candidate, FIND_PATH_LAST) != FIND_PATH_RET_ERROR)
+        {
+            vclusterdir = vretpath.ClusterDir;
+            if (fsFindInDir(vretpath.Name, TYPE_FILE) < ERRO_D_START)
+            {
+                strcpy((char *)outName, vretpath.Name);
+                *outCluster = vretpath.ClusterDir;
+                vclusterdir = curCluster;
+                return 1;
+            }
+        }
+    }
+
+    vclusterdir = curCluster;
+    return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -419,6 +665,7 @@ void main(void)
     memInit();
 
     fsChangeDir("/");
+    mmsjosLoadConfig();
 
     printText("Ok\r\n\0");
     printText("#>");
@@ -1422,26 +1669,46 @@ writeLongSerial("\r\n\0");*/
                 if (*startBasic == 1)
                     printText("\r\n\0");
             }
+            else if (!strcmp(linhacomando,"PATH") && iy == 4)
+            {
+                if (linhaarg[0] == 0x00)
+                {
+                    printText(mmsjosExecPath);
+                    printText("\r\n\0");
+                }
+                else
+                {
+                    strncpy((char *)mmsjosExecPath, (char *)linhaarg, sizeof(mmsjosExecPath) - 1);
+                    mmsjosExecPath[sizeof(mmsjosExecPath) - 1] = 0;
+
+                    if (!mmsjosSaveConfig())
+                        vretfat = ERRO_B_WRITE_FILE;
+                }
+
+                ix = 255;
+            }
             else
             {
-                // Verifica se tem Arquivo com esse nome na pasta atual no disco
-                ix = iy;
-                linhacomando[ix] = '.';
-                ix++;
-                linhacomando[ix] = 'E'; // 'B';
-                ix++;
-                linhacomando[ix] = 'X'; // 'I';
-                ix++;
-                linhacomando[ix] = 'E'; // 'N';
-                ix++;
-                linhacomando[ix] = '\0';
+                unsigned char progName[80];
+                unsigned char foundName[32];
+                unsigned char execArg[128];
+                unsigned long foundCluster;
+                unsigned long oldCluster;
 
-                vretfat = fsFindInDir(linhacomando, TYPE_FILE);
-                if (vretfat <= ERRO_D_START)
+                mmsjosBuildExeName(linhacomando, progName, sizeof(progName));
+
+                foundCluster = vclusterdir;
+                if (mmsjosFindExecutable(progName, foundName, &foundCluster))
                 {
+                    oldCluster = vclusterdir;
+                    vclusterdir = foundCluster;
+                    vretpath.ClusterDirAtu = foundCluster; /* ensure loadFileSize starts from right dir */
+
                     #ifdef USE_RELOC_LOAD_PROGS
-                        strcpy(paramBasic, linhaarg);
-                        if (loadMbinAndRun(linhacomando, 1) != 0)
+                        mmsjosBuildArgPath(linhaarg, execArg, sizeof(execArg));
+                        paramBasic[0] = '\0';
+                        strcpy(paramBasic, execArg);
+                        if (loadMbinAndRun(foundName, 1) != 0)
                             printText("Error Executing File\r\n\0");
                     #else
                         // Slot fixo para apps gerais: 0x00880000
@@ -1450,8 +1717,9 @@ writeLongSerial("\r\n\0");*/
                         printText("Loading File in \0");
                         printText(sqtdtam);
                         printText("h\r\n\0");
-                        vsizeProg = loadFile(linhacomando, (unsigned long*)vEnderExec);
-                        strcpy(paramBasic, linhaarg);
+                        vsizeProg = loadFile(foundName, (unsigned long*)vEnderExec);
+                        mmsjosBuildArgPath(linhaarg, execArg, sizeof(execArg));
+                        strcpy(paramBasic, execArg);
                         strcat(paramBasic, ",");
                         ltoa(vsizeProg, sqtdtam, 10);
                         strcat(paramBasic, sqtdtam);
@@ -1463,6 +1731,8 @@ writeLongSerial("\r\n\0");*/
                                 printText("Loading File Error...\r\n\0");
                         }
                     #endif
+
+                    vclusterdir = oldCluster;
 
                     ix = 255;
                 }

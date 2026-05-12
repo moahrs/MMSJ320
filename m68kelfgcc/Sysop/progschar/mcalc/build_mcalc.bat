@@ -67,5 +67,5 @@ echo.
 echo Artefatos gerados:
 dir mcalc.elf mcalc.exe mcalc.map mcalc.lst
 copy /Y mcalc.exe D:\PROJETOS\MMSJ320\HD_ATU\MCALC.EXE
-copy /Y mcalc.exe F:\MCALC.EXE
+copy /Y mcalc.exe F:\MCALC\MCALC.EXE
 exit /b 0
