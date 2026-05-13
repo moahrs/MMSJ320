@@ -97,6 +97,7 @@ static unsigned char noteExitRequest(void);
 static void noteDrawMenuBar(void);
 static void noteDrawStatus(void);
 static void noteDrawVisibleRow(unsigned short row);
+static void noteRedrawVisibleLine(unsigned short line);
 static void noteRedrawVisibleRowsFrom(unsigned short line);
 static void noteDrawEditorContent(unsigned char drawCursor);
 static void noteDrawEditorPage(unsigned char drawCursor);
@@ -274,7 +275,13 @@ void main(void)
             {
                 if (oldBufSize != noteBufSize || oldLineCount != noteLineCount)
                 {
-                    noteRedrawVisibleRowsFrom((oldCurLine < noteCurLine) ? oldCurLine : noteCurLine);
+                    unsigned short redrawFrom;
+                    redrawFrom = (oldCurLine < noteCurLine) ? oldCurLine : noteCurLine;
+
+                    if (oldLineCount != noteLineCount)
+                        noteRedrawVisibleRowsFrom(redrawFrom);
+                    else
+                        noteRedrawVisibleLine(redrawFrom);
 
                     if (noteSelActive)
                         noteDrawSelectionOverlay();
@@ -1410,6 +1417,21 @@ static void noteDrawVisibleRow(unsigned short row)
 
     FillRect(NOTE_TEXT_X, y, NOTE_CHARS_LINE * NOTE_CHAR_W, NOTE_LINE_H, nvcorbg);
     writesxy(NOTE_TEXT_X, y, 8, linebuf, nvcorfg, nvcorbg);
+}
+
+//-----------------------------------------------------------------------------
+static void noteRedrawVisibleLine(unsigned short line)
+{
+    unsigned short row;
+
+    if (line < noteTopLine)
+        return;
+
+    row = (unsigned short)(line - noteTopLine);
+    if (row >= NOTE_VISIBLE)
+        return;
+
+    noteDrawVisibleRow(row);
 }
 
 //-----------------------------------------------------------------------------
