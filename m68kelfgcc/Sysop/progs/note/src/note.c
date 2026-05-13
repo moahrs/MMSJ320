@@ -220,7 +220,7 @@ void main(void)
 
         getMouseData(0, &mouseData);
         getMouseData(1, &mouseData);
-        keyRaw = (unsigned int)mguiListWindows[0].keyTec;
+        keyRaw = (unsigned int)mguiListWindows[6].keyTec;
 
         if (keyRaw != 0)
         {
@@ -1073,7 +1073,7 @@ static unsigned char notePromptStatus(const unsigned char *label, unsigned char 
         }
 
         getMouseData(1, &m);
-        keyRaw = (unsigned int)mguiListWindows[0].keyTec;
+        keyRaw = (unsigned int)mguiListWindows[6].keyTec;
         if (keyRaw == 0)
             continue;
 
@@ -2122,7 +2122,7 @@ static unsigned char notePopupMenu(unsigned char menuId)
 
         getMouseData(0, &m);
         getMouseData(1, &m);
-        keyRaw = (unsigned int)mguiListWindows[0].keyTec;
+        keyRaw = (unsigned int)mguiListWindows[6].keyTec;
         keyCode = (unsigned char)(keyRaw & 0xFF);
 
         if (keyCode == KEY_ESC)

@@ -53,7 +53,7 @@ void myTimerBefore(void *p)
 
     ctx = (TIMER_CTX *)p;
 
-    mprintf("\n[TIMER BEFORE] tick atual = %lu\n", ctx->tick);
+    mprintf("[TIMER BEFORE] tick atual = %lu\r\n", ctx->tick);
 }
 
 
@@ -63,7 +63,7 @@ void myTimerAfter(void *p)
 
     ctx = (TIMER_CTX *)p;
 
-    mprintf("[TIMER AFTER] tick depois da rotina normal = %lu\n", ctx->tick);
+    mprintf("[TIMER AFTER] tick depois da rotina normal = %lu\r\n", ctx->tick);
 
     /* desativa depois de executar uma vez */
     hookTable[HOOK_TIMER_AFTER].magic = 0;
@@ -80,7 +80,7 @@ void myKeyboardBefore(void *p)
 
     ctx = (KEY_CTX *)p;
 
-    mprintf("\n[KEY BEFORE] raw = %u ascii = %c\n", ctx->raw, ctx->ascii);
+    mprintf("[KEY BEFORE] raw = %u ascii = %c\r\n", ctx->raw, ctx->ascii);
 
     /* exemplo: troca a tecla A por Z antes da rotina normal */
     if (ctx->ascii == 'A')
@@ -96,7 +96,7 @@ void myKeyboardAfter(void *p)
 
     ctx = (KEY_CTX *)p;
 
-    mprintf("[KEY AFTER] ascii final = %c\n", ctx->ascii);
+    mprintf("[KEY AFTER] ascii final = %c\r\n", ctx->ascii);
 
     hookTable[HOOK_KEYBOARD_AFTER].magic = 0;
 }
@@ -121,13 +121,13 @@ void installHook(int hookNum, void (*func)(void *))
 void rotinaNormalTimer(TIMER_CTX *ctx)
 {
     ctx->tick++;
-    mprintf("Rotina normal TIMER executou. tick = %lu\n", ctx->tick);
+    mprintf("Rotina normal TIMER executou. tick = %lu\r\n", ctx->tick);
 }
 
 
 void rotinaNormalKeyboard(KEY_CTX *ctx)
 {
-    mprintf("Rotina normal KEYBOARD recebeu ascii = %c\n", ctx->ascii);
+    mprintf("Rotina normal KEYBOARD recebeu ascii = %c\r\n", ctx->ascii);
 }
 
 
@@ -189,7 +189,7 @@ int main(void)
         hookTable[i].addr = 0;
     }
 
-    mprintf("Instalando hooks...\n");
+    mprintf("Instalando hooks...\r\n");
 
     installHook(HOOK_TIMER_BEFORE, myTimerBefore);
     installHook(HOOK_TIMER_AFTER, myTimerAfter);
@@ -197,10 +197,10 @@ int main(void)
     installHook(HOOK_KEYBOARD_BEFORE, myKeyboardBefore);
     installHook(HOOK_KEYBOARD_AFTER, myKeyboardAfter);
 
-    mprintf("\n--- Simulando interrupcao TIMER ---\n");
+    mprintf("--- Simulando interrupcao TIMER ---\r\n");
     IntTimer();
 
-    mprintf("\n--- Simulando interrupcao KEYBOARD ---\n");
+    mprintf("--- Simulando interrupcao KEYBOARD ---\r\n");
     IntKeyboard();
 
     return 0;
