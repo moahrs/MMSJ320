@@ -17,8 +17,6 @@
 
 #include "testes.h"
 
-#include <stdio.h>
-
 /* -------------------------------------------------- */
 /* CALL HOOK GENERICO                                 */
 /* -------------------------------------------------- */
@@ -55,7 +53,7 @@ void myTimerBefore(void *p)
 
     ctx = (TIMER_CTX *)p;
 
-    printf("\n[TIMER BEFORE] tick atual = %lu\n", ctx->tick);
+    mprintf("\n[TIMER BEFORE] tick atual = %lu\n", ctx->tick);
 }
 
 
@@ -65,7 +63,7 @@ void myTimerAfter(void *p)
 
     ctx = (TIMER_CTX *)p;
 
-    printf("[TIMER AFTER] tick depois da rotina normal = %lu\n", ctx->tick);
+    mprintf("[TIMER AFTER] tick depois da rotina normal = %lu\n", ctx->tick);
 
     /* desativa depois de executar uma vez */
     hookTable[HOOK_TIMER_AFTER].magic = 0;
@@ -82,7 +80,7 @@ void myKeyboardBefore(void *p)
 
     ctx = (KEY_CTX *)p;
 
-    printf("\n[KEY BEFORE] raw = %u ascii = %c\n", ctx->raw, ctx->ascii);
+    mprintf("\n[KEY BEFORE] raw = %u ascii = %c\n", ctx->raw, ctx->ascii);
 
     /* exemplo: troca a tecla A por Z antes da rotina normal */
     if (ctx->ascii == 'A')
@@ -98,7 +96,7 @@ void myKeyboardAfter(void *p)
 
     ctx = (KEY_CTX *)p;
 
-    printf("[KEY AFTER] ascii final = %c\n", ctx->ascii);
+    mprintf("[KEY AFTER] ascii final = %c\n", ctx->ascii);
 
     hookTable[HOOK_KEYBOARD_AFTER].magic = 0;
 }
@@ -123,13 +121,13 @@ void installHook(int hookNum, void (*func)(void *))
 void rotinaNormalTimer(TIMER_CTX *ctx)
 {
     ctx->tick++;
-    printf("Rotina normal TIMER executou. tick = %lu\n", ctx->tick);
+    mprintf("Rotina normal TIMER executou. tick = %lu\n", ctx->tick);
 }
 
 
 void rotinaNormalKeyboard(KEY_CTX *ctx)
 {
-    printf("Rotina normal KEYBOARD recebeu ascii = %c\n", ctx->ascii);
+    mprintf("Rotina normal KEYBOARD recebeu ascii = %c\n", ctx->ascii);
 }
 
 
@@ -191,7 +189,7 @@ int main(void)
         hookTable[i].addr = 0;
     }
 
-    printf("Instalando hooks...\n");
+    mprintf("Instalando hooks...\n");
 
     installHook(HOOK_TIMER_BEFORE, myTimerBefore);
     installHook(HOOK_TIMER_AFTER, myTimerAfter);
@@ -199,10 +197,10 @@ int main(void)
     installHook(HOOK_KEYBOARD_BEFORE, myKeyboardBefore);
     installHook(HOOK_KEYBOARD_AFTER, myKeyboardAfter);
 
-    printf("\n--- Simulando interrupcao TIMER ---\n");
+    mprintf("\n--- Simulando interrupcao TIMER ---\n");
     IntTimer();
 
-    printf("\n--- Simulando interrupcao KEYBOARD ---\n");
+    mprintf("\n--- Simulando interrupcao KEYBOARD ---\n");
     IntKeyboard();
 
     return 0;
