@@ -181,7 +181,7 @@ int loadMbinAndRun(char *filename, char porig)
         msfree(fileBuf);
         return -10;
     }
-    
+
     if (porig == 1)
     {
         runFromOsCmd((unsigned long)vEnderExec);
@@ -1056,15 +1056,34 @@ writeLongSerial("\r\n\0");*/
             fsVer();
             printText("\r\n\0");
         }
-        else if (!strcmp(linhacomando,"DIR") && iy == 3)
+        else if (!strcmp(linhacomando,"LS") && iy == 2)
         {
+            char pNameFile[13];
             pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
             fsListDir(pDir, linhaarg);
             ix = 0;
 
             while (pDir[ix].Name[0] != 0)
             {
-                mprintf("%s.%s %s %ld %s\r\n\0", pDir[ix].Name, pDir[ix].Ext, pDir[ix].Attr, pDir[ix].Size, pDir[ix].Modify);
+                if (pDir[ix].Attr[1] == 'V')
+                {
+                    mprintf("          Disk name is %s%s\r\n\r\n\0", pDir[ix].Name, pDir[ix].Ext);
+                }
+                else
+                {
+                    strcpy(pNameFile, pDir[ix].Name);
+
+                    if (pDir[ix].Ext[0] != 0)
+                    {
+                        strcat(pNameFile, ".");
+                        strcat(pNameFile, pDir[ix].Ext);
+                    }
+
+                    if (pDir[ix].Attr[1] == 'D')
+                        strcat(pNameFile, "/");
+
+                    mprintf("    %s %s %s\r\n\0", (pDir[ix].Attr[1] == 'D' ? "     " : pDir[ix].Size), pDir[ix].Modify, pNameFile);
+                }
                 ix++;
             }
 
@@ -1080,7 +1099,7 @@ writeLongSerial("\r\n\0");*/
             printText(vdiratu);
             printText("\r\n\0");
         }
-        else if (iy == 2 && (!strcmp(linhacomando,"LS") ||
+        else if (iy == 2 && (!strcmp(linhacomando,"XX") ||
                              !strcmp(linhacomando,"RM") ||
                              !strcmp(linhacomando,"CP")))
         {
@@ -1133,7 +1152,7 @@ writeLongSerial("\r\n\0");*/
             if (fsFindInDir(NULL, TYPE_FIRST_ENTRY) >= ERRO_D_START)
             {
                 printText("File not found..\r\n\0");
-                if (strcmp(linhacomando,"LS"))
+                if (strcmp(linhacomando,"XX"))
                     vretfat = ERRO_B_NOT_FOUND;
             }
             else
@@ -1172,7 +1191,7 @@ writeLongSerial("\r\n\0");*/
                         vparam[ix] = '\0';
                     }
 
-                    if (!strcmp(linhacomando,"LS"))
+                    if (!strcmp(linhacomando,"XX"))
                     {
                         if (vrettype == FIND_PATH_RET_FOLDER || (vrettype != FIND_PATH_RET_FOLDER && matches_wildcard(vretpath.Name, vparam)))
                         {
@@ -5713,7 +5732,7 @@ void fsListDir(FILES_DIR * dir, unsigned char *param)
         {
             fsGetDirAtuData(&vdirfiles);
 
-            if (vdirfiles.Attr != ATTR_VOLUME)
+            if (1 /*vdirfiles.Attr != ATTR_VOLUME*/)
             {
                 // Nome
                 errorName = 0;
@@ -5857,6 +5876,13 @@ void fsListDir(FILES_DIR * dir, unsigned char *param)
                         ddir.Attr[1] = 'D';
                         ddir.Attr[2] = 'I';
                         ddir.Attr[3] = 'R';
+                        ddir.Attr[4] = '>';
+                    }
+                    else if (vdirfiles.Attr == ATTR_VOLUME) {
+                        ddir.Attr[0] = '<';
+                        ddir.Attr[1] = 'V';
+                        ddir.Attr[2] = 'O';
+                        ddir.Attr[3] = 'L';
                         ddir.Attr[4] = '>';
                     }
                     else {

@@ -56,6 +56,9 @@ void main(void)
     MGUI_MOUSE mouseData;
     MGUI_SAVESCR windowScr;
 
+    if (*startBasic != 2)
+        return;
+
     // Define o ID do window
     vComma = (unsigned char *)strrchr((char*)paramBasic, ',');
     if (vComma)
@@ -563,6 +566,11 @@ void main(void)
 
                         vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
                         vdp_set_bdcolor(VDP_BLACK);
+                        
+                        TrocaSpriteMouse(MOUSE_POINTER);
+
+                        if (!setFontUseG2(0) )   // Seta fonte 0 = 5x8 
+                            setFontUseG2(99);    // Fonte default 6x8, caso nao tenha conseguido carregar a fonte 0
 
                         drawWindow();
 

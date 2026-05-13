@@ -122,6 +122,8 @@ unsigned char vIndicaDialog = 0;
 unsigned char bufOut[128];
 unsigned int timeToDoubleClick = 0xFFFF;
 
+static unsigned char mguiToUpper(unsigned char c);
+
 //=============================================================================
 // DESKTOP ICONS
 //=============================================================================
@@ -252,11 +254,7 @@ static MGUI_INPUT mguiWidgetProcess(unsigned char thisIdx,
         // Leitura de tecla: tenta mmsjKeyGet primeiro, depois keyTec da janela
         if (result.key == KEY_NONE)
         {
-            reqWin = *mguiIdRequest;
-            if (reqWin > 6) 
-                reqWin = 6;
-            result.key = (unsigned char)(mguiListWindows[reqWin].keyTec & 0xFF);
-
+            result.key = (unsigned char)(mguiListWindows[*mguiIdRequest].keyTec & 0xFF);
         }
 
         // TAB: avanca foco e consome a tecla
@@ -1972,7 +1970,7 @@ static void deskOpenIcon(unsigned char slot)
         strcpy(bascmd, "BASIC ");
         strcat(bascmd, vnomefile);
         fsOsCommand((unsigned char*)bascmd);
-        restoreMGUI(); // in case BASIC doesn't return to caller
+        restoreMGUI(); // in case BASIC redraw mgui (basic exit in text mode)
     }
     else
     {
@@ -2046,7 +2044,7 @@ static void deskAddIconDialog(void)
 
     while (1)
     {
-        fillin(0, vstring, 100, 57, 140, wmode);
+        fillin(0, vstring, 120, 57, 120, wmode);
 
         if (button(1, (unsigned char*)"OK",     18, 78, 44, 10, wmode)) { vwb = BTOK;     break; }
         if (button(2, (unsigned char*)"CANCEL",  66, 78, 44, 10, wmode)) { vwb = BTCANCEL; break; }
@@ -2384,12 +2382,12 @@ void startMGI(void) {
         loadFile("/MGUI/IMAGES/ICOFOLD.PBM", imgsMenuSys);
         writesxy(137,170,1,"ICORUN.PBM ",vcorwf,vcorwb);
         loadFile("/MGUI/IMAGES/ICORUN.PBM", (imgsMenuSys + 64));
-        writesxy(137,170,1,"ICOOS.PBM  ",vcorwf,vcorwb);
-        loadFile("/MGUI/IMAGES/ICOOS.PBM", (imgsMenuSys + 128));
         writesxy(137,170,1,"ICOSET.PBM ",vcorwf,vcorwb);
-        loadFile("/MGUI/IMAGES/ICOSET.PBM", (imgsMenuSys + 192));
+        loadFile("/MGUI/IMAGES/ICOSET.PBM", (imgsMenuSys + 128));
         writesxy(137,170,1,"ICOOFF.PBM ",vcorwf,vcorwb);
-        loadFile("/MGUI/IMAGES/ICOOFF.PBM", (imgsMenuSys + 256));
+        loadFile("/MGUI/IMAGES/ICOOFF.PBM", (imgsMenuSys + 192));
+        writesxy(137,170,1,"ICOOS.PBM  ",vcorwf,vcorwb);
+        loadFile("/MGUI/IMAGES/ICOOS.PBM", (imgsMenuSys + 256));
     }
     else
     {
@@ -2723,7 +2721,7 @@ void desenhaMenu(void)
     vx = COLMENU;
     vy = LINMENU;
 
-    for (lc = 0; lc <= 4; lc++)
+    for (lc = 0; lc <= 3; lc++)
     {
         idx = lc * 64;
         putImagePbmP4((imgsMenuSys + idx), vx, vy);
@@ -2880,7 +2878,7 @@ void getMouseData(char ptipo, MGUI_MOUSE *pmouseData)
     int key;
     MMSJ_KEYEVENT k;
 
-    ix = 0;
+    ix = 6;
     if (ix > MGUI_LOCAL_MAX_SLOT)
     {
         if (ptipo == 0x01)
@@ -2904,7 +2902,7 @@ void getMouseData(char ptipo, MGUI_MOUSE *pmouseData)
             key = k.raw;
         }
 
-        mguiListWindows[ix].keyTec = key;
+        mguiListWindows[*mguiIdRequest].keyTec = key;
     }
     else if (ptipo == 0x00)
     {
@@ -3250,6 +3248,8 @@ void TrocaSpriteMouse(unsigned char vicone)
     }
 
     vdp_set_sprite_pattern(0, tempPtrMouse);
+    spthdlmouse = vdp_sprite_init(0, 0, VDP_DARK_RED);
+    statusVdpSprite = vdp_sprite_set_position(spthdlmouse, mouseX, mouseY);
 }
 
 //-------------------------------------------------------------------------
@@ -3278,16 +3278,15 @@ unsigned char new_menu(void)
             case 1: // RUN
                 runBin();
                 break;
-            case 2: // MMSJOS
+            case 2: // SETUP
                 break;
-            case 3: // SETUP
-                break;
-            case 4: // EXIT
+            case 3: // EXIT
                 mpos = message("Do you want to exit ?\0", BTYES | BTNO, 0);
                 if (mpos == BTYES)
                     vresp = 0;
-
                 break;
+            /*case 4: // MMSJOS
+                break;*/
         }
     }
 
@@ -3510,36 +3509,34 @@ void runBin(void)
     TrocaSpriteMouse(MOUSE_HOURGLASS);
     vUseFixedAddr = 1;
 
-    #ifdef USE_RELOC_LOAD_PROGS
-        //strcpy(paramBasic, linhaarg);
-        if (loadMbinAndRun(vfullpath, 2) != 0)
-            printText("Error Executing File\r\n\0");
-    #else
-        if (!strcmp(vfullpath, "/MGUI/PROGS/FILES.BIN"))
-        {
-            vEndExec = (unsigned char*)ADDR_EXEC_FILES;
-        }
-        else
-        {
-            vEndExec = (unsigned char*)ADDR_EXEC_PROG;
-        }
+    SaveScreenNew(&vsavescr, 0,0,255,191);
 
-        if (!vEndExec)
-        {
-            TrocaSpriteMouse(MOUSE_POINTER);
-            message("No memory to load .BIN\0", BTCLOSE, 0);
-            return;
-        }
+    if (strncmp(vfullpath, "BASIC", 5) == 0)
+    {
+        /* Run BASIC with file as argument */
+        fsOsCommand((unsigned char*)vfullpath);
+        restoreMGUI(); // in case BASIC redraw mgui (basic exit in text mode)
+    }
+    else
+    {
+        /* execProg is a full path to an EXE/BIN that should open this file */
+        #ifdef USE_RELOC_LOAD_PROGS
+            if (loadMbinAndRun(vfullpath, 2) != 0)
+            {
+                TrocaSpriteMouse(MOUSE_POINTER);
+                message("Error Executing File\0", BTCLOSE, 0);
+            }
+        #else
+            vsizefile = loadFile((unsigned char*)execProg,
+                                 (unsigned short*)ADDR_EXEC_PROG);
+            if (vsizefile > 0 && vsizefile < ERRO_D_START)
+                runFromMGUI((unsigned long)ADDR_EXEC_PROG);
+            else
+                message("Loading Error...\0", BTCLOSE, 0);
+        #endif
+    }
 
-        loadFile(vfullpath, (unsigned long*)vEndExec);
-        TrocaSpriteMouse(MOUSE_POINTER);
-        if (!verro)
-            runFromMGUI(vEndExec);
-        else
-        {
-            message("Loading Error...\0", BTCLOSE, 0);
-        }
-    #endif
+    RestoreScreen(&vsavescr);
 
     return;
 }
@@ -3826,6 +3823,15 @@ void putImagePbmP4(unsigned char* cursor, unsigned short ix, unsigned short iy)
             ixx += 8;
         }
     }
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char mguiToUpper(unsigned char c)
+{
+    if (c >= 'a' && c <= 'z')
+        return (unsigned char)(c - ('a' - 'A'));
+
+    return c;
 }
 
 #ifndef __EM_OBRAS__

@@ -86,6 +86,7 @@ static unsigned char notePasteClipboard(void);
 static int noteFindNext(const unsigned char *txt, unsigned char repeat);
 static int noteReplaceNext(void);
 static unsigned char notePromptStatus(const unsigned char *label, unsigned char *out, unsigned short outMax);
+static unsigned char noteTryLoadCandidate(const unsigned char *candidate);
 static unsigned char noteLoadFileByName(const unsigned char *name);
 static unsigned char noteSaveFileByName(const unsigned char *name);
 static unsigned char noteSaveCurrent(void);
@@ -95,14 +96,19 @@ static unsigned char noteConfirmLoseChanges(void);
 static unsigned char noteExitRequest(void);
 static void noteDrawMenuBar(void);
 static void noteDrawStatus(void);
+static void noteDrawVisibleRow(unsigned short row);
+static void noteRedrawVisibleRowsFrom(unsigned short line);
 static void noteDrawEditorContent(unsigned char drawCursor);
 static void noteDrawEditorPage(unsigned char drawCursor);
+static void noteScrollVisualStep(signed char dir);
 static void noteDrawScrollBarV(void);
 static void noteDrawScrollBarH(void);
+static void noteRedrawRangeCells(unsigned short sl, unsigned short sc, unsigned short el, unsigned short ec);
 static void noteDrawSelectionOverlay(void);
 static void noteDrawCursorBar(void);
 static void noteDrawTextCell(unsigned short line, unsigned short col);
 static unsigned char noteIsCellSelected(unsigned short line, unsigned short col);
+static unsigned char noteToUpper(unsigned char c);
 static unsigned char noteCharAt(unsigned short line, unsigned short col);
 static unsigned char noteGetMouseTextPos(unsigned short mx, unsigned short my, unsigned short *line, unsigned short *col);
 static unsigned char noteHandleKey(unsigned int keyRaw);
@@ -118,6 +124,9 @@ void main(void)
     unsigned char running;
     unsigned char vParamName[128];
     unsigned char *vComma;
+
+    if (*startBasic != 2)
+        return;
 
     memset(vParamName, 0x00, sizeof(vParamName));
     if (*paramBasic != 0x00)
@@ -218,32 +227,85 @@ void main(void)
             unsigned short oldHOffset = noteHOffset;
             unsigned short oldCurLine = noteCurLine;
             unsigned short oldCurCol = noteCurCol;
+            unsigned short oldSelStartLine = 0;
+            unsigned short oldSelStartCol = 0;
+            unsigned short oldSelEndLine = 0;
+            unsigned short oldSelEndCol = 0;
             unsigned char oldSelActive = noteSelActive;
             unsigned char oldSelSelecting = noteSelSelecting;
+            unsigned long oldBufSize = noteBufSize;
+            unsigned short oldLineCount = noteLineCount;
+            unsigned char oldDirty = noteDirty;
+            unsigned char oldStatusMsg[96];
+
+            strncpy((char *)oldStatusMsg, (char *)noteStatusMsg, sizeof(oldStatusMsg) - 1);
+            oldStatusMsg[sizeof(oldStatusMsg) - 1] = 0;
+
+            if (oldSelActive)
+                noteNormalizeSelection(&oldSelStartLine, &oldSelStartCol, &oldSelEndLine, &oldSelEndCol);
             
             if (!noteHandleKey(keyRaw))
                 running = 0;
 
             if (oldTopLine != noteTopLine || oldHOffset != noteHOffset)
             {
-                noteDrawEditorPage(1);
+                if (oldHOffset == noteHOffset &&
+                    (noteTopLine == (unsigned short)(oldTopLine + 1) ||
+                     oldTopLine == (unsigned short)(noteTopLine + 1)))
+                {
+                    if (noteTopLine > oldTopLine)
+                        noteScrollVisualStep(1);
+                    else
+                        noteScrollVisualStep(-1);
+
+                    if (noteSelActive)
+                        noteDrawSelectionOverlay();
+
+                    noteDrawScrollBarV();
+                    noteDrawCursorBar();
+                    noteDrawStatus();
+                }
+                else
+                {
+                    noteDrawEditorPage(1);
+                }
             }
             else
             {
-                if (oldSelActive == noteSelActive &&
-                    oldSelSelecting == noteSelSelecting &&
-                    !noteSelActive &&
-                    !noteSelSelecting &&
-                    (oldCurLine != noteCurLine || oldCurCol != noteCurCol))
+                if (oldBufSize != noteBufSize || oldLineCount != noteLineCount)
                 {
-                    noteDrawTextCell(oldCurLine, oldCurCol);
+                    noteRedrawVisibleRowsFrom((oldCurLine < noteCurLine) ? oldCurLine : noteCurLine);
+
+                    if (noteSelActive)
+                        noteDrawSelectionOverlay();
+
                     noteDrawCursorBar();
                 }
                 else
                 {
-                    noteDrawEditorContent(1);
+                    if (oldSelActive && !noteSelActive)
+                        noteRedrawRangeCells(oldSelStartLine, oldSelStartCol, oldSelEndLine, oldSelEndCol);
+
+                    if (noteSelActive)
+                        noteDrawSelectionOverlay();
+
+                    if (oldCurLine != noteCurLine || oldCurCol != noteCurCol)
+                        noteDrawTextCell(oldCurLine, oldCurCol);
+
+                    if (oldCurLine != noteCurLine ||
+                        oldCurCol != noteCurCol ||
+                        oldSelActive != noteSelActive ||
+                        oldSelSelecting != noteSelSelecting)
+                        noteDrawCursorBar();
                 }
-                noteDrawStatus();
+
+                if (oldCurLine != noteCurLine ||
+                    oldCurCol != noteCurCol ||
+                    oldSelActive != noteSelActive ||
+                    oldSelSelecting != noteSelSelecting ||
+                    oldDirty != noteDirty ||
+                    strcmp((char *)oldStatusMsg, (char *)noteStatusMsg) != 0)
+                    noteDrawStatus();
             }
         }
 
@@ -313,7 +375,13 @@ void main(void)
                 unsigned short oldCurLine = noteCurLine;
                 unsigned short oldCurCol = noteCurCol;
                 unsigned char hadSelection = noteSelActive;
-                unsigned char needFullContent = 0;
+                unsigned short oldSelStartLine = 0;
+                unsigned short oldSelStartCol = 0;
+                unsigned short oldSelEndLine = 0;
+                unsigned short oldSelEndCol = 0;
+
+                if (hadSelection)
+                    noteNormalizeSelection(&oldSelStartLine, &oldSelStartCol, &oldSelEndLine, &oldSelEndCol);
 
                 if (noteSelSelecting)
                 {
@@ -335,15 +403,11 @@ void main(void)
                     }
 
                     noteBlockArmed = 0;
-                    needFullContent = 1;
                 }
                 else
                 {
                     if (noteSelActive)
-                    {
                         noteSelActive = 0;
-                        needFullContent = 1;
-                    }
 
                     if (noteCurLine == lpos && noteCurCol == cpos && noteBlockArmed)
                     {
@@ -371,15 +435,22 @@ void main(void)
                 }
                 else
                 {
-                    if (needFullContent || hadSelection || noteSelActive || noteSelSelecting)
+                    if (hadSelection && !noteSelActive)
                     {
-                        noteDrawEditorContent(1);
+                        noteRedrawRangeCells(oldSelStartLine, oldSelStartCol, oldSelEndLine, oldSelEndCol);
                     }
-                    else if (oldCurLine != noteCurLine || oldCurCol != noteCurCol)
+
+                    if (noteSelActive)
+                    {
+                        noteDrawSelectionOverlay();
+                    }
+
+                    if (oldCurLine != noteCurLine || oldCurCol != noteCurCol)
                     {
                         noteDrawTextCell(oldCurLine, oldCurCol);
-                        noteDrawCursorBar();
                     }
+
+                    noteDrawCursorBar();
                     noteDrawStatus();
                 }
             }
@@ -822,7 +893,14 @@ static int noteFindNext(const unsigned char *txt, unsigned char repeat)
 {
     unsigned long start;
     unsigned long i;
+    unsigned long j;
     unsigned long tlen;
+    unsigned short sl;
+    unsigned short sc;
+    unsigned short el;
+    unsigned short ec;
+    unsigned char a;
+    unsigned char b;
 
     if (!txt || txt[0] == 0)
     {
@@ -833,12 +911,33 @@ static int noteFindNext(const unsigned char *txt, unsigned char repeat)
     tlen = strlen((char *)txt);
     start = noteOffsetFromLineCol(noteCurLine, noteCurCol);
 
-    if (repeat && start < noteBufSize)
-        start++;
+    if (repeat)
+    {
+        if (noteSelActive)
+        {
+            noteNormalizeSelection(&sl, &sc, &el, &ec);
+            start = noteOffsetFromLineCol(sl, sc);
+        }
+
+        if (start < noteBufSize)
+            start++;
+    }
 
     for (i = start; i + tlen <= noteBufSize; i++)
     {
-        if (!strncmp((char *)(noteTextBuf + i), (char *)txt, tlen))
+        j = 0;
+        while (j < tlen)
+        {
+            a = noteTextBuf[i + j];
+            b = txt[j];
+
+            if (noteToUpper(a) != noteToUpper(b))
+                break;
+
+            j++;
+        }
+
+        if (j == tlen)
         {
             noteCursorFromOffset(i);
             noteSelActive = 1;
@@ -944,21 +1043,27 @@ static unsigned char notePromptStatus(const unsigned char *label, unsigned char 
     unsigned char code;
     unsigned char flags;
     unsigned char line[160];
+    unsigned char redraw;
 
     if (!out || outMax < 2)
         return 0;
 
     out[0] = 0;
     len = 0;
+    redraw = 1;
 
     while (1)
     {
-        memset(line, 0, sizeof(line));
-        strcat((char *)line, (char *)label);
-        strcat((char *)line, (char *)out);
+        if (redraw)
+        {
+            memset(line, 0, sizeof(line));
+            strcat((char *)line, (char *)label);
+            strcat((char *)line, (char *)out);
 
-        FillRect(1, NOTE_STATUS_Y, 252, 10, nvcorbg);
-        writesxy(2, NOTE_STATUS_Y + 1, 1, line, nvcorfg, nvcorbg);
+            FillRect(1, NOTE_STATUS_Y, 252, 10, nvcorbg);
+            writesxy(2, NOTE_STATUS_Y + 1, 1, line, nvcorfg, nvcorbg);
+            redraw = 0;
+        }
 
         getMouseData(1, &m);
         keyRaw = (unsigned int)mguiListWindows[0].keyTec;
@@ -983,6 +1088,7 @@ static unsigned char notePromptStatus(const unsigned char *label, unsigned char 
             {
                 len--;
                 out[len] = 0;
+                redraw = 1;
             }
             continue;
         }
@@ -993,27 +1099,28 @@ static unsigned char notePromptStatus(const unsigned char *label, unsigned char 
             {
                 out[len++] = code;
                 out[len] = 0;
+                redraw = 1;
             }
         }
     }
 }
 
 //-----------------------------------------------------------------------------
-static unsigned char noteLoadFileByName(const unsigned char *name)
+static unsigned char noteTryLoadCandidate(const unsigned char *candidate)
 {
     unsigned long sz;
 
-    if (!name || name[0] == 0)
+    if (!candidate || candidate[0] == 0)
         return 0;
 
-    sz = fsInfoFile((char *)name, INFO_SIZE);
+    sz = fsInfoFile((char *)candidate, INFO_SIZE);
     if (sz == 0 || sz == ERRO_D_NOT_FOUND)
         return 0;
 
     if (sz >= NOTE_MAX_FILE_SIZE)
         sz = NOTE_MAX_FILE_SIZE - 1;
 
-    sz = loadFile((unsigned char *)name, noteTextBuf);
+    sz = loadFile((unsigned char *)candidate, noteTextBuf);
     if (sz == 0)
         return 0;
 
@@ -1022,8 +1129,59 @@ static unsigned char noteLoadFileByName(const unsigned char *name)
 
     noteBufSize = sz;
     noteTextBuf[noteBufSize] = 0;
+    return 1;
+}
 
-    strncpy((char *)noteFileName, (char *)name, sizeof(noteFileName) - 1);
+//-----------------------------------------------------------------------------
+static unsigned char noteLoadFileByName(const unsigned char *name)
+{
+    unsigned char rawName[128];
+    unsigned char upperName[128];
+    unsigned char noSlash[128];
+    unsigned char upperNoSlash[128];
+    unsigned short i;
+    const unsigned char *loadedName;
+
+    if (!name || name[0] == 0)
+        return 0;
+
+    strncpy((char *)rawName, (const char *)name, sizeof(rawName) - 1);
+    rawName[sizeof(rawName) - 1] = 0;
+
+    strncpy((char *)upperName, (char *)rawName, sizeof(upperName) - 1);
+    upperName[sizeof(upperName) - 1] = 0;
+    for (i = 0; upperName[i] != 0; i++)
+        upperName[i] = (unsigned char)toupper(upperName[i]);
+
+    noSlash[0] = 0;
+    upperNoSlash[0] = 0;
+    if (rawName[0] == '/' && rawName[1] != 0)
+    {
+        strncpy((char *)noSlash, (char *)(rawName + 1), sizeof(noSlash) - 1);
+        noSlash[sizeof(noSlash) - 1] = 0;
+
+        strncpy((char *)upperNoSlash, (char *)noSlash, sizeof(upperNoSlash) - 1);
+        upperNoSlash[sizeof(upperNoSlash) - 1] = 0;
+        for (i = 0; upperNoSlash[i] != 0; i++)
+            upperNoSlash[i] = (unsigned char)toupper(upperNoSlash[i]);
+    }
+
+    loadedName = 0;
+    if (noteTryLoadCandidate(rawName))
+        loadedName = rawName;
+    else if (strcmp((char *)upperName, (char *)rawName) && noteTryLoadCandidate(upperName))
+        loadedName = upperName;
+    else if (noSlash[0] != 0 && noteTryLoadCandidate(noSlash))
+        loadedName = noSlash;
+    else if (upperNoSlash[0] != 0 &&
+             strcmp((char *)upperNoSlash, (char *)noSlash) &&
+             noteTryLoadCandidate(upperNoSlash))
+        loadedName = upperNoSlash;
+
+    if (!loadedName)
+        return 0;
+
+    strncpy((char *)noteFileName, (const char *)loadedName, sizeof(noteFileName) - 1);
     noteFileName[sizeof(noteFileName) - 1] = 0;
 
     noteCurLine = 0;
@@ -1199,61 +1357,88 @@ static void noteDrawStatus(void)
 }
 
 //-----------------------------------------------------------------------------
-static void noteDrawEditorContent(unsigned char drawCursor)
+static void noteDrawVisibleRow(unsigned short row)
 {
     unsigned char linebuf[NOTE_CHARS_LINE + 2];
-    unsigned short row;
     unsigned short idx;
     unsigned short col;
     unsigned long pos;
     unsigned char ch;
     unsigned short y;
 
+    if (row >= NOTE_VISIBLE)
+        return;
+
+    y = NOTE_Y_TEXT + (row * NOTE_LINE_H);
+
+    for (col = 0; col < NOTE_CHARS_LINE; col++)
+        linebuf[col] = ' ';
+    linebuf[NOTE_CHARS_LINE] = 0;
+
+    idx = noteTopLine + row;
+    if (idx < noteLineCount)
+    {
+        pos = noteLines[idx];
+
+        col = 0;
+        while (col < noteHOffset && pos < noteBufSize)
+        {
+            ch = noteTextBuf[pos];
+            if (ch == 0x0D || ch == 0x0A || ch == 0)
+                break;
+            col++;
+            pos++;
+        }
+
+        col = 0;
+        while (col < NOTE_CHARS_LINE && pos < noteBufSize)
+        {
+            ch = noteTextBuf[pos];
+            if (ch == 0x0D || ch == 0x0A || ch == 0)
+                break;
+
+            if (ch < 0x20 || ch >= 0x7F)
+                ch = ' ';
+            if (ch == '\t')
+                ch = ' ';
+
+            linebuf[col] = ch;
+            col++;
+            pos++;
+        }
+    }
+
+    FillRect(NOTE_TEXT_X, y, NOTE_CHARS_LINE * NOTE_CHAR_W, NOTE_LINE_H, nvcorbg);
+    writesxy(NOTE_TEXT_X, y, 8, linebuf, nvcorfg, nvcorbg);
+}
+
+//-----------------------------------------------------------------------------
+static void noteRedrawVisibleRowsFrom(unsigned short line)
+{
+    unsigned short startRow;
+    unsigned short row;
+
+    if (line < noteTopLine)
+        startRow = 0;
+    else
+        startRow = (unsigned short)(line - noteTopLine);
+
+    if (startRow >= NOTE_VISIBLE)
+        return;
+
+    for (row = startRow; row < NOTE_VISIBLE; row++)
+        noteDrawVisibleRow(row);
+}
+
+//-----------------------------------------------------------------------------
+static void noteDrawEditorContent(unsigned char drawCursor)
+{
+    unsigned short row;
+
     FillRect(NOTE_TEXT_X, NOTE_Y_TEXT, NOTE_CHARS_LINE * NOTE_CHAR_W, NOTE_VISIBLE * NOTE_LINE_H, nvcorbg);
 
     for (row = 0; row < NOTE_VISIBLE; row++)
-    {
-        y = NOTE_Y_TEXT + (row * NOTE_LINE_H);
-
-        for (col = 0; col < NOTE_CHARS_LINE; col++)
-            linebuf[col] = ' ';
-        linebuf[NOTE_CHARS_LINE] = 0;
-
-        idx = noteTopLine + row;
-        if (idx < noteLineCount)
-        {
-            pos = noteLines[idx];
-
-            col = 0;
-            while (col < noteHOffset && pos < noteBufSize)
-            {
-                ch = noteTextBuf[pos];
-                if (ch == 0x0D || ch == 0x0A || ch == 0)
-                    break;
-                col++;
-                pos++;
-            }
-
-            col = 0;
-            while (col < NOTE_CHARS_LINE && pos < noteBufSize)
-            {
-                ch = noteTextBuf[pos];
-                if (ch == 0x0D || ch == 0x0A || ch == 0)
-                    break;
-
-                if (ch < 0x20 || ch >= 0x7F)
-                    ch = ' ';
-                if (ch == '\t')
-                    ch = ' ';
-
-                linebuf[col] = ch;
-                col++;
-                pos++;
-            }
-        }
-
-        writesxy(NOTE_TEXT_X, y, 8, linebuf, nvcorfg, nvcorbg);
-    }
+        noteDrawVisibleRow(row);
 
     noteDrawSelectionOverlay();
 
@@ -1268,6 +1453,91 @@ static void noteDrawEditorPage(unsigned char drawCursor)
     noteDrawScrollBarV();
     noteDrawScrollBarH();
     noteDrawStatus();
+}
+
+//-----------------------------------------------------------------------------
+static void noteScrollVisualStep(signed char dir)
+{
+    unsigned short row;
+
+    if (dir > 0)
+    {
+        for (row = 0; row + 1 < NOTE_VISIBLE; row++)
+            noteDrawVisibleRow(row);
+
+        noteDrawVisibleRow((unsigned short)(NOTE_VISIBLE - 1));
+    }
+    else
+    {
+        row = (unsigned short)(NOTE_VISIBLE - 1);
+        while (row > 0)
+        {
+            noteDrawVisibleRow(row);
+            row--;
+        }
+
+        noteDrawVisibleRow(0);
+    }
+}
+
+//-----------------------------------------------------------------------------
+static void noteRedrawRangeCells(unsigned short sl, unsigned short sc, unsigned short el, unsigned short ec)
+{
+    unsigned short ln;
+    unsigned short fromCol;
+    unsigned short toCol;
+    unsigned short visFrom;
+    unsigned short visTo;
+    unsigned short c;
+
+    if (sl > el || (sl == el && sc > ec))
+    {
+        unsigned short tl = sl;
+        unsigned short tc = sc;
+        sl = el;
+        sc = ec;
+        el = tl;
+        ec = tc;
+    }
+
+    for (ln = sl; ln <= el; ln++)
+    {
+        if (ln < noteTopLine || ln >= (unsigned short)(noteTopLine + NOTE_VISIBLE))
+            continue;
+
+        if (ln == sl)
+            fromCol = sc;
+        else
+            fromCol = 0;
+
+        if (ln == el)
+            toCol = ec;
+        else
+            toCol = noteLineLen(ln);
+
+        if (toCol <= fromCol)
+            continue;
+
+        if (toCol <= noteHOffset)
+            continue;
+
+        visFrom = fromCol;
+        if (visFrom < noteHOffset)
+            visFrom = noteHOffset;
+
+        visTo = toCol;
+        if (visTo > (unsigned short)(noteHOffset + NOTE_CHARS_LINE))
+            visTo = noteHOffset + NOTE_CHARS_LINE;
+
+        if (visTo <= visFrom)
+            continue;
+
+        for (c = visFrom; c < visTo; c++)
+            noteDrawTextCell(ln, c);
+
+        if (ln == el)
+            break;
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -1354,6 +1624,7 @@ static void noteDrawCursorBar(void)
 {
     unsigned short sx;
     unsigned short sy;
+    unsigned short cellW;
     unsigned char cursorChar[2];
 
     if (noteCurLine < noteTopLine || noteCurLine >= (unsigned short)(noteTopLine + NOTE_VISIBLE))
@@ -1368,7 +1639,8 @@ static void noteDrawCursorBar(void)
     if (sx >= 252 || sy >= NOTE_STATUS_Y)
         return;
 
-    FillRect(sx, sy, NOTE_CHAR_W, NOTE_CHAR_H, nvcorfg);
+    cellW = (NOTE_CHAR_W > 1) ? (NOTE_CHAR_W - 1) : NOTE_CHAR_W;
+    FillRect(sx, sy, cellW, NOTE_CHAR_H, nvcorfg);
     cursorChar[0] = noteCharAt(noteCurLine, noteCurCol);
     cursorChar[1] = 0;
     writesxy(sx, sy, 8, cursorChar, nvcorbg, nvcorfg);
@@ -1379,6 +1651,7 @@ static void noteDrawTextCell(unsigned short line, unsigned short col)
 {
     unsigned short sx;
     unsigned short sy;
+    unsigned short cellW;
     unsigned char chbuf[2];
     unsigned char invert;
 
@@ -1397,8 +1670,9 @@ static void noteDrawTextCell(unsigned short line, unsigned short col)
     chbuf[0] = noteCharAt(line, col);
     chbuf[1] = 0;
     invert = noteIsCellSelected(line, col);
+    cellW = (NOTE_CHAR_W > 1) ? (NOTE_CHAR_W - 1) : NOTE_CHAR_W;
 
-    FillRect(sx, sy, NOTE_CHAR_W, NOTE_CHAR_H, nvcorbg);
+    FillRect(sx, sy, cellW, NOTE_CHAR_H, nvcorbg);
     if (invert)
         writesxy(sx, sy, 8, chbuf, nvcorbg, nvcorfg);
     else
@@ -1428,6 +1702,15 @@ static unsigned char noteIsCellSelected(unsigned short line, unsigned short col)
         return 0;
 
     return 1;
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char noteToUpper(unsigned char c)
+{
+    if (c >= 'a' && c <= 'z')
+        return (unsigned char)(c - ('a' - 'A'));
+
+    return c;
 }
 
 //-----------------------------------------------------------------------------
@@ -1594,7 +1877,7 @@ static unsigned char noteHandleKey(unsigned int keyRaw)
             return noteExecCommand(CMD_PASTE);
 
         if (code == 'X')
-            return noteExecCommand(CMD_CUT);
+            return noteExecCommand(CMD_EXIT);
 
         if (code == 'F')
             return noteExecCommand(CMD_FIND);
@@ -1768,7 +2051,7 @@ static unsigned char notePopupMenu(unsigned char menuId)
         items[0] = (unsigned char *)"Open     Ctrl+O";
         items[1] = (unsigned char *)"Save     Ctrl+S";
         items[2] = (unsigned char *)"Save As  Ctrl+Alt+S";
-        items[3] = (unsigned char *)"Exit     Alt+F4";
+        items[3] = (unsigned char *)"Exit     Ctrl+X";
         count = 4;
         x = 4;
     }
@@ -1776,7 +2059,7 @@ static unsigned char notePopupMenu(unsigned char menuId)
     {
         items[0] = (unsigned char *)"Copy     Ctrl+C";
         items[1] = (unsigned char *)"Paste    Ctrl+V";
-        items[2] = (unsigned char *)"Cut      Ctrl+X";
+        items[2] = (unsigned char *)"Cut";
         count = 3;
         x = 46;
     }

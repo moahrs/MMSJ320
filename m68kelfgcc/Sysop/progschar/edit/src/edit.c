@@ -47,6 +47,9 @@ void main(void)
     unsigned char ix;
     unsigned char sqtdtam[20];
 
+    if (*startBasic != 1)
+        return;
+
     memset(vParamName, 0x00, sizeof(vParamName));
     if (*paramBasic != 0x00)
         strcpy((char*)vParamName, (char*)paramBasic);
