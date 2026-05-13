@@ -3760,7 +3760,7 @@ void importFile(void)
                     if (xaddressStart)
                     {
                         #ifdef USE_MALLOC
-                            free(xaddressStart);
+                            free(xaddressStart); 
                         #else
                             msfree(xaddressStart);
                         #endif
