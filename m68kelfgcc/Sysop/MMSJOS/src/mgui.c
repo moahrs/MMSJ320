@@ -2488,8 +2488,9 @@ void startMGI(void) {
                 msfree(imgsMenuSys);
                 msfree(memVideoFonts);
             #endif
+            imgsMenuSys = 0;
+            memVideoFonts = 0;
         #endif
-        /* memPosConfig usa buffer fixo (0x008EF800), nao vem de malloc. */
         if (memDeskCfg)
         {
             #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
@@ -2503,6 +2504,52 @@ void startMGI(void) {
             #endif
             memDeskCfg = 0;
         }
+    }
+
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        if (imgsMenuSys)
+        {
+            #ifdef USE_MALLOC
+                free(imgsMenuSys);
+            #else
+                msfree(imgsMenuSys);
+            #endif
+            imgsMenuSys = 0;
+        }
+
+        if (memVideoFonts)
+        {
+            #ifdef USE_MALLOC
+                free(memVideoFonts);
+            #else
+                msfree(memVideoFonts);
+            #endif
+            memVideoFonts = 0;
+        }
+
+        if (memPosConfig)
+        {
+            #ifdef USE_MALLOC
+                free(memPosConfig);
+            #else
+                msfree(memPosConfig);
+            #endif
+            memPosConfig = 0;
+        }
+    #endif
+
+    if (memDeskCfg)
+    {
+        #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+            #ifdef USE_MALLOC
+                free(memDeskCfg);
+            #else
+                msfree(memDeskCfg);
+            #endif
+        #else
+            msfree(memDeskCfg);
+        #endif
+        memDeskCfg = 0;
     }
 
     vdp_init(VDP_MODE_TEXT, VDP_BLACK, 0, 0);
@@ -3546,7 +3593,7 @@ void importFile(void)
 {
     unsigned long vStep, ix;
     unsigned char *xaddress = 0x00840000;
-    unsigned char *xaddressStart;
+    unsigned char *xaddressStart = 0;
     unsigned char vErro, vPerc;
     char vfilename[64], vstring[64];
     unsigned char vwb, vresp, vBuffer[128];
@@ -3651,13 +3698,7 @@ void importFile(void)
                     vErro = fsOpenFile(vfilename);
                     if (vErro != RETURN_OK)
                     {
-                        #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-                            #ifdef USE_MALLOC
-                                free(xaddressStart);
-                            #else
-                                msfree(xaddressStart);
-                            #endif
-                        #endif
+                        xaddress = xaddressStart;
                     }
                     else
                     {
@@ -3693,13 +3734,6 @@ void importFile(void)
                             vErro = fsWriteFile(vfilename, ix, vBuffer, (unsigned char)vChunkSize);
                             if (vErro != RETURN_OK)
                             {
-                                #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
-                                    #ifdef USE_MALLOC
-                                        free(xaddressStart);
-                                    #else
-                                        msfree(xaddressStart);
-                                    #endif
-                                #endif
                                 break;
                             }
                         }
@@ -3721,6 +3755,18 @@ void importFile(void)
                 }
                 else
                     writesxy(12,55,8,"Serial Load Error...",vcorwf,vcorwb);
+
+                #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+                    if (xaddressStart)
+                    {
+                        #ifdef USE_MALLOC
+                            free(xaddressStart);
+                        #else
+                            msfree(xaddressStart);
+                        #endif
+                        xaddressStart = 0;
+                    }
+                #endif
             }
             else
             {

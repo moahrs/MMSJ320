@@ -2796,6 +2796,14 @@ unsigned char fsLoadSerialToRun(char * vfilename)
     {
         printText("Serial Load Error...");
 
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        #if defined(USE_MALLOC)
+            free(vEnderExec);
+        #else
+            msfree(vEnderExec);
+        #endif
+    #endif
+
         return ERRO_B_WRITE_FILE;
     }
 
