@@ -216,6 +216,8 @@ RET_PATH vretpath;
 RET_PATH vretpath2;
 MEM_ALOC vMemAloc;
 
+char startEnv = 0;
+
 //--- KeyBOard Functions
 int mmsjKeyHit(void);
 int mmsjKeyPost(MMSJ_KEYEVENT *k);
@@ -313,7 +315,7 @@ const unsigned char vmesc[12][3] = {{'J','a','n'},{'F','e','b'},{'M','a','r'},
                                     {'O','c','t'},{'N','o','v'},{'D','e','c'}};
 
 // Funcoes de Alocacao de Memoria
-void memInit(void);
+char memInit(void);
 
 HEADER *_allocp;
 
@@ -427,6 +429,7 @@ static void mmsjosLoadConfig(void)
                 *(next - 1) = 0;
         }
 
+        // PATH=/[;xxxx;/yyyyyy]
         if (!strncmp(line, "PATH=", 5))
         {
             strncpy((char *)mmsjosExecPath, line + 5, sizeof(mmsjosExecPath) - 1);
@@ -434,6 +437,13 @@ static void mmsjosLoadConfig(void)
 
             for (i = 0; mmsjosExecPath[i] != 0; i++)
                 mmsjosExecPath[i] = (unsigned char)toupper(mmsjosExecPath[i]);
+        }
+
+        // 0 = MMSJOS / 1 = MGUI
+        if (!strncmp(line, "STARTAT=", 8))
+        {
+            if (line[9] == 0x31)
+                startEnv = 1;
         }
 
         if (!next)
@@ -644,6 +654,16 @@ void printDiskError(unsigned char pError)
 }
 
 //-----------------------------------------------------------------------------
+void putPrompt(char pAddLine)
+{
+//    msprintf("#:%s>",vdiratu);
+    printText("#:>");
+
+    if (pAddLine)
+        printText("\r\n\0");
+}
+
+//-----------------------------------------------------------------------------
 // Main Function
 //-----------------------------------------------------------------------------
 void main(void)
@@ -657,24 +677,37 @@ void main(void)
     vdp_mode = VDP_MODE_TEXT;
 
     clearScr();
-    printText("MMSJ-OS v"versionMMSJOS);
-    printText("\r\n\0");
-    printText("Utility (c) 2014-2026\r\n\0");
 
-    fsInit();
-    memInit();
-
+    mprintf("OS> MMSJ-OS v%s\r\n",versionMMSJOS);
+    mprintf("OS> Utility (c) 2014-2026\r\n\0");
+    mprintf("OS> CPU 68HC000 AT 10MHz\r\n");
+    mprintf("OS> TMS9118 Video Display Processor\r\n");
+    mprintf("      Graphic %dx%d\r\n", 256, 192);
+    mprintf("      Text %dx%d\r\n", 40, 24);
+    mprintf("OS> 68901 Multifunction Peripheral\r\n");
+    mprintf("      Timers Controller...\r\n");
+    mprintf("      RS-232C at 9600bps...\r\n");
+    mprintf("      KeyBoard/Mouse Controller...\r\n");
+    mprintf("OS> Total Memory %dKB. Free %dKB\r\n", 1256, 1024);
+    mprintf("OS> Starting Management Memory... %s.\r\n", !memInit() ? "Done" : "Error");
+    mprintf("OS> Mounting Disk... %s.\r\n", !fsInit() ? "Done" : "Error");
     fsChangeDir("/");
+    
+    mprintf("OS> Loading MMSJOS Config File... ");
     mmsjosLoadConfig();
+    mprintf("Done.\r\n");
 
-    printText("Ok\r\n\0");
-    printText("#>");
-
-    vbuf[0] = '\0';
-
-    mmsjKeyClear();
-
-    showCursor();
+    if (startEnv)
+    {
+        strcpy(vbuf,"MGUI\n")
+    }
+    else
+    {
+        vbuf[0] = '\0';
+        printText("Ok\r\n\0");
+        putPrompt(0);
+        showCursor();
+    }
 
     mmsjKeyClear();
 
@@ -832,7 +865,7 @@ void inputFunc(void *pdata)
                 if (vRetProcCmd)
                     printText("\r\n\0");
 
-                printText("#>");
+                putPrompt(0);
             }
 
             showCursor();
@@ -1855,7 +1888,7 @@ void delayus(int pTimeUS)
 //-----------------------------------------------------------------------------
 // Initialization
 //-----------------------------------------------------------------------------
-void memInit(void)
+char memInit(void)
 {
     // Alloc all memmory available minus reserved
 #ifdef USE_MSMALLOC
@@ -1864,6 +1897,8 @@ void memInit(void)
     heapFirst->used = 0;
     heapFirst->next = 0;
 #endif    
+
+    return 0;
 }
 
 #ifdef USE_MSMALLOC
