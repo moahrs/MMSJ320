@@ -313,7 +313,7 @@ const unsigned char vmesc[12][3] = {{'J','a','n'},{'F','e','b'},{'M','a','r'},
                                     {'O','c','t'},{'N','o','v'},{'D','e','c'}};
 
 // Funcoes de Alocacao de Memoria
-void memInit(void);
+char memInit(void);
 
 HEADER *_allocp;
 
@@ -644,6 +644,16 @@ void printDiskError(unsigned char pError)
 }
 
 //-----------------------------------------------------------------------------
+void putPrompt(char pAddLine)
+{
+//    msprintf("#:%s>",vdiratu);
+    printText("#:>");
+
+    if (pAddLine)
+        printText("\r\n\0");
+}
+
+//-----------------------------------------------------------------------------
 // Main Function
 //-----------------------------------------------------------------------------
 void main(void)
@@ -657,18 +667,28 @@ void main(void)
     vdp_mode = VDP_MODE_TEXT;
 
     clearScr();
-    printText("MMSJ-OS v"versionMMSJOS);
-    printText("\r\n\0");
-    printText("Utility (c) 2014-2026\r\n\0");
 
-    fsInit();
-    memInit();
-
+    mprintf("OS> MMSJ-OS v%s\r\n",versionMMSJOS);
+    mprintf("OS> Utility (c) 2014-2026\r\n\0");
+    mprintf("OS> CPU 68HC000 AT 10MHz\r\n");
+    mprintf("OS> LCD Graphic %dx%d\r\n", 256, 192);
+    mprintf("OS> LCD Text %dx%d\r\n", 40, 24);
+    mprintf("OS> Total Memory %dKB. Free %dKB\r\n", 1256, 1024);
+    mprintf("OS> Starting Management Memory... %s.\r\n", !memInit() ? "Done" : "Error");
+    mprintf("OS> Mounting Disk... %s.\r\n", !fsInit() ? "Done" : "Error");
     fsChangeDir("/");
+    
+    mprintf("OS> Loading Config File... ");
     mmsjosLoadConfig();
+    mprintf("Done.\r\n");
+
+    mprintf("OS> 68901 Multi Peripherical Controller\r\n");
+    mprintf("      Timers Controller...\r\n");
+    mprintf("      RS-232C at 9600bps...\r\n");
+    mprintf("      KeyBoard/Mouse Controller...\r\n");
 
     printText("Ok\r\n\0");
-    printText("#>");
+    putPrompt(0);
 
     vbuf[0] = '\0';
 
@@ -832,7 +852,7 @@ void inputFunc(void *pdata)
                 if (vRetProcCmd)
                     printText("\r\n\0");
 
-                printText("#>");
+                putPrompt(0);
             }
 
             showCursor();
@@ -1855,7 +1875,7 @@ void delayus(int pTimeUS)
 //-----------------------------------------------------------------------------
 // Initialization
 //-----------------------------------------------------------------------------
-void memInit(void)
+char memInit(void)
 {
     // Alloc all memmory available minus reserved
 #ifdef USE_MSMALLOC
@@ -1864,6 +1884,8 @@ void memInit(void)
     heapFirst->used = 0;
     heapFirst->next = 0;
 #endif    
+
+    return 0;
 }
 
 #ifdef USE_MSMALLOC
