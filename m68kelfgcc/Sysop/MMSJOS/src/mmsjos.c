@@ -216,6 +216,8 @@ RET_PATH vretpath;
 RET_PATH vretpath2;
 MEM_ALOC vMemAloc;
 
+char startEnv = 0;
+
 //--- KeyBOard Functions
 int mmsjKeyHit(void);
 int mmsjKeyPost(MMSJ_KEYEVENT *k);
@@ -427,6 +429,7 @@ static void mmsjosLoadConfig(void)
                 *(next - 1) = 0;
         }
 
+        // PATH=/[;xxxx;/yyyyyy]
         if (!strncmp(line, "PATH=", 5))
         {
             strncpy((char *)mmsjosExecPath, line + 5, sizeof(mmsjosExecPath) - 1);
@@ -434,6 +437,13 @@ static void mmsjosLoadConfig(void)
 
             for (i = 0; mmsjosExecPath[i] != 0; i++)
                 mmsjosExecPath[i] = (unsigned char)toupper(mmsjosExecPath[i]);
+        }
+
+        // 0 = MMSJOS / 1 = MGUI
+        if (!strncmp(line, "STARTAT=", 8))
+        {
+            if (line[9] == 0x31)
+                startEnv = 1;
         }
 
         if (!next)
@@ -687,14 +697,17 @@ void main(void)
     mmsjosLoadConfig();
     mprintf("Done.\r\n");
 
-    printText("Ok\r\n\0");
-    putPrompt(0);
-
-    vbuf[0] = '\0';
-
-    mmsjKeyClear();
-
-    showCursor();
+    if (startEnv)
+    {
+        strcpy(vbuf,"MGUI\n")
+    }
+    else
+    {
+        vbuf[0] = '\0';
+        printText("Ok\r\n\0");
+        putPrompt(0);
+        showCursor();
+    }
 
     mmsjKeyClear();
 
