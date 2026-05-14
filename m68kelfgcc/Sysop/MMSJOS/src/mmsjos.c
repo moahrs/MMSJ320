@@ -671,21 +671,21 @@ void main(void)
     mprintf("OS> MMSJ-OS v%s\r\n",versionMMSJOS);
     mprintf("OS> Utility (c) 2014-2026\r\n\0");
     mprintf("OS> CPU 68HC000 AT 10MHz\r\n");
-    mprintf("OS> LCD Graphic %dx%d\r\n", 256, 192);
-    mprintf("OS> LCD Text %dx%d\r\n", 40, 24);
+    mprintf("OS> TMS9118 Video Display\r\n");
+    mprintf("      Graphic %dx%d\r\n", 256, 192);
+    mprintf("      Text %dx%d\r\n", 40, 24);
+    mprintf("OS> 68901 Multi Peripherical Controller\r\n");
+    mprintf("      Timers Controller...\r\n");
+    mprintf("      RS-232C at 9600bps...\r\n");
+    mprintf("      KeyBoard/Mouse Controller...\r\n");
     mprintf("OS> Total Memory %dKB. Free %dKB\r\n", 1256, 1024);
     mprintf("OS> Starting Management Memory... %s.\r\n", !memInit() ? "Done" : "Error");
     mprintf("OS> Mounting Disk... %s.\r\n", !fsInit() ? "Done" : "Error");
     fsChangeDir("/");
     
-    mprintf("OS> Loading Config File... ");
+    mprintf("OS> Loading MMSJOS Config File... ");
     mmsjosLoadConfig();
     mprintf("Done.\r\n");
-
-    mprintf("OS> 68901 Multi Peripherical Controller\r\n");
-    mprintf("      Timers Controller...\r\n");
-    mprintf("      RS-232C at 9600bps...\r\n");
-    mprintf("      KeyBoard/Mouse Controller...\r\n");
 
     printText("Ok\r\n\0");
     putPrompt(0);
