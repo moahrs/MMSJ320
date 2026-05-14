@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
+#include "../mmsj320api.h"
 #include "../mmsj320vdp.h"
 #include "../mmsj320mfp.h"
 #include "../monitor.h"
@@ -21,12 +22,12 @@
 
 void listHello(void);
 
-unsigned char vmouseStat;
+/*unsigned char vmouseStat;
 unsigned char vmouseMoveX;
 unsigned char vmouseMoveY;
 
 unsigned char *vMseMovPtrR = 0x00600512; // Contador do ponteiro das dados do mouse recebidos
-unsigned char *vMseMovPtrW = 0x00600514; // Contador do ponteiro das dados do mouse recebidos
+unsigned char *vMseMovPtrW = 0x00600514; // Contador do ponteiro das dados do mouse recebidos*/
 
 //-----------------------------------------------------------------------------
 // Principal
@@ -40,11 +41,11 @@ void main(void)
     // mostra msgs na tela
     printText("Hellooooooooo...\r\n\0");
 
-    for(ix=0;ix<90000;ix++);
+    hookTable[HOOK_KEYBOARD].addr  = listHello;
+    hookTable[HOOK_KEYBOARD].flags = HOOKF_ACTIVE;
+    hookTable[HOOK_KEYBOARD].magic = HOOK_MAGIC;
 
-    listHello();
-
-    while(1)
+    /*while(1)
     {
         if (readMouse(&vmouseStat, &vmouseMoveX, &vmouseMoveY))
         {
@@ -68,13 +69,23 @@ void main(void)
 
         if (readChar() == 0x1B)
             break;
+    }*/
+
+    while (1)
+    {
+        if (readChar() == 27)
+            break;
     }
+
+    hookTable[HOOK_KEYBOARD].magic = 0x0000;
+    hookTable[HOOK_KEYBOARD].flags = 0x0000;
+    hookTable[HOOK_KEYBOARD].addr  = 0x00;
 }
 
 void listHello(void)
 {
-    int ix;
+/*    int ix;
 
-    for (ix=0;ix<5;ix++)
+    for (ix=0;ix<5;ix++)*/
         printText("Hello................\r\n\0");
 }

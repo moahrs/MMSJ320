@@ -238,6 +238,34 @@ main_1:
        addq.l    #1,D3
        bra       main_1
 main_3:
+; // Zera HOOKs
+; for (ix = 0; ix < MAX_HOOKS; ix++)
+       clr.l     D3
+main_4:
+       cmp.l     #32,D3
+       bhs       main_6
+; {
+; hookTable[ix].magic = 0;
+       move.l    _hookTable.L,A0
+       move.l    D3,D0
+       muls      #12,D0
+       clr.l     0(A0,D0.L)
+; hookTable[ix].flags = 0;
+       move.l    _hookTable.L,A0
+       move.l    D3,D0
+       muls      #12,D0
+       add.l     D0,A0
+       clr.l     4(A0)
+; hookTable[ix].addr = 0;
+       move.l    _hookTable.L,A0
+       move.l    D3,D0
+       muls      #12,D0
+       add.l     D0,A0
+       clr.l     8(A0)
+       addq.l    #1,D3
+       bra       main_4
+main_6:
+; }
 ; //---------------------------------------------
 ; // Enviar setup para o MFP 68901
 ; //---------------------------------------------
@@ -255,42 +283,42 @@ main_3:
        and.l     #65535,D0
        move.b    #16,0(A0,D0.L)
 ; while(*(vmfp + Reg_TADR) != 0x9A)
-main_4:
+main_7:
        move.l    (A2),A0
        move.w    _Reg_TADR.L,D0
        and.l     #65535,D0
        move.b    0(A0,D0.L),D0
        and.w     #255,D0
        cmp.w     #154,D0
-       beq.s     main_6
+       beq.s     main_9
 ; *(vmfp + Reg_TADR)  = 0x9A; // Valor para 1 ms
        move.l    (A2),A0
        move.w    _Reg_TADR.L,D0
        and.l     #65535,D0
        move.b    #154,0(A0,D0.L)
-       bra       main_4
-main_6:
+       bra       main_7
+main_9:
 ; *(vmfp + Reg_TACR)  = 0x13; // Start Counter Timer A Com Delay por 16
        move.l    (A2),A0
        move.w    _Reg_TACR.L,D0
        and.l     #65535,D0
        move.b    #19,0(A0,D0.L)
 ; while(*(vmfp + Reg_TBDR) != 0xF6)
-main_7:
+main_10:
        move.l    (A2),A0
        move.w    _Reg_TBDR.L,D0
        and.l     #65535,D0
        move.b    0(A0,D0.L),D0
        and.w     #255,D0
        cmp.w     #246,D0
-       beq.s     main_9
+       beq.s     main_12
 ; *(vmfp + Reg_TBDR)  = 0xF6; // Valor para 10 ms
        move.l    (A2),A0
        move.w    _Reg_TBDR.L,D0
        and.l     #65535,D0
        move.b    #246,0(A0,D0.L)
-       bra       main_7
-main_9:
+       bra       main_10
+main_12:
 ; *(vmfp + Reg_TBCR)  = 0x16; // Start Counter Timer B Com Delay por 100
        move.l    (A2),A0
        move.w    _Reg_TBCR.L,D0
@@ -438,17 +466,17 @@ main_9:
 ; xaddr = 0x00600000;
        move.l    #6291456,D2
 ; while (xaddr <= 0x00FFFFFE)
-main_10:
+main_13:
        cmp.l     #16777214,D2
-       bhi.s     main_12
+       bhi.s     main_15
 ; {
 ; *xaddr = 0x0000;
        move.l    D2,A0
        clr.w     (A0)
 ; xaddr += 32768;
        add.l     #65536,D2
-       bra       main_10
-main_12:
+       bra       main_13
+main_15:
 ; }
 ; // Testando memoria RAM de 64 em 64K Word pra saber quando tem
 ; xaddr = 0x00600000;
@@ -456,53 +484,53 @@ main_12:
 ; xcounter = 0;
        clr.l     D4
 ; while (xaddr <= 0x00FFFFFE) {
-main_13:
+main_16:
        cmp.l     #16777214,D2
-       bhi       main_15
+       bhi       main_18
 ; // Se ja passou por esse endereco, cai fora - (caso de usar memoria de sistema como principal)
 ; xdado = *xaddr;
        move.l    D2,A0
        move.w    (A0),D5
 ; if (xaddr < 0x00800000 && xdado == 0x5A4C && !vRamSyst1st)
        cmp.l     #8388608,D2
-       bhs.s     main_16
+       bhs.s     main_19
        cmp.w     #23116,D5
-       bne.s     main_16
+       bne.s     main_19
        tst.b     D7
-       bne.s     main_18
+       bne.s     main_21
        moveq     #1,D0
-       bra.s     main_19
-main_18:
+       bra.s     main_22
+main_21:
        clr.l     D0
-main_19:
+main_22:
        and.l     #255,D0
-       beq.s     main_16
+       beq.s     main_19
 ; {
 ; xaddr = 0x00800000;
        move.l    #8388608,D2
 ; continue;
-       bra       main_14
-main_16:
+       bra       main_17
+main_19:
 ; }
 ; else
 ; {
 ; if (xaddr >= 0x00800000 && xdado == 0x5A4C && !vRamUser1st)
        cmp.l     #8388608,D2
-       blo.s     main_20
+       blo.s     main_23
        cmp.w     #23116,D5
-       bne.s     main_20
+       bne.s     main_23
        tst.b     D6
-       bne.s     main_22
+       bne.s     main_25
        moveq     #1,D0
-       bra.s     main_23
-main_22:
+       bra.s     main_26
+main_25:
        clr.l     D0
-main_23:
+main_26:
        and.l     #255,D0
-       beq.s     main_20
+       beq.s     main_23
 ; break;
-       bra       main_15
-main_20:
+       bra       main_18
+main_23:
 ; }
 ; // Testa Gravacao de 0000h
 ; *xaddr = 0x0000;
@@ -510,32 +538,32 @@ main_20:
        clr.w     (A0)
 ; for(ix = 0; ix <= 100; ix++);
        clr.l     D3
-main_24:
+main_27:
        cmp.l     #100,D3
-       bhi.s     main_26
+       bhi.s     main_29
        addq.l    #1,D3
-       bra       main_24
-main_26:
+       bra       main_27
+main_29:
 ; xdado = *xaddr;
        move.l    D2,A0
        move.w    (A0),D5
 ; if (xdado != 0x0000)
        tst.w     D5
-       beq.s     main_27
+       beq.s     main_30
 ; {
 ; if (xaddr < 0x00800000)
        cmp.l     #8388608,D2
-       bhs.s     main_29
+       bhs.s     main_32
 ; {
 ; xaddr = 0x00800000;
        move.l    #8388608,D2
 ; continue;
-       bra       main_14
-main_29:
+       bra       main_17
+main_32:
 ; }
 ; break;
-       bra       main_15
-main_27:
+       bra       main_18
+main_30:
 ; }
 ; // Testa Gravacao de FFFFh
 ; *xaddr = 0xFFFF;
@@ -543,32 +571,32 @@ main_27:
        move.w    #65535,(A0)
 ; for(ix = 0; ix <= 100; ix++);
        clr.l     D3
-main_31:
+main_34:
        cmp.l     #100,D3
-       bhi.s     main_33
+       bhi.s     main_36
        addq.l    #1,D3
-       bra       main_31
-main_33:
+       bra       main_34
+main_36:
 ; xdado = *xaddr;
        move.l    D2,A0
        move.w    (A0),D5
 ; if (xdado != 0xFFFF)
        cmp.w     #65535,D5
-       beq.s     main_34
+       beq.s     main_37
 ; {
 ; if (xaddr < 0x00800000)
        cmp.l     #8388608,D2
-       bhs.s     main_36
+       bhs.s     main_39
 ; {
 ; xaddr = 0x00800000;
        move.l    #8388608,D2
 ; continue;
-       bra.s     main_14
-main_36:
+       bra.s     main_17
+main_39:
 ; }
 ; break;
-       bra.s     main_15
-main_34:
+       bra.s     main_18
+main_37:
 ; }
 ; // Se tudo ok, deixa gravado 0x5A4C para nao ler novamente - (caso de usar memoria de sistema como principal)
 ; *xaddr = 0x5A4C;
@@ -576,29 +604,29 @@ main_34:
        move.w    #23116,(A0)
 ; if (xaddr < 0x00800000)
        cmp.l     #8388608,D2
-       bhs.s     main_38
+       bhs.s     main_41
 ; vRamSyst1st = 0;
        moveq     #0,D7
-       bra.s     main_39
-main_38:
+       bra.s     main_42
+main_41:
 ; else
 ; vRamUser1st = 0;
        clr.b     D6
-main_39:
+main_42:
 ; xcounter += 64; // dobrar a soma para aparecer em bytes e nao em words
        add.l     #64,D4
 ; // Limite maximo de contagem, 8MB
 ; if (xcounter >= 8448)
        cmp.l     #8448,D4
-       blo.s     main_40
+       blo.s     main_43
 ; break;
-       bra.s     main_15
-main_40:
+       bra.s     main_18
+main_43:
 ; xaddr += 32768;
        add.l     #65536,D2
-main_14:
-       bra       main_13
-main_15:
+main_17:
+       bra       main_16
+main_18:
 ; }
 ; vtotmem = xcounter;
        move.b    D4,_vtotmem.L
@@ -2677,7 +2705,7 @@ processCmd_39:
        addq.w    #4,A7
        bra.s     processCmd_46
 processCmd_45:
-; else 
+; else
 ; printText("OS loaded. Run Basic from OS !!!\r\n\0");
        pea       @monitor_17.L
        jsr       (A5)
@@ -7004,10 +7032,386 @@ delayus_3:
 ; }
 ; #endif
 ; //-----------------------------------------------------------------------------
+; char callHook(unsigned char hookId)
+; {
+       xdef      _callHook
+_callHook:
+       link      A6,#0
+       movem.l   D2/A2,-(A7)
+       move.b    11(A6),D2
+       and.l     #255,D2
+       lea       _hookTable.L,A2
+; if (hookTable[hookId].magic == HOOK_MAGIC)
+       move.l    (A2),A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #12,D0
+       move.l    0(A0,D0.L),D0
+       cmp.l     #19786,D0
+       bne       callHook_9
+; {
+; if (hookTable[hookId].flags & HOOKF_ACTIVE)
+       move.l    (A2),A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #12,D0
+       add.l     D0,A0
+       move.l    4(A0),D0
+       and.l     #1,D0
+       beq       callHook_9
+; {
+; if (hookTable[hookId].addr)
+       move.l    (A2),A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #12,D0
+       add.l     D0,A0
+       tst.l     8(A0)
+       beq.s     callHook_5
+; hookTable[hookId].addr();
+       move.l    (A2),A0
+       and.l     #255,D2
+       move.l    D2,D1
+       muls      #12,D1
+       add.l     D1,A0
+       move.l    8(A0),A0
+       jsr       (A0)
+callHook_5:
+; if (hookTable[hookId].flags & HOOKF_ONESHOT)
+       move.l    (A2),A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #12,D0
+       add.l     D0,A0
+       move.l    4(A0),D0
+       and.l     #8,D0
+       beq.s     callHook_7
+; {
+; hookTable[hookId].magic = 0x0000;
+       move.l    (A2),A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #12,D0
+       clr.l     0(A0,D0.L)
+; hookTable[hookId].flags &= ~HOOKF_ACTIVE;
+       move.l    (A2),A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #12,D0
+       add.l     D0,A0
+       and.l     #-2,4(A0)
+callHook_7:
+; }
+; if (hookTable[hookId].flags & HOOKF_SKIP_OS)
+       move.l    (A2),A0
+       and.l     #255,D2
+       move.l    D2,D0
+       muls      #12,D0
+       add.l     D0,A0
+       move.l    4(A0),D0
+       and.l     #2,D0
+       beq.s     callHook_9
+; return 1;
+       moveq     #1,D0
+       bra.s     callHook_11
+callHook_9:
+; }
+; }
+; return 0;
+       clr.b     D0
+callHook_11:
+       movem.l   (A7)+,D2/A2
+       unlk      A6
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc00Handler(void)
+; {
+       xdef      _trapFunc00Handler
+_trapFunc00Handler:
+; if (callHook(HOOK_TRAP00))
+       clr.l     -(A7)
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc00Handler_1
+; return;
+       bra       trapFunc00Handler_3
+trapFunc00Handler_1:
+; return;
+trapFunc00Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc01Handler(void)
+; {
+       xdef      _trapFunc01Handler
+_trapFunc01Handler:
+; if (callHook(HOOK_TRAP01))
+       pea       1
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc01Handler_1
+; return;
+       bra       trapFunc01Handler_3
+trapFunc01Handler_1:
+; return;
+trapFunc01Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc02Handler(void)
+; {
+       xdef      _trapFunc02Handler
+_trapFunc02Handler:
+; if (callHook(HOOK_TRAP02))
+       pea       2
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc02Handler_1
+; return;
+       bra       trapFunc02Handler_3
+trapFunc02Handler_1:
+; return;
+trapFunc02Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc03Handler(void)
+; {
+       xdef      _trapFunc03Handler
+_trapFunc03Handler:
+; if (callHook(HOOK_TRAP03))
+       pea       3
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc03Handler_1
+; return;
+       bra       trapFunc03Handler_3
+trapFunc03Handler_1:
+; return;
+trapFunc03Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc04Handler(void)
+; {
+       xdef      _trapFunc04Handler
+_trapFunc04Handler:
+; if (callHook(HOOK_TRAP04))
+       pea       4
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc04Handler_1
+; return;
+       bra       trapFunc04Handler_3
+trapFunc04Handler_1:
+; return;
+trapFunc04Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc05Handler(void)
+; {
+       xdef      _trapFunc05Handler
+_trapFunc05Handler:
+; if (callHook(HOOK_TRAP05))
+       pea       5
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc05Handler_1
+; return;
+       bra       trapFunc05Handler_3
+trapFunc05Handler_1:
+; return;
+trapFunc05Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc06Handler(void)
+; {
+       xdef      _trapFunc06Handler
+_trapFunc06Handler:
+; if (callHook(HOOK_TRAP06))
+       pea       6
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc06Handler_1
+; return;
+       bra       trapFunc06Handler_3
+trapFunc06Handler_1:
+; return;
+trapFunc06Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc07Handler(void)
+; {
+       xdef      _trapFunc07Handler
+_trapFunc07Handler:
+; if (callHook(HOOK_TRAP07))
+       pea       7
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc07Handler_1
+; return;
+       bra       trapFunc07Handler_3
+trapFunc07Handler_1:
+; return;
+trapFunc07Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc08Handler(void)
+; {
+       xdef      _trapFunc08Handler
+_trapFunc08Handler:
+; if (callHook(HOOK_TRAP08))
+       pea       8
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc08Handler_1
+; return;
+       bra       trapFunc08Handler_3
+trapFunc08Handler_1:
+; return;
+trapFunc08Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc09Handler(void)
+; {
+       xdef      _trapFunc09Handler
+_trapFunc09Handler:
+; if (callHook(HOOK_TRAP09))
+       pea       9
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc09Handler_1
+; return;
+       bra       trapFunc09Handler_3
+trapFunc09Handler_1:
+; return;
+trapFunc09Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc10Handler(void)
+; {
+       xdef      _trapFunc10Handler
+_trapFunc10Handler:
+; if (callHook(HOOK_TRAP10))
+       pea       10
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc10Handler_1
+; return;
+       bra       trapFunc10Handler_3
+trapFunc10Handler_1:
+; return;
+trapFunc10Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc11Handler(void)
+; {
+       xdef      _trapFunc11Handler
+_trapFunc11Handler:
+; if (callHook(HOOK_TRAP11))
+       pea       11
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc11Handler_1
+; return;
+       bra       trapFunc11Handler_3
+trapFunc11Handler_1:
+; return;
+trapFunc11Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc12Handler(void)
+; {
+       xdef      _trapFunc12Handler
+_trapFunc12Handler:
+; if (callHook(HOOK_TRAP12))
+       pea       12
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc12Handler_1
+; return;
+       bra       trapFunc12Handler_3
+trapFunc12Handler_1:
+; return;
+trapFunc12Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc13Handler(void)
+; {
+       xdef      _trapFunc13Handler
+_trapFunc13Handler:
+; if (callHook(HOOK_TRAP13))
+       pea       13
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc13Handler_1
+; return;
+       bra       trapFunc13Handler_3
+trapFunc13Handler_1:
+; return;
+trapFunc13Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; void trapFunc14Handler(void)
+; {
+       xdef      _trapFunc14Handler
+_trapFunc14Handler:
+; if (callHook(HOOK_TRAP14))
+       pea       14
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     trapFunc14Handler_1
+; return;
+       bra       trapFunc14Handler_3
+trapFunc14Handler_1:
+; return;
+trapFunc14Handler_3:
+       rts
+; }
+; //-----------------------------------------------------------------------------
+; // Trap 15
+; //-----------------------------------------------------------------------------
 ; void basicFuncBios(void)
 ; {
        xdef      _basicFuncBios
 _basicFuncBios:
+; if (callHook(HOOK_TRAP15))
+       pea       15
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     basicFuncBios_1
+; return;
+       bra       basicFuncBios_3
+basicFuncBios_1:
+; return;
+basicFuncBios_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7067,12 +7471,22 @@ _funcIntMultiTask:
 ; {
        xdef      _funcIntMfpGpi0
 _funcIntMfpGpi0:
-; // TBD
+; if (callHook(HOOK_GPIO0))
+       pea       22
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpGpi0_1
+; return;
+       bra.s     funcIntMfpGpi0_3
+funcIntMfpGpi0_1:
 ; *(vmfp + Reg_ISRB) &= 0xFE;  // Reseta flag de interrupcao GPI0 no MFP
        move.l    _vmfp.L,A0
        move.w    _Reg_ISRB.L,D0
        and.l     #65535,D0
        and.b     #254,0(A0,D0.L)
+; return;
+funcIntMfpGpi0_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7080,6 +7494,17 @@ _funcIntMfpGpi0:
 ; {
        xdef      _funcIntMfpGpi1
 _funcIntMfpGpi1:
+; if (callHook(HOOK_GPIO1))
+       pea       23
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpGpi1_1
+; return;
+       bra       funcIntMfpGpi1_3
+funcIntMfpGpi1_1:
+; return;
+funcIntMfpGpi1_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7087,6 +7512,17 @@ _funcIntMfpGpi1:
 ; {
        xdef      _funcIntMfpGpi2
 _funcIntMfpGpi2:
+; if (callHook(HOOK_GPIO2))
+       pea       24
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpGpi2_1
+; return;
+       bra       funcIntMfpGpi2_3
+funcIntMfpGpi2_1:
+; return;
+funcIntMfpGpi2_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7094,6 +7530,17 @@ _funcIntMfpGpi2:
 ; {
        xdef      _funcIntMfpGpi3
 _funcIntMfpGpi3:
+; if (callHook(HOOK_GPIO3))
+       pea       25
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpGpi3_1
+; return;
+       bra       funcIntMfpGpi3_3
+funcIntMfpGpi3_1:
+; return;
+funcIntMfpGpi3_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7101,6 +7548,17 @@ _funcIntMfpGpi3:
 ; {
        xdef      _funcIntMfpTmrD
 _funcIntMfpTmrD:
+; if (callHook(HOOK_TIMER_D))
+       pea       19
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpTmrD_1
+; return;
+       bra       funcIntMfpTmrD_3
+funcIntMfpTmrD_1:
+; return;
+funcIntMfpTmrD_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7108,6 +7566,17 @@ _funcIntMfpTmrD:
 ; {
        xdef      _funcIntMfpTmrC
 _funcIntMfpTmrC:
+; if (callHook(HOOK_TIMER_C))
+       pea       18
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpTmrC_1
+; return;
+       bra       funcIntMfpTmrC_3
+funcIntMfpTmrC_1:
+; return;
+funcIntMfpTmrC_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7115,6 +7584,17 @@ _funcIntMfpTmrC:
 ; {
        xdef      _funcIntMfpGpi4
 _funcIntMfpGpi4:
+; if (callHook(HOOK_GPIO4))
+       pea       26
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpGpi4_1
+; return;
+       bra       funcIntMfpGpi4_3
+funcIntMfpGpi4_1:
+; return;
+funcIntMfpGpi4_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7122,6 +7602,17 @@ _funcIntMfpGpi4:
 ; {
        xdef      _funcIntMfpGpi5
 _funcIntMfpGpi5:
+; if (callHook(HOOK_GPIO5))
+       pea       27
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpGpi5_1
+; return;
+       bra       funcIntMfpGpi5_3
+funcIntMfpGpi5_1:
+; return;
+funcIntMfpGpi5_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7129,6 +7620,17 @@ _funcIntMfpGpi5:
 ; {
        xdef      _funcIntMfpTmrB
 _funcIntMfpTmrB:
+; if (callHook(HOOK_TIMER_B))
+       pea       17
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpTmrB_1
+; return;
+       bra       funcIntMfpTmrB_3
+funcIntMfpTmrB_1:
+; return;
+funcIntMfpTmrB_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7136,6 +7638,17 @@ _funcIntMfpTmrB:
 ; {
        xdef      _funcIntMfpXmitErr
 _funcIntMfpXmitErr:
+; if (callHook(HOOK_XMIT_ERR))
+       pea       28
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpXmitErr_1
+; return;
+       bra       funcIntMfpXmitErr_3
+funcIntMfpXmitErr_1:
+; return;
+funcIntMfpXmitErr_3:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7143,8 +7656,18 @@ _funcIntMfpXmitErr:
 ; {
        xdef      _funcIntMfpXmitBufEmpty
 _funcIntMfpXmitBufEmpty:
+; if (callHook(HOOK_XMIT_BUF_EMPTY))
+       pea       29
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpXmitBufEmpty_1
+; return;
+       bra.s     funcIntMfpXmitBufEmpty_3
+funcIntMfpXmitBufEmpty_1:
 ; vBufXmitEmpty = 1; // Buffer Transmissao Vazio
        move.b    #1,_vBufXmitEmpty.L
+funcIntMfpXmitBufEmpty_3:
        rts
 ; //*(vmfp + Reg_GPDR) = 0x05;
 ; //    *(vmfp + Reg_ISRA) &= 0xFB; // Reseta flag de interrupcao no MFP
@@ -7154,6 +7677,15 @@ _funcIntMfpXmitBufEmpty:
 ; {
        xdef      _funcIntMfpRecErr
 _funcIntMfpRecErr:
+; if (callHook(HOOK_REC_ERR))
+       pea       30
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpRecErr_1
+; return;
+       bra       funcIntMfpRecErr_1
+funcIntMfpRecErr_1:
        rts
 ; }
 ; //-----------------------------------------------------------------------------
@@ -7161,11 +7693,21 @@ _funcIntMfpRecErr:
 ; {
        xdef      _funcIntMfpRecBufFull
 _funcIntMfpRecBufFull:
+; if (callHook(HOOK_REC_BUF_FULL))
+       pea       31
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpRecBufFull_1
+; return;
+       bra.s     funcIntMfpRecBufFull_3
+funcIntMfpRecBufFull_1:
 ; vBufReceived = *(vmfp + Reg_UDR);   // Carrega byte do buffer do MFP
        move.l    _vmfp.L,A0
        move.w    _Reg_UDR.L,D0
        and.l     #65535,D0
        move.b    0(A0,D0.L),_vBufReceived.L
+funcIntMfpRecBufFull_3:
        rts
 ; //    *(vmfp + Reg_ISRA) &= 0xEF;  // Reseta flag de interrupcao no MFP
 ; }
@@ -7174,8 +7716,18 @@ _funcIntMfpRecBufFull:
 ; {
        xdef      _funcIntMfpTmrA
 _funcIntMfpTmrA:
+; if (callHook(HOOK_TIMER_A))
+       pea       16
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpTmrA_1
+; return;
+       bra.s     funcIntMfpTmrA_3
+funcIntMfpTmrA_1:
 ; SysClockms = SysClockms + 1;
        addq.l    #1,_SysClockms.L
+funcIntMfpTmrA_3:
        rts
 ; // Reseta flag de interrupcao no MFP do Timer A
 ; //    *(vmfp + Reg_ISRA) &= 0xDF;
@@ -7190,23 +7742,32 @@ _funcIntMfpGpi6:
        lea       _vmfp.L,A3
        lea       _writeLongSerial.L,A4
        lea       _debugMessages.L,A5
-; #ifdef __KEYPS2_EXT__
 ; unsigned char decoded = 0xFF;
        move.b    #255,D3
 ; int vTimeout;
+; if (callHook(HOOK_KEYBOARD))
+       pea       20
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpGpi6_1
+; return;
+       bra       funcIntMfpGpi6_25
+funcIntMfpGpi6_1:
+; #ifdef __KEYPS2_EXT__
 ; if (debugMessages)
        tst.b     (A5)
-       beq.s     funcIntMfpGpi6_1
+       beq.s     funcIntMfpGpi6_4
 ; writeLongSerial("Aqui 0\r\n\0");
        pea       @monitor_80.L
        jsr       (A4)
        addq.w    #4,A7
-funcIntMfpGpi6_1:
+funcIntMfpGpi6_4:
 ; // Pega dados do controlador via protocolo
 ; while (decoded != 0)
-funcIntMfpGpi6_3:
+funcIntMfpGpi6_6:
        tst.b     D3
-       beq       funcIntMfpGpi6_5
+       beq       funcIntMfpGpi6_8
 ; {
 ; vTimeout = 0x0FF;
        move.l    #255,D2
@@ -7216,19 +7777,19 @@ funcIntMfpGpi6_3:
        and.l     #65535,D0
        and.b     #239,0(A0,D0.L)
 ; while (*(vmfp + Reg_GPDR) & 0x20 && vTimeout) vTimeout--; // Aguarda Controlador liberar LSB para leitura
-funcIntMfpGpi6_6:
+funcIntMfpGpi6_9:
        move.l    (A3),A0
        move.w    (A2),D0
        and.l     #65535,D0
        move.b    0(A0,D0.L),D0
        and.b     #32,D0
        and.l     #255,D0
-       beq.s     funcIntMfpGpi6_8
+       beq.s     funcIntMfpGpi6_11
        tst.l     D2
-       beq.s     funcIntMfpGpi6_8
+       beq.s     funcIntMfpGpi6_11
        subq.l    #1,D2
-       bra       funcIntMfpGpi6_6
-funcIntMfpGpi6_8:
+       bra       funcIntMfpGpi6_9
+funcIntMfpGpi6_11:
 ; decoded = *(vmfp + Reg_GPDR) & 0x0F;
        move.l    (A3),A0
        move.w    (A2),D0
@@ -7244,25 +7805,25 @@ funcIntMfpGpi6_8:
        and.l     #65535,D0
        or.b      #16,0(A0,D0.L)
 ; while (!(*(vmfp + Reg_GPDR) & 0x20) && vTimeout) vTimeout--; // Aguarda Controlador liberar MSB para leitura
-funcIntMfpGpi6_9:
+funcIntMfpGpi6_12:
        move.l    (A3),A0
        move.w    (A2),D0
        and.l     #65535,D0
        move.b    0(A0,D0.L),D0
        and.b     #32,D0
-       bne.s     funcIntMfpGpi6_12
+       bne.s     funcIntMfpGpi6_15
        moveq     #1,D0
-       bra.s     funcIntMfpGpi6_13
-funcIntMfpGpi6_12:
+       bra.s     funcIntMfpGpi6_16
+funcIntMfpGpi6_15:
        clr.l     D0
-funcIntMfpGpi6_13:
+funcIntMfpGpi6_16:
        and.l     #255,D0
-       beq.s     funcIntMfpGpi6_11
+       beq.s     funcIntMfpGpi6_14
        tst.l     D2
-       beq.s     funcIntMfpGpi6_11
+       beq.s     funcIntMfpGpi6_14
        subq.l    #1,D2
-       bra       funcIntMfpGpi6_9
-funcIntMfpGpi6_11:
+       bra       funcIntMfpGpi6_12
+funcIntMfpGpi6_14:
 ; decoded |= ((*(vmfp + Reg_GPDR) & 0x0F) << 4);
        move.l    (A3),A0
        move.w    (A2),D0
@@ -7273,28 +7834,28 @@ funcIntMfpGpi6_11:
        or.b      D0,D3
 ; if (!vTimeout)
        tst.l     D2
-       bne.s     funcIntMfpGpi6_14
+       bne.s     funcIntMfpGpi6_17
 ; {
 ; if (debugMessages)
        tst.b     (A5)
-       beq.s     funcIntMfpGpi6_16
+       beq.s     funcIntMfpGpi6_19
 ; writeLongSerial("Aqui 0.1\r\n\0");
        pea       @monitor_81.L
        jsr       (A4)
        addq.w    #4,A7
-funcIntMfpGpi6_16:
+funcIntMfpGpi6_19:
 ; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
        move.l    (A3),A0
        move.w    (A2),D0
        and.l     #65535,D0
        and.b     #239,0(A0,D0.L)
 ; break;
-       bra       funcIntMfpGpi6_5
-funcIntMfpGpi6_14:
+       bra       funcIntMfpGpi6_8
+funcIntMfpGpi6_17:
 ; }
 ; if (decoded != 0x00)
        tst.b     D3
-       beq.s     funcIntMfpGpi6_20
+       beq.s     funcIntMfpGpi6_23
 ; {
 ; // Coloca tecla digitada no buffer
 ; kbdKeyBuffer[kbdKeyPtrW] = decoded;
@@ -7307,18 +7868,18 @@ funcIntMfpGpi6_14:
 ; if (kbdKeyPtrW > kbdKeyBuffMax)
        move.b    _kbdKeyPtrW.L,D0
        cmp.b     #65,D0
-       bls.s     funcIntMfpGpi6_20
+       bls.s     funcIntMfpGpi6_23
 ; kbdKeyPtrW = 0;
        clr.b     _kbdKeyPtrW.L
-funcIntMfpGpi6_20:
+funcIntMfpGpi6_23:
 ; }
 ; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
        move.l    (A3),A0
        move.w    (A2),D0
        and.l     #65535,D0
        and.b     #239,0(A0,D0.L)
-       bra       funcIntMfpGpi6_3
-funcIntMfpGpi6_5:
+       bra       funcIntMfpGpi6_6
+funcIntMfpGpi6_8:
 ; }
 ; *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS = 1 (I4) do controlador
        move.l    (A3),A0
@@ -7327,12 +7888,12 @@ funcIntMfpGpi6_5:
        or.b      #16,0(A0,D0.L)
 ; if (debugMessages)
        tst.b     (A5)
-       beq.s     funcIntMfpGpi6_22
+       beq.s     funcIntMfpGpi6_25
 ; writeLongSerial("Aqui 1\r\n\0");
        pea       @monitor_82.L
        jsr       (A4)
        addq.w    #4,A7
-funcIntMfpGpi6_22:
+funcIntMfpGpi6_25:
        movem.l   (A7)+,D2/D3/A2/A3/A4/A5
        rts
 ; #endif
@@ -7400,21 +7961,30 @@ _funcIntMfpGpi7:
        lea       _vmfp.L,A3
        lea       _writeLongSerial.L,A4
        lea       _debugMessages.L,A5
-; #ifdef __MOUSEPS2__EXT__
 ; unsigned char decoded = 0xFF;
        move.b    #255,D3
 ; int vTimeout;
+; if (callHook(HOOK_MOUSE))
+       pea       21
+       jsr       _callHook
+       addq.w    #4,A7
+       tst.b     D0
+       beq.s     funcIntMfpGpi7_1
+; return;
+       bra       funcIntMfpGpi7_30
+funcIntMfpGpi7_1:
+; #ifdef __MOUSEPS2__EXT__
 ; if (debugMessages)
        tst.b     (A5)
-       beq.s     funcIntMfpGpi7_1
+       beq.s     funcIntMfpGpi7_4
 ; writeLongSerial("Aqui 2\r\n\0");
        pea       @monitor_83.L
        jsr       (A4)
        addq.w    #4,A7
-funcIntMfpGpi7_1:
+funcIntMfpGpi7_4:
 ; // Pega dados do controlador via protocolo
 ; while (1)
-funcIntMfpGpi7_3:
+funcIntMfpGpi7_6:
 ; {
 ; if (*(vmfp + Reg_GPDR) & 0x80)
        move.l    (A3),A0
@@ -7423,11 +7993,11 @@ funcIntMfpGpi7_3:
        move.b    0(A0,D0.L),D0
        and.w     #255,D0
        and.w     #128,D0
-       beq.s     funcIntMfpGpi7_6
+       beq.s     funcIntMfpGpi7_9
 ; {
 ; break;
-       bra       funcIntMfpGpi7_5
-funcIntMfpGpi7_6:
+       bra       funcIntMfpGpi7_8
+funcIntMfpGpi7_9:
 ; }
 ; vTimeout = 0xFF;
        move.l    #255,D2
@@ -7437,19 +8007,19 @@ funcIntMfpGpi7_6:
        and.l     #65535,D0
        and.b     #239,0(A0,D0.L)
 ; while (*(vmfp + Reg_GPDR) & 0x20 && vTimeout) vTimeout--; // Aguarda Controlador liberar LSB para leitura
-funcIntMfpGpi7_8:
+funcIntMfpGpi7_11:
        move.l    (A3),A0
        move.w    (A2),D0
        and.l     #65535,D0
        move.b    0(A0,D0.L),D0
        and.b     #32,D0
        and.l     #255,D0
-       beq.s     funcIntMfpGpi7_10
+       beq.s     funcIntMfpGpi7_13
        tst.l     D2
-       beq.s     funcIntMfpGpi7_10
+       beq.s     funcIntMfpGpi7_13
        subq.l    #1,D2
-       bra       funcIntMfpGpi7_8
-funcIntMfpGpi7_10:
+       bra       funcIntMfpGpi7_11
+funcIntMfpGpi7_13:
 ; decoded = *(vmfp + Reg_GPDR) & 0x0F;
        move.l    (A3),A0
        move.w    (A2),D0
@@ -7459,35 +8029,35 @@ funcIntMfpGpi7_10:
        move.b    D0,D3
 ; if (vTimeout)
        tst.l     D2
-       beq.s     funcIntMfpGpi7_11
+       beq.s     funcIntMfpGpi7_14
 ; vTimeout = 0xFF;
        move.l    #255,D2
-funcIntMfpGpi7_11:
+funcIntMfpGpi7_14:
 ; *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS (I4) = 1 do controlador indicando que ja leu LSB
        move.l    (A3),A0
        move.w    (A2),D0
        and.l     #65535,D0
        or.b      #16,0(A0,D0.L)
 ; while (!(*(vmfp + Reg_GPDR) & 0x20) && vTimeout) vTimeout--; // Aguarda Controlador liberar MSB para leitura
-funcIntMfpGpi7_13:
+funcIntMfpGpi7_16:
        move.l    (A3),A0
        move.w    (A2),D0
        and.l     #65535,D0
        move.b    0(A0,D0.L),D0
        and.b     #32,D0
-       bne.s     funcIntMfpGpi7_16
+       bne.s     funcIntMfpGpi7_19
        moveq     #1,D0
-       bra.s     funcIntMfpGpi7_17
-funcIntMfpGpi7_16:
+       bra.s     funcIntMfpGpi7_20
+funcIntMfpGpi7_19:
        clr.l     D0
-funcIntMfpGpi7_17:
+funcIntMfpGpi7_20:
        and.l     #255,D0
-       beq.s     funcIntMfpGpi7_15
+       beq.s     funcIntMfpGpi7_18
        tst.l     D2
-       beq.s     funcIntMfpGpi7_15
+       beq.s     funcIntMfpGpi7_18
        subq.l    #1,D2
-       bra       funcIntMfpGpi7_13
-funcIntMfpGpi7_15:
+       bra       funcIntMfpGpi7_16
+funcIntMfpGpi7_18:
 ; decoded |= ((*(vmfp + Reg_GPDR) & 0x0F) << 4);
        move.l    (A3),A0
        move.w    (A2),D0
@@ -7498,24 +8068,24 @@ funcIntMfpGpi7_15:
        or.b      D0,D3
 ; if (!vTimeout)
        tst.l     D2
-       bne.s     funcIntMfpGpi7_18
+       bne.s     funcIntMfpGpi7_21
 ; {
 ; if (debugMessages)
        tst.b     (A5)
-       beq.s     funcIntMfpGpi7_20
+       beq.s     funcIntMfpGpi7_23
 ; writeLongSerial("Aqui 2.1\r\n\0");
        pea       @monitor_84.L
        jsr       (A4)
        addq.w    #4,A7
-funcIntMfpGpi7_20:
+funcIntMfpGpi7_23:
 ; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
        move.l    (A3),A0
        move.w    (A2),D0
        and.l     #65535,D0
        and.b     #239,0(A0,D0.L)
 ; break;
-       bra.s     funcIntMfpGpi7_5
-funcIntMfpGpi7_18:
+       bra.s     funcIntMfpGpi7_8
+funcIntMfpGpi7_21:
 ; }
 ; // Coloca dado mouse lido no buffer
 ; MseMovBuffer[MseMovPtrW] = decoded;
@@ -7528,17 +8098,17 @@ funcIntMfpGpi7_18:
 ; if (MseMovPtrW > kbdKeyBuffMax)
        move.b    _MseMovPtrW.L,D0
        cmp.b     #65,D0
-       bls.s     funcIntMfpGpi7_22
+       bls.s     funcIntMfpGpi7_25
 ; MseMovPtrW = 0;
        clr.b     _MseMovPtrW.L
-funcIntMfpGpi7_22:
+funcIntMfpGpi7_25:
 ; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
        move.l    (A3),A0
        move.w    (A2),D0
        and.l     #65535,D0
        and.b     #239,0(A0,D0.L)
-       bra       funcIntMfpGpi7_3
-funcIntMfpGpi7_5:
+       bra       funcIntMfpGpi7_6
+funcIntMfpGpi7_8:
 ; }
 ; *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS = 1 (I4) do controlador
        move.l    (A3),A0
@@ -7548,25 +8118,25 @@ funcIntMfpGpi7_5:
 ; // Verifica se ao final, o cursor de gravacao é modulo 3, ou seja, sempre entrou 3 dados do mouse
 ; // Se nao for modulo 3, volta até ser modulo 3.
 ; while ((MseMovPtrW % 3) != 0)
-funcIntMfpGpi7_24:
+funcIntMfpGpi7_27:
        move.b    _MseMovPtrW.L,D0
        and.l     #65535,D0
        divu.w    #3,D0
        swap      D0
        tst.b     D0
-       beq.s     funcIntMfpGpi7_26
+       beq.s     funcIntMfpGpi7_29
 ; MseMovPtrW = MseMovPtrW - 1;
        subq.b    #1,_MseMovPtrW.L
-       bra       funcIntMfpGpi7_24
-funcIntMfpGpi7_26:
+       bra       funcIntMfpGpi7_27
+funcIntMfpGpi7_29:
 ; if (debugMessages)
        tst.b     (A5)
-       beq.s     funcIntMfpGpi7_27
+       beq.s     funcIntMfpGpi7_30
 ; writeLongSerial("Aqui 3\r\n\0");
        pea       @monitor_85.L
        jsr       (A4)
        addq.w    #4,A7
-funcIntMfpGpi7_27:
+funcIntMfpGpi7_30:
        movem.l   (A7)+,D2/D3/A2/A3/A4/A5
        rts
 ; #endif
@@ -9230,8 +9800,8 @@ _startBasic5:
        xdef      _paramBasic
 _paramBasic:
        dc.l      6354620
-       xdef      _reserved
-_reserved:
+       xdef      _hookTable
+_hookTable:
        dc.l      6354876
        xdef      _ascii
 _ascii:

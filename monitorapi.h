@@ -95,7 +95,7 @@ typedef void (*mprintfType)(const char *fmt, ...);
  * O monitor recebe ponteiro de retorno oculto; estes wrappers mantem compatibilidade
  * ao compilar com m68k-elf-gcc.
  */
-typedef void (*vdp_sprite_get_attributes_rawType)(Sprite_attributes *out, unsigned int addr);
+/*typedef void (*vdp_sprite_get_attributes_rawType)(Sprite_attributes *out, unsigned int addr);
 typedef void (*vdp_sprite_get_position_rawType)(Sprite_attributes *out, unsigned int addr);
 typedef void (*vdp_get_cursor_rawType)(VDP_COORD *out);
 typedef void (*vdp_get_color_rawType)(VDP_COLOR *out);
@@ -127,3 +127,4 @@ static __inline__ VDP_COLOR vdp_get_color_safe(void)
 	((vdp_get_color_rawType *)(unsigned long)MONITOR_FUNC_TABLE)[31](&out);
 	return out;
 }
+*/

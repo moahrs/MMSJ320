@@ -71,22 +71,22 @@
            dc.l        $44             ; Vector # 29, 0x00000074: Level 5 Interrupt Autovector
            dc.l        $48             ; Vector # 30, 0x00000078: Level 6 Interrupt Autovector
            dc.l        $4C             ; Vector # 31, 0x0000007C: Level 7 Interrupt Autovector
-           dc.l        $008000C4             ; Vector # 32, 0x00000080: Trap # 0 Context switch - _OSCtxSw
-           dc.l        $54             ; Vector # 33, 0x00000084: Trap # 1
-           dc.l        $58             ; Vector # 34, 0x00000088: Trap # 2
-           dc.l        $5C             ; Vector # 35, 0x0000008C: Trap # 3
-           dc.l        $60             ; Vector # 36, 0x00000090: Trap # 4
-           dc.l        $64             ; Vector # 37, 0x00000094: Trap # 5
-           dc.l        $68             ; Vector # 38, 0x00000098: Trap # 6
-           dc.l        $6C             ; Vector # 39, 0x0000009C: Trap # 7
-           dc.l        $70             ; Vector # 40, 0x000000A0: Trap # 8
-           dc.l        $74             ; Vector # 41, 0x000000A4: Trap # 9
-           dc.l        $78             ; Vector # 42, 0x000000A8: Trap #10
-           dc.l        $7C             ; Vector # 43, 0x000000AC: Trap #11
-           dc.l        $80             ; Vector # 44, 0x000000B0: Trap #12
-           dc.l        $84             ; Vector # 45, 0x000000B4: Trap #13
-           dc.l        $88             ; Vector # 46, 0x000000B8: Trap #14
-           dc.l        $8C             ; Vector # 47, 0x000000BC: Trap #15 System call
+           dc.l        _trapFunc00     ; Vector # 32, 0x00000080: Trap # 0
+           dc.l        _trapFunc01     ; Vector # 33, 0x00000084: Trap # 1
+           dc.l        _trapFunc02     ; Vector # 34, 0x00000088: Trap # 2
+           dc.l        _trapFunc03     ; Vector # 35, 0x0000008C: Trap # 3
+           dc.l        _trapFunc04     ; Vector # 36, 0x00000090: Trap # 4
+           dc.l        _trapFunc05     ; Vector # 37, 0x00000094: Trap # 5
+           dc.l        _trapFunc06     ; Vector # 38, 0x00000098: Trap # 6
+           dc.l        _trapFunc07     ; Vector # 39, 0x0000009C: Trap # 7
+           dc.l        _trapFunc08     ; Vector # 40, 0x000000A0: Trap # 8
+           dc.l        _trapFunc09     ; Vector # 41, 0x000000A4: Trap # 9
+           dc.l        _trapFunc10     ; Vector # 42, 0x000000A8: Trap #10
+           dc.l        _trapFunc11     ; Vector # 43, 0x000000AC: Trap #11
+           dc.l        _trapFunc12     ; Vector # 44, 0x000000B0: Trap #12
+           dc.l        _trapFunc13     ; Vector # 45, 0x000000B4: Trap #13
+           dc.l        _trapFunc14     ; Vector # 46, 0x000000B8: Trap #14
+           dc.l        _trapFunc15     ; Vector # 47, 0x000000BC: Trap #15
            dc.l        $90             ; Vector # 48, 0x000000C0: Reserved
            dc.l        $94             ; Vector # 49, 0x000000C4: Reserved
            dc.l        $98             ; Vector # 50, 0x000000C8: Reserved
@@ -305,7 +305,7 @@
            dc.l    _intMfpTmrC          ; Vector $A5 - 0 1 0 1 Timer C
            dc.l    _intMfpGpi4          ; Vector $A6 - 0 1 1 0 General Purpose Interrupt 4(I4)
            dc.l    _intMfpGpi5          ; Vector $A7 - 0 1 1 1 General Purpose Interrupt 5 (I5)
-           dc.l    $008001D0  ; _OSTickISR ;_intMfpTmrB          ; Vector $A8 - 1 0 0 0 Timer B
+           dc.l    _intMfpTmrB          ; Vector $A8 - 1 0 0 0 Timer B
            dc.l    _intMfpXmitErr       ; Vector $A9 - 1 0 0 1 Transmit Error
            dc.l    _intMfpXmitBufEmpty  ; Vector $AA - 1 0 1 0 Transmit Buffer Empty
            dc.l    _intMfpRecErr        ; Vector $AB - 1 0 1 1 Receive Error

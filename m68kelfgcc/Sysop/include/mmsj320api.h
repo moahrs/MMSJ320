@@ -36,7 +36,58 @@ unsigned long *startBasic3           = 0x0060F6B0;
 unsigned long *startBasic4           = 0x0060F6B4;
 unsigned long *startBasic5           = 0x0060F6B8;
 unsigned char *paramBasic            = 0x0060F6BC; // 255 bytes para passagem de parametros do monitor/mmsjos para o basic
-unsigned char *reserved              = 0x0060F7BC; // Reservado
+
+#define HOOK_MAGIC      0x4D4A
+
+#define HOOKF_ACTIVE    0x0001
+#define HOOKF_SKIP_OS   0x0002
+#define HOOKF_CHAIN     0x0004
+#define HOOKF_ONESHOT   0x0008
+
+#define HOOK_TRAP00           0
+#define HOOK_TRAP01           1
+#define HOOK_TRAP02           2
+#define HOOK_TRAP03           3
+#define HOOK_TRAP04           4
+#define HOOK_TRAP05           5
+#define HOOK_TRAP06           6
+#define HOOK_TRAP07           7
+#define HOOK_TRAP08           8
+#define HOOK_TRAP09           9
+#define HOOK_TRAP10           10
+#define HOOK_TRAP11           11
+#define HOOK_TRAP12           12
+#define HOOK_TRAP13           13
+#define HOOK_TRAP14           14
+#define HOOK_TRAP15           15
+#define HOOK_TIMER_A          16
+#define HOOK_TIMER_B          17
+#define HOOK_TIMER_C          18
+#define HOOK_TIMER_D          19
+#define HOOK_KEYBOARD         20
+#define HOOK_MOUSE            21
+#define HOOK_GPIO0            22
+#define HOOK_GPIO1            23
+#define HOOK_GPIO2            24
+#define HOOK_GPIO3            25
+#define HOOK_GPIO4            26
+#define HOOK_GPIO5            27
+#define HOOK_XMIT_ERR         28
+#define HOOK_XMIT_BUF_EMPTY   29
+#define HOOK_REC_ERR          30
+#define HOOK_REC_BUF_FULL     31
+
+#define MAX_HOOKS             32
+
+typedef struct
+{
+    unsigned long magic;
+    unsigned long flags;
+    unsigned long (*addr)(void);
+} HOOK;
+
+HOOK *hookTable                      = 0x0060F7BC; 
+                                 // to 0x0060F954
 
 /*unsigned char *kbdvprim = 0x00609B3C;
 unsigned char *kbdvmove = 0x00609B3E;

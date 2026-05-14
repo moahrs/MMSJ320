@@ -234,6 +234,14 @@ void main(void)
     // Tempo para Inicializar a Memoria DRAM (se tiver), Perifericos e etc...
     for(ix = 0; ix <= 12000; ix++);
 
+    // Zera HOOKs
+    for (ix = 0; ix < MAX_HOOKS; ix++)
+    {
+        hookTable[ix].magic = 0;
+        hookTable[ix].flags = 0;
+        hookTable[ix].addr = 0;
+    }
+
     //---------------------------------------------
     // Enviar setup para o MFP 68901
     //---------------------------------------------
@@ -1247,7 +1255,7 @@ int processCmd(void)
         {
             if (!*hasMmsjosLoaded)
                 runBasic(linhaarg);
-            else 
+            else
                 printText("OS loaded. Run Basic from OS !!!\r\n\0");
         }
         else if (!strcmp(linhacomando,"BASICAP2") && iy == 8)
@@ -3060,8 +3068,173 @@ void sendByte(unsigned char b)
 #endif
 
 //-----------------------------------------------------------------------------
+char callHook(unsigned char hookId)
+{
+    if (hookTable[hookId].magic == HOOK_MAGIC)
+    {
+        if (hookTable[hookId].flags & HOOKF_ACTIVE)
+        {
+            if (hookTable[hookId].addr)
+                hookTable[hookId].addr();
+
+            if (hookTable[hookId].flags & HOOKF_ONESHOT)
+            {
+                hookTable[hookId].magic = 0x0000;
+                hookTable[hookId].flags &= ~HOOKF_ACTIVE;
+            }
+
+            if (hookTable[hookId].flags & HOOKF_SKIP_OS)
+                return 1;
+        }
+    }
+
+    return 0;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc00Handler(void)
+{
+    if (callHook(HOOK_TRAP00))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc01Handler(void)
+{
+    if (callHook(HOOK_TRAP01))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc02Handler(void)
+{
+    if (callHook(HOOK_TRAP02))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc03Handler(void)
+{
+    if (callHook(HOOK_TRAP03))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc04Handler(void)
+{
+    if (callHook(HOOK_TRAP04))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc05Handler(void)
+{
+    if (callHook(HOOK_TRAP05))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc06Handler(void)
+{
+    if (callHook(HOOK_TRAP06))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc07Handler(void)
+{
+    if (callHook(HOOK_TRAP07))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc08Handler(void)
+{
+    if (callHook(HOOK_TRAP08))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc09Handler(void)
+{
+    if (callHook(HOOK_TRAP09))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc10Handler(void)
+{
+    if (callHook(HOOK_TRAP10))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc11Handler(void)
+{
+    if (callHook(HOOK_TRAP11))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc12Handler(void)
+{
+    if (callHook(HOOK_TRAP12))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc13Handler(void)
+{
+    if (callHook(HOOK_TRAP13))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+void trapFunc14Handler(void)
+{
+    if (callHook(HOOK_TRAP14))
+        return;
+
+    return;
+}
+
+//-----------------------------------------------------------------------------
+// Trap 15
+//-----------------------------------------------------------------------------
 void basicFuncBios(void)
 {
+    if (callHook(HOOK_TRAP15))
+        return;
+
+    return;
 }
 
 //-----------------------------------------------------------------------------
@@ -3107,68 +3280,101 @@ void funcIntMultiTask(void)
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi0(void)
 {
-    // TBD
+    if (callHook(HOOK_GPIO0))
+        return;
 
     *(vmfp + Reg_ISRB) &= 0xFE;  // Reseta flag de interrupcao GPI0 no MFP
+
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi1(void)
 {
+    if (callHook(HOOK_GPIO1))
+        return;
 
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi2(void)
 {
+    if (callHook(HOOK_GPIO2))
+        return;
 
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi3(void)
 {
+    if (callHook(HOOK_GPIO3))
+        return;
 
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpTmrD(void)
 {
+    if (callHook(HOOK_TIMER_D))
+        return;
 
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpTmrC(void)
 {
+    if (callHook(HOOK_TIMER_C))
+        return;
 
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi4(void)
 {
+    if (callHook(HOOK_GPIO4))
+        return;
 
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi5(void)
 {
+    if (callHook(HOOK_GPIO5))
+        return;
 
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpTmrB(void)
 {
+    if (callHook(HOOK_TIMER_B))
+        return;
 
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpXmitErr(void)
 {
+    if (callHook(HOOK_XMIT_ERR))
+        return;
 
+    return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpXmitBufEmpty(void)
 {
+    if (callHook(HOOK_XMIT_BUF_EMPTY))
+        return;
+
     vBufXmitEmpty = 1; // Buffer Transmissao Vazio
     //*(vmfp + Reg_GPDR) = 0x05;
 //    *(vmfp + Reg_ISRA) &= 0xFB; // Reseta flag de interrupcao no MFP
@@ -3177,12 +3383,16 @@ void funcIntMfpXmitBufEmpty(void)
 //-----------------------------------------------------------------------------
 void funcIntMfpRecErr(void)
 {
-
+    if (callHook(HOOK_REC_ERR))
+        return;
 }
 
 //-----------------------------------------------------------------------------
 void funcIntMfpRecBufFull(void)
 {
+    if (callHook(HOOK_REC_BUF_FULL))
+        return;
+
     vBufReceived = *(vmfp + Reg_UDR);   // Carrega byte do buffer do MFP
 //    *(vmfp + Reg_ISRA) &= 0xEF;  // Reseta flag de interrupcao no MFP
 }
@@ -3190,6 +3400,9 @@ void funcIntMfpRecBufFull(void)
 //-----------------------------------------------------------------------------
 void funcIntMfpTmrA(void)
 {
+    if (callHook(HOOK_TIMER_A))
+        return;
+
     SysClockms = SysClockms + 1;
 
     // Reseta flag de interrupcao no MFP do Timer A
@@ -3199,10 +3412,13 @@ void funcIntMfpTmrA(void)
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi6(void)
 {
-    #ifdef __KEYPS2_EXT__
-        unsigned char decoded = 0xFF;
-        int vTimeout;
+    unsigned char decoded = 0xFF;
+    int vTimeout;
 
+    if (callHook(HOOK_KEYBOARD))
+        return;
+
+    #ifdef __KEYPS2_EXT__
         if (debugMessages)
             writeLongSerial("Aqui 0\r\n\0");
 
@@ -3317,10 +3533,13 @@ void funcIntMfpGpi6(void)
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi7(void)
 {
-    #ifdef __MOUSEPS2__EXT__
-        unsigned char decoded = 0xFF;
-        int vTimeout;
+    unsigned char decoded = 0xFF;
+    int vTimeout;
 
+    if (callHook(HOOK_MOUSE))
+        return;
+
+    #ifdef __MOUSEPS2__EXT__
         if (debugMessages)
             writeLongSerial("Aqui 2\r\n\0");
 
