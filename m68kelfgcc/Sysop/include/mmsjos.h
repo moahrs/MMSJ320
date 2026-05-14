@@ -158,7 +158,7 @@ extern MEM_ALOC vMemAloc;
 #define ATTR_SYSTEM         0x04
 #define ATTR_VOLUME         0x08
 #define ATTR_LONG_NAME      0x0f
-#define ATTR_DIRECTORY      0x10
+#define ATTR_DIRECTORY      0x10 
 #define ATTR_ARCHIVE        0x20
 #define ATTR_MASK           0x3f
 
