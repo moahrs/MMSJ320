@@ -671,10 +671,10 @@ void main(void)
     mprintf("OS> MMSJ-OS v%s\r\n",versionMMSJOS);
     mprintf("OS> Utility (c) 2014-2026\r\n\0");
     mprintf("OS> CPU 68HC000 AT 10MHz\r\n");
-    mprintf("OS> TMS9118 Video Display\r\n");
+    mprintf("OS> TMS9118 Video Display Processor\r\n");
     mprintf("      Graphic %dx%d\r\n", 256, 192);
     mprintf("      Text %dx%d\r\n", 40, 24);
-    mprintf("OS> 68901 Multi Peripherical Controller\r\n");
+    mprintf("OS> 68901 Multifunction Peripheral\r\n");
     mprintf("      Timers Controller...\r\n");
     mprintf("      RS-232C at 9600bps...\r\n");
     mprintf("      KeyBoard/Mouse Controller...\r\n");
