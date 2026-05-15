@@ -2276,14 +2276,14 @@ void startMGI(void) {
 
     vcorwf = VDP_WHITE;
     vcorwb = VDP_TRANSPARENT;
-    vcorwb2 = VDP_DARK_BLUE;
+    vcorwb2 = VDP_BLACK;
 
-    vdp_init(VDP_MODE_G2, VDP_DARK_BLUE, 0, 0);
-    vdp_set_bdcolor(VDP_DARK_BLUE);
+    vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
+    vdp_set_bdcolor(VDP_BLACK);
     vdp_mode = VDP_MODE_G2;
 
     fgcolorMgui = VDP_WHITE; // cores.fg;
-    bgcolorMgui = VDP_DARK_BLUE; // cores.bg;
+    bgcolorMgui = VDP_BLACK; // cores.bg;
     
     errorMalloc = 0;
 

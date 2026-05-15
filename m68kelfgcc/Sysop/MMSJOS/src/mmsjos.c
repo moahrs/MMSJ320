@@ -216,7 +216,8 @@ RET_PATH vretpath;
 RET_PATH vretpath2;
 MEM_ALOC vMemAloc;
 
-char startEnv = 0;
+char startEnv;
+char promptDet;
 
 //--- KeyBOard Functions
 int mmsjKeyHit(void);
@@ -386,9 +387,15 @@ static unsigned char mmsjosSaveConfig(void)
     strcat((char *)cfg, "PATH=");
     strcat((char *)cfg, (char *)mmsjosExecPath);
     strcat((char *)cfg, "\n");
+    strcat((char *)cfg, "STARTAT=");
+    strcat((char *)cfg, (char *)startEnv + 0x30);
+    strcat((char *)cfg, "\n");
+    strcat((char *)cfg, "PROMPT=");
+    strcat((char *)cfg, (char *)promptDet + 0x30);
+    strcat((char *)cfg, "\n");
 
     len = (unsigned long)strlen((char *)cfg);
-    if (saveFile((unsigned char *)"MMSJOS.CFG", cfg, len) != RETURN_OK)
+    if (saveFile((unsigned char *)"/MMSJOS.CFG", cfg, len) != RETURN_OK)
         return 0;
 
     return 1;
@@ -404,7 +411,7 @@ static void mmsjosLoadConfig(void)
 
     mmsjosSetDefaultExecPath();
 
-    sz = loadFile((unsigned char *)"MMSJOS.CFG", cfg);
+    sz = loadFile((unsigned char *)"/MMSJOS.CFG", cfg);
     if (sz == 0)
     {
         mmsjosSaveConfig();
@@ -429,8 +436,8 @@ static void mmsjosLoadConfig(void)
                 *(next - 1) = 0;
         }
 
-        // PATH=/[;xxxx;/yyyyyy]
-        if (!strncmp(line, "PATH=", 5))
+        
+        if (!strncmp(line, "PATH=", 5)) // PATH=/[;xxxx;/yyyyyy]
         {
             strncpy((char *)mmsjosExecPath, line + 5, sizeof(mmsjosExecPath) - 1);
             mmsjosExecPath[sizeof(mmsjosExecPath) - 1] = 0;
@@ -438,12 +445,15 @@ static void mmsjosLoadConfig(void)
             for (i = 0; mmsjosExecPath[i] != 0; i++)
                 mmsjosExecPath[i] = (unsigned char)toupper(mmsjosExecPath[i]);
         }
-
-        // 0 = MMSJOS / 1 = MGUI
-        if (!strncmp(line, "STARTAT=", 8))
+        else if (!strncmp(line, "STARTAT=", 8))  // 0 = MMSJOS / 1 = MGUI
         {
-            if (line[9] == 0x31)
+            if (line[8] == 0x31)
                 startEnv = 1;
+        }
+        else if (!strncmp(line, "PROMPT=", 7))   // 0 = #:> / 1 = #:[path]>
+        {
+            if (line[7] == 0x31)
+                promptDet = 1;
         }
 
         if (!next)
@@ -656,8 +666,14 @@ void printDiskError(unsigned char pError)
 //-----------------------------------------------------------------------------
 void putPrompt(char pAddLine)
 {
-//    msprintf("#:%s>",vdiratu);
-    printText("#:>");
+    if (promptDet)
+    {
+        mprintf("#:%s>",vdiratu);
+    }
+    else
+    {
+        printText("#:>");
+    }
 
     if (pAddLine)
         printText("\r\n\0");
@@ -673,7 +689,9 @@ void main(void)
     unsigned long ixxx;
 
     *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
-    
+    startEnv = 0;
+    promptDet = 0;
+
     vdp_mode = VDP_MODE_TEXT;
 
     clearScr();
@@ -699,12 +717,12 @@ void main(void)
 
     if (startEnv)
     {
-        strcpy(vbuf,"MGUI\n")
+        strcpy(vbuf,"MGUI\n");
     }
     else
     {
         vbuf[0] = '\0';
-        printText("Ok\r\n\0");
+        printText("\r\n\0");
         putPrompt(0);
         showCursor();
     }

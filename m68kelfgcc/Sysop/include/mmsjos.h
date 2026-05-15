@@ -454,7 +454,6 @@ typedef struct header_compat {
 #endif
 
 // Funcoes de Alocacao de Memoria
-extern void memInit(void);
 
 /************************************************;
 ; Convert LBA to CHS
