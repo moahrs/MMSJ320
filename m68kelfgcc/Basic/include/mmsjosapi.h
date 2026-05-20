@@ -3,7 +3,8 @@
 
 // Function Shared Definitions
 #define MMSJOS_FUNC_TABLE    0x00800034
-#define MGUI_FUNC_TABLE      0x00803B24
+#define MGUI_FUNC_TABLE      0x008000E8
+#define MMSJOS_UCOSII_TABLE  0x0080E628
 
 // MMSJOS Struct for Functions
 typedef unsigned char (*fsGetDirAtuDataType)(FAT32_DIR *pDir);
@@ -17,23 +18,37 @@ typedef unsigned char (*fsCreateFileType)(char * vfilename);
 typedef unsigned char (*fsOpenFileType)(char * vfilename);
 typedef unsigned char (*fsCloseFileType)(char * vfilename, unsigned char vupdated);
 typedef unsigned long (*fsInfoFileType)(char * vfilename, unsigned char vtype);
-typedef unsigned char (*fsFreeType)(unsigned long vAddress);
+typedef unsigned char (*mprintfType)(const char *fmt, ...);
 typedef unsigned short (*fsReadFileType)(char * vfilename, unsigned long voffset, unsigned char *buffer, unsigned short vsizebuffer);
 typedef unsigned char (*fsWriteFileType)(char * vfilename, unsigned long voffset, unsigned char *buffer, unsigned char vsizebuffer);
 typedef unsigned char (*fsDelFileType)(char * vfilename);
 typedef unsigned char (*fsRenameFileType)(char * vfilename, char * vnewname);
-typedef unsigned long (*loadFileType)(unsigned char *parquivo, unsigned short* xaddress);
+typedef unsigned long (*loadFileType)(unsigned char *parquivo, void* xaddress);
 typedef unsigned char (*fsMakeDirType)(char * vdirname);
 typedef unsigned char (*fsChangeDirType)(char * vdirname);
 typedef unsigned char (*fsRemoveDirType)(char * vdirname);
+typedef unsigned char (*saveFileType)(unsigned char *parquivo, void* xaddress, unsigned long xsize);
 typedef unsigned char (*fsPwdDirType)(unsigned char *vdirpath);
 typedef unsigned long (*fsFindInDirType)(char * vname, unsigned char vtype);
 typedef unsigned long (*mmsjKeyGetType)(MMSJ_KEYEVENT *k);
 typedef unsigned long (*fsFindNextClusterType)(unsigned long vclusteratual, unsigned char vtype);
 typedef unsigned long (*fsFindClusterFreeType)(unsigned char vtype);
-typedef unsigned char (*OSTimeDlyHMSMType)(unsigned char hours, unsigned char minutes, unsigned char seconds, unsigned int ms);
 typedef unsigned char (*OSTaskSuspendType)(unsigned char prio);
 typedef unsigned char (*OSTaskResumeType)(unsigned char prio);
+typedef void *(*msmallocType)(unsigned long size);
+typedef void *(*msreallocType)(void *ptr, unsigned long newSize);
+typedef void (*msfreeType)(void *ptr);
+typedef int (*loadMbinAndRunType)(char *filename, char porig);
+typedef int (*readFontStructType)(unsigned char *file, unsigned long fileSize, FON_INFO *info);
+typedef void (*fsListDirType)(FILES_DIR * dir, unsigned char *param);
+typedef unsigned char (*setFontUseG2Type)(unsigned char *nameFile);
+typedef unsigned char (*loadFontUseG2Type)(unsigned char pos, unsigned char *nameFile, unsigned char *bufLoad, unsigned char *bufSave);
+typedef void (*msprintfType)(char *buffer, const char *fmt, ...);
+typedef void (*clearScrWType)(unsigned char vcolor);
+typedef int (*getFontUseG2Type)(MGUI_SET_FONT *fonInfo);
+typedef void (*setModeVideoOSType)(unsigned char mode);
+typedef unsigned char (*getModeVideoOSType)(void);
+typedef void (*setColorVideoG2Type)(unsigned char fgcolor, unsigned char bgcolor);
 
 // MGUI Struct for Functions
 typedef void (*writesxyType)(unsigned short x, unsigned short y, unsigned char sizef, unsigned char *msgs, unsigned short pcolor, unsigned short pbcolor);
@@ -52,22 +67,24 @@ typedef void (*PutIconeType)(unsigned int* vimage, unsigned short x, unsigned sh
 typedef void (*InvertRectType)(unsigned short xi, unsigned short yi, unsigned short pwidth, unsigned short pheight);
 typedef void (*SelRectType)(unsigned short x, unsigned short y, unsigned short pwidth, unsigned short pheight);
 typedef void (*PutImageType)(unsigned char* cimage, unsigned short x, unsigned short y);
-typedef void (*runFromMGUIType)(unsigned long vEnderExec);
+typedef void (*runFromMGUIType)(unsigned long vEnderExec, unsigned long vFileBuf);
 typedef unsigned char (*waitButtonType)(void);
 typedef unsigned char (*messageType)(char* bstr, unsigned char bbutton, unsigned short btime);
 typedef void (*drawButtonsnewType)(unsigned char *vbuttons, unsigned char *pbbutton, unsigned short xib, unsigned short yib);
 typedef void (*showWindowType)(unsigned char* bstr, unsigned char x1, unsigned char y1, unsigned short pwidth, unsigned char pheight, unsigned char bbutton);
 typedef void (*TrocaSpriteMouseType)(unsigned char vicone);
 typedef void (*MostraIconeType)(unsigned short xi, unsigned short yi, unsigned char vicone, unsigned char colorfg, unsigned char colorbg);
-typedef char (*mguiCfgGetType)(char *section, char *key, char *vOutBuf, unsigned char vOutMax);
+typedef char (*mguiCfgGetType)(char *section, char *key, char *vOutBuf, unsigned char vOutMax);;
 typedef void (*putImagePbmP4Type)(unsigned long* memoria, unsigned short ix, unsigned short iy);
 typedef void (*setPosPressedType)(unsigned char vppostx, unsigned char vpposty);
-typedef void (*getMouseDataType)(MGUI_MOUSE *pmouseData);
-typedef void (*toggleboxType)(unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
-typedef void (*radiosetType)(unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
-typedef void (*fillinType)(unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
+typedef void (*getMouseDataType)(char ptipo, MGUI_MOUSE *pmouseData);
+typedef void (*toggleboxType)(unsigned char id, unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
+typedef void (*radiosetType)(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
+typedef void (*fillinType)(unsigned char id, unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
 typedef void (*getColorDataType)(MGUI_COLOR *pColor);
-typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, unsigned short yib, unsigned short pwidth, unsigned short height, unsigned char vtipo);
+typedef unsigned char (*buttonType)(unsigned char id, unsigned char* title, unsigned short xib, unsigned short yib, unsigned short pwidth, unsigned short height, unsigned char vtipo);
+
+// MMSJOS UCOSII Struct for Functions
 
 // MMSJOS define functions
 #define fsGetDirAtuData ((fsGetDirAtuDataType *)(unsigned long)MMSJOS_FUNC_TABLE)[0] // Índice da função
@@ -81,7 +98,7 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define fsOpenFile ((fsOpenFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[8] // Índice da função
 #define fsCloseFile ((fsCloseFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[9] // Índice da função
 #define fsInfoFile ((fsInfoFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[10] // Índice da função
-#define fsFree ((fsFreeType *)(unsigned long)MMSJOS_FUNC_TABLE)[11] // Índice da função
+#define mprintf ((mprintfType *)(unsigned long)MMSJOS_FUNC_TABLE)[11] // Índice da função
 #define fsReadFile ((fsReadFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[12] // Índice da função
 #define fsWriteFile ((fsWriteFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[13] // Índice da função
 #define fsDelFile ((fsDelFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[14] // Índice da função
@@ -90,13 +107,27 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define fsMakeDir ((fsMakeDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[17] // Índice da função
 #define fsChangeDir ((fsChangeDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[18] // Índice da função
 #define fsRemoveDir ((fsRemoveDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[19] // Índice da função
-#define OSTimeDlyHMSM ((OSTimeDlyHMSMType *)(unsigned long)MMSJOS_FUNC_TABLE)[20] // Índice da função
+#define saveFile ((saveFileType *)(unsigned long)MMSJOS_FUNC_TABLE)[20] // Índice da função
 #define fsFindInDir ((fsFindInDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[21] // Índice da função
 #define mmsjKeyGet ((mmsjKeyGetType *)(unsigned long)MMSJOS_FUNC_TABLE)[22] // Índice da função
 #define fsFindNextCluster ((fsFindNextClusterType *)(unsigned long)MMSJOS_FUNC_TABLE)[23] // Índice da função
 #define fsFindClusterFree ((fsFindClusterFreeType *)(unsigned long)MMSJOS_FUNC_TABLE)[24] // Índice da função
 #define OSTaskSuspend ((OSTaskSuspendType *)(unsigned long)MMSJOS_FUNC_TABLE)[25] // Índice da função
 #define OSTaskResume ((OSTaskResumeType *)(unsigned long)MMSJOS_FUNC_TABLE)[26] // Índice da função
+#define msmalloc ((msmallocType *)(unsigned long)MMSJOS_FUNC_TABLE)[27] // Índice da função
+#define msrealloc ((msreallocType *)(unsigned long)MMSJOS_FUNC_TABLE)[28] // Índice da função
+#define msfree ((msfreeType *)(unsigned long)MMSJOS_FUNC_TABLE)[29] // Índice da função
+#define loadMbinAndRun ((loadMbinAndRunType *)(unsigned long)MMSJOS_FUNC_TABLE)[30] // Índice da função
+#define readFontStruct ((readFontStructType *)(unsigned long)MMSJOS_FUNC_TABLE)[31] // Índice da função
+#define fsListDir ((fsListDirType *)(unsigned long)MMSJOS_FUNC_TABLE)[32] // Índice da função
+#define setFontUseG2 ((setFontUseG2Type *)(unsigned long)MMSJOS_FUNC_TABLE)[33] // Índice da função
+#define loadFontUseG2 ((loadFontUseG2Type *)(unsigned long)MMSJOS_FUNC_TABLE)[34] // Índice da função
+#define msprintf ((msprintfType *)(unsigned long)MMSJOS_FUNC_TABLE)[35] // Índice da função
+#define clearScrW ((clearScrWType *)(unsigned long)MMSJOS_FUNC_TABLE)[36] // Índice da função
+#define getFontUseG2 ((getFontUseG2Type *)(unsigned long)MMSJOS_FUNC_TABLE)[37] // Índice da função
+#define setModeVideoOS ((setModeVideoOSType *)(unsigned long)MMSJOS_FUNC_TABLE)[38] // Índice da função
+#define getModeVideoOS ((getModeVideoOSType *)(unsigned long)MMSJOS_FUNC_TABLE)[39] // Índice da função
+#define setColorVideoG2 ((setColorVideoG2Type *)(unsigned long)MMSJOS_FUNC_TABLE)[40] // Índice da função
 
 // MGUI define functions
 #define writesxy ((writesxyType *)(unsigned long)MGUI_FUNC_TABLE)[0] // Índice da função
@@ -132,6 +163,9 @@ typedef unsigned char (*buttonType)(unsigned char* title, unsigned short xib, un
 #define getColorData ((getColorDataType *)(unsigned long)MGUI_FUNC_TABLE)[30] // Índice da função
 #define button ((buttonType *)(unsigned long)MGUI_FUNC_TABLE)[31] // Índice da função
 
+// MMSJOS UCOSII define Functions
+
+// Apoio
 const unsigned char strValidChars[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ^&'@{}[],$=!-#()%.+~_";
 
 const unsigned char vmesc[12][3] = {{'J','a','n'},{'F','e','b'},{'M','a','r'},

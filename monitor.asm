@@ -36,6 +36,7 @@
 ; * 24/04/2026  1.4a04  Moacir Jr.   Ajustes nas variaveis basic e prepara para LOADBAS
 ; * 02/05/2026  1.4a05  Moacir Jr.   Ajuste endereco loadbas
 ; * 09/05/2026  1.4a06  Moacir Jr.   Ajuste Tela vermelha da morte - stack error
+; * 15/05/2026  1.4a07  Moacir Jr.   Ajuste teclado PS/2 para o MMSJ320_PS2ADVv2
 ; *--------------------------------------------------------------------------------
 ; *
 ; * Mapa de Memoria
@@ -87,16 +88,18 @@
 ; *
 ; * Enderecos de Perifericos
 ; *
-; * 00200001h e 00200003 - DISK Arduino UNO (Temp)
-; *                        - A1 = 0: r/w 4 bits LSB
-; *                        - A1 = 1: r/w 4 bits MSB
-; * 00400020h a 0040003F - MFP MC68901p - Cristal de 2.4576MHz
-; *                        - SERIAL 9600, 8, 1, n
-; *                        - TECLADO (PC-AT - PS/2)
-; *                        - Controle de Interrupcoes e PS/2
-; * 00400040h a 00400043 - VIDEO TMS9118 (16KB VRAM):
-; *             00400041 - Data Mode
-; *             00400043 - Register / Adress Mode
+; * 00200000h a 002FFFFFh - Expansao
+; *     - 00200001h e 00200003h - DISK Arduino UNO (Temp)
+; *                             - A1 = 0: r/w 4 bits LSB
+; *                             - A1 = 1: r/w 4 bits MSB
+; * 00400020h a 0040003Fh - MFP MC68901p - Cristal de 2.4576MHz
+; *                         - SERIAL 9600, 8, 1, n
+; *                         - Controle de Interrupcoes
+; *                         - Timers 
+; * 00400040h a 00400043h - VIDEO TMS9118 (16KB VRAM):
+; *             00400041h - Data Mode
+; *             00400043h - Register / Adress Mode
+; * 00400060h             - kbd/mouse controller final A0 = 0 = UDS (D8 a D15)
 ; ********************************************************************************/
 ; #define VDP_EXT extern
 ; #define MFP_EXT extern
@@ -109,8 +112,9 @@
 ; #include "mmsj320vdp.h"
 ; #include "mmsj320mfp.h"
 ; #include "monitor.h"
-; #define versionBios "1.4a06"
+; #define versionBios "1.4a07"
 ; HEADER *_allocp;
+; unsigned char *inKbdMse = 0x00400060; // Nano kbd/mouse ler final A0 = 1 = UDS (D8 a D15)
 ; #define ERR_MAGIC       (*(volatile unsigned long  *)0x0060E200)
 ; #define ERR_VERSION     (*(volatile unsigned short *)0x0060E204)
 ; #define ERR_TYPE        (*(volatile unsigned short *)0x0060E206)
@@ -186,6 +190,9 @@
 ; void mprintf_ulong_dec(unsigned long v);
 ; void mprintf(const char *fmt, ...);
 ; void inputTask(void);
+; #if defined(__KEYPS2_EXT__) || defined(__MOUSEPS2__EXT__)
+; unsigned char readInKbdMseByte(void);
+; #endif
 ; #ifdef __KEYPS2__
 ; void scanCodeTask(void *);
 ; #endif
@@ -395,13 +402,7 @@ main_12:
 ; #ifdef __KEYPS2__
 ; *(vmfp + Reg_DDR)   = 0x10; // I4 as Output, I7 - I5 e I3 - I0 as Input
 ; #endif
-; #ifdef __KEYPS2_EXT__
-; *(vmfp + Reg_DDR)   = 0x10; // I4 as Output, I7 - I5 e I3 - I0 as Input
-       move.l    (A2),A0
-       move.w    _Reg_DDR.L,D0
-       and.l     #65535,D0
-       move.b    #16,0(A0,D0.L)
-; #endif
+; /* __KEYPS2_EXT__: CS/dados no barramento nano (inKbdMse), nao no GPIO MFP */
 ; *(vmfp + Reg_AER)   = 0x00; // All Interrupts transction 1 to 0
        move.l    (A2),A0
        move.w    _Reg_AER.L,D0
@@ -429,13 +430,6 @@ main_12:
        and.l     #65535,D0
        clr.b     0(A0,D0.L)
 ; //---------------------------------------------
-; #ifdef __KEYPS2_EXT__
-; *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS = 1 (I4) do controlador
-       move.l    (A2),A0
-       move.w    _Reg_GPDR.L,D0
-       and.l     #65535,D0
-       or.b      #16,0(A0,D0.L)
-; #endif
 ; //---------------------------------------------
 ; // Enviar setup para o VDP TMS9118
 ; //---------------------------------------------
@@ -448,8 +442,8 @@ main_12:
        move.b    #1,_videoScroll.L
 ; videoScrollDir = 1;    // Pra Cima
        move.b    #1,_videoScrollDir.L
-; videoCursorBlink = 0;
-       clr.b     _videoCursorBlink.L
+; videoCursorBlink = 1;
+       move.b    #1,_videoCursorBlink.L
 ; videoCursorShow = 0;
        clr.b     _videoCursorShow.L
 ; vdpMaxCols = 39;
@@ -810,32 +804,35 @@ _inputTask:
 inputTask_1:
 ; {
 ; // Piscar Cursor
-; if (debugMessages) //(videoCursorBlink)
+; if (debugMessages ||videoCursorBlink)
        tst.b     _debugMessages.L
+       bne.s     inputTask_6
+       tst.b     _videoCursorBlink.L
        beq.s     inputTask_4
+inputTask_6:
 ; {
 ; switch (countCursor)
        cmp.l     #12000,D4
-       beq.s     inputTask_9
-       bgt.s     inputTask_7
+       beq.s     inputTask_10
+       bgt.s     inputTask_8
        cmp.l     #6000,D4
-       beq.s     inputTask_8
-       bra.s     inputTask_7
-inputTask_8:
+       beq.s     inputTask_9
+       bra.s     inputTask_8
+inputTask_9:
 ; {
 ; case 6000:  //20
 ; hideCursor();
        jsr       _hideCursor
 ; break;
-       bra.s     inputTask_7
-inputTask_9:
+       bra.s     inputTask_8
+inputTask_10:
 ; case 12000: //40
 ; showCursor();
        jsr       _showCursor
 ; countCursor = 0;
        clr.l     D4
 ; break;
-inputTask_7:
+inputTask_8:
 ; }
 ; countCursor++;
        addq.l    #1,D4
@@ -846,20 +843,20 @@ inputTask_4:
        move.b    D0,D2
 ; if (vtec)
        tst.b     D2
-       beq       inputTask_10
+       beq       inputTask_11
 ; {
 ; hideCursor();
        jsr       _hideCursor
 ; if (vtec >= 0x20 && vtec != 0x7F)   // Caracter Printavel menos o DeLete
        cmp.b     #32,D2
-       blo       inputTask_12
+       blo       inputTask_13
        cmp.b     #127,D2
-       beq       inputTask_12
+       beq       inputTask_13
 ; {
 ; // Digitcao Normal
 ; if (vbufptr > 127)
        cmp.b     #127,D3
-       bls.s     inputTask_14
+       bls.s     inputTask_15
 ; {
 ; vbufptr--;
        subq.b    #1,D3
@@ -868,7 +865,7 @@ inputTask_4:
        pea       8
        jsr       (A3)
        addq.w    #8,A7
-inputTask_14:
+inputTask_15:
 ; }
 ; printChar(vtec, 1);
        pea       1
@@ -884,16 +881,16 @@ inputTask_14:
 ; vbuf[vbufptr] = '\0';
        and.l     #255,D3
        clr.b     0(A2,D3.L)
-       bra       inputTask_20
-inputTask_12:
+       bra       inputTask_21
+inputTask_13:
 ; }
 ; else if (vtec == 0x08)  // Backspace
        cmp.b     #8,D2
-       bne.s     inputTask_16
+       bne.s     inputTask_17
 ; {
 ; if (vbufptr > 0)
        cmp.b     #0,D3
-       bls.s     inputTask_18
+       bls.s     inputTask_19
 ; {
 ; vbuf[vbufptr] = 0x00;
        and.l     #255,D3
@@ -905,17 +902,17 @@ inputTask_12:
        pea       8
        jsr       (A3)
        addq.w    #8,A7
-inputTask_18:
-       bra       inputTask_20
-inputTask_16:
+inputTask_19:
+       bra       inputTask_21
+inputTask_17:
 ; }
 ; }
 ; else if (vtec == 0x0D || vtec == 0x0A)
        cmp.b     #13,D2
-       beq.s     inputTask_22
+       beq.s     inputTask_23
        cmp.b     #10,D2
-       bne       inputTask_20
-inputTask_22:
+       bne       inputTask_21
+inputTask_23:
 ; {
 ; vRetProcCmd = 1;
        moveq     #1,D5
@@ -934,22 +931,22 @@ inputTask_22:
        clr.b     D3
 ; if (vRetProcCmd)
        tst.l     D5
-       beq.s     inputTask_23
+       beq.s     inputTask_24
 ; printText("\r\n\0");
        pea       @monitor_2.L
        jsr       _printText
        addq.w    #4,A7
-inputTask_23:
+inputTask_24:
 ; printChar('>', 1);
        pea       1
        pea       62
        jsr       (A3)
        addq.w    #8,A7
-inputTask_20:
+inputTask_21:
 ; }
 ; showCursor();
        jsr       _showCursor
-inputTask_10:
+inputTask_11:
 ; }
 ; vtecant = vtec;
        move.b    D2,-1(A6)
@@ -7732,19 +7729,30 @@ funcIntMfpTmrA_3:
 ; // Reseta flag de interrupcao no MFP do Timer A
 ; //    *(vmfp + Reg_ISRA) &= 0xDF;
 ; }
+; #if defined(__KEYPS2_EXT__) || defined(__MOUSEPS2__EXT__)
+; //-----------------------------------------------------------------------------
+; // Le 1 byte do nano (ciclo CS/RW/DTACK no barramento via inKbdMse)
+; //-----------------------------------------------------------------------------
+; unsigned char readInKbdMseByte(void)
+; {
+       xdef      _readInKbdMseByte
+_readInKbdMseByte:
+; /* Endereco impar (UDS): num acesso byte, o 68000 usa a metade alta do barramento;
+; o valor ja aparece nos 8 bits menos significativos recebidos pelo C. */
+; return *(volatile unsigned char *)(inKbdMse);
+       move.l    _inKbdMse.L,D0
+       move.l    D0,A0
+       move.b    (A0),D0
+       rts
+; }
+; #endif
 ; //-----------------------------------------------------------------------------
 ; void funcIntMfpGpi6(void)
 ; {
        xdef      _funcIntMfpGpi6
 _funcIntMfpGpi6:
-       movem.l   D2/D3/A2/A3/A4/A5,-(A7)
-       lea       _Reg_GPDR.L,A2
-       lea       _vmfp.L,A3
-       lea       _writeLongSerial.L,A4
-       lea       _debugMessages.L,A5
-; unsigned char decoded = 0xFF;
-       move.b    #255,D3
-; int vTimeout;
+       link      A6,#-4
+; unsigned char decoded;
 ; if (callHook(HOOK_KEYBOARD))
        pea       20
        jsr       _callHook
@@ -7752,149 +7760,27 @@ _funcIntMfpGpi6:
        tst.b     D0
        beq.s     funcIntMfpGpi6_1
 ; return;
-       bra       funcIntMfpGpi6_25
+       bra.s     funcIntMfpGpi6_4
 funcIntMfpGpi6_1:
 ; #ifdef __KEYPS2_EXT__
-; if (debugMessages)
-       tst.b     (A5)
-       beq.s     funcIntMfpGpi6_4
-; writeLongSerial("Aqui 0\r\n\0");
-       pea       @monitor_80.L
-       jsr       (A4)
-       addq.w    #4,A7
-funcIntMfpGpi6_4:
-; // Pega dados do controlador via protocolo
-; while (decoded != 0)
-funcIntMfpGpi6_6:
-       tst.b     D3
-       beq       funcIntMfpGpi6_8
-; {
-; vTimeout = 0x0FF;
-       move.l    #255,D2
-; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       and.b     #239,0(A0,D0.L)
-; while (*(vmfp + Reg_GPDR) & 0x20 && vTimeout) vTimeout--; // Aguarda Controlador liberar LSB para leitura
-funcIntMfpGpi6_9:
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       move.b    0(A0,D0.L),D0
-       and.b     #32,D0
-       and.l     #255,D0
-       beq.s     funcIntMfpGpi6_11
-       tst.l     D2
-       beq.s     funcIntMfpGpi6_11
-       subq.l    #1,D2
-       bra       funcIntMfpGpi6_9
-funcIntMfpGpi6_11:
-; decoded = *(vmfp + Reg_GPDR) & 0x0F;
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       move.b    0(A0,D0.L),D0
-       and.b     #15,D0
-       move.b    D0,D3
-; vTimeout = 0x0FF;
-       move.l    #255,D2
-; *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS (I4) = 1 do controlador indicando que ja leu LSB
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       or.b      #16,0(A0,D0.L)
-; while (!(*(vmfp + Reg_GPDR) & 0x20) && vTimeout) vTimeout--; // Aguarda Controlador liberar MSB para leitura
-funcIntMfpGpi6_12:
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       move.b    0(A0,D0.L),D0
-       and.b     #32,D0
-       bne.s     funcIntMfpGpi6_15
-       moveq     #1,D0
-       bra.s     funcIntMfpGpi6_16
-funcIntMfpGpi6_15:
-       clr.l     D0
-funcIntMfpGpi6_16:
-       and.l     #255,D0
-       beq.s     funcIntMfpGpi6_14
-       tst.l     D2
-       beq.s     funcIntMfpGpi6_14
-       subq.l    #1,D2
-       bra       funcIntMfpGpi6_12
-funcIntMfpGpi6_14:
-; decoded |= ((*(vmfp + Reg_GPDR) & 0x0F) << 4);
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       move.b    0(A0,D0.L),D0
-       and.b     #15,D0
-       lsl.b     #4,D0
-       or.b      D0,D3
-; if (!vTimeout)
-       tst.l     D2
-       bne.s     funcIntMfpGpi6_17
-; {
-; if (debugMessages)
-       tst.b     (A5)
-       beq.s     funcIntMfpGpi6_19
-; writeLongSerial("Aqui 0.1\r\n\0");
-       pea       @monitor_81.L
-       jsr       (A4)
-       addq.w    #4,A7
-funcIntMfpGpi6_19:
-; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       and.b     #239,0(A0,D0.L)
-; break;
-       bra       funcIntMfpGpi6_8
-funcIntMfpGpi6_17:
-; }
-; if (decoded != 0x00)
-       tst.b     D3
-       beq.s     funcIntMfpGpi6_23
-; {
-; // Coloca tecla digitada no buffer
+; decoded = readInKbdMseByte();
+       jsr       _readInKbdMseByte
+       move.b    D0,-1(A6)
 ; kbdKeyBuffer[kbdKeyPtrW] = decoded;
        move.b    _kbdKeyPtrW.L,D0
        and.l     #255,D0
        lea       _kbdKeyBuffer.L,A0
-       move.b    D3,0(A0,D0.L)
+       move.b    -1(A6),0(A0,D0.L)
 ; kbdKeyPtrW = kbdKeyPtrW + 1;
        addq.b    #1,_kbdKeyPtrW.L
 ; if (kbdKeyPtrW > kbdKeyBuffMax)
        move.b    _kbdKeyPtrW.L,D0
        cmp.b     #65,D0
-       bls.s     funcIntMfpGpi6_23
+       bls.s     funcIntMfpGpi6_4
 ; kbdKeyPtrW = 0;
        clr.b     _kbdKeyPtrW.L
-funcIntMfpGpi6_23:
-; }
-; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       and.b     #239,0(A0,D0.L)
-       bra       funcIntMfpGpi6_6
-funcIntMfpGpi6_8:
-; }
-; *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS = 1 (I4) do controlador
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       or.b      #16,0(A0,D0.L)
-; if (debugMessages)
-       tst.b     (A5)
-       beq.s     funcIntMfpGpi6_25
-; writeLongSerial("Aqui 1\r\n\0");
-       pea       @monitor_82.L
-       jsr       (A4)
-       addq.w    #4,A7
-funcIntMfpGpi6_25:
-       movem.l   (A7)+,D2/D3/A2/A3/A4/A5
+funcIntMfpGpi6_4:
+       unlk      A6
        rts
 ; #endif
 ; #ifdef __KEYPS2__
@@ -7956,14 +7842,8 @@ funcIntMfpGpi6_25:
 ; {
        xdef      _funcIntMfpGpi7
 _funcIntMfpGpi7:
-       movem.l   D2/D3/A2/A3/A4/A5,-(A7)
-       lea       _Reg_GPDR.L,A2
-       lea       _vmfp.L,A3
-       lea       _writeLongSerial.L,A4
-       lea       _debugMessages.L,A5
-; unsigned char decoded = 0xFF;
-       move.b    #255,D3
-; int vTimeout;
+       link      A6,#-4
+; unsigned char decoded;
 ; if (callHook(HOOK_MOUSE))
        pea       21
        jsr       _callHook
@@ -7971,173 +7851,27 @@ _funcIntMfpGpi7:
        tst.b     D0
        beq.s     funcIntMfpGpi7_1
 ; return;
-       bra       funcIntMfpGpi7_30
+       bra.s     funcIntMfpGpi7_4
 funcIntMfpGpi7_1:
 ; #ifdef __MOUSEPS2__EXT__
-; if (debugMessages)
-       tst.b     (A5)
-       beq.s     funcIntMfpGpi7_4
-; writeLongSerial("Aqui 2\r\n\0");
-       pea       @monitor_83.L
-       jsr       (A4)
-       addq.w    #4,A7
-funcIntMfpGpi7_4:
-; // Pega dados do controlador via protocolo
-; while (1)
-funcIntMfpGpi7_6:
-; {
-; if (*(vmfp + Reg_GPDR) & 0x80)
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       move.b    0(A0,D0.L),D0
-       and.w     #255,D0
-       and.w     #128,D0
-       beq.s     funcIntMfpGpi7_9
-; {
-; break;
-       bra       funcIntMfpGpi7_8
-funcIntMfpGpi7_9:
-; }
-; vTimeout = 0xFF;
-       move.l    #255,D2
-; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       and.b     #239,0(A0,D0.L)
-; while (*(vmfp + Reg_GPDR) & 0x20 && vTimeout) vTimeout--; // Aguarda Controlador liberar LSB para leitura
-funcIntMfpGpi7_11:
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       move.b    0(A0,D0.L),D0
-       and.b     #32,D0
-       and.l     #255,D0
-       beq.s     funcIntMfpGpi7_13
-       tst.l     D2
-       beq.s     funcIntMfpGpi7_13
-       subq.l    #1,D2
-       bra       funcIntMfpGpi7_11
-funcIntMfpGpi7_13:
-; decoded = *(vmfp + Reg_GPDR) & 0x0F;
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       move.b    0(A0,D0.L),D0
-       and.b     #15,D0
-       move.b    D0,D3
-; if (vTimeout)
-       tst.l     D2
-       beq.s     funcIntMfpGpi7_14
-; vTimeout = 0xFF;
-       move.l    #255,D2
-funcIntMfpGpi7_14:
-; *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS (I4) = 1 do controlador indicando que ja leu LSB
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       or.b      #16,0(A0,D0.L)
-; while (!(*(vmfp + Reg_GPDR) & 0x20) && vTimeout) vTimeout--; // Aguarda Controlador liberar MSB para leitura
-funcIntMfpGpi7_16:
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       move.b    0(A0,D0.L),D0
-       and.b     #32,D0
-       bne.s     funcIntMfpGpi7_19
-       moveq     #1,D0
-       bra.s     funcIntMfpGpi7_20
-funcIntMfpGpi7_19:
-       clr.l     D0
-funcIntMfpGpi7_20:
-       and.l     #255,D0
-       beq.s     funcIntMfpGpi7_18
-       tst.l     D2
-       beq.s     funcIntMfpGpi7_18
-       subq.l    #1,D2
-       bra       funcIntMfpGpi7_16
-funcIntMfpGpi7_18:
-; decoded |= ((*(vmfp + Reg_GPDR) & 0x0F) << 4);
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       move.b    0(A0,D0.L),D0
-       and.b     #15,D0
-       lsl.b     #4,D0
-       or.b      D0,D3
-; if (!vTimeout)
-       tst.l     D2
-       bne.s     funcIntMfpGpi7_21
-; {
-; if (debugMessages)
-       tst.b     (A5)
-       beq.s     funcIntMfpGpi7_23
-; writeLongSerial("Aqui 2.1\r\n\0");
-       pea       @monitor_84.L
-       jsr       (A4)
-       addq.w    #4,A7
-funcIntMfpGpi7_23:
-; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       and.b     #239,0(A0,D0.L)
-; break;
-       bra.s     funcIntMfpGpi7_8
-funcIntMfpGpi7_21:
-; }
-; // Coloca dado mouse lido no buffer
+; decoded = readInKbdMseByte();
+       jsr       _readInKbdMseByte
+       move.b    D0,-1(A6)
 ; MseMovBuffer[MseMovPtrW] = decoded;
        move.b    _MseMovPtrW.L,D0
        and.l     #255,D0
        lea       _MseMovBuffer.L,A0
-       move.b    D3,0(A0,D0.L)
+       move.b    -1(A6),0(A0,D0.L)
 ; MseMovPtrW = MseMovPtrW + 1;
        addq.b    #1,_MseMovPtrW.L
 ; if (MseMovPtrW > kbdKeyBuffMax)
        move.b    _MseMovPtrW.L,D0
        cmp.b     #65,D0
-       bls.s     funcIntMfpGpi7_25
+       bls.s     funcIntMfpGpi7_4
 ; MseMovPtrW = 0;
        clr.b     _MseMovPtrW.L
-funcIntMfpGpi7_25:
-; *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       and.b     #239,0(A0,D0.L)
-       bra       funcIntMfpGpi7_6
-funcIntMfpGpi7_8:
-; }
-; *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS = 1 (I4) do controlador
-       move.l    (A3),A0
-       move.w    (A2),D0
-       and.l     #65535,D0
-       or.b      #16,0(A0,D0.L)
-; // Verifica se ao final, o cursor de gravacao é modulo 3, ou seja, sempre entrou 3 dados do mouse
-; // Se nao for modulo 3, volta até ser modulo 3.
-; while ((MseMovPtrW % 3) != 0)
-funcIntMfpGpi7_27:
-       move.b    _MseMovPtrW.L,D0
-       and.l     #65535,D0
-       divu.w    #3,D0
-       swap      D0
-       tst.b     D0
-       beq.s     funcIntMfpGpi7_29
-; MseMovPtrW = MseMovPtrW - 1;
-       subq.b    #1,_MseMovPtrW.L
-       bra       funcIntMfpGpi7_27
-funcIntMfpGpi7_29:
-; if (debugMessages)
-       tst.b     (A5)
-       beq.s     funcIntMfpGpi7_30
-; writeLongSerial("Aqui 3\r\n\0");
-       pea       @monitor_85.L
-       jsr       (A4)
-       addq.w    #4,A7
-funcIntMfpGpi7_30:
-       movem.l   (A7)+,D2/D3/A2/A3/A4/A5
+funcIntMfpGpi7_4:
+       unlk      A6
        rts
 ; #endif
 ; }
@@ -8539,7 +8273,7 @@ funcErrorBusAddr_3:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8548,7 +8282,7 @@ funcErrorBusAddr_3:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("          EXCEPTION OCCURRED        ");
-       pea       @monitor_87.L
+       pea       @monitor_81.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8557,7 +8291,7 @@ funcErrorBusAddr_3:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(195,1);
@@ -8584,7 +8318,7 @@ funcErrorBusAddr_6:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; vOP = ERR_TYPE;
@@ -8619,7 +8353,7 @@ funcErrorBusAddr_10:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("              BUS ERROR             ");
-       pea       @monitor_88.L
+       pea       @monitor_82.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8628,7 +8362,7 @@ funcErrorBusAddr_10:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8641,7 +8375,7 @@ funcErrorBusAddr_11:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("            ADDRESS ERROR           ");
-       pea       @monitor_89.L
+       pea       @monitor_83.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8650,7 +8384,7 @@ funcErrorBusAddr_11:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8663,7 +8397,7 @@ funcErrorBusAddr_12:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("         ILLEGAL INSTRUCTION        ");
-       pea       @monitor_90.L
+       pea       @monitor_84.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8672,7 +8406,7 @@ funcErrorBusAddr_12:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8685,7 +8419,7 @@ funcErrorBusAddr_13:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("             ZERO DIVIDE            ");
-       pea       @monitor_91.L
+       pea       @monitor_85.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8694,7 +8428,7 @@ funcErrorBusAddr_13:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8707,7 +8441,7 @@ funcErrorBusAddr_14:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("           CHK INSTRUCTION          ");
-       pea       @monitor_92.L
+       pea       @monitor_86.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8716,7 +8450,7 @@ funcErrorBusAddr_14:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8729,7 +8463,7 @@ funcErrorBusAddr_15:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("                TRAPV               ");
-       pea       @monitor_93.L
+       pea       @monitor_87.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8738,7 +8472,7 @@ funcErrorBusAddr_15:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8751,7 +8485,7 @@ funcErrorBusAddr_16:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("         PRIVILEGE VIOLATION        ");
-       pea       @monitor_94.L
+       pea       @monitor_88.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8760,7 +8494,7 @@ funcErrorBusAddr_16:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8773,7 +8507,7 @@ funcErrorBusAddr_17:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("              TRACE ERROR           ");
-       pea       @monitor_95.L
+       pea       @monitor_89.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8782,7 +8516,7 @@ funcErrorBusAddr_17:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8795,7 +8529,7 @@ funcErrorBusAddr_18:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("            LINE A EMULATOR         ");
-       pea       @monitor_96.L
+       pea       @monitor_90.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8804,7 +8538,7 @@ funcErrorBusAddr_18:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8817,7 +8551,7 @@ funcErrorBusAddr_19:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("            LINE F EMULATOR         ");
-       pea       @monitor_97.L
+       pea       @monitor_91.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8826,7 +8560,7 @@ funcErrorBusAddr_19:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8839,7 +8573,7 @@ funcErrorBusAddr_7:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("           UNKNOWN EXCEPTION        ");
-       pea       @monitor_98.L
+       pea       @monitor_92.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8848,7 +8582,7 @@ funcErrorBusAddr_7:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; break;
@@ -8878,7 +8612,7 @@ funcErrorBusAddr_23:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; /* D0-D3 */
@@ -8888,7 +8622,7 @@ funcErrorBusAddr_23:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" D0       D1       D2       D3      ");
-       pea       @monitor_99.L
+       pea       @monitor_93.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8897,7 +8631,7 @@ funcErrorBusAddr_23:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8955,7 +8689,7 @@ funcErrorBusAddr_26:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" D4       D5       D6       D7      ");
-       pea       @monitor_100.L
+       pea       @monitor_94.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -8964,7 +8698,7 @@ funcErrorBusAddr_26:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9022,7 +8756,7 @@ funcErrorBusAddr_31:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" A0       A1       A2       A3      ");
-       pea       @monitor_101.L
+       pea       @monitor_95.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9031,7 +8765,7 @@ funcErrorBusAddr_31:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9079,7 +8813,7 @@ funcErrorBusAddr_36:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; /* A4-A7 */
@@ -9089,7 +8823,7 @@ funcErrorBusAddr_36:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" A4       A5       A6       A7      ");
-       pea       @monitor_102.L
+       pea       @monitor_96.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9098,7 +8832,7 @@ funcErrorBusAddr_36:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9155,7 +8889,7 @@ funcErrorBusAddr_41:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("                                    ");
-       pea       @monitor_103.L
+       pea       @monitor_97.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9174,7 +8908,7 @@ funcErrorBusAddr_41:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" SR   PC       IR   Special_Word    ");
-       pea       @monitor_104.L
+       pea       @monitor_98.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9183,7 +8917,7 @@ funcErrorBusAddr_41:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9231,7 +8965,7 @@ funcErrorBusAddr_41:
        jsr       (A5)
        addq.w    #4,A7
 ; printText("          ");
-       pea       @monitor_105.L
+       pea       @monitor_99.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9249,7 +8983,7 @@ funcErrorBusAddr_41:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("                                    ");
-       pea       @monitor_103.L
+       pea       @monitor_97.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9268,7 +9002,7 @@ funcErrorBusAddr_41:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" FaultAddr Frame Type Magic         ");
-       pea       @monitor_106.L
+       pea       @monitor_100.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9277,7 +9011,7 @@ funcErrorBusAddr_41:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9295,7 +9029,7 @@ funcErrorBusAddr_41:
        jsr       (A4)
        addq.w    #4,A7
 ; printText("  ");
-       pea       @monitor_107.L
+       pea       @monitor_101.L
        jsr       (A3)
        addq.w    #4,A7
 ; printHexWord(ERR_FRAME_WORDS);
@@ -9305,7 +9039,7 @@ funcErrorBusAddr_41:
        jsr       (A5)
        addq.w    #4,A7
 ; printText("  ");
-       pea       @monitor_107.L
+       pea       @monitor_101.L
        jsr       (A3)
        addq.w    #4,A7
 ; printHexWord(ERR_TYPE);
@@ -9315,7 +9049,7 @@ funcErrorBusAddr_41:
        jsr       (A5)
        addq.w    #4,A7
 ; printText("  ");
-       pea       @monitor_107.L
+       pea       @monitor_101.L
        jsr       (A3)
        addq.w    #4,A7
 ; printHexLong(ERR_MAGIC);
@@ -9323,7 +9057,7 @@ funcErrorBusAddr_41:
        jsr       (A4)
        addq.w    #4,A7
 ; printText("     ");
-       pea       @monitor_108.L
+       pea       @monitor_102.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9359,7 +9093,7 @@ funcErrorBusAddr_46:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9368,7 +9102,7 @@ funcErrorBusAddr_46:
        jsr       (A2)
        addq.w    #8,A7
 ; printText("            SYSTEM HALTED           ");
-       pea       @monitor_109.L
+       pea       @monitor_103.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(179,1);
@@ -9377,7 +9111,7 @@ funcErrorBusAddr_46:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; printChar(192,1);
@@ -9404,7 +9138,7 @@ funcErrorBusAddr_49:
        jsr       (A2)
        addq.w    #8,A7
 ; printText(" \r\n");
-       pea       @monitor_86.L
+       pea       @monitor_80.L
        jsr       (A3)
        addq.w    #4,A7
 ; for(;;);
@@ -9414,7 +9148,7 @@ funcErrorBusAddr_50:
        section   const
 @monitor_1:
        dc.b      77,77,83,74,45,51,50,48,32,66,73,79,83,32,118
-       dc.b      49,46,52,97,48,54,0
+       dc.b      49,46,52,97,48,55,0
 @monitor_2:
        dc.b      13,10,0
 @monitor_3:
@@ -9643,102 +9377,90 @@ funcErrorBusAddr_50:
        dc.b      46,32,80,108,101,97,115,101,32,87,97,105,116
        dc.b      46,46,46,0
 @monitor_80:
-       dc.b      65,113,117,105,32,48,13,10,0
-@monitor_81:
-       dc.b      65,113,117,105,32,48,46,49,13,10,0
-@monitor_82:
-       dc.b      65,113,117,105,32,49,13,10,0
-@monitor_83:
-       dc.b      65,113,117,105,32,50,13,10,0
-@monitor_84:
-       dc.b      65,113,117,105,32,50,46,49,13,10,0
-@monitor_85:
-       dc.b      65,113,117,105,32,51,13,10,0
-@monitor_86:
        dc.b      32,13,10,0
-@monitor_87:
+@monitor_81:
        dc.b      32,32,32,32,32,32,32,32,32,32,69,88,67,69,80
        dc.b      84,73,79,78,32,79,67,67,85,82,82,69,68,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_88:
+@monitor_82:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,66
        dc.b      85,83,32,69,82,82,79,82,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_89:
+@monitor_83:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,65,68,68
        dc.b      82,69,83,83,32,69,82,82,79,82,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_90:
+@monitor_84:
        dc.b      32,32,32,32,32,32,32,32,32,73,76,76,69,71,65
        dc.b      76,32,73,78,83,84,82,85,67,84,73,79,78,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_91:
+@monitor_85:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,90,69
        dc.b      82,79,32,68,73,86,73,68,69,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_92:
+@monitor_86:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,67,72,75,32
        dc.b      73,78,83,84,82,85,67,84,73,79,78,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_93:
+@monitor_87:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,84,82,65,80,86,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_94:
+@monitor_88:
        dc.b      32,32,32,32,32,32,32,32,32,80,82,73,86,73,76
        dc.b      69,71,69,32,86,73,79,76,65,84,73,79,78,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_95:
+@monitor_89:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,84
        dc.b      82,65,67,69,32,69,82,82,79,82,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_96:
+@monitor_90:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,76,73,78
        dc.b      69,32,65,32,69,77,85,76,65,84,79,82,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_97:
+@monitor_91:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,76,73,78
        dc.b      69,32,70,32,69,77,85,76,65,84,79,82,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_98:
+@monitor_92:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,85,78,75,78
        dc.b      79,87,78,32,69,88,67,69,80,84,73,79,78,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_99:
+@monitor_93:
        dc.b      32,68,48,32,32,32,32,32,32,32,68,49,32,32,32
        dc.b      32,32,32,32,68,50,32,32,32,32,32,32,32,68,51
        dc.b      32,32,32,32,32,32,0
-@monitor_100:
+@monitor_94:
        dc.b      32,68,52,32,32,32,32,32,32,32,68,53,32,32,32
        dc.b      32,32,32,32,68,54,32,32,32,32,32,32,32,68,55
        dc.b      32,32,32,32,32,32,0
-@monitor_101:
+@monitor_95:
        dc.b      32,65,48,32,32,32,32,32,32,32,65,49,32,32,32
        dc.b      32,32,32,32,65,50,32,32,32,32,32,32,32,65,51
        dc.b      32,32,32,32,32,32,0
-@monitor_102:
+@monitor_96:
        dc.b      32,65,52,32,32,32,32,32,32,32,65,53,32,32,32
        dc.b      32,32,32,32,65,54,32,32,32,32,32,32,32,65,55
        dc.b      32,32,32,32,32,32,0
-@monitor_103:
+@monitor_97:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
-@monitor_104:
+@monitor_98:
        dc.b      32,83,82,32,32,32,80,67,32,32,32,32,32,32,32
        dc.b      73,82,32,32,32,83,112,101,99,105,97,108,95,87
        dc.b      111,114,100,32,32,32,32,0
-@monitor_105:
+@monitor_99:
        dc.b      32,32,32,32,32,32,32,32,32,32,0
-@monitor_106:
+@monitor_100:
        dc.b      32,70,97,117,108,116,65,100,100,114,32,70,114
        dc.b      97,109,101,32,84,121,112,101,32,77,97,103,105
        dc.b      99,32,32,32,32,32,32,32,32,32,0
-@monitor_107:
+@monitor_101:
        dc.b      32,32,0
-@monitor_108:
+@monitor_102:
        dc.b      32,32,32,32,32,0
-@monitor_109:
+@monitor_103:
        dc.b      32,32,32,32,32,32,32,32,32,32,32,32,83,89,83
        dc.b      84,69,77,32,72,65,76,84,69,68,32,32,32,32,32
        dc.b      32,32,32,32,32,32,0
@@ -9803,6 +9525,9 @@ _paramBasic:
        xdef      _hookTable
 _hookTable:
        dc.l      6354876
+       xdef      _inKbdMse
+_inKbdMse:
+       dc.l      4194400
        xdef      _ascii
 _ascii:
        dc.b      97,98,99,100,101,102,103,104,105,106,107,108
@@ -9900,7 +9625,6 @@ _debugMessages:
        xref      _strlen
        xref      _Reg_IMRA
        xref      _Reg_IMRB
-       xref      _Reg_GPDR
        xref      _vdp_write
        xref      _realloc
        xref      _Reg_RSR
@@ -9924,7 +9648,6 @@ _debugMessages:
        xref      _Reg_IERA
        xref      _Reg_IERB
        xref      _Reg_TDDR
-       xref      _Reg_DDR
        xref      _Reg_TCDR
        xref      _Reg_TSR
        xref      _strcmp

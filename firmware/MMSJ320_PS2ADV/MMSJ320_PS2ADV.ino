@@ -1,9 +1,9 @@
 #include <PS2KeyAdvanced.h>
 
-const int KbdData = 8;
+const int KbdData = 12;
 const int KbdClk =  3;
 const int MseClk = 2;
-const int MseData = 10;
+const int MseData = A5;
 
 #define OUT_D4    4   // PD4
 #define OUT_D5    5   // PD5
@@ -15,9 +15,6 @@ const int MseData = 10;
 #define IN_CS     A3  // PC3
 
 #define OUT_YEL   11
-#define OUT_RED   12
-#define OUT_GRE   A5
-#define OUT_RED2  A4
 
 PS2KeyAdvanced keyboard;
 
@@ -65,10 +62,8 @@ void ps2mseinterrupt(void)
 {
   int timeout = 0xFF;
     //Serial.println("A");
-    digitalWrite(OUT_RED,HIGH);
   if (!digitalRead(MseData))
   {
-    digitalWrite(OUT_GRE,HIGH);
     //Serial.println("Z");
     while (digitalRead(MseData) && --timeout);
     dataMse = readMsePs2();
@@ -80,9 +75,7 @@ void ps2mseinterrupt(void)
     ymvmt = readMsePs2();
 
     mseDataAvailable = 1;
-    digitalWrite(OUT_GRE,LOW);
   }
-    digitalWrite(OUT_RED,LOW);
 }
 
 //----------------------------------------------------
@@ -90,15 +83,6 @@ void ps2mseinterrupt(void)
 //----------------------------------------------------
 void setup() 
 {
-  pinMode(OUT_YEL,OUTPUT);
-  digitalWrite(OUT_YEL,HIGH);
-  pinMode(OUT_RED,OUTPUT);
-  digitalWrite(OUT_RED,HIGH);
-  pinMode(OUT_GRE,OUTPUT);
-  digitalWrite(OUT_GRE,HIGH);
-  pinMode(OUT_RED2,OUTPUT);
-  digitalWrite(OUT_RED2,HIGH);
-
   digitalWrite(OUT_RDYK,HIGH);
   pinMode(OUT_RDYK,OUTPUT);
   digitalWrite(OUT_RDYM,HIGH);
@@ -123,12 +107,10 @@ delay(1000);
   
   if (vtimeoutmouseaux <= 0)
     hasmouseaux = 0;
-digitalWrite(OUT_RED2,LOW);
-  if (hasmouseaux)
+
+    if (hasmouseaux)
   {
     //Serial.println("B");
-    digitalWrite(OUT_RED2,HIGH);
-    
     dataMse = readMsePs2(); // acknowledge: should be 0xFA
     dataMse = readMsePs2(); // self test:   should be 0xAA
     dataMse = readMsePs2(); // mouse id:    Should be 0x00
@@ -151,10 +133,6 @@ digitalWrite(OUT_RED2,LOW);
     attachInterrupt(digitalPinToInterrupt(MseClk), ps2mseinterrupt, FALLING);
 
   //Serial.println("Monitorando...");
-  digitalWrite(OUT_YEL,LOW);
-  digitalWrite(OUT_RED,LOW);
-  digitalWrite(OUT_GRE,LOW);
-    
 }
 
 //----------------------------------------------------
@@ -208,7 +186,6 @@ void loop()
   // Send Mouse Data to Host
   if (hasmouseaux && !(PINC & 0b00001000) && !(PINC & 0b00000001))  // CS = 0 e DTRDYM = 0 (leitura mouse lida)
   {
-    digitalWrite(OUT_YEL,LOW);
     vTimeOutCpuReadAux = 0xFFF;
 //Serial.println("E");
     while (vCountM > 0 && !(PINC & 0b00001000)) // Envia todos os Bytes do buffer
@@ -286,8 +263,6 @@ void loop()
   // Read Mouse
   if (mseDataAvailable)
   {
-        digitalWrite(OUT_YEL,HIGH);
-
     mseDataAvailable = 0;
     
     dataMse = (dataMse & 0b00111111110) >> 1;     //take off pairity, start & stop bits

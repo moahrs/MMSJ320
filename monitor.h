@@ -52,6 +52,10 @@ extern void mprintf_long_dec(long v);
 extern void mprintf_ulong_dec(unsigned long v);
 extern void mprintf(const char *fmt, ...);
 
+#if defined(__KEYPS2_EXT__) || defined(__MOUSEPS2__EXT__)
+unsigned char readInKbdMseByte(void);
+#endif
+
 #ifdef __KEYPS2__
 void writeKbdPs2(unsigned char pData);
 unsigned char readKbdPs2 (void);

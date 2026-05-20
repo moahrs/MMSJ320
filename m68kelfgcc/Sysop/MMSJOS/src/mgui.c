@@ -11,6 +11,7 @@
 * 19/01/2025  0.6     Moacir Jr.   Adaptar para rodar junto com o MMSJOS
 * 13/04/2026  0.7a03  Moacir Jr.   Ajustes para o mouse e o sprite do ponteiro
 * 10/05/2026  0.7a04  Moacir Jr.   Remover uC/OS-II - RTOS
+* 16/05/2026  1.0a02  Moacir Jr.   Versao publicacao
 *--------------------------------------------------------------------------------
 *
 *--------------------------------------------------------------------------------
@@ -73,7 +74,7 @@ extern unsigned char *mguiIdRequest;
 extern unsigned long *mguiRunTask;
 extern LIST_WINDOWS *mguiListWindows;
 
-#define versionMgui "0.7a04"
+#define versionMgui "1.0a02"
 #define __EM_OBRAS__ 1
 
 unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode

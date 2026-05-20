@@ -143,7 +143,7 @@ unsigned long *vDataLineAtu         = 0x008FE95E; //
 for_stack *forStack                 = 0x008FF6BE; // stack for FOR/NEXT loop
 unsigned long *atuVarAddr           = 0x008FF6B0; // Endereco da variavel atualmente usada pelo basLet
 
-const keywords_count = 76; // Quantidade de palavras reservadas
+const keywords_count = 81; // Quantidade de palavras reservadas
 
 // -------------------------------------------------------------------------------
 // Mensagens de Erro
@@ -234,14 +234,18 @@ static const struct keyword_token keywords[] =
   {"ONERR",   0xBB},   // .. .. ok
   {"WHILE",   0xBC},   // .. .. ok
   {"WEND",    0xBD},   // .. .. ok
-  {"RESERVED",    0xBE},   // .. .. ok  
+  {"VPOKE",   0xBE},   // .. .. ok  
   {"ASC",     0xC4},   // .. .. ok
   {"HEX$",    0xC5},   // .. .. ok
   {"BIN$",    0xC6},   // .. .. ok
   {"OCT$",    0xC7},   // .. .. ok
+  {"VPEEK",   0xC8},   // .. .. ok
+  {"BASE",    0xC9},   // .. .. ok
   {"PEEK",    0xCD},   // .. .. ok
   {"POKE",    0xCE},   // .. .. ok
   {"RND",     0xD1},   // .. .. ok
+  {"SIGN",    0xD2},   // .. .. ok
+  {"ATN",     0xD3},   // .. .. ok
   {"LEN",     0xDB},   // ok ok ok
   {"VAL",     0xDC},   // ok ok ok
   {"STR$",    0xDD},   // ok ok ok
@@ -398,6 +402,9 @@ int basXBasLoad1k(void);
 int basInt(void);
 int basAbs(void);
 int basPeekPoke(char pTipo);
+int basVpoke(void);
+int basVpeek(void);
+int basBase(void);
 int basDim(void);
 int basOnVar(void);
 int basScreen(void);
@@ -424,6 +431,7 @@ int basBufVdg(unsigned char pEnabled);
 int basBufCopy(void);
 int basBufShow(void);
 int basTrig(unsigned char pFunc);
+int basSign(void);
 int basWhile(void);
 int basWend(void);
 
@@ -446,6 +454,7 @@ unsigned long fppReal(long pFppD7);
 unsigned long fppSin(long pFppD7);
 unsigned long fppCos(long pFppD7);
 unsigned long fppTan(long pFppD7);
+unsigned long fppAtn(long pFppD7);
 unsigned long fppSinH(long pFppD7);
 unsigned long fppCosH(long pFppD7);
 unsigned long fppTanH(long pFppD7);
@@ -469,6 +478,7 @@ void FPP_FPP(void);
 void FPP_SIN(void);
 void FPP_COS(void);
 void FPP_TAN(void);
+void FPP_ATN(void);
 void FPP_SINH(void);
 void FPP_COSH(void);
 void FPP_TANH(void);

@@ -45,7 +45,7 @@ typedef void (*setReadAddressType)(unsigned int address);
 typedef unsigned long (*getVideoFontesType)(void);
 typedef unsigned char (*readMouseType)(unsigned char *vStat, unsigned char *vMovX, unsigned char *vMovY);
 typedef unsigned char (* loadSerialToMem2Type)(unsigned char *pEnder, unsigned char ptipo);
-typedef void (*mprintfType)(const char *fmt, ...);
+typedef void (*moprintfType)(const char *fmt, ...);
 
 #define processCmd ((processCmdType *)(unsigned long)MONITOR_FUNC_TABLE)[0] // Índice da função
 #define clearScr ((clearScrType *)(unsigned long)MONITOR_FUNC_TABLE)[1] // Índice da função
@@ -88,7 +88,7 @@ typedef void (*mprintfType)(const char *fmt, ...);
 #define getVideoFontes ((getVideoFontesType *)(unsigned long)MONITOR_FUNC_TABLE)[38] // Índice da função
 #define readMouse ((readMouseType *)(unsigned long)MONITOR_FUNC_TABLE)[39] // Índice da função
 #define loadSerialToMem2 ((loadSerialToMem2Type *)(unsigned long)MONITOR_FUNC_TABLE)[40] // Índice da função
-#define mprintf ((mprintfType *)(unsigned long)MONITOR_FUNC_TABLE)[41] // Índice da função
+#define moprintf ((moprintfType *)(unsigned long)MONITOR_FUNC_TABLE)[41] // Índice da função
 
 /*
  * ABI-safe wrappers para funcoes que retornam struct no monitor (CC68K/PCC style).

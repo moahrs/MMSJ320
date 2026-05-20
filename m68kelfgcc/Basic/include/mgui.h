@@ -3,7 +3,13 @@
 
 typedef struct
 {
-    unsigned int id;
+    #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
+        unsigned long *pat;
+        unsigned long *cor;
+        unsigned int size;
+    #else
+        unsigned int id;
+    #endif
     unsigned short xi;
     unsigned short yi;
     unsigned short xf;
@@ -70,6 +76,7 @@ extern unsigned int mgui_color_table;
 extern unsigned long mguiVideoFontes;
 extern unsigned char fgcolorMgui;
 extern unsigned char bgcolorMgui;
+extern unsigned char *memVideoFonts; // Fontes para Video, formato igual ao do VDP (8 bytes por char, 256 chars = 2048 bytes)
 
 #define BTNONE      0x00
 #define BTOK        0x01
@@ -107,21 +114,27 @@ extern unsigned char bgcolorMgui;
 #define ICON_EXIT  56
 #define ICON_HOURGLASS  57
 
-#define SIZE_LOAD_IMAGE_MEM 8192    // Max PBM file format for 256x192 area
-#define SIZE_LOAD_ICONS_MEM 8192    // 128 incons 64 bytes
-#define SIZE_LOAD_CFG_MEM    2048   // Max config file size (+1 byte for terminator)
+#define SIZE_LOAD_IMAGE_MEM 8192     // Max PBM file format for 256x192 area
+#define SIZE_LOAD_ICONS_MEM 8192     // 128 icons 64 bytes
+#define SIZE_LOAD_CFG_MEM    2048    // Max config file size (+1 byte for terminator)
+#define SIZE_LOAD_FONTS_MEM  10240   // Max font file size 4 set de fonts de 8 Bytes (max 8x8) x 256 chars
+#define SIZE_LOAD_FILE_FONT_MEM 8192 // Max font file size 4 set de fonts de 8 Bytes (max 8x8) x 256 chars
 
 #define TASK_MGUI_TELA    11
 #define TASK_MGUI_MOUSE   12
 #define TASK_MGUI_MESSAGE 19
 
-// -------------------------------------------------------------------------------
-// Config INI - Busca direta no buffer
-// mguiCfgGet: busca 'key' dentro de '[section]' em 'buf', copia valor em vOutBuf.
+//-----------------------------------------------------------------------------
+// Config INI - Busca direta no buffer de memoria
+// Busca 'key' dentro de '[section]' em memPosConfig; copia o valor em vOutBuf como string.
 // Retorna vOutBuf em caso de sucesso, NULL se nao encontrado.
-// Para usar como int: atoi(mguiCfgGet(buf, "SEC", "KEY", tmp, sizeof(tmp)))
-// -------------------------------------------------------------------------------
+// vOutMax: tamanho do vOutBuf incluindo '\0'
+//-----------------------------------------------------------------------------
+// Like mguiCfgGet but reads from an arbitrary NUL-terminated buffer instead
+// of the global memPosConfig.
+//-----------------------------------------------------------------------------
 char mguiCfgGet(char *section, char *key, char *vOutBuf, unsigned char vOutMax);
+static char mguiCfgGetBuf(unsigned char *buf, char *section, char *key, char *vOutBuf, unsigned char vOutMax);
 
 // -------------------------------------------------------------------------------
 // Funcoes Graficas
@@ -150,7 +163,7 @@ void LoadIconLib(unsigned char* cfile);
 unsigned long readMousePs2 (void);
 void VerifyMouse(void);
 void setPosPressed(unsigned char vppostx, unsigned char vpposty);
-void getMouseData(MGUI_MOUSE *pmouseData);
+void getMouseData(char ptipo, MGUI_MOUSE *pmouseData);
 void getColorData(MGUI_COLOR *pColor);
 unsigned char waitButton(void);
 unsigned char message(char* bstr, unsigned char bbutton, unsigned short btime);
@@ -176,8 +189,8 @@ void putImagePbmP4(unsigned char* memoria, unsigned short ix, unsigned short iy)
 // Elementos
 // -------------------------------------------------------------------------------
 void showWindow(unsigned char* bstr, unsigned char x1, unsigned char y1, unsigned short pwidth, unsigned char pheight, unsigned char bbutton);
-void fillin(unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
-unsigned char button(unsigned char *title, unsigned short xib, unsigned short yib, unsigned short width, unsigned short height, unsigned char vtipo);
-void radioset(unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
-void togglebox(unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
+void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
+unsigned char button(unsigned char id, unsigned char *title, unsigned short xib, unsigned short yib, unsigned short width, unsigned short height, unsigned char vtipo);
+void radioset(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
+void togglebox(unsigned char id, unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
 #endif

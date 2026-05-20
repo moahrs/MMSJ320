@@ -174,12 +174,12 @@ _vRetAlloc:
 ; #include "../mgui.h"
 ; #include "../monitorapi.h"
 ; #include "../mmsjosapi.h"
-; void listHello(void);
-; /*unsigned char vmouseStat;
+; //void listHello(void);
+; unsigned char vmouseStat;
 ; unsigned char vmouseMoveX;
 ; unsigned char vmouseMoveY;
 ; unsigned char *vMseMovPtrR = 0x00600512; // Contador do ponteiro das dados do mouse recebidos
-; unsigned char *vMseMovPtrW = 0x00600514; // Contador do ponteiro das dados do mouse recebidos*/
+; unsigned char *vMseMovPtrW = 0x00600514; // Contador do ponteiro das dados do mouse recebidos
 ; //-----------------------------------------------------------------------------
 ; // Principal
 ; //-----------------------------------------------------------------------------
@@ -187,10 +187,11 @@ _vRetAlloc:
 ; {
        xdef      _main
 _main:
-       link      A6,#-16
-       move.l    A2,-(A7)
-       lea       _hookTable.L,A2
-; int ix;
+       link      A6,#-12
+       movem.l   A2/A3,-(A7)
+       lea       -10(A6),A2
+       lea       _itoa.L,A3
+; //int ix;
 ; unsigned char sqtdtam[10];
 ; //unsigned char sqtdtam[10];
 ; // mostra msgs na tela
@@ -199,87 +200,160 @@ _main:
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
-; hookTable[HOOK_KEYBOARD].addr  = listHello;
-       lea       _listHello.L,A0
-       move.l    (A2),A1
-       move.l    A0,248(A1)
+; /*    hookTable[HOOK_KEYBOARD].addr  = listHello;
 ; hookTable[HOOK_KEYBOARD].flags = HOOKF_ACTIVE;
-       move.l    (A2),A0
-       move.l    #1,244(A0)
-; hookTable[HOOK_KEYBOARD].magic = HOOK_MAGIC;
-       move.l    (A2),A0
-       move.l    #19786,240(A0)
-; /*while(1)
-; {
-; if (readMouse(&vmouseStat, &vmouseMoveX, &vmouseMoveY))
-; {
-; printText("*[");
-; itoa(vmouseStat, sqtdtam, 16);
-; printText(sqtdtam);
-; printText("]-[");
-; itoa(vmouseMoveX, sqtdtam, 16);
-; printText(sqtdtam);
-; printText("]-[");
-; itoa(vmouseMoveY, sqtdtam, 16);
-; printText(sqtdtam);
-; printText("]-[");
-; itoa(*vMseMovPtrR, sqtdtam, 10);
-; printText(sqtdtam);
-; printText("]-[");
-; itoa(*vMseMovPtrW, sqtdtam, 10);
-; printText(sqtdtam);
-; printText("]*\r\n\0");
-; }
-; if (readChar() == 0x1B)
-; break;
-; }*/
-; while (1)
+; hookTable[HOOK_KEYBOARD].magic = HOOK_MAGIC;*/
+; while(1)
 main_1:
 ; {
-; if (readChar() == 27)
-       move.l    1074,A0
+; if (readMouse(&vmouseStat, &vmouseMoveX, &vmouseMoveY))
+       pea       _vmouseMoveY.L
+       pea       _vmouseMoveX.L
+       pea       _vmouseStat.L
+       move.l    1206,A0
        jsr       (A0)
-       cmp.b     #27,D0
-       bne.s     main_4
-; break;
-       bra.s     main_3
-main_4:
-       bra       main_1
-main_3:
-; }
-; hookTable[HOOK_KEYBOARD].magic = 0x0000;
-       move.l    (A2),A0
-       clr.l     240(A0)
-; hookTable[HOOK_KEYBOARD].flags = 0x0000;
-       move.l    (A2),A0
-       clr.l     244(A0)
-; hookTable[HOOK_KEYBOARD].addr  = 0x00;
-       move.l    (A2),A0
-       clr.l     248(A0)
-       move.l    (A7)+,A2
-       unlk      A6
-       rts
-; }
-; void listHello(void)
+       add.w     #12,A7
+       tst.b     D0
+       beq       main_4
 ; {
-       xdef      _listHello
-_listHello:
-; /*    int ix;
-; for (ix=0;ix<5;ix++)*/
-; printText("Hello................\r\n\0");
+; printText("*[");
        pea       @hello_2.L
        move.l    1058,A0
        jsr       (A0)
        addq.w    #4,A7
+; itoa(vmouseStat, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.b    _vmouseStat.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; printText(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("]-[");
+       pea       @hello_3.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vmouseMoveX, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.b    _vmouseMoveX.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; printText(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("]-[");
+       pea       @hello_3.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(vmouseMoveY, sqtdtam, 16);
+       pea       16
+       move.l    A2,-(A7)
+       move.b    _vmouseMoveY.L,D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; printText(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("]-[");
+       pea       @hello_3.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(*vMseMovPtrR, sqtdtam, 10);
+       pea       10
+       move.l    A2,-(A7)
+       move.l    _vMseMovPtrR.L,A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; printText(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("]-[");
+       pea       @hello_3.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; itoa(*vMseMovPtrW, sqtdtam, 10);
+       pea       10
+       move.l    A2,-(A7)
+       move.l    _vMseMovPtrW.L,A0
+       move.b    (A0),D1
+       and.l     #255,D1
+       move.l    D1,-(A7)
+       jsr       (A3)
+       add.w     #12,A7
+; printText(sqtdtam);
+       move.l    A2,-(A7)
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+; printText("]*\r\n\0");
+       pea       @hello_4.L
+       move.l    1058,A0
+       jsr       (A0)
+       addq.w    #4,A7
+main_4:
+; }
+; if (readChar() == 0x1B)
+       move.l    1074,A0
+       jsr       (A0)
+       cmp.b     #27,D0
+       bne.s     main_6
+; break;
+       bra.s     main_3
+main_6:
+       bra       main_1
+main_3:
+       movem.l   (A7)+,A2/A3
+       unlk      A6
        rts
 ; }
+; /*    while (1)
+; {
+; if (readChar() == 27)
+; break;
+; }
+; hookTable[HOOK_KEYBOARD].magic = 0x0000;
+; hookTable[HOOK_KEYBOARD].flags = 0x0000;
+; hookTable[HOOK_KEYBOARD].addr  = 0x00;*/
+; }
+; /*void listHello(void)
+; {
+; //int ix;
+; //for (ix=0;ix<5;ix++)
+; printText("Hello................\r\n\0");
+; }*/
        section   const
 @hello_1:
        dc.b      72,101,108,108,111,111,111,111,111,111,111,111
        dc.b      111,46,46,46,13,10,0
 @hello_2:
-       dc.b      72,101,108,108,111,46,46,46,46,46,46,46,46,46
-       dc.b      46,46,46,46,46,46,46,13,10,0
+       dc.b      42,91,0
+@hello_3:
+       dc.b      93,45,91,0
+@hello_4:
+       dc.b      93,42,13,10,0
        xdef      _strValidChars
 _strValidChars:
        dc.b      48,49,50,51,52,53,54,55,56,57,65,66,67,68,69
@@ -352,3 +426,20 @@ _vmesc:
        dc.b      74,97,110,70,101,98,77,97,114,65,112,114,77
        dc.b      97,121,74,117,110,74,117,108,65,117,103,83,101
        dc.b      112,79,99,116,78,111,118,68,101,99
+       xdef      _vMseMovPtrR
+_vMseMovPtrR:
+       dc.l      6292754
+       xdef      _vMseMovPtrW
+_vMseMovPtrW:
+       dc.l      6292756
+       section   bss
+       xdef      _vmouseStat
+_vmouseStat:
+       ds.b      1
+       xdef      _vmouseMoveX
+_vmouseMoveX:
+       ds.b      1
+       xdef      _vmouseMoveY
+_vmouseMoveY:
+       ds.b      1
+       xref      _itoa

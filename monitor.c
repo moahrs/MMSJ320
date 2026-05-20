@@ -35,6 +35,7 @@
 * 24/04/2026  1.4a04  Moacir Jr.   Ajustes nas variaveis basic e prepara para LOADBAS
 * 02/05/2026  1.4a05  Moacir Jr.   Ajuste endereco loadbas
 * 09/05/2026  1.4a06  Moacir Jr.   Ajuste Tela vermelha da morte - stack error
+* 15/05/2026  1.4a07  Moacir Jr.   Ajuste teclado PS/2 para o MMSJ320_PS2ADVv2
 *--------------------------------------------------------------------------------
 *
 * Mapa de Memoria
@@ -84,18 +85,26 @@
 * +-------------+ FFFFFFh
 *--------------------------------------------------------------------------------
 *
+* Enderecos de Slots de Expansao
+* 
+* 00200000h a 00200FFFh - Expansion Slot 0 (Reserved Disk)
+* 00201000h a 00201FFFh - Expansion Slot 1
+* 00202000h a 00202FFFh - Expansion Slot 2
+* 00203000h a 00203FFFh - Expansion Slot 3
+* 
 * Enderecos de Perifericos
-*
-* 00200001h e 00200003 - DISK Arduino UNO (Temp)
-*                        - A1 = 0: r/w 4 bits LSB
-*                        - A1 = 1: r/w 4 bits MSB
-* 00400020h a 0040003F - MFP MC68901p - Cristal de 2.4576MHz
-*                        - SERIAL 9600, 8, 1, n
-*                        - TECLADO (PC-AT - PS/2)
-*                        - Controle de Interrupcoes e PS/2
-* 00400040h a 00400043 - VIDEO TMS9118 (16KB VRAM):
-*             00400041 - Data Mode
-*             00400043 - Register / Adress Mode
+* 
+* 00200001h e 00200003h - DISK Arduino UNO
+*                         - A1 = 0: r/w 4 bits LSB
+*                         - A1 = 1: r/w 4 bits MSB
+* 00400020h a 0040003Fh - MFP MC68901p - Cristal de 2.4576MHz
+*                         - SERIAL 9600, 8, 1, n
+*                         - Controle de Interrupcoes
+*                         - Timers 
+* 00400040h a 00400043h - VIDEO TMS9118 (16KB VRAM):
+*             00400041h - Data Mode
+*             00400043h - Register / Adress Mode
+* 00400060h             - kbd/mouse controller final A0 = 0 = UDS (D8 a D15)
 ********************************************************************************/
 #define VDP_EXT extern
 #define MFP_EXT extern
@@ -110,9 +119,10 @@
 #include "mmsj320mfp.h"
 #include "monitor.h"
 
-#define versionBios "1.4a06"
+#define versionBios "1.4a07"
 
 HEADER *_allocp;
+unsigned char *inKbdMse = 0x00400060; // Nano kbd/mouse ler final A0 = 1 = UDS (D8 a D15)
 
 #define ERR_MAGIC       (*(volatile unsigned long  *)0x0060E200)
 #define ERR_VERSION     (*(volatile unsigned short *)0x0060E204)
@@ -197,6 +207,10 @@ void mprintf_ulong_dec(unsigned long v);
 void mprintf(const char *fmt, ...);
 
 void inputTask(void);
+
+#if defined(__KEYPS2_EXT__) || defined(__MOUSEPS2__EXT__)
+unsigned char readInKbdMseByte(void);
+#endif
 
 #ifdef __KEYPS2__
     void scanCodeTask(void *);
@@ -284,9 +298,7 @@ void main(void)
         *(vmfp + Reg_DDR)   = 0x10; // I4 as Output, I7 - I5 e I3 - I0 as Input
     #endif
 
-    #ifdef __KEYPS2_EXT__
-        *(vmfp + Reg_DDR)   = 0x10; // I4 as Output, I7 - I5 e I3 - I0 as Input
-    #endif
+    /* __KEYPS2_EXT__: CS/dados no barramento nano (inKbdMse), nao no GPIO MFP */
 
     *(vmfp + Reg_AER)   = 0x00; // All Interrupts transction 1 to 0
 
@@ -297,10 +309,6 @@ void main(void)
     *(vmfp + Reg_IMRB)  = 0x00;
     //---------------------------------------------
 
-    #ifdef __KEYPS2_EXT__
-        *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS = 1 (I4) do controlador
-    #endif
-
     //---------------------------------------------
     // Enviar setup para o VDP TMS9118
     //---------------------------------------------
@@ -309,7 +317,7 @@ void main(void)
     videoCursorPosRowY = 0;
     videoScroll = 1;       // Ativo
     videoScrollDir = 1;    // Pra Cima
-    videoCursorBlink = 0;
+    videoCursorBlink = 1;
     videoCursorShow = 0;
     vdpMaxCols = 39;
     vdpMaxRows = 23;
@@ -516,7 +524,7 @@ void inputTask(void)
     while (1)
     {
         // Piscar Cursor
-        if (debugMessages) //(videoCursorBlink)
+        if (debugMessages ||videoCursorBlink)
         {
             switch (countCursor)
             {
@@ -3409,60 +3417,34 @@ void funcIntMfpTmrA(void)
 //    *(vmfp + Reg_ISRA) &= 0xDF;
 }
 
+#if defined(__KEYPS2_EXT__) || defined(__MOUSEPS2__EXT__)
+//-----------------------------------------------------------------------------
+// Le 1 byte do nano (ciclo CS/RW/DTACK no barramento via inKbdMse)
+//-----------------------------------------------------------------------------
+unsigned char readInKbdMseByte(void)
+{
+    /* Endereco par (UDS): num acesso byte, o 68000 usa a metade alta do barramento;
+       o valor ja aparece nos 8 bits menos significativos recebidos pelo C. */
+    return *(volatile unsigned char *)(inKbdMse);
+}
+#endif
+
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi6(void)
 {
-    unsigned char decoded = 0xFF;
-    int vTimeout;
+    unsigned char decoded;
 
     if (callHook(HOOK_KEYBOARD))
         return;
 
     #ifdef __KEYPS2_EXT__
-        if (debugMessages)
-            writeLongSerial("Aqui 0\r\n\0");
+        decoded = readInKbdMseByte();
 
-        // Pega dados do controlador via protocolo
-        while (decoded != 0)
-        {
-            vTimeout = 0x0FF;
+        kbdKeyBuffer[kbdKeyPtrW] = decoded;
+        kbdKeyPtrW = kbdKeyPtrW + 1;
 
-            *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-            while (*(vmfp + Reg_GPDR) & 0x20 && vTimeout) vTimeout--; // Aguarda Controlador liberar LSB para leitura
-            decoded = *(vmfp + Reg_GPDR) & 0x0F;
-
-            vTimeout = 0x0FF;
-
-            *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS (I4) = 1 do controlador indicando que ja leu LSB
-            while (!(*(vmfp + Reg_GPDR) & 0x20) && vTimeout) vTimeout--; // Aguarda Controlador liberar MSB para leitura
-            decoded |= ((*(vmfp + Reg_GPDR) & 0x0F) << 4);
-
-            if (!vTimeout)
-            {
-                if (debugMessages)
-                    writeLongSerial("Aqui 0.1\r\n\0");
-
-                *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-                break;
-            }
-
-            if (decoded != 0x00)
-            {
-                // Coloca tecla digitada no buffer
-                kbdKeyBuffer[kbdKeyPtrW] = decoded;
-                kbdKeyPtrW = kbdKeyPtrW + 1;
-
-                if (kbdKeyPtrW > kbdKeyBuffMax)
-                    kbdKeyPtrW = 0;
-            }
-
-            *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-        }
-
-        *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS = 1 (I4) do controlador
-
-        if (debugMessages)
-            writeLongSerial("Aqui 1\r\n\0");
+        if (kbdKeyPtrW > kbdKeyBuffMax)
+            kbdKeyPtrW = 0;
     #endif
 
     #ifdef __KEYPS2__
@@ -3533,65 +3515,19 @@ void funcIntMfpGpi6(void)
 //-----------------------------------------------------------------------------
 void funcIntMfpGpi7(void)
 {
-    unsigned char decoded = 0xFF;
-    int vTimeout;
+    unsigned char decoded;
 
     if (callHook(HOOK_MOUSE))
         return;
 
     #ifdef __MOUSEPS2__EXT__
-        if (debugMessages)
-            writeLongSerial("Aqui 2\r\n\0");
+        decoded = readInKbdMseByte();
 
-        // Pega dados do controlador via protocolo
-        while (1)
-        {
-            if (*(vmfp + Reg_GPDR) & 0x80)
-            {
-                break;
-            }
+        MseMovBuffer[MseMovPtrW] = decoded;
+        MseMovPtrW = MseMovPtrW + 1;
 
-            vTimeout = 0xFF;
-
-            *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-            while (*(vmfp + Reg_GPDR) & 0x20 && vTimeout) vTimeout--; // Aguarda Controlador liberar LSB para leitura
-            decoded = *(vmfp + Reg_GPDR) & 0x0F;
-
-            if (vTimeout)
-                vTimeout = 0xFF;
-
-            *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS (I4) = 1 do controlador indicando que ja leu LSB
-            while (!(*(vmfp + Reg_GPDR) & 0x20) && vTimeout) vTimeout--; // Aguarda Controlador liberar MSB para leitura
-            decoded |= ((*(vmfp + Reg_GPDR) & 0x0F) << 4);
-
-            if (!vTimeout)
-            {
-                if (debugMessages)
-                    writeLongSerial("Aqui 2.1\r\n\0");
-
-                *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-                break;
-            }
-
-            // Coloca dado mouse lido no buffer
-            MseMovBuffer[MseMovPtrW] = decoded;
-            MseMovPtrW = MseMovPtrW + 1;
-
-            if (MseMovPtrW > kbdKeyBuffMax)
-                MseMovPtrW = 0;
-
-            *(vmfp + Reg_GPDR) &= 0xEF;  // Seta CS (I4) = 0 do controlador e/ou indicando que ja leu MSB
-        }
-
-        *(vmfp + Reg_GPDR) |= 0x10;  // Seta CS = 1 (I4) do controlador
-
-        // Verifica se ao final, o cursor de gravacao é modulo 3, ou seja, sempre entrou 3 dados do mouse
-        // Se nao for modulo 3, volta até ser modulo 3.
-        while ((MseMovPtrW % 3) != 0)
-            MseMovPtrW = MseMovPtrW - 1;
-
-        if (debugMessages)
-            writeLongSerial("Aqui 3\r\n\0");
+        if (MseMovPtrW > kbdKeyBuffMax)
+            MseMovPtrW = 0;
     #endif
 }
 

@@ -84,6 +84,16 @@ typedef struct
     unsigned char        Ext[3];
 } FILE_NAME;
 
+typedef struct FILES_DIR
+{
+    unsigned char        Name[9];
+    unsigned char        Ext[4];
+    unsigned char        Modify[12];
+    unsigned char        Size[8];
+	  unsigned char		Attr[6];
+    unsigned char        posy;
+} FILES_DIR;
+
 typedef struct
 {
     char                 Name[13];
@@ -148,7 +158,7 @@ extern MEM_ALOC vMemAloc;
 #define ATTR_SYSTEM         0x04
 #define ATTR_VOLUME         0x08
 #define ATTR_LONG_NAME      0x0f
-#define ATTR_DIRECTORY      0x10
+#define ATTR_DIRECTORY      0x10 
 #define ATTR_ARCHIVE        0x20
 #define ATTR_MASK           0x3f
 
@@ -237,8 +247,6 @@ extern MEM_ALOC vMemAloc;
 
 #define RETURN_OK             0x00
 
-#define TASK_MMSJOS_MAIN    10
-
 #define KEY_ESC     27
 #define KEY_ENTER   13
 
@@ -250,7 +258,7 @@ extern MEM_ALOC vMemAloc;
 #define KEY_BACKSPACE 8
 #define KEY_DELETE    127
 #define KEY_ENTER     13
-
+#define KEY_HOME      2
 #define KEY_NONE     0
 
 #define KEY_CTRL        0xA0
@@ -263,7 +271,14 @@ extern const unsigned char strValidChars[];
 
 extern const unsigned char vmesc[12][3];
 
+extern unsigned char vdp_mode; // Modo de video 0 = caracter (32 x 24), 1 = grafico (256 x 192)
+
 #define KEYBUF_SIZE 32
+
+//#define USE_MALLOC 0
+#define USE_MSMALLOC 1
+#define USE_MSPRINTF_MMSJOS 1
+#define USE_RELOC_LOAD_PROGS 1
 
 typedef struct
 {
@@ -278,6 +293,7 @@ static volatile unsigned char keyHead = 0;
 static volatile unsigned char keyTail = 0;
 
 //--- KeyBOardTAsks Functions
+extern int mmsjKeyPost(MMSJ_KEYEVENT *k);
 extern int mmsjKeyGet(MMSJ_KEYEVENT *k);
 extern int mmsjKeyHit(void);
 
@@ -311,7 +327,8 @@ extern unsigned char fsWriteFile(char * vfilename, unsigned long voffset, unsign
 extern unsigned char fsDelFile(char * vfilename);
 extern unsigned char fsRenameFile(char * vfilename, char * vnewname);
 extern void runFromOsCmd(unsigned long vEnderExec);
-extern unsigned long loadFile(unsigned char *parquivo, unsigned short* xaddress);
+extern unsigned long loadFile(unsigned char *parquivo, void* xaddress);
+extern unsigned long loadFileSize(unsigned char *parquivo, void* xaddress, unsigned long xsize);
 extern void catFile(unsigned char *parquivo);
 extern unsigned char fsLoadSerialToFile(char * vfilename);
 extern unsigned char fsLoadSerialToRun(char * vfilename);
@@ -319,7 +336,7 @@ extern unsigned char fsFindDirPath(char * vpath, char vtype);
 extern void fsGetDirAtuData(FAT32_DIR *pDir);
 extern unsigned long fsMalloc(unsigned long vMemSize);
 extern void fsFree(unsigned long vAddress);
-extern void runFromMGUI(unsigned long vEnderExec);
+extern void runFromMGUI(unsigned long vEnderExec, unsigned long vFileBuf);
 
 // Funcoes de Manipulacao de Diretorios
 extern unsigned char fsMakeDir(char * vdirname);
@@ -343,11 +360,89 @@ extern void strncpy2( char* _dst, const char* _src, int _n );
 extern int isValidFilename(char *filename) ;
 extern unsigned char matches_wildcard(const char *pattern, const char *filename);
 extern unsigned char contains_wildcards(const char *pattern);
+extern void fsListDir(FILES_DIR * dir, unsigned char *param);
+
+#ifdef USE_MSMALLOC
+extern void *msmalloc(unsigned long size);
+extern void *msrealloc(void *ptr, unsigned long newSize);
+extern void msfree(void *ptr);
+#endif
+
+#ifdef USE_MSPRINTF_MMSJOS
+extern void setColorVideoG2(unsigned char fgcolor, unsigned char bgcolor);
+extern void setModeVideoOS(unsigned char mode);
+extern unsigned char getModeVideoOS(void);
+extern void msprintf_puts(char **dst, char *s);
+extern void msprintf_ulong_hex(char **dst, unsigned long v);
+extern void msprintf_ulong_dec(char **dst, unsigned long v);
+extern void msprintf_long_dec(char **dst, long v);
+extern void msprintf(char *buffer, const char *fmt, ...);
+extern void mprintf_ulong_hex(unsigned long v);
+extern void mprintf_long_dec(long v);
+extern void mprintf_ulong_dec(unsigned long v);
+extern void mprintf(const char *fmt, ...);
+#endif
+
+#ifdef USE_RELOC_LOAD_PROGS
+extern int loadMbinAndRun(char *filename, char porig);
+#endif
 
 #ifdef __SO_ST_MFP__
 extern void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char TypeSet);
 extern unsigned int fsGetMfp(unsigned int Config);
 #endif
+
+
+typedef struct
+{
+    unsigned char name[12]; // Font Name
+    unsigned char fc;       // First Char
+    unsigned char lc;       // Last Char
+    unsigned char w;        // Width
+    unsigned char h;        // Height
+    unsigned long addr;     // Addr Memory Set Char Font
+} MGUI_SET_FONT;
+
+extern MGUI_SET_FONT addrSetFontUseG2; // Endereco da funcao setFontUseG2, para ser usada por programas externos
+extern MGUI_SET_FONT listFontsUseG2[4]; 
+
+extern void vdp_set_cursor_pos_G2(unsigned char direction);
+extern void vdp_writeG2(unsigned char chr);
+extern int getFontUseG2(MGUI_SET_FONT *fonInfo);
+extern int setFontUseG2(unsigned char vpos);
+extern int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bufLoad, unsigned char *bufSave);
+
+typedef struct
+{
+    unsigned long fonFileOffset;
+    unsigned long fonFileSize;
+
+    unsigned long fntOffset;
+    unsigned long fntSize;
+
+    unsigned int dfVersion;
+    unsigned long dfSize;
+
+    unsigned int dfPixWidth;
+    unsigned int dfPixHeight;
+    unsigned int dfWidthBytes;
+    unsigned int dfMaxWidth;
+
+    unsigned char  dfFirstChar;
+    unsigned char  dfLastChar;
+    unsigned char  dfDefaultChar;
+    unsigned char  dfBreakChar;
+
+    unsigned long dfDevice;
+    unsigned long dfFace;
+
+    unsigned long dfBitsOffset;
+    unsigned long bitsFileOffset;
+
+    unsigned int alignShift;
+
+    char fontName[20];
+} FON_INFO;
 
 // Compatibilidade com codigo legado que referencia allocator interno da std68k
 #ifndef MMSJ_HEADER_TYPE_DEF
@@ -359,7 +454,6 @@ typedef struct header_compat {
 #endif
 
 // Funcoes de Alocacao de Memoria
-extern void memInit(void);
 
 /************************************************;
 ; Convert LBA to CHS

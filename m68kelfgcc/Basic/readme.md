@@ -49,13 +49,14 @@ Rotinas internas sem token continuam fora.
 
 | Comando | Sintaxe | O que faz | Exemplo |
 |---|---|---|---|
-| `CIRCLE` | `CIRCLE x,y,rh[,rv]` | Desenha um círculo ou ovoide. `rv` é opcional. | `CIRCLE 120,80,20` |
+| `CIRCLE` | `CIRCLE x,y,rh[,rv][,cor]` | Desenha um círculo ou ovoide. `rv` é opcional; se omitido, usa `rh`. `cor` é opcional (0–15); se omitida, usa a cor de frente atual (`COLOR`). Para círculo com cor sem elipse, repita o raio: `CIRCLE x,y,r,r,cor`. | `CIRCLE 120,80,20,20,4` |
 | `DRAW` | `DRAW "<comandos>"` | Desenha/move com comandos encadeados no estilo MSX (`BM`, `M`, `R/L/U/D/E/F/G/H`, `C`). | `DRAW "BM100,100R20D20L20U20"` |
-| `FILL` | `FILL <x1>,<y1>,<x2>,<y2>,<cor>` | Preenche um retângulo definido, direto na VDP, com a cor informada. | `FILL 10,10,60,40,3` |
-| `LINE` | `LINE x,y TO x,y [TO x,y...]` | Desenha uma linha ou sequência de segmentos. | `LINE 10,10 TO 100,10 TO 100,50` |
+| `FILL` | `FILL <x1>,<y1>,<x2>,<y2>[,<cor>]` | Preenche um retângulo definido, direto na VDP. `cor` é opcional (0–15); se omitida, usa a cor de frente atual. | `FILL 10,10,60,40,3` |
+| `LINE` | `LINE x,y TO x,y [TO x,y...] [COLOR <cor>]` | Desenha uma linha ou sequência de segmentos. `COLOR` só no final da linha; aplica a cor a todo o traçado. Se omitido, usa a cor de frente atual. | `LINE 10,10 TO 100,100 COLOR 15` |
 | `PAINT` | `PAINT x,y,c` | Flood fill a partir de um ponto, preenchendo a área conectada com a cor `c`. | `PAINT 30,20,4` |
-| `PLOT` | `PLOT <x>,<y>` | Desenha um ponto/pixel na posição informada. | `PLOT 20,10` |
-| `RECT` | `RECT x1,y1,x2,y2` | Desenha as bordas de um retângulo. | `RECT 10,10,80,40` |
+| `PLOT` | `PLOT <x>,<y>[,<cor>]` | Desenha um ponto/pixel na posição informada. `cor` é opcional (0–15); se omitida, usa a cor de frente atual. | `PLOT 20,10,7` |
+| `RECT` | `RECT x1,y1,x2,y2[,<cor>]` | Desenha as bordas de um retângulo. `cor` é opcional (0–15); se omitida, usa a cor de frente atual. | `RECT 10,10,80,40,2` |
+| `VPOKE` | `VPOKE <endereco>,<byte>` | Grava um byte diretamente na VRAM do VDP (buffer de vídeo do BASIC). | `VPOKE 0,255` |
 
 ## Buffer de vídeo (G2)
 
@@ -81,6 +82,8 @@ Rotinas internas sem token continuam fora.
 |---|---|---|---|
 | `ABS` | `ABS(<number real>)` | Retorna o valor absoluto. | `PRINT ABS(-10)` |
 | `ASC` | `ASC(<string>)` | Retorna o código ASCII do primeiro caractere. | `PRINT ASC("A")` |
+| `ATN` | `ATN(<number real>)` | Retorna o arco-tangente (radianos, via FFP). | `PRINT ATN(1)` |
+| `BASE` | `BASE(<tabela>)` | Retorna o endereço base de uma tabela VDP (esquema próprio do MMSJ-BASIC). `0` = pattern; `1` = name; `2` = color (G2) ou name+0x800 (texto). | `PRINT BASE(1)` |
 | `BIN$` | `BIN$(<inteiro>)` | Converte inteiro para string binária com sufixo `b`. | `PRINT BIN$(10)` |
 | `CHR$` | `CHR$(<codigo ascii>)` | Retorna uma string com o caractere correspondente ao código. | `A$ = CHR$(65)` |
 | `COS` | `COS(<number real>)` | Retorna o cosseno do ângulo. | `PRINT COS(0)` |
@@ -98,6 +101,7 @@ Rotinas internas sem token continuam fora.
 | `POKE` | `POKE(<endereco>,<byte>)` | Grava um byte na memória. | `POKE 4096,255` |
 | `RND` | `RND(<number>)` | Retorna um número pseudoaleatório. | `PRINT RND(1)` |
 | `RIGHT$` | `RIGHT$(<string>,<qtd>)` | Retorna os últimos caracteres da string. | `PRINT RIGHT$(A$,2)` |
+| `SIGN` | `SIGN(<numero>)` | Retorna o sinal: `-1` se negativo, `0` se zero, `1` se positivo. Aceita inteiro ou real. | `PRINT SIGN(-5)` |
 | `SIN` | `SIN(<number real>)` | Retorna o seno do ângulo. | `PRINT SIN(0)` |
 | `SPC` | `SPC(<numero>)` | Gera um bloco de espaços para uso em `PRINT`. | `PRINT "A";SPC(5);"B"` |
 | `SPRITEOVER` | `SPRITEOVER(<numsprite1>,<numsprite2>)` | Retorna 1 quando os dois sprites informados estão em colisão. | `PRINT SPRITEOVER(0,1)` |
@@ -106,6 +110,7 @@ Rotinas internas sem token continuam fora.
 | `TAB` | `TAB(<numero>)` | Avança a coluna do `PRINT`. | `PRINT TAB(10);"X"` |
 | `TAN` | `TAN(<number real>)` | Retorna a tangente do ângulo. | `PRINT TAN(0)` |
 | `VAL` | `VAL(<string>)` | Converte string numérica para valor. | `PRINT VAL("123")` |
+| `VPEEK` | `VPEEK(<endereco>)` | Lê um byte da VRAM do VDP (buffer de vídeo do BASIC). | `PRINT VPEEK(0)` |
 
 ## Palavras-chave auxiliares
 
@@ -116,5 +121,7 @@ Estas palavras existem no BASIC, mas não são comandos independentes:
 
 - `PAINT` é flood fill por área conectada.
 - `FILL` é preenchimento de retângulo.
+- `PEEK`/`POKE` acessam memória da CPU; `VPEEK`/`VPOKE` acessam a VRAM do VDP pelo buffer do BASIC.
+- `LINE ... COLOR n` só aceita `COLOR` no final da linha, após todos os pontos.
 - Os comandos gráficos e de sprite exigem modo gráfico compatível, geralmente `SCREEN 2` para G2.
 - `PRINT`, `INPUT`, `READ` e `DATA` aceitam strings e números conforme o contexto.

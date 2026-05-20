@@ -24,6 +24,7 @@
 * 20/04/2026  2.0a04  Moacir Jr.   Dual chamada, pelo monitor, e pelo mmsjos.
 * 22/04/2026  2.0a05  Moacir Jr.   Buffer video, hex, oct, bin e save e load no disco
 * 24/04/2026  2.0a06  Moacir Jr.   Colocacao do DRAW e ajustes gerais
+* 17/05/2026  2.0a07  Moacir Jr.   Novos comandos: VPOKE, VPEEK, BASE
 *--------------------------------------------------------------------------------
 * Variables Simples: start at 00800000
 *   --------------------------------------------------------
@@ -60,11 +61,11 @@
 #include "mmsjosapi.h"
 #include "basic.h"
 
-#define versionBasic "2.0a06"
+#define versionBasic "2.0a07"
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
-#define RUN_ON_FLASH 0
+//#define RUN_ON_FLASH 0
 #define USE_ITERATIVE_PARSER // Comente para usar o parser antigo
 
 #define SIMPLE_VAR_CACHE_SLOTS 8
@@ -118,6 +119,8 @@ static void vdpEditCursorOff(void);
 static void vdpEditCursorOn(void);
 static void vdpEditCursorToggle(void);
 static int vdpEditReadLogicalLineAt(int x, int y, char *dest, int maxLen, int *pStartX, int *pStartY, int *pEndY);
+static void basReadNumericArg(int *pValue);
+static void basDrawLineSegment(unsigned char x0, unsigned char y0, unsigned char x1, unsigned char y1, unsigned char color);
 
 static unsigned int textPatternTable = 0x0000;
 static unsigned int textNameTable = 0x0800;
@@ -435,8 +438,8 @@ void main(void)
         vMemTotalXBasLoad = 65536;
         vMemTotalStack = 8192;
 
-        if (*startBasic == 1)
-            OSTaskSuspend(TASK_MMSJOS_MAIN);
+/*        if (*startBasic == 1)
+            OSTaskSuspend(TASK_MMSJOS_MAIN);*/
     }
     else
     {
@@ -656,8 +659,14 @@ void main(void)
     if (*startBasic == 1)
     {
         printText("Ok\r\n\0");
-        printText("#>");
-        OSTaskResume(TASK_MMSJOS_MAIN);
+//        OSTaskResume(TASK_MMSJOS_MAIN);
+    }
+
+    // Se nao veio do Monitor, espera por qualquer tecla para continuar
+    if (*startBasic != 0)
+    {
+        printText("Press any key to continue...\r\n\0");
+        while(readChar() == 0);
     }
 }
 
@@ -2511,6 +2520,9 @@ int executeToken(unsigned char pToken)
         case 0xBD:  // WEND
             vReta = basWend();
             break;
+        case 0xBE:  // VPOKE
+            vReta = basVpoke();
+            break;
         case 0xC4:  // ASC
             vReta = basAsc();
             break;
@@ -2523,6 +2535,12 @@ int executeToken(unsigned char pToken)
         case 0xC7:  // OCT$
             vReta = basOct();
             break;
+        case 0xC8:  // VPEEK
+            vReta = basVpeek();
+            break;
+        case 0xC9:  // BASE
+            vReta = basBase();
+            break;
         case 0xCD:  // PEEK
             vReta = basPeekPoke('R');
             break;
@@ -2531,6 +2549,12 @@ int executeToken(unsigned char pToken)
             break;
         case 0xD1:  // RND
             vReta = basRnd();
+            break;
+        case 0xD2:  // SIGN
+            vReta = basSign();
+            break;
+        case 0xD3:  // ATN
+            vReta = basTrig(7);
             break;
         case 0xDB:  // Len
             vReta = basLen();
@@ -2988,6 +3012,7 @@ void parseExpr(unsigned char *result) {
     unsigned char sqtdtam[20];
     unsigned char nivelAtual;
     unsigned char (*valStack)[50];
+    unsigned char varName[4], iz;
     unsigned char *opStack;
     unsigned char *opPrecStack;
     char *valTypeStack;
@@ -3055,6 +3080,35 @@ writeLongSerial("]\r\n\0");
 
                     if (tokenLen < 3)
                     {
+                        *varName = *token;
+                        valueType = VARTYPEDEFAULT;
+        
+                        if (tokenLen == 2 && *(token + 1) < 0x30)
+                            valueType = *(token + 1);
+        
+                        if (tokenLen == 2 && isalphas(*(token + 1)))
+                            *(varName + 1) = *(token + 1);
+                        else
+                            *(varName + 1) = 0x00;
+        
+                        *(varName + 2) = valueType;
+                    }
+                    else
+                    {
+                        *varName = *token;
+                        *(varName + 1) = *(token + 1);
+                        iz = strlen(token) - 1;
+                
+                        if (strchr("%$#", *(token + iz)) != NULL)
+                            valueType = *(token + iz);
+                        else
+                            valueType = VARTYPEDEFAULT;
+                        
+                        *(varName + 2) = valueType;                
+                    }        
+                        
+                    /*if (tokenLen < 3)
+                    {
                         valueType = VARTYPEDEFAULT;
 
                         if (tokenLen == 2 && token[1] < 0x30)
@@ -3062,25 +3116,24 @@ writeLongSerial("]\r\n\0");
                     }
                     else
                     {
+                        *varName = *token;
+                        *(varName + 1) = *(token + 1);
+                        iz = strlen(token) - 1;
+                
+                        if (strchr("%$#", *(token + iz)) != NULL)
+                            varTipo = *(token + iz);
+                        else
+                            varTipo = VARTYPEDEFAULT;
+                        
+                        *(varName + 2) = varTipo;                
+        
                         valueType = token[2];
-                    }
+                    }*/
 
-#ifdef BASIC_DEBUG_ON
-if (*debugOn)
-{
-writeLongSerial("Aqui 888.666.0 - [\0");
-itoa(*(char*)token,sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]-[");
-itoa(*(char*)(token + 1),sqtdtam,16);
-writeLongSerial(sqtdtam);
-writeLongSerial("]\r\n\0");
-}
-#endif
                     *tokenVarAtuLen = tokenLen;
-                    tokenVarAtu[0] = token[0];
-                    tokenVarAtu[1] = token[1];
-                    tokenVarAtu[2] = token[2];
+                    tokenVarAtu[0] = varName[0];
+                    tokenVarAtu[1] = varName[1];
+                    tokenVarAtu[2] = varName[2];
                     tokenVarAtu[3] = 0x00;
                     vRet = find_var((char*)tokenVarAtu);
                     if (vRet == 0)
@@ -4839,6 +4892,17 @@ unsigned long fppTan(long pFppD7)
 }
 
 //-----------------------------------------------------------------------------
+// Float Function Return ATN
+//-----------------------------------------------------------------------------
+unsigned long fppAtn(long pFppD7)
+{
+    *floatNumD7 = pFppD7;
+    FPP_ATN();
+
+    return *floatNumD7;
+}
+
+//-----------------------------------------------------------------------------
 // Float Function Return SIN Hiperb
 //-----------------------------------------------------------------------------
 unsigned long fppSinH(long pFppD7)
@@ -4950,7 +5014,7 @@ unsigned long fppComp(unsigned long pFppD7, unsigned long pFppD6)
 //-----------------------------------------------------------------------------
 int procParam(unsigned char tipoRetorno, unsigned char temParenteses, unsigned char tipoSeparador, unsigned char qtdParam, unsigned char *tipoParams,  unsigned char *retParams)
 {
-    int ix, iy;
+    int ix, iy, iz;
     unsigned char answer[200], varTipo, vTipoParam;
     char last_delim, last_token_type = 0;
     unsigned char sqtdtam[10];
@@ -5085,8 +5149,19 @@ int procParam(unsigned char tipoRetorno, unsigned char temParenteses, unsigned c
             {
                 *varName = *token;
                 *(varName + 1) = *(token + 1);
+                iz = strlen(token) - 1;
+        
+                if (strchr("%$#", *(token + iz)) != NULL)
+                    varTipo = *(token + iz);
+                else
+                    varTipo = VARTYPEDEFAULT;
+                
+                *(varName + 2) = varTipo;                
+                
+/*                *varName = *token;
+                *(varName + 1) = *(token + 1);
                 *(varName + 2) = *(token + 2);
-                varTipo = *(varName + 2);
+                varTipo = *(varName + 2);*/
             }
 
             answer[0] = varTipo;
@@ -5198,6 +5273,45 @@ static unsigned char* getArrayValuePointer(unsigned char ixDim, unsigned char* v
     vPosValueVar = vPosValueVar + (vOffSet + 8 + (ixDim * 2));
 
     return vPosValueVar;
+}
+
+void convertVarName(char *s, int vLen, char *vTemp)
+{
+    int i;
+    int p;
+    char c;
+
+    vTemp[0] = 0x00;
+    vTemp[1] = 0x00;
+    vTemp[2] = VARTYPEDEFAULT;
+    vTemp[3] = 0x00;
+
+    p = 0;
+
+    for (i = 0; i < vLen; i++)
+    {
+        c = s[i];
+
+        // Tipo da variável
+        if (c == '%' || c == '$' || c == '#')
+        {
+            // Só aceita se estiver no final
+            if (i == (vLen - 1))
+                vTemp[2] = c;
+
+            break;
+        }
+
+        // Guarda apenas os 2 primeiros caracteres válidos
+        if (p < 2)
+        {
+            if (isalphas(c) || isdigit(c))
+            {
+                vTemp[p] = c;
+                p++;
+            }
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -6708,6 +6822,9 @@ int basTrig(unsigned char pFunc)
         case 6: // sqrt
             vResult = fppSqrt(vReal);
             break;
+        case 7: // atn
+            vResult = fppAtn(vReal);
+            break;
         default:
             *vErroProc = 14;
             return 0;
@@ -7052,6 +7169,147 @@ int basPeekPoke(char pTipo)
     return 0;
 }
 
+//--------------------------------------------------------------------------------------
+//  Comandos diretos de VRAM
+//      VPOKE <endereco>,<byte>
+//      VPEEK(<endereco>)
+//      BASE(<tabela>)
+//--------------------------------------------------------------------------------------
+int basVpoke(void)
+{
+    int address = 0;
+    int value = 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&address);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&value);
+    if (*vErroProc) return 0;
+
+    if (address < 0 || address >= BASIC_VDP_RAM_SIZE || value < 0 || value > 255)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, (unsigned int)address, (unsigned char)value);
+
+    *value_type = '%';
+    return 0;
+}
+
+int basVpeek(void)
+{
+    int address = 0;
+    int *tval = token;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&address);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type != CLOSEPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    if (address < 0 || address >= BASIC_VDP_RAM_SIZE)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    *tval = basVideoReadByte(BASIC_VDP_BUFFER_VRAM, (unsigned int)address);
+    *value_type = '%';
+    return 0;
+}
+
+int basBase(void)
+{
+    int table = 0;
+    int result = 0;
+    int *tval = token;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    basReadNumericArg(&table);
+    if (*vErroProc) return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type != CLOSEPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    switch (table)
+    {
+        case 0:
+            if (vdpModeBas == VDP_MODE_TEXT)
+                result = textPatternTable;
+            else
+                result = paintPatternTable;
+            break;
+        case 1:
+            result = textNameTable;
+            break;
+        case 2:
+            if (vdpModeBas == VDP_MODE_TEXT)
+                result = textNameTable + 0x0800;
+            else
+                result = paintColorTable;
+            break;
+        default:
+            *vErroProc = 5;
+            return 0;
+    }
+
+    *tval = result;
+    *value_type = '%';
+    return 0;
+}
+
 
 //--------------------------------------------------------------------------------------
 //  Array (min 1 dimensoes)
@@ -7095,9 +7353,20 @@ int basDim(void)
     {
         *varName = *token;
         *(varName + 1) = *(token + 1);
+        iz = strlen(token) - 1;
+
+        if (strchr("%$#", *(token + iz)) != NULL)
+            varTipo = *(token + iz);
+        else
+            varTipo = VARTYPEDEFAULT;
+
+        *(varName + 2) = varTipo;        
+
+/*        *varName = *token;
+        *(varName + 1) = *(token + 1);
         *(varName + 2) = *(token + 2);
         iz = strlen(token) - 1;
-        varTipo = *(varName + 2);
+        varTipo = *(varName + 2);*/
     }
 
     nextToken();
@@ -7403,9 +7672,20 @@ int basLet(void)
     {
         *varName = *token;
         *(varName + 1) = *(token + 1);
+        iz = strlen(token) - 1;
+
+        if (strchr("%$#", *(token + iz)) != NULL)
+            varTipo = *(token + iz);
+        else
+            varTipo = VARTYPEDEFAULT;
+
+        *(varName + 2) = varTipo;        
+
+/*        *varName = *token;
+        *(varName + 1) = *(token + 1);
         *(varName + 2) = *(token + 2);
         iz = strlen(token) - 1;
-        varTipo = *(varName + 2);
+        varTipo = *(varName + 2);*/
     }
 
     // verifica se é array (abre parenteses no inicio)
@@ -7531,9 +7811,20 @@ int basInputGet(unsigned char pSize)
             {
                 *varName = *token;
                 *(varName + 1) = *(token + 1);
+                iz = strlen(token) - 1;
+    
+                if (strchr("%$#", *(token + iz)) != NULL)
+                    varTipo = *(token + iz);
+                else
+                    varTipo = VARTYPEDEFAULT;
+                
+                *(varName + 2) = varTipo;        
+
+/*                *varName = *token;
+                *(varName + 1) = *(token + 1);
                 *(varName + 2) = *(token + 2);
                 iz = strlen(token) - 1;
-                varTipo = *(varName + 2);
+                varTipo = *(varName + 2);*/
             }
 
             answer[0] = 0x00;
@@ -8389,6 +8680,78 @@ int basAbs(void)
 }
 
 //--------------------------------------------------------------------------------------
+// Retorna o sinal de um numero
+// Syntaxe:
+//          SIGN(<number>)
+//--------------------------------------------------------------------------------------
+int basSign(void)
+{
+    int vReal = 0, vResult = 0;
+    unsigned long vCCR = 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*tok == EOL || *tok == FINISHED || *token_type != OPENPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    putback();
+
+    getExp(&vReal);
+
+    if (*value_type == '$')
+    {
+        *vErroProc = 16;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type != CLOSEPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    if (*value_type == '#')
+    {
+        vCCR = fppComp(vReal, fppReal(0));
+
+        if (vCCR & 0x04)
+            vResult = 0;
+        else if (vCCR & 0x08)
+            vResult = -1;
+        else
+            vResult = 1;
+    }
+    else
+    {
+        if (vReal < 0)
+            vResult = -1;
+        else if (vReal > 0)
+            vResult = 1;
+        else
+            vResult = 0;
+    }
+
+    *value_type='%';
+
+    *token=((int)(vResult & 0xFF000000) >> 24);
+    *(token + 1)=((int)(vResult & 0x00FF0000) >> 16);
+    *(token + 2)=((int)(vResult & 0x0000FF00) >> 8);
+    *(token + 3)=(vResult & 0x000000FF);
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
 // Retorna um numero randomicamente
 // Syntaxe:
 //          RND(<number>)
@@ -9055,12 +9418,12 @@ int basColor(void)
 // Syntaxe:
 //          CIRCLE x,y,rh[,rv]
 //--------------------------------------------------------------------------------------
-static void basPlotEllipsePoints(int x0, int y0, int dx, int dy)
+static void basPlotEllipsePoints(int x0, int y0, int dx, int dy, unsigned char color)
 {
-    basVideoPlotHires((unsigned char)(x0 + dx), (unsigned char)(y0 + dy), fgcolorBas, bgcolorBas);
-    basVideoPlotHires((unsigned char)(x0 - dx), (unsigned char)(y0 + dy), fgcolorBas, bgcolorBas);
-    basVideoPlotHires((unsigned char)(x0 + dx), (unsigned char)(y0 - dy), fgcolorBas, bgcolorBas);
-    basVideoPlotHires((unsigned char)(x0 - dx), (unsigned char)(y0 - dy), fgcolorBas, bgcolorBas);
+    basVideoPlotHires((unsigned char)(x0 + dx), (unsigned char)(y0 + dy), color, bgcolorBas);
+    basVideoPlotHires((unsigned char)(x0 - dx), (unsigned char)(y0 + dy), color, bgcolorBas);
+    basVideoPlotHires((unsigned char)(x0 + dx), (unsigned char)(y0 - dy), color, bgcolorBas);
+    basVideoPlotHires((unsigned char)(x0 - dx), (unsigned char)(y0 - dy), color, bgcolorBas);
 }
 
 static void basReadNumericArg(int *pValue)
@@ -9255,6 +9618,7 @@ int basBufShow(void)
 int basCircle(void)
 {
     int centerX = 0, centerY = 0, horizontalRadius = 0, verticalRadius = 0;
+    int colorValue = fgcolorBas;
     long rx2, ry2, twoRx2, twoRy2, d1, d2, dx, dy;
     int x, y;
 
@@ -9310,6 +9674,22 @@ int basCircle(void)
 
         basReadNumericArg(&verticalRadius);
         if (*vErroProc) return 0;
+
+        nextToken();
+        if (*vErroProc) return 0;
+
+        if (*token == ',')
+        {
+            nextToken();
+            if (*vErroProc) return 0;
+
+            basReadNumericArg(&colorValue);
+            if (*vErroProc) return 0;
+        }
+        else
+        {
+            putback();
+        }
     }
     else
     {
@@ -9324,19 +9704,25 @@ int basCircle(void)
     if (verticalRadius < 0)
         verticalRadius = -verticalRadius;
 
+    if (colorValue < 0 || colorValue > 15)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
     if (horizontalRadius == 0 && verticalRadius == 0)
     {
-        basVideoPlotHires((unsigned char)centerX, (unsigned char)centerY, fgcolorBas, bgcolorBas);
+        basVideoPlotHires((unsigned char)centerX, (unsigned char)centerY, (unsigned char)colorValue, bgcolorBas);
     }
     else if (horizontalRadius == 0)
     {
         for (y = -verticalRadius; y <= verticalRadius; y++)
-            basVideoPlotHires((unsigned char)centerX, (unsigned char)(centerY + y), fgcolorBas, bgcolorBas);
+            basVideoPlotHires((unsigned char)centerX, (unsigned char)(centerY + y), (unsigned char)colorValue, bgcolorBas);
     }
     else if (verticalRadius == 0)
     {
         for (x = -horizontalRadius; x <= horizontalRadius; x++)
-            basVideoPlotHires((unsigned char)(centerX + x), (unsigned char)centerY, fgcolorBas, bgcolorBas);
+            basVideoPlotHires((unsigned char)(centerX + x), (unsigned char)centerY, (unsigned char)colorValue, bgcolorBas);
     }
     else
     {
@@ -9353,7 +9739,7 @@ int basCircle(void)
 
         while (dx < dy)
         {
-            basPlotEllipsePoints(centerX, centerY, x, y);
+            basPlotEllipsePoints(centerX, centerY, x, y, (unsigned char)colorValue);
 
             if (d1 < 0)
             {
@@ -9375,7 +9761,7 @@ int basCircle(void)
 
         while (y >= 0)
         {
-            basPlotEllipsePoints(centerX, centerY, x, y);
+            basPlotEllipsePoints(centerX, centerY, x, y, (unsigned char)colorValue);
 
             if (d2 > 0)
             {
@@ -9407,6 +9793,7 @@ int basCircle(void)
 int basRect(void)
 {
     int x1 = 0, y1 = 0, x2 = 0, y2 = 0, temp;
+    int colorValue = fgcolorBas;
     int ix, iy, left, right, top, bottom;
 
     if (vdpModeBas != VDP_MODE_G2)
@@ -9466,6 +9853,28 @@ int basRect(void)
     basReadNumericArg(&y2);
     if (*vErroProc) return 0;
 
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token == ',')
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        basReadNumericArg(&colorValue);
+        if (*vErroProc) return 0;
+    }
+    else
+    {
+        putback();
+    }
+
+    if (colorValue < 0 || colorValue > 15)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
     left = x1;
     right = x2;
     top = y1;
@@ -9486,21 +9895,21 @@ int basRect(void)
     }
 
     for (ix = left; ix <= right; ix++)
-        basVideoPlotHires((unsigned char)ix, (unsigned char)top, fgcolorBas, bgcolorBas);
+        basVideoPlotHires((unsigned char)ix, (unsigned char)top, (unsigned char)colorValue, bgcolorBas);
 
     for (iy = top; iy <= bottom; iy++)
-        basVideoPlotHires((unsigned char)left, (unsigned char)iy, fgcolorBas, bgcolorBas);
+        basVideoPlotHires((unsigned char)left, (unsigned char)iy, (unsigned char)colorValue, bgcolorBas);
 
     if (bottom != top)
     {
         for (ix = left; ix <= right; ix++)
-            basVideoPlotHires((unsigned char)ix, (unsigned char)bottom, fgcolorBas, bgcolorBas);
+            basVideoPlotHires((unsigned char)ix, (unsigned char)bottom, (unsigned char)colorValue, bgcolorBas);
     }
 
     if (right != left)
     {
         for (iy = top; iy <= bottom; iy++)
-            basVideoPlotHires((unsigned char)right, (unsigned char)iy, fgcolorBas, bgcolorBas);
+            basVideoPlotHires((unsigned char)right, (unsigned char)iy, (unsigned char)colorValue, bgcolorBas);
     }
 
     *value_type = '%';
@@ -9775,7 +10184,7 @@ int basFill (void)
 {
     int x1 = 0, y1 = 0;
     int x2 = 0, y2 = 0;
-    int fillColor = 0;
+    int fillColor = fgcolorBas;
 
     if (vdpModeBas != VDP_MODE_G2)
     {
@@ -10332,6 +10741,7 @@ int basPlot(void)
     unsigned char answer[20];
     int  *iVal = answer;
     unsigned char vx, vy;
+    int colorValue = fgcolorBas;
     unsigned char sqtdtam[10];
 
     if (vdpModeBas == VDP_MODE_TEXT)
@@ -10402,10 +10812,32 @@ int basPlot(void)
 
     vy=(char)*iVal;
 
-    if (vdpModeBas == VDP_MODE_G2)
-        basVideoPlotHires(vx, vy, fgcolorBas, bgcolorBas);
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token == ',')
+    {
+        nextToken();
+        if (*vErroProc) return 0;
+
+        basReadNumericArg(&colorValue);
+        if (*vErroProc) return 0;
+    }
     else
-        vdp_plot_color(vx, vy, fgcolorBas);
+    {
+        putback();
+    }
+
+    if (colorValue < 0 || colorValue > 15)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    if (vdpModeBas == VDP_MODE_G2)
+        basVideoPlotHires(vx, vy, (unsigned char)colorValue, bgcolorBas);
+    else
+        vdp_plot_color(vx, vy, (unsigned char)colorValue);
 
     *value_type='%';
 
@@ -10523,16 +10955,13 @@ int basPoint(void)
 //--------------------------------------------------------------------------------------
 int basLine(void)
 {
-    int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
-    unsigned char answer[20];
-    int  *iVal = answer;
-    int rivx, rivy;
-    unsigned long riy, rlvx, rlvy, vDiag;
-    unsigned char vx, vy, vtemp;
+    int coordX, coordY;
+    int colorValue = fgcolorBas;
+    unsigned char lineX[64];
+    unsigned char lineY[64];
+    unsigned char pointCount = 0;
+    unsigned char ix;
     unsigned char sqtdtam[10];
-    unsigned char vOper = 0;
-    int x,y,addx,addy,dx,dy;
-    long P;
 
     if (vdpModeBas != VDP_MODE_G2)
     {
@@ -10540,178 +10969,116 @@ int basLine(void)
         return 0;
     }
 
-    do
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token == 0x86)
     {
+        lineX[pointCount] = *lastHgrX;
+        lineY[pointCount] = *lastHgrY;
+        pointCount++;
+        *pointerRunProg = *pointerRunProg + 1;
+
+        nextToken();
+        if (*vErroProc) return 0;
+    }
+
+    while (1)
+    {
+        basReadNumericArg(&coordX);
+        if (*vErroProc) return 0;
+
+        lineX[pointCount] = (unsigned char)coordX;
+
         nextToken();
         if (*vErroProc) return 0;
 
-        if (*token != 0x86)
+        if (*token != ',')
         {
-            if (*token_type == QUOTE) { // is string, error
-                *vErroProc = 16;
-                return 0;
-            }
-            else { // is expression
-                putback();
+            *vErroProc = 18;
+            return 0;
+        }
 
-                getExp(&answer);
-                if (*vErroProc) return 0;
+        nextToken();
+        if (*vErroProc) return 0;
 
-                if (*value_type == '$')
-                {
-                    *vErroProc = 16;
-                    return 0;
-                }
+        basReadNumericArg(&coordY);
+        if (*vErroProc) return 0;
 
-                if (*value_type == '#')
-                {
-                    *iVal = fppInt(*iVal);
-                    *value_type = '%';
-                }
-            }
+        lineY[pointCount] = (unsigned char)coordY;
+        pointCount++;
 
-            vx = (unsigned char)*iVal;
+        if (pointCount >= 64)
+        {
+            *vErroProc = 21;
+            return 0;
+        }
 
-            if (*token != ',')
+        nextToken();
+        if (*vErroProc) return 0;
+
+        if (*token == 0x86)
+        {
+            *pointerRunProg = *pointerRunProg + 1;
+            nextToken();
+            if (*vErroProc) return 0;
+            continue;
+        }
+
+        if (*token == 0xB3) // COLOR
+        {
+            *pointerRunProg = *pointerRunProg + 1;
+
+            nextToken();
+            if (*vErroProc) return 0;
+
+            basReadNumericArg(&colorValue);
+            if (*vErroProc) return 0;
+            
+            if (colorValue < 0 || colorValue > 15)
             {
-                *vErroProc = 18;
+                *vErroProc = 5;
                 return 0;
             }
 
             nextToken();
             if (*vErroProc) return 0;
 
-            if (*token_type == QUOTE) { // is string, error
-                *vErroProc = 16;
+            if (*tok != EOL && *tok != FINISHED)
+            {
+                *vErroProc = 18;
                 return 0;
             }
-            else { // is expression
-                //putback();
 
-                getExp(&answer);
-                if (*vErroProc) return 0;
-
-                if (*value_type == '$')
-                {
-                    *vErroProc = 16;
-                    return 0;
-                }
-
-                if (*value_type == '#')
-                {
-                    *iVal = fppInt(*iVal);
-                    *value_type = '%';
-                }
-            }
-
-            vy = (unsigned char)*iVal;
-
-            if (!vOper)
-                vOper = 1;
+            break;
         }
-        else
+
+        if (*tok == EOL || *tok == FINISHED)
+            break;
+
+        *vErroProc = 18;
+        return 0;
+    }
+
+    if (pointCount == 1)
+    {
+        *lastHgrX = lineX[0];
+        *lastHgrY = lineY[0];
+        basVideoPlotHires(lineX[0], lineY[0], (unsigned char)colorValue, bgcolorBas);
+    }
+    else
+    {
+        for (ix = 1; ix < pointCount; ix++)
         {
-           // *pointerRunProg = *pointerRunProg + 1;
+            if (lineX[ix] == lineX[ix - 1] && lineY[ix] == lineY[ix - 1])
+                basVideoPlotHires(lineX[ix], lineY[ix], (unsigned char)colorValue, bgcolorBas);
+            else
+                basDrawLineSegment(lineX[ix - 1], lineY[ix - 1], lineX[ix], lineY[ix], (unsigned char)colorValue);
         }
 
-        if (*tok == EOL || *tok == FINISHED || *token == 0x86)    // Fim de linha, programa ou token
-        {
-            if (!vOper)
-            {
-                vOper = 2;
-            }
-            else if (vOper == 1)
-            {
-                *lastHgrX = vx;
-                *lastHgrY = vy;
-
-                if (*token != 0x86)
-                    basVideoPlotHires(vx, vy, fgcolorBas, bgcolorBas);
-            }
-            else if (vOper == 2)
-            {
-                if (vx == *lastHgrX && vy == *lastHgrY)
-                    basVideoPlotHires(vx, vy, fgcolorBas, bgcolorBas);
-                else
-                {
-                    dx = (vx - *lastHgrX);
-                    dy = (vy - *lastHgrY);
-
-                    if (dx < 0)
-                        dx = dx * (-1);
-
-                    if (dy < 0)
-                        dy = dy * (-1);
-
-                    x = *lastHgrX;
-                    y = *lastHgrY;
-
-                    if(*lastHgrX > vx)
-                       addx = -1;
-                    else
-                       addx = 1;
-
-                    if(*lastHgrY > vy)
-                      addy = -1;
-                    else
-                      addy = 1;
-
-                    if(dx >= dy)
-                    {
-                        P = (2 * dy) - dx;
-
-                        for(ix = 1; ix <= (dx + 1); ix++)
-                        {
-                            basVideoPlotHires(x, y, fgcolorBas, 0);
-
-                            if (P < 0)
-                            {
-                                P = P + (2 * dy);
-                                x = (x + addx);
-                            }
-                            else
-                            {
-                                P = P + (2 * dy) - (2 * dx);
-                                x = x + addx;
-                                y = y + addy;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        P = (2 * dx) - dy;
-
-                        for(ix = 1; ix <= (dy +1); ix++)
-                        {
-                            basVideoPlotHires(x, y, fgcolorBas, 0);
-
-                            if (P < 0)
-                            {
-                                P = P + (2 * dx);
-                                y = y + addy;
-                            }
-                            else
-                            {
-                                P = P + (2 * dx) - (2 * dy);
-                                x = x + addx;
-                                y = y + addy;
-                            }
-                        }
-                    }
-                }
-
-                *lastHgrX = vx;
-                *lastHgrY = vy;
-            }
-
-            if (*token == 0x86)
-            {
-                *pointerRunProg = *pointerRunProg + 1;
-            }
-        }
-
-        vOper = 2;
-   } while (*token == 0x86); // TO Token
+        *lastHgrX = lineX[pointCount - 1];
+        *lastHgrY = lineY[pointCount - 1];
+    }
 
     *value_type='%';
 
@@ -11060,9 +11427,14 @@ int basRead(void)
         {
             *varName = *token;
             *(varName + 1) = *(token + 1);
-            *(varName + 2) = *(token + 2);
             iz = strlen(token) - 1;
-            varTipo = *(varName + 2);
+
+            if (strchr("%$#", *(token + iz)) != NULL)
+                varTipo = *(token + iz);
+            else
+                varTipo = VARTYPEDEFAULT;
+
+            *(varName + 2) = varTipo;
         }
     }
 

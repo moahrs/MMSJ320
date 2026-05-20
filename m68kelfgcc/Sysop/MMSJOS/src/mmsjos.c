@@ -716,16 +716,12 @@ void main(void)
     mprintf("Done.\r\n");
 
     if (startEnv)
-    {
-        strcpy(vbuf,"MGUI\n");
-    }
-    else
-    {
-        vbuf[0] = '\0';
-        printText("\r\n\0");
-        putPrompt(0);
-        showCursor();
-    }
+        mguiFunc(0);
+
+    vbuf[0] = '\0';
+    printText("\r\n\0");
+    putPrompt(0);
+    showCursor();
 
     mmsjKeyClear();
 

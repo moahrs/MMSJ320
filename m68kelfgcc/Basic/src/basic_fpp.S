@@ -17,6 +17,7 @@
             .extern FFPMUL2
             .extern FFPNEG
             .extern FFPPWR
+            .extern FFPATAN
             .extern FFPSIN
             .extern FFPSINH
             .extern FFPSQRT
@@ -161,6 +162,15 @@ FPP_TAN:
             SAVE_ALL
             move.l  FLOAT_NUM_D7,%d7
             jsr     FFPTAN
+            move.l  %d7,FLOAT_NUM_D7
+            RESTORE_ALL
+            rts
+
+            .global FPP_ATN
+FPP_ATN:
+            SAVE_ALL
+            move.l  FLOAT_NUM_D7,%d7
+            jsr     FFPATAN
             move.l  %d7,FLOAT_NUM_D7
             RESTORE_ALL
             rts
