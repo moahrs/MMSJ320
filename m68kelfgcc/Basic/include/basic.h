@@ -143,7 +143,7 @@ unsigned long *vDataLineAtu         = 0x008FE95E; //
 for_stack *forStack                 = 0x008FF6BE; // stack for FOR/NEXT loop
 unsigned long *atuVarAddr           = 0x008FF6B0; // Endereco da variavel atualmente usada pelo basLet
 
-const keywords_count = 81; // Quantidade de palavras reservadas
+const keywords_count = 79; // Quantidade de palavras reservadas
 
 // -------------------------------------------------------------------------------
 // Mensagens de Erro
@@ -178,7 +178,8 @@ static unsigned char *listError[]= {
     /* 26 */ "?Out of data",
     /* 27 */ "?Illegal Operation",
     /* 28 */ "?WEND without WHILE",
-    /* 29 */ "?Too many nested WHILE"
+    /* 29 */ "?Too many nested WHILE",
+    /* 30 */ "?Division by zero"
 };
 
 // -------------------------------------------------------------------------------
@@ -193,6 +194,7 @@ static const struct keyword_token keywords[] =
   {"PRINT", 	0x81},   // ok ok ok
   {"IF", 		  0x82},   // .. ok ok
   {"THEN", 		0x83},   // .. ok ok
+  {"ELSE", 		0x84},   // .. .. ok
   {"FOR", 		0x85},   // .. .. ok
   {"TO", 		  0x86},   // .. .. ok
   {"NEXT", 		0x87},   // .. .. ok
@@ -204,7 +206,6 @@ static const struct keyword_token keywords[] =
   {"SPRITESET", 0x8D},  // .. .. ok
   {"SPRITEPUT", 0x8E},  // .. .. ok
   {"DIM", 		0x8F},   // .. .. ok
-  {"BUFSHOW", 0x90},   // .. .. ok
   {"ON",      0x91},   // .. .. ok
   {"INPUT", 	0x92},   // .. ok ok
   {"GET",     0x93},   // .. ok ok
@@ -215,8 +216,7 @@ static const struct keyword_token keywords[] =
   {"DATA", 		0x98},   // .. .. ok
   {"READ", 		0x99},   // .. .. ok
   {"RESTORE", 0x9A},   // .. .. ok
-  {"BUFDRAWON", 0x9B},   // .. .. ok
-  {"BUFDRAWOFF", 0x9C},   // .. .. ok
+  {"BUFDRAW", 0x9B},   // .. .. ok
   {"BUFCOPY", 0x9D},   // .. .. ok
   {"END",     0x9E},   // .. .. ok
   {"STOP",    0x9F},   // .. .. ok
@@ -347,8 +347,8 @@ void level5(unsigned char *result);
 void level6(unsigned char *result);
 void primitive(unsigned char *result);
 void atithChar(unsigned char *r, unsigned char *h);
-void arithInt(char o, char *r, char *h);
-void arithReal(char o, char *r, char *h);
+int arithInt(char o, char *r, char *h);
+int arithReal(char o, char *r, char *h);
 void logicalNumericFloat(unsigned char o, char *r, char *h);
 char logicalNumericFloatLong(unsigned char o, long r, long h);
 void logicalNumericInt(unsigned char o, char *r, char *h);
@@ -427,9 +427,8 @@ int basPoint(void);
 int basLine(void);
 int basRead(void);
 int basRestore(void);
-int basBufVdg(unsigned char pEnabled);
+int basBufDraw(void);
 int basBufCopy(void);
-int basBufShow(void);
 int basTrig(unsigned char pFunc);
 int basSign(void);
 int basWhile(void);

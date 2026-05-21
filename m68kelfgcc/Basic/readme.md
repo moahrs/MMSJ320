@@ -11,7 +11,7 @@ Rotinas internas sem token continuam fora.
 | `FOR` | `FOR <var> = <inicio> TO <final> [STEP <passo>]` | Inicia laço contado. A variável pode ser criada automaticamente. | `FOR I = 1 TO 10 STEP 2` |
 | `GOSUB` | `GOSUB <linha>` | Salta para uma sub-rotina e volta com `RETURN`. | `GOSUB 200` |
 | `GOTO` | `GOTO <linha>` | Salta para uma linha do programa sem retorno. | `GOTO 100` |
-| `IF` | `IF <expr> THEN <comando>` | Executa algo somente quando a expressão for verdadeira. | `IF A>10 THEN PRINT "OK"` |
+| `IF` | `IF <expr> THEN <cmds> [ELSE <cmds>]` | Verdadeiro: executa após `THEN` (vários comandos com `:`) e salta de `ELSE` até fim da linha. Falso: salta de `THEN` até `ELSE` e executa o resto da linha até `0x00`. | `IF A>10 THEN PRINT "OK" ELSE PRINT "NO"` |
 | `LET` | `LET <var> = <expr>` | Atribui valor a uma variável. O `LET` é opcional; `A$="OI"` funciona do mesmo jeito. | `LET A = 10` |
 | `LOAD` | `LOAD <arquivo>` | Carrega um programa textual do disco para a memória do BASIC usando o nome informado. | `LOAD CUBE.BAS` |
 | `NEXT` | `NEXT [<var>]` | Fecha o laço `FOR` e avança para a próxima iteração. | `NEXT I` |
@@ -49,7 +49,7 @@ Rotinas internas sem token continuam fora.
 
 | Comando | Sintaxe | O que faz | Exemplo |
 |---|---|---|---|
-| `CIRCLE` | `CIRCLE x,y,rh[,rv][,cor]` | Desenha um círculo ou ovoide. `rv` é opcional; se omitido, usa `rh`. `cor` é opcional (0–15); se omitida, usa a cor de frente atual (`COLOR`). Para círculo com cor sem elipse, repita o raio: `CIRCLE x,y,r,r,cor`. | `CIRCLE 120,80,20,20,4` |
+| `CIRCLE` | `CIRCLE x,y,radius[,color[,tracingStart[,tracingEnd[,aspect]]]]` | Desenha círculo, elipse ou arco (estilo MSX-BASIC). `radius` é o raio horizontal; `aspect` (opcional, padrão `1`) define a razão vertical/horizontal (`raio vertical = radius × aspect`). `tracingStart` e `tracingEnd` são ângulos em radianos (0 = ponto mais à esquerda, sentido horário; padrão `0` a `2π` = círculo completo). Valores negativos em `tracingStart` ou `tracingEnd` traçam uma linha do centro até o ponto do ângulo (valor absoluto). `color` é opcional (0–15); se omitida, usa a cor de frente (`COLOR`). Parâmetros intermediários podem ser omitidos com vírgulas: `CIRCLE 127,95,50,,,,1.4`. | `CIRCLE 120,80,20,4` / `CIRCLE 127,95,50,,,,1.4` |
 | `DRAW` | `DRAW "<comandos>"` | Desenha/move com comandos encadeados no estilo MSX (`BM`, `M`, `R/L/U/D/E/F/G/H`, `C`). | `DRAW "BM100,100R20D20L20U20"` |
 | `FILL` | `FILL <x1>,<y1>,<x2>,<y2>[,<cor>]` | Preenche um retângulo definido, direto na VDP. `cor` é opcional (0–15); se omitida, usa a cor de frente atual. | `FILL 10,10,60,40,3` |
 | `LINE` | `LINE x,y TO x,y [TO x,y...] [COLOR <cor>]` | Desenha uma linha ou sequência de segmentos. `COLOR` só no final da linha; aplica a cor a todo o traçado. Se omitido, usa a cor de frente atual. | `LINE 10,10 TO 100,100 COLOR 15` |
@@ -60,12 +60,12 @@ Rotinas internas sem token continuam fora.
 
 ## Buffer de vídeo (G2)
 
+Há **7 superfícies**: área **0** = VRAM (tela visível); áreas **1** a **6** = buffers em RAM (`pStartVdpBuffer`, 72 KB no total — 6×12 KB: 6 KB tabela de padrão + 6 KB tabela de cor por área). No início e ao fim de cada `RUN`, os desenhos ficam na área **0**.
+
 | Comando | Sintaxe | O que faz | Exemplo |
 |---|---|---|---|
-| `BUFCOPY` | `BUFCOPY <orig>,<dest>,<x1>,<y1>,<x2>,<y2>` | Copia uma região entre superfícies (`orig`/`dest`: `0`=VRAM, `1`=RAM) com substituição direta na área de destino. | `BUFCOPY 1,0,0,0,255,191` |
-| `BUFDRAWOFF` | `BUFDRAWOFF` | Volta os desenhos G2 para a VRAM (BUF0). | `BUFDRAWOFF` |
-| `BUFDRAWON` | `BUFDRAWON` | Redireciona os desenhos G2 para o buffer em RAM (BUF1). | `BUFDRAWON` |
-| `BUFSHOW` | `BUFSHOW <x1>,<y1>,<x2>,<y2>` | Atalho para copiar RAM→VRAM (`orig=1`, `dest=0`) na região informada. | `BUFSHOW 0,0,255,191` |
+| `BUFCOPY` | `BUFCOPY <orig>,<dest>,<x1>,<y1>,<x2>,<y2>` | Copia uma região entre áreas (`orig`/`dest`: `0`=VRAM, `1`–`6`=buffers RAM de 12 KB cada). Para exibir um buffer na tela: `BUFCOPY <area>,0,...`. | `BUFCOPY 1,0,0,0,255,191` |
+| `BUFDRAW` | `BUFDRAW <area>` | Redireciona os desenhos G2 para a área informada (`0`=VRAM, `1`–`6`=buffer RAM). Ao terminar o programa (`RUN`, `END`, `STOP` ou ESC), volta automaticamente para a área `0`. | `BUFDRAW 1` |
 
 ## Sprites
 
@@ -115,7 +115,7 @@ Rotinas internas sem token continuam fora.
 ## Palavras-chave auxiliares
 
 Estas palavras existem no BASIC, mas não são comandos independentes:
-`THEN`, `TO`, `STEP`, `AT`.
+`THEN`, `ELSE`, `TO`, `STEP`, `AT`.
 
 ## Notas rápidas
 
