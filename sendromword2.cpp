@@ -24,6 +24,7 @@
 *--------------------------------------------------------------------------------
 * Data        Responsavel  Motivo
 * 20/12/2011  Moacir Jr.   criacao
+* 24/04/2026  Moacir Jr.   Adaptação para receber 000000, high/msb/lsb e modo verboso
 ********************************************************************************/
 
 #include <stdio.h> 

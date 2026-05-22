@@ -66,7 +66,7 @@
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
-//#define RUN_ON_FLASH 0
+#define RUN_ON_FLASH 0
 #define USE_ITERATIVE_PARSER // Comente para usar o parser antigo
 
 #define SIMPLE_VAR_CACHE_SLOTS 8
@@ -1663,7 +1663,7 @@ static unsigned short basBuildListTextLine(unsigned char *pTokenLine, unsigned c
 
             if (!vFirstByte)
             {
-                if (isalphas(*(pTokenLine - 2)) || isdigitus(*(pTokenLine - 2)) || *(pTokenLine - 2) == ')')
+                if (isalphas(*(pTokenLine - 2)) || isdigitus(*(pTokenLine - 2)) || *(pTokenLine - 2) == ')' || *(pTokenLine - 2) == '%' || *(pTokenLine - 2) == '#' || *(pTokenLine - 2) == '$')
                     pOutLine[ix++] = 0x20;
             }
             else

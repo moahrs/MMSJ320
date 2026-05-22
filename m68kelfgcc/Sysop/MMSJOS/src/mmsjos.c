@@ -903,7 +903,7 @@ void basicFunc(void *pData)
     unsigned char kbdFuncSuspended;
 
     // Aloca espaço pro Basic // Area fixa para dados do BASIC: 0x00890000..0x008E0000
-    *startBasic0 = msmalloc(262144); // 256 KBytes para o Basic, o suficiente para a maioria dos programas, e ainda sobra para o heap do MMSJOS
+    *startBasic0 = msmalloc(278528); // 272 KBytes para o Basic, o suficiente para a maioria dos programas, e ainda sobra para o heap do MMSJOS
 
     if (!*startBasic0)
     {

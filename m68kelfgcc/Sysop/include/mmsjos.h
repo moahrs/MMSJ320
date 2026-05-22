@@ -255,11 +255,17 @@ extern MEM_ALOC vMemAloc;
 #define KEY_LEFT    18
 #define KEY_RIGHT   20
 
+#define KEY_TAB       9
+#define KEY_PAGEUP    22
+#define KEY_PAGEDOWN  23
+
 #define KEY_BACKSPACE 8
 #define KEY_DELETE    127
+#define KEY_INSERT    21
 #define KEY_ENTER     13
 #define KEY_HOME      2
-#define KEY_NONE     0
+#define KEY_END       3
+#define KEY_NONE      0
 
 #define KEY_CTRL        0xA0
 #define KEY_ALT         0x88

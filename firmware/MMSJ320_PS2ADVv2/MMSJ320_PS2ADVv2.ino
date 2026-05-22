@@ -506,21 +506,21 @@ void initKeyMapABNT2(void)
   setKeyMap(0x3A, '~', '^');
 
   setKeyMap(0x1F, ' ', ' ');
-  setKeyMap(0x1E, 13, 13);
-  setKeyMap(0x1B, 27, 27);
-  setKeyMap(0x1C, 8, 8);
-  setKeyMap(0x1A, 127, 127);
-  setKeyMap(0x19, 0x11, 0x11);
-  setKeyMap(0x1D, 9, 9);
-  setKeyMap(0x11, 2, 2);
-  setKeyMap(0x13, 0x12, 0x12);
-  setKeyMap(0x14, 0x13, 0x13);
-  setKeyMap(0x12, 3, 3);
+  setKeyMap(0x1E, 13, 13);      // ENTER
+  setKeyMap(0x1B, 27, 27);      // ESC
+  setKeyMap(0x1C, 8, 8);        // BACKSPACE
+  setKeyMap(0x1A, 127, 127);    // DELETE
+  setKeyMap(0x19, 21, 21);      // INSERT
+  setKeyMap(0x1D, 9, 9);        // TAB
+  setKeyMap(0x11, 2, 2);        // HOME
+  setKeyMap(0x13, 22, 22);      // PAGE UP
+  setKeyMap(0x14, 23, 23);      // PAGE DOWN
+  setKeyMap(0x12, 3, 3);        // END
 
-  setKeyMap(0x17, 17, 17);
-  setKeyMap(0x18, 19, 19);
-  setKeyMap(0x15, 18, 18);
-  setKeyMap(0x16, 20, 20);
+  setKeyMap(0x17, 17, 17);      // UP
+  setKeyMap(0x18, 19, 19);      // DOWN
+  setKeyMap(0x15, 18, 18);      // LEFT
+  setKeyMap(0x16, 20, 20);      // RIGHT
 }
 
 //----------------------------------------------------

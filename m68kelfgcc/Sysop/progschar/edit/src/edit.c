@@ -1038,6 +1038,81 @@ void edMoveDown(void)
 }
 
 //-------------------------------------------------------------------
+// Move cursor 1 pagina pra cima, 19 linhas pra cima
+//-------------------------------------------------------------------
+int edMovePageUp(void)
+{
+    int len;
+
+    edCurLine -= 19;
+    
+    if (edCurLine < 0)
+        edCurLine = 0;
+
+    len = edLineLen(edCurLine);
+
+    if (edCurCol > len)
+        edCurCol = len;
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+// Move cursor 1 pagina pra baixo, 19 linhas pra baixo
+//-------------------------------------------------------------------
+int edMovePageDown(void)
+{
+    int len;
+
+    edCurLine += 19;
+
+    if (edCurLine >= edNumLines)
+        edCurLine = edNumLines - 1;
+
+    len = edLineLen(edCurLine);
+
+    if (edCurCol > len)
+        edCurCol = len;
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+// Move cursor para o inicio da linha
+//-------------------------------------------------------------------
+int edMoveHome(void)
+{
+    edCurCol = 0;
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+// Move cursor para o fim da linha
+//-------------------------------------------------------------------
+int edMoveEnd(void)
+{
+    edCurCol = edLineLen(edCurLine);
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+// insere 4 espaços na posicao do cursor, empurrando o texto pa frente
+//-------------------------------------------------------------------
+int edMoveTab(void)
+{
+    int i;
+
+    for (i = 0; i < 4; i++)
+        edInsertChar(' ');
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+// Apaga o caracter anterior
+//-------------------------------------------------------------------
 int edBackspace(void)
 {
     int i;
@@ -1114,15 +1189,19 @@ void edDrawCommandHelp(void)
 
         edClearLine(1);
         vdp_set_cursor(0, 1);
-        printText("  S=Save   A=SaveAs |  B=Begin   K=End ");
+        printText(" S=Save   A=SaveAs  |  B=Begin   K=End ");
 
         edClearLine(2);
         vdp_set_cursor(0, 2);
-        printText("  Q=Abandon  O=Open |  C=Copy    V=Move");
+        printText(" Q=Abandon  O=Open  |  C=Copy    V=Move");
 
         edClearLine(3);
         vdp_set_cursor(0, 3);
-        printText("  X=Save & Exit     |  P=Paste   D=Del ");
+
+        if (my_strstr(edFileName, ".BAS") != NULL)
+            printText(" X=Save&Exit R=Run  |  P=Paste   D=Del ");
+        else
+            printText(" X=Save&Exit        |  P=Paste   D=Del ");
     }
     if (edCmdModeQ)
     {
@@ -1166,6 +1245,7 @@ void edLoop(char *filename)
     unsigned int tick;
     int changedText;
     char logBlinkCursor;
+    char cRunAux[128];
     MMSJ_KEYEVENT k;
 
     clearScr();
@@ -1260,6 +1340,21 @@ void edLoop(char *filename)
                     {
                         if (edSaveFile())
                             break;
+                    }
+                    else if (key == 'R' || key == 'r')  // Se a Extensao for .BAS, salva e Executa Prog Em Basic
+                    {
+                        if (my_strstr(edFileName, ".BAS") != NULL)
+                        {
+                            if (!edDirty || (edDirty && edSaveFile()))
+                            {
+                                strcpy(cRunAux, "BASIC ");
+                                strcat(cRunAux, edFileName);
+
+                                clearScr();
+                                fsOsCommand(cRunAux);
+                                clearScr();
+                            }    
+                        }
                     }
                     else if (key == 'B' || key == 'b')  // ^KB = marca inicio
                     {
@@ -1365,6 +1460,19 @@ void edLoop(char *filename)
                 edMoveUp();
             else if (key == KEY_DOWN)
                 edMoveDown();
+            else if (key == KEY_PAGEUP)
+                edMovePageUp();
+            else if (key == KEY_PAGEDOWN)
+                edMovePageDown();
+            else if (key == KEY_HOME)
+                edMoveHome();
+            else if (key == KEY_END)
+                edMoveEnd();
+            else if (key == KEY_TAB)
+            {
+                edMoveTab();
+                changedText = 1;
+            }
             else if (key == KEY_BACKSPACE)
             {
                 edBackspace();

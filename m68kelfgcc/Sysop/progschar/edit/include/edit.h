@@ -111,3 +111,26 @@ int edReplaceAt(unsigned long pos, int oldLen, char *newText);
 int edGotoLine(void);
 int edReplaceAsk(void);
 void edClearLineFrom(int y, int start);
+
+char *my_strstr(const char *haystack, const char *needle) {
+    int i;
+    // If needle is empty, the standard says to return haystack
+    if (*needle == '\0') {
+        return (char *)haystack;
+    }
+
+    for (i = 0; haystack[i] != '\0'; i++) {
+        int j = 0;
+        // Check if needle matches starting at current position i
+        while (needle[j] != '\0' && haystack[i + j] == needle[j]) {
+            j++;
+        }
+
+        // If we reached the end of the needle, a match was found
+        if (needle[j] == '\0') {
+            return (char *)&haystack[i];
+        }
+    }
+
+    return NULL;
+}
