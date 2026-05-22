@@ -28,6 +28,9 @@ const int MseData = A5;
 
 #define QUEUE_SIZE 64
 
+#define MSE_CLK_WAIT     2500
+#define MSE_HOST_WAIT    0xFFF
+
 PS2KeyAdvanced keyboard;
 
 typedef struct
@@ -67,10 +70,19 @@ long int vtimeoutmouseaux = 0xFFF;
 unsigned long vTimeOutCpuReadAux = 0xFFF;
 char hasmouseaux = 1;
 
+volatile char msePacketStart = 0;
+volatile char mseBusy = 0;
+
 char queuePush(unsigned char dev, unsigned char b);
 void serviceBusRead(void);
 void serviceBusWrite(void);
 void queuePushKey(unsigned int key);
+char readMsePs2(unsigned long *out);
+char writeMsePS2(byte Data);
+void mseReadPacket(void);
+static char mseWaitClkHigh(void);
+static char mseWaitClkLow(void);
+static char mseWaitDataLow(void);
 
 //----------------------------------------------------
 char queuePush(unsigned char dev, unsigned char b)
@@ -237,26 +249,85 @@ void queuePushKey(unsigned int key)
 }
 
 //----------------------------------------------------
+static char mseWaitClkHigh(void)
+{
+  unsigned int t = MSE_CLK_WAIT;
+  while (digitalRead(MseClk) == HIGH && t--)
+    ;
+  return (t != 0);
+}
+
+//----------------------------------------------------
+static char mseWaitClkLow(void)
+{
+  unsigned int t = MSE_CLK_WAIT;
+  while (digitalRead(MseClk) == LOW && t--)
+    ;
+  return (t != 0);
+}
+
+//----------------------------------------------------
+static char mseWaitDataLow(void)
+{
+  unsigned int t = MSE_CLK_WAIT;
+  while (digitalRead(MseData) == HIGH && t--)
+    ;
+  return (t != 0);
+}
+
+//----------------------------------------------------
 void ps2mseinterrupt(void)
 {
-  int timeout = 0xFF;
+  if (mseBusy)
+    return;
 
   if (!digitalRead(MseData))
-  {
-    while (digitalRead(MseData) && --timeout)
-      ;
-    dataMse = readMsePs2();
-    timeout = 0xFF;
-    while (digitalRead(MseData) && --timeout)
-      ;
-    xmvmt = readMsePs2();
-    timeout = 0xFF;
-    while (digitalRead(MseData) && --timeout)
-      ;
-    ymvmt = readMsePs2();
+    msePacketStart = 1;
+}
 
-    mseDataAvailable = 1;
-  }
+//----------------------------------------------------
+void mseReadPacket(void)
+{
+  unsigned long raw;
+
+  if (!msePacketStart || mseBusy)
+    return;
+
+  msePacketStart = 0;
+  mseBusy = 1;
+
+  noInterrupts();
+
+  if (!mseWaitDataLow())
+    goto fail;
+
+  if (!readMsePs2(&raw))
+    goto fail;
+  dataMse = (int)raw;
+
+  if (!mseWaitDataLow())
+    goto fail;
+
+  if (!readMsePs2(&raw))
+    goto fail;
+  xmvmt = (int)raw;
+
+  if (!mseWaitDataLow())
+    goto fail;
+
+  if (!readMsePs2(&raw))
+    goto fail;
+  ymvmt = (int)raw;
+
+  mseDataAvailable = 1;
+  mseBusy = 0;
+  interrupts();
+  return;
+
+fail:
+  mseDataAvailable = 0;
+  mseBusy = 0;
+  interrupts();
 }
 
 //----------------------------------------------------
@@ -273,8 +344,8 @@ void setup()
   PORTC = (unsigned char)((PORTC & 0b11100000) | 0b00010011); // PC0/PC1 INT high, PC4 DTACK high
   DDRC  = (unsigned char)((DDRC  & 0b11100000) | 0b00010011); // PC0, PC1, PC4 saida; PC2/RW, PC3/CS entrada
 
-  pinMode(MseClk, INPUT);
-  pinMode(MseData, INPUT);
+  pinMode(MseClk, INPUT_PULLUP);
+  pinMode(MseData, INPUT_PULLUP);
 
   Serial.begin(115200);
 
@@ -286,14 +357,16 @@ void setup()
 
   if (hasmouseaux)
   {
-    dataMse = readMsePs2();
-    dataMse = readMsePs2();
-    dataMse = readMsePs2();
+    readMsePs2((unsigned long *)&dataMse);
+    readMsePs2((unsigned long *)&dataMse);
+    readMsePs2((unsigned long *)&dataMse);
 
     writeMsePS2(0xF4);
-    dataMse = readMsePs2();
+    readMsePs2((unsigned long *)&dataMse);
 
     mseDataAvailable = 0;
+    msePacketStart = 0;
+    mseBusy = 0;
   }
 
   delay(1000);
@@ -309,6 +382,9 @@ void setup()
 void loop()
 {
   int key;
+
+  if (hasmouseaux)
+    mseReadPacket();
 
   if (busIntArmed)
   {
@@ -371,36 +447,37 @@ void loop()
 }
 
 //----------------------------------------------------
-unsigned long int readMsePs2()
+char readMsePs2(unsigned long *out)
 {
-  unsigned long int b = 0;
-  int timeoutread = 0xFF;
+  unsigned long b = 0;
+  int i;
 
-  for (int i = 0; i < 11; i++)
+  if (!out)
+    return 0;
+
+  for (i = 0; i < 11; i++)
   {
-    timeoutread = 0xFF;
-    while (digitalRead(MseClk) == HIGH)
-    {
-    }
+    if (!mseWaitClkHigh())
+      return 0;
 
-    b += (digitalRead(MseData) << i);
+    if (digitalRead(MseData))
+      b |= (1UL << i);
 
-    timeoutread = 0xFF;
-    while (digitalRead(MseClk) == LOW)
-    {
-    }
+    if (!mseWaitClkLow())
+      return 0;
   }
 
-  if (!timeoutread)
-    b = 0;
-
-  return b;
+  *out = b;
+  return 1;
 }
 
 //----------------------------------------------------
-void writeMsePS2(byte Data)
+char writeMsePS2(byte Data)
 {
-  vtimeoutmouseaux = 0xFFF;
+  int pairck;
+  int i;
+
+  vtimeoutmouseaux = MSE_HOST_WAIT;
 
   pinMode(MseClk, OUTPUT);
   digitalWrite(MseClk, LOW);
@@ -410,26 +487,25 @@ void writeMsePS2(byte Data)
   digitalWrite(MseData, LOW);
   delayMicroseconds(50);
 
-  pinMode(MseClk, INPUT);
+  pinMode(MseClk, INPUT_PULLUP);
 
   while (digitalRead(MseClk) && vtimeoutmouseaux-- > 0)
   {
   }
 
   if (vtimeoutmouseaux <= 0)
-    return;
+    return 0;
 
-  int pairck = 0;
-  for (int i = 0; i < 8; i++)
+  pairck = 0;
+  for (i = 0; i < 8; i++)
   {
-    digitalWrite(MseData, (Data & (1 << i)) >> i);
-    pairck += ((Data & (1 << i)) >> i);
-    while (digitalRead(MseClk) == LOW)
-    {
-    }
-    while (digitalRead(MseClk) == HIGH)
-    {
-    }
+    digitalWrite(MseData, (Data & (1 << i)) ? 1 : 0);
+    pairck += ((Data & (1 << i)) ? 1 : 0);
+
+    if (!mseWaitClkLow())
+      return 0;
+    if (!mseWaitClkHigh())
+      return 0;
   }
 
   if (pairck % 2 == 0)
@@ -437,27 +513,21 @@ void writeMsePS2(byte Data)
   else
     digitalWrite(MseData, LOW);
 
-  while (digitalRead(MseClk) == LOW)
-  {
-  }
-  while (digitalRead(MseClk) == HIGH)
-  {
-  }
+  if (!mseWaitClkLow())
+    return 0;
+  if (!mseWaitClkHigh())
+    return 0;
 
-  pinMode(MseData, INPUT);
-  while (digitalRead(MseData) == HIGH)
-  {
-  }
-  while (digitalRead(MseClk) == HIGH)
-  {
-  }
+  pinMode(MseData, INPUT_PULLUP);
 
-  while (digitalRead(MseData) == LOW)
-  {
-  }
-  while (digitalRead(MseClk) == LOW)
-  {
-  }
+  if (!mseWaitClkHigh())
+    return 0;
+  if (!mseWaitDataLow())
+    return 0;
+  if (!mseWaitClkLow())
+    return 0;
+
+  return 1;
 }
 
 //----------------------------------------------------
