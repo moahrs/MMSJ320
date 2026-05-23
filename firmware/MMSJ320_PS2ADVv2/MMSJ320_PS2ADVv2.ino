@@ -31,6 +31,11 @@ const int MseData = A5;
 #define MSE_CLK_WAIT     2500
 #define MSE_HOST_WAIT    0xFFF
 
+/* Watchdog: recupera Nano se host nao ler ou INT ficar presa */
+#define WATCHDOG_BUS_TICKS       0xFFF
+#define WATCHDOG_BUS_STALL_MAX   10
+#define WATCHDOG_QUEUE_TICKS_MAX 0xC000
+
 PS2KeyAdvanced keyboard;
 
 typedef struct
@@ -73,16 +78,55 @@ char hasmouseaux = 1;
 volatile char msePacketStart = 0;
 volatile char mseBusy = 0;
 
+unsigned int busStallCount = 0;
+unsigned long queueStallTicks = 0;
+
 char queuePush(unsigned char dev, unsigned char b);
 void serviceBusRead(void);
 void serviceBusWrite(void);
 void queuePushKey(unsigned int key);
+void busWatchdogRecover(void);
+void busWatchdogOnBusReadOk(void);
 char readMsePs2(unsigned long *out);
 char writeMsePS2(byte Data);
 void mseReadPacket(void);
 static char mseWaitClkHigh(void);
 static char mseWaitClkLow(void);
 static char mseWaitDataLow(void);
+
+//----------------------------------------------------
+void busWatchdogRecover(void)
+{
+  noInterrupts();
+
+  PORTC = (unsigned char)((PORTC & 0b11100000) | 0b00010011);
+
+  busIntArmed = 0;
+  busIntActive = 0;
+  queueHead = 0;
+  queueTail = 0;
+  queueCount = 0;
+  hostWritePending = 0;
+  vTimeOutCpuReadAux = WATCHDOG_BUS_TICKS;
+  busStallCount = 0;
+  queueStallTicks = 0;
+
+  msePacketStart = 0;
+  mseBusy = 0;
+  mseDataAvailable = 0;
+
+  interrupts();
+
+  while (keyboard.available())
+    keyboard.read();
+}
+
+//----------------------------------------------------
+void busWatchdogOnBusReadOk(void)
+{
+  busStallCount = 0;
+  queueStallTicks = 0;
+}
 
 //----------------------------------------------------
 char queuePush(unsigned char dev, unsigned char b)
@@ -110,7 +154,7 @@ char queuePush(unsigned char dev, unsigned char b)
     else
       PORTC = (unsigned char)((PORTC & ~(unsigned char)0x03) | 0x02); /* Mouse=0, Key=1 */
 
-    vTimeOutCpuReadAux = 0xFFF;
+    vTimeOutCpuReadAux = WATCHDOG_BUS_TICKS;
   }
 
   return 1;
@@ -126,20 +170,32 @@ void serviceBusRead(void)
   noInterrupts();
 
   if (!busIntArmed || queueCount == 0)
+  {
+    interrupts();
     return;
+  }
 
   if (busIntActive == DEV_KBD)
   {
     if (PINC & 0x02)
+    {
+      interrupts();
       return;
+    }
   }
   else if (busIntActive == DEV_MSE)
   {
     if (PINC & 0x01)
+    {
+      interrupts();
       return;
+    }
   }
   else
+  {
+    interrupts();
     return;
+  }
 
   PORTC |= 0x03; // PC0/PC1 INT high
 
@@ -192,9 +248,10 @@ void serviceBusRead(void)
     else
       PORTC = (unsigned char)((PORTC & ~(unsigned char)0x03) | 0x02); /* Mouse=0, Key=1 */
 
-    vTimeOutCpuReadAux = 0xFFF;
+    vTimeOutCpuReadAux = WATCHDOG_BUS_TICKS;
   }
 
+  busWatchdogOnBusReadOk();
   interrupts();
 }
 
@@ -386,6 +443,15 @@ void loop()
   if (hasmouseaux)
     mseReadPacket();
 
+  /* Fila com dados mas sem pedido de INT ao host (estado preso) */
+  if (queueCount > 0 && !busIntArmed)
+  {
+    if (++queueStallTicks >= WATCHDOG_QUEUE_TICKS_MAX)
+      busWatchdogRecover();
+  }
+  else if (queueCount == 0)
+    queueStallTicks = 0;
+
   if (busIntArmed)
   {
     if (!--vTimeOutCpuReadAux)
@@ -393,8 +459,13 @@ void loop()
       PORTC |= 0x03;
       busIntArmed = 0;
       busIntActive = 0;
+      busStallCount++;
 
-      if (queueCount > 0 && ((PINC & 0x03) == 0x03))
+      if (busStallCount >= WATCHDOG_BUS_STALL_MAX)
+      {
+        busWatchdogRecover();
+      }
+      else if (queueCount > 0 && ((PINC & 0x03) == 0x03))
       {
         busIntActive = queueDev[queueHead];
         busIntArmed = 1;
@@ -404,7 +475,7 @@ void loop()
         else
           PORTC = (unsigned char)((PORTC & ~(unsigned char)0x03) | 0x02);
 
-        vTimeOutCpuReadAux = 0xFFF;
+        vTimeOutCpuReadAux = WATCHDOG_BUS_TICKS;
       }
     }
   }

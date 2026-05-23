@@ -702,7 +702,7 @@ void main(void)
     mprintf("OS> TMS9118 Video Display Processor\r\n");
     mprintf("      Graphic %dx%d\r\n", 256, 192);
     mprintf("      Text %dx%d\r\n", 40, 24);
-    mprintf("OS> 68901 Multifunction Peripheral\r\n");
+    mprintf("OS> MC68901 Multifunction Peripheral\r\n");
     mprintf("      Timers Controller...\r\n");
     mprintf("      RS-232C at 9600bps...\r\n");
     mprintf("      KeyBoard/Mouse Controller...\r\n");
