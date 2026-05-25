@@ -16,6 +16,7 @@
 * 20/04/2026  1.0a04  Moacir Jr.   Ajustes chamar basic com malloc e passagem de parametros
 * 28/04/2026  1.0a05  Moacir Jr.   Convertido para m68k-elf-gcc e retirada do malloc/realloc/free
 * 10/05/2026  1.0a06  Moacir Jr.   Remover uC/OS-II - RTOS
+* 25/05/2026  1.0a07  Moacir Jr.   Piscar Cursor no monitor, Ajustes Gerais
 ********************************************************************************/
 #include <ctype.h>
 #include <string.h>
@@ -320,7 +321,7 @@ char memInit(void);
 
 HEADER *_allocp;
 
-#define versionMMSJOS "1.0a06"
+#define versionMMSJOS "1.0a07"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 #define FS_SECTOR_RETRY_COUNT 3
 #define FS_ENABLE_WRITE_VERIFY 1
@@ -825,6 +826,20 @@ void inputFunc(void *pdata)
     
     while (1)
     {
+        // Piscar Cursor 
+        switch (countCursor)
+        {
+            case 6000:  //20
+                hideCursor();
+                break;
+            case 12000: //40
+                showCursor();
+                countCursor = 0;
+                break;
+        }
+
+        countCursor++;
+
         vtec = 0x00;
         
         if (mmsjKeyGet(&k))
@@ -883,6 +898,7 @@ void inputFunc(void *pdata)
             }
 
             showCursor();
+            countCursor = 0;
         }
 
         vtecant = vtec;

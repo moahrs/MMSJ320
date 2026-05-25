@@ -161,6 +161,20 @@ char queuePush(unsigned char dev, unsigned char b)
 }
 
 //----------------------------------------------------
+char waitCsHighTimeout(void)
+{
+  unsigned int t = 60000;
+
+  while (!(PINC & 0x08))
+  {
+    if (--t == 0)
+      return 0;
+  }
+
+  return 1;
+}
+
+//----------------------------------------------------
 /* 1 byte por interrupcao; so atende se INT ja estiver armada */
 void serviceBusRead(void)
 {
@@ -216,7 +230,17 @@ void serviceBusRead(void)
 
   PORTC &= 0b11101111; // DTACK = 0
 
-  while (!(PINC & 0x08));  // Enquanto CS Ativo
+  while (!waitCsHighTimeout())  // Enquanto CS Ativo
+  {
+    DDRB &= 0b11110000;
+    DDRD &= 0b00001111;
+    PORTC |= 0b00010000; // DTACK = 1
+    PORTC |= 0x03;       // INTs high
+    busIntArmed = 0;
+    busIntActive = 0;
+    interrupts();
+    return;
+  }
 
   DDRB &= 0b11110000; // PB0-PB3 como Entrada
   DDRD &= 0b00001111; // PD4-PD7 como Entrada
@@ -277,8 +301,18 @@ void serviceBusWrite(void)
 
   PORTC &= 0b11101111; // DTACK = 0
 
-  while (!(PINC & 0x08));
-
+  while (!waitCsHighTimeout())  // Enquanto CS Ativo
+  {
+    DDRB &= 0b11110000;
+    DDRD &= 0b00001111;
+    PORTC |= 0b00010000; // DTACK = 1
+    PORTC |= 0x03;       // INTs high
+    busIntArmed = 0;
+    busIntActive = 0;
+    interrupts();
+    return;
+  }
+  
   __asm__("nop");
   __asm__("nop");
 
