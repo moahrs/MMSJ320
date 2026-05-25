@@ -246,3 +246,140 @@ FPP_NEG:
             move.l  %d7,FLOAT_NUM_D7
             RESTORE_ALL
             rts
+
+            .global fppBasGT
+            .global fppBasLT
+            .global fppBasGE
+            .global fppBasLE
+            .global fppBasEQ
+            .global fppBasNE
+
+fppBasGT:
+        move.l  4(%sp),%d7
+        move.l  8(%sp),%d6
+        jsr     FFPCMP
+        bgt.s   .fppBasGT_true
+        moveq   #0,%d0
+        rts
+.fppBasGT_true:
+        moveq   #1,%d0
+        rts
+
+
+fppBasLT:
+        move.l  4(%sp),%d7
+        move.l  8(%sp),%d6
+        jsr     FFPCMP
+        blt.s   .fppBasLT_true
+        moveq   #0,%d0
+        rts
+.fppBasLT_true:
+        moveq   #1,%d0
+        rts
+
+
+fppBasGE:
+        move.l  4(%sp),%d7
+        move.l  8(%sp),%d6
+        jsr     FFPCMP
+        bge.s   .fppBasGE_true
+        moveq   #0,%d0
+        rts
+.fppBasGE_true:
+        moveq   #1,%d0
+        rts
+
+
+fppBasLE:
+        move.l  4(%sp),%d7
+        move.l  8(%sp),%d6
+        jsr     FFPCMP
+        ble.s   .fppBasLE_true
+        moveq   #0,%d0
+        rts
+.fppBasLE_true:
+        moveq   #1,%d0
+        rts
+
+
+fppBasEQ:
+        move.l  4(%sp),%d7
+        move.l  8(%sp),%d6
+        jsr     FFPCMP
+        beq.s   .fppBasEQ_true
+        moveq   #0,%d0
+        rts
+.fppBasEQ_true:
+        moveq   #1,%d0
+        rts
+
+
+fppBasNE:
+        move.l  4(%sp),%d7
+        move.l  8(%sp),%d6
+        jsr     FFPCMP
+        bne.s   .fppBasNE_true
+        moveq   #0,%d0
+        rts
+.fppBasNE_true:
+        moveq   #1,%d0
+        rts
+
+; entrada:
+;   D7 = esquerda
+;   D6 = direita
+;
+; saída:
+*   D7 = -1  se esquerda < direita
+*   D7 =  0  se esquerda = direita
+*   D7 =  1  se esquerda > direita
+
+        .global  fppBasCMP
+
+fppBasCMP:
+        SAVE_ALL
+
+        move.l  FLOAT_NUM_D7,%d7
+        move.l  FLOAT_NUM_D6,%d6
+
+        tst.b   %d6
+        bpl.s   fppBasCMP_pos
+
+        tst.b   %d7
+        bpl.s   fppBasCMP_pos
+
+        * ambos negativos: comparação invertida, igual Motorola
+        cmp.b   %d7,%d6
+        bne.s   fppBasCMP_result
+        cmp.l   %d7,%d6
+        bra.s   fppBasCMP_result
+
+fppBasCMP_pos:
+        cmp.b   %d6,%d7
+        bne.s   fppBasCMP_result
+        cmp.l   %d6,%d7
+
+fppBasCMP_result:
+        beq.s   fppBasCMP_eq
+        bgt.s   fppBasCMP_gt
+
+fppBasCMP_lt:
+        moveq   #-1,%d7
+        move.l  %d7,%d0
+        move.l  %d7,FLOAT_NUM_D7
+        RESTORE_ALL
+        rts
+
+fppBasCMP_eq:
+        moveq   #0,%d7
+        move.l  %d7,%d0
+        move.l  %d7,FLOAT_NUM_D7
+        RESTORE_ALL
+        rts
+
+fppBasCMP_gt:
+        moveq   #1,%d7
+        move.l  %d7,%d0
+        move.l  %d7,FLOAT_NUM_D7
+        RESTORE_ALL
+        rts

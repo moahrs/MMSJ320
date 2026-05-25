@@ -4557,7 +4557,7 @@ int arithReal(char o, char *r, char *h)
     if (o == '/')
     {
         zeroFpp = fppReal(0);
-        if (fppComp(*hVal, zeroFpp) & 0x04)
+        if (fppComp(*hVal, zeroFpp) == 0)
             return -1;
     }
 
@@ -4592,7 +4592,7 @@ void logicalNumericFloat(unsigned char o, char *r, char *h)
     int t, ex;
     unsigned long *rVal = r; //(int)((int)(r[0] << 24) | (int)(r[1] << 16) | (int)(r[2] << 8) | (int)(r[3]));
     unsigned long *hVal = h; //(int)((int)(h[0] << 24) | (int)(h[1] << 16) | (int)(h[2] << 8) | (int)(h[3]));
-    unsigned long oCCR = 0;
+    long oCCR = 0;
 
     oCCR = fppComp(*rVal, *hVal);
 
@@ -4601,27 +4601,27 @@ void logicalNumericFloat(unsigned char o, char *r, char *h)
 
     switch(o) {
         case '=':
-            if (oCCR & 0x04)    // Z=1
+            if (oCCR == 0)    
                 *rVal = 1;
             break;
         case '>':
-            if (!(oCCR & 0x08) && !(oCCR & 0x04))   // N=0 e Z=0
+            if (oCCR > 0)    
                 *rVal = 1;
             break;
         case '<':
-            if ((oCCR & 0x08) && !(oCCR & 0x04))   // N=1 e Z=0
+            if (oCCR < 0)    
                 *rVal = 1;
             break;
         case 0xF5:  // >=
-            if (!(oCCR & 0x08) || (oCCR & 0x04))   // N=0 ou Z=1
+            if (oCCR >= 0)    
                 *rVal = 1;
             break;
         case 0xF6:  // <=
-            if ((oCCR & 0x08) || (oCCR & 0x04))   // N=1 ou Z=1
+            if (oCCR <= 0)    
                 *rVal = 1;
             break;
         case 0xF7:  // <>
-            if (!(oCCR & 0x04)) // z=0
+            if (oCCR != 0)    
                 *rVal = 1;
             break;
     }
@@ -4633,7 +4633,7 @@ void logicalNumericFloat(unsigned char o, char *r, char *h)
 char logicalNumericFloatLong(unsigned char o, long r, long h)
 {
     char ex = 0;
-    unsigned long oCCR = 0;
+    long oCCR = 0;
 
     oCCR = fppComp(r, h);
 
@@ -4641,27 +4641,27 @@ char logicalNumericFloatLong(unsigned char o, long r, long h)
 
     switch(o) {
         case '=':
-            if (oCCR & 0x04)    // Z=1
+            if (oCCR == 0)    
                 ex = 1;
             break;
         case '>':
-            if (!(oCCR & 0x08) && !(oCCR & 0x04))   // N=0 e Z=0
+            if (oCCR > 0)    
                 ex = 1;
             break;
         case '<':
-            if ((oCCR & 0x08) && !(oCCR & 0x04))   // N=1 e Z=0
+            if (oCCR < 0)    
                 ex = 1;
             break;
         case 0xF5:  // >=
-            if (!(oCCR & 0x08) || (oCCR & 0x04))   // N=0 ou Z=1
+            if (oCCR >= 0)    
                 ex = 1;
             break;
         case 0xF6:  // <=
-            if ((oCCR & 0x08) || (oCCR & 0x04))   // N=1 ou Z=1
+            if (oCCR <= 0)    
                 ex = 1;
             break;
         case 0xF7:  // <>
-            if (!(oCCR & 0x04)) // z=0
+            if (oCCR != 0)    
                 ex = 1;
             break;
     }
@@ -5150,12 +5150,13 @@ unsigned long fppNeg(long pFppD7)
 //-----------------------------------------------------------------------------
 // Float Function to Comp 2 float values D7-D6
 //-----------------------------------------------------------------------------
-unsigned long fppComp(unsigned long pFppD7, unsigned long pFppD6)
+long fppComp(unsigned long pFppD7, unsigned long pFppD6)
 {
-    *floatNumD7 = pFppD7;
     *floatNumD6 = pFppD6;
+    *floatNumD7 = pFppD7;
 
-    FPP_CMP();
+    //FPP_CMP();
+    fppBasCMP();
 
     return *floatNumD7;
 }
@@ -8742,7 +8743,7 @@ int basAbs(void)
 int basSign(void)
 {
     int vReal = 0, vResult = 0;
-    unsigned long vCCR = 0;
+    long vCCR = 0;
 
     nextToken();
     if (*vErroProc) return 0;
@@ -8779,9 +8780,9 @@ int basSign(void)
     {
         vCCR = fppComp(vReal, fppReal(0));
 
-        if (vCCR & 0x04)
+        if (vCCR == 0)
             vResult = 0;
-        else if (vCCR & 0x08)
+        else if (vCCR < 0)
             vResult = -1;
         else
             vResult = 1;
@@ -9546,17 +9547,17 @@ static int basCircleIsFullArc(unsigned long traceStart, unsigned long traceEnd)
 {
     unsigned long span;
     unsigned long twoPi;
-    unsigned long ccr;
+    long ccr;
 
     twoPi = basFppTwoPi();
     span = fppSub(traceEnd, traceStart);
     ccr = fppComp(span, twoPi);
-    if (ccr & 0x04)
+    if (ccr == 0)
         return 1;
-    if (!(ccr & 0x08) && !(ccr & 0x04))
+    if (ccr > 0)
         return 1;
     ccr = fppComp(traceStart, fppReal(0));
-    if ((ccr & 0x04) && (fppComp(traceEnd, twoPi) & 0x04))
+    if (ccr == 0 && fppComp(traceEnd, twoPi) == 0)
         return 1;
     return 0;
 }
@@ -9763,7 +9764,7 @@ int basCircle(void)
     unsigned long traceStart;
     unsigned long traceEnd;
     unsigned long aspectFpp;
-    unsigned long ccr;
+    long ccr;
     long rx2, ry2, twoRx2, twoRy2, d1, d2, dx, dy;
     int x, y;
     unsigned char lineX;
@@ -9858,14 +9859,14 @@ int basCircle(void)
     }
 
     ccr = fppComp(traceStart, fppReal(0));
-    if (ccr & 0x08)
+    if (ccr < 0)
     {
         radLineStart = 1;
         traceStart = fppNeg(traceStart);
     }
 
     ccr = fppComp(traceEnd, fppReal(0));
-    if (ccr & 0x08)
+    if (ccr < 0)
     {
         radLineEnd = 1;
         traceEnd = fppNeg(traceEnd);

@@ -1,0 +1,9 @@
+; flashprg.a68 - rotinas de SR para gravacao flash (IDE68K nao tem inline asm)
+
+_fpIntsOff:
+       move.w  #$2700,SR
+       rts
+
+_fpIntsOn:
+       move.w  #$2300,SR
+       rts

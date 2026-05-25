@@ -447,7 +447,7 @@ unsigned long fppSub(unsigned long pFppD7, unsigned long pFppD6);
 unsigned long fppMul(unsigned long pFppD7, unsigned long pFppD6);
 unsigned long fppDiv(unsigned long pFppD7, unsigned long pFppD6);
 unsigned long fppPwr(unsigned long pFppD7, unsigned long pFppD6);
-unsigned long fppComp(unsigned long pFppD7, unsigned long pFppD6);
+long fppComp(unsigned long pFppD7, unsigned long pFppD6);
 long fppInt(unsigned long pFppD7);
 unsigned long fppReal(long pFppD7);
 unsigned long fppSin(long pFppD7);
@@ -487,6 +487,14 @@ void FPP_EXP(void);
 void FPP_CMP(void);
 void FPP_ABS(void);
 void FPP_NEG(void);
+
+int fppBasLT(unsigned long a, unsigned long b);
+int fppBasGT(unsigned long a, unsigned long b);
+int fppBasEQ(unsigned long a, unsigned long b);
+int fppBasLE(unsigned long a, unsigned long b);
+int fppBasGE(unsigned long a, unsigned long b);
+int fppBasNE(unsigned long a, unsigned long b);
+int fppBasCMP();
 
 void TRACE_ON(void);
 void TRACE_OFF(void);
