@@ -1210,7 +1210,7 @@ void edDrawCommandHelp(void)
 
         edClearLine(1);
         vdp_set_cursor(0, 1);
-        printText("  F Find           |");
+        printText("  F Find           |  G Goto Line      ");
 
         edClearLine(2);
         vdp_set_cursor(0, 2);
@@ -1218,7 +1218,7 @@ void edDrawCommandHelp(void)
 
         edClearLine(3);
         vdp_set_cursor(0, 3);
-        printText("  G Goto Line      |");
+        printText("                   |");
     }
 
     edDrawLine(4, '=');

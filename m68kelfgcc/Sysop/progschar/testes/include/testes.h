@@ -16,17 +16,6 @@
 
 #define MAX_HOOKS              4
 
-typedef struct
-{
-    unsigned short magic;
-    unsigned short flags;
-    void (*addr)(void *);
-
-} HOOK;
-
-HOOK hookTable[MAX_HOOKS];
-
-
 /* -------------------------------------------------- */
 /* CONTEXTOS                                          */
 /* -------------------------------------------------- */
@@ -48,6 +37,9 @@ typedef struct
     unsigned short ascii;
 
 } KEY_CTX;
+
+extern void tstIntsOff(void);
+extern void tstIntsOn(void);
 
 #endif
 

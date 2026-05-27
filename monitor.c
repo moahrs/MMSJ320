@@ -97,11 +97,11 @@
 * 00200001h e 00200003h - DISK Arduino UNO
 *                         - A1 = 0: r/w 4 bits LSB
 *                         - A1 = 1: r/w 4 bits MSB
-* 00400020h a 0040003Fh - MFP MC68901p - Cristal de 2.4576MHz
+* 00400021h a 0040003Fh - MFP MC68901p - Cristal de 2.4576MHz
 *                         - SERIAL 9600, 8, 1, n
 *                         - Controle de Interrupcoes
 *                         - Timers 
-* 00400040h a 00400043h - VIDEO TMS9118 (16KB VRAM):
+* 00400041h a 00400043h - VIDEO TMS9118 (16KB VRAM):
 *             00400041h - Data Mode
 *             00400043h - Register / Adress Mode
 * 00400060h             - kbd/mouse controller final A0 = 0 = UDS (D8 a D15)

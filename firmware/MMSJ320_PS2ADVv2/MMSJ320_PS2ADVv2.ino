@@ -82,6 +82,7 @@ unsigned int busStallCount = 0;
 unsigned long queueStallTicks = 0;
 
 char queuePush(unsigned char dev, unsigned char b);
+char waitCsHighReleaseData(void);
 void serviceBusRead(void);
 void serviceBusWrite(void);
 void queuePushKey(unsigned int key);
@@ -100,6 +101,10 @@ void busWatchdogRecover(void)
   noInterrupts();
 
   PORTC = (unsigned char)((PORTC & 0b11100000) | 0b00010011);
+  DDRB &= 0b11110000;
+  DDRD &= 0b00001111;
+  PORTB &= 0b11110000;
+  PORTD &= 0b00001111;
 
   busIntArmed = 0;
   busIntActive = 0;
@@ -175,6 +180,26 @@ char waitCsHighTimeout(void)
 }
 
 //----------------------------------------------------
+char waitCsHighReleaseData(void)
+{
+  unsigned int t = 60000;
+
+  while (!(PINC & 0x08))
+  {
+    if (--t == 0)
+    {
+      DDRB &= 0b11110000;
+      DDRD &= 0b00001111;
+      return 0;
+    }
+  }
+
+  DDRB &= 0b11110000;
+  DDRD &= 0b00001111;
+  return 1;
+}
+
+//----------------------------------------------------
 /* 1 byte por interrupcao; so atende se INT ja estiver armada */
 void serviceBusRead(void)
 {
@@ -230,11 +255,11 @@ void serviceBusRead(void)
 
   PORTC &= 0b11101111; // DTACK = 0
 
-  while (!waitCsHighTimeout())  // Enquanto CS Ativo
+  if (!waitCsHighReleaseData())  // Enquanto CS Ativo
   {
-    DDRB &= 0b11110000;
-    DDRD &= 0b00001111;
     PORTC |= 0b00010000; // DTACK = 1
+    PORTB &= 0b11110000;
+    PORTD &= 0b00001111;
     PORTC |= 0x03;       // INTs high
     busIntArmed = 0;
     busIntActive = 0;
@@ -242,13 +267,9 @@ void serviceBusRead(void)
     return;
   }
 
-  DDRB &= 0b11110000; // PB0-PB3 como Entrada
-  DDRD &= 0b00001111; // PD4-PD7 como Entrada
-
-  __asm__("nop");
-  __asm__("nop");
-
   PORTC |= 0b00010000; // DTACK = 1
+  PORTB &= 0b11110000; // desliga pull-up interno dos dados
+  PORTD &= 0b00001111;
 
   __asm__("nop");
   __asm__("nop");
@@ -289,6 +310,8 @@ void serviceBusWrite(void)
 
   DDRB &= 0b11110000; // PB0-PB3 como Entrada
   DDRD &= 0b00001111; // PD4-PD7 como Entrada
+  PORTB &= 0b11110000; // Sem pull-up nos dados
+  PORTD &= 0b00001111;
 
   __asm__("nop");
   __asm__("nop");
@@ -306,6 +329,8 @@ void serviceBusWrite(void)
     DDRB &= 0b11110000;
     DDRD &= 0b00001111;
     PORTC |= 0b00010000; // DTACK = 1
+    PORTB &= 0b11110000;
+    PORTD &= 0b00001111;
     PORTC |= 0x03;       // INTs high
     busIntArmed = 0;
     busIntActive = 0;
@@ -431,6 +456,7 @@ void setup()
   DDRD &= 0b00001111;  // PD4-PD7 dados entrada
 
   PORTB &= 0b11010000; // Sem pull-up nos dados e UDS
+  PORTD &= 0b00001111; // Sem pull-up nos dados
 
   PORTC = (unsigned char)((PORTC & 0b11100000) | 0b00010011); // PC0/PC1 INT high, PC4 DTACK high
   DDRC  = (unsigned char)((DDRC  & 0b11100000) | 0b00010011); // PC0, PC1, PC4 saida; PC2/RW, PC3/CS entrada

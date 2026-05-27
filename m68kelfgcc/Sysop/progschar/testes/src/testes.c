@@ -17,6 +17,8 @@
 
 #include "testes.h"
 
+unsigned char *vEthSlot = 0x00201001;
+
 /* -------------------------------------------------- */
 /* CALL HOOK GENERICO                                 */
 /* -------------------------------------------------- */
@@ -39,7 +41,7 @@ void callHook(int hookNum, void *ctx)
     if (h->addr == 0)
         return;
 
-    h->addr(ctx);
+    h->addr();
 }
 
 
@@ -173,6 +175,33 @@ void IntKeyboard(void)
     callHook(HOOK_KEYBOARD_AFTER, &ctx);
 }
 
+void sendData(unsigned char* b)
+{
+    while (*b)
+    {
+        *vEthSlot = *b++;
+    }
+}
+
+unsigned char recData()
+{
+    return *vEthSlot;
+}
+
+void ethStart()
+{
+    unsigned char c;
+
+    tstIntsOff();
+    sendData("INIT\r");
+    c=recData();
+    while (c)
+    {
+        printChar(c,1);
+        c=recData();
+    }
+    tstIntsOn();
+}
 
 /* -------------------------------------------------- */
 /* MAIN                                               */
@@ -180,16 +209,19 @@ void IntKeyboard(void)
 
 int main(void)
 {
-    int i;
+    /*int i;
 
     for (i = 0; i < MAX_HOOKS; i++)
     {
         hookTable[i].magic = 0;
         hookTable[i].flags = 0;
         hookTable[i].addr = 0;
-    }
+    }*/
 
-    mprintf("Instalando hooks...\r\n");
+    mprintf("Iniciando Ethernet...\r\n");
+    ethStart();
+
+    /*mprintf("Instalando hooks...\r\n");
 
     installHook(HOOK_TIMER_BEFORE, myTimerBefore);
     installHook(HOOK_TIMER_AFTER, myTimerAfter);
@@ -201,7 +233,7 @@ int main(void)
     IntTimer();
 
     mprintf("--- Simulando interrupcao KEYBOARD ---\r\n");
-    IntKeyboard();
+    IntKeyboard();*/
 
     return 0;
 }
