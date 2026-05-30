@@ -52,7 +52,7 @@ static void ansiGet2(char *s, int *a, int *b)
     if (*b <= 0) *b = 1;
 }
 
-void serialRxHook(void)
+/*void serialRxHook(void)
 {
     unsigned char c;
     unsigned int next;
@@ -72,7 +72,7 @@ void serialRxHook(void)
 
     serRxBuf[serRxHead] = c;
     serRxHead = next;
-}
+}*/
 
 int serialBufGet(unsigned char *c)
 {
@@ -80,7 +80,7 @@ int serialBufGet(unsigned char *c)
         return 0;
 
     *c = serRxBuf[serRxTail];
-
+  
     serRxTail++;
     if (serRxTail >= SER_RX_SIZE)
         serRxTail = 0;
@@ -90,13 +90,7 @@ int serialBufGet(unsigned char *c)
 
 static unsigned char serialReadByte(unsigned char *pByte)
 {
-    if ((*(vmfp + Reg_RSR) & 0x80))
-    {
-        *pByte = *(vmfp + Reg_UDR);
-        return 1;
-    }
-
-    return 0;
+    return serialBufGet(pByte);
 }
 
 static unsigned char termReadSerial(unsigned char *c)
@@ -115,6 +109,13 @@ static void termUnreadSerial(unsigned char c)
 {
     telPushByte = c;
     telPushValid = 1;
+}
+
+static void termDiscardPendingSerial(void)
+{
+    serRxTail = serRxHead;
+    serRxLost = 0;
+    telPushValid = 0;
 }
 
 static void termRender(void)
@@ -484,11 +485,8 @@ static unsigned char serialReadByteTimeout(unsigned char *pByte, unsigned long p
         if (readChar() == 0x1B)  // ESC
             return 0;
 
-        if ((*(vmfp + Reg_RSR) & 0x80))
-        {
-            *pByte = *(vmfp + Reg_UDR);
+        if (termReadSerial(pByte))
             return 1;
-        }
 
         pTimeoutSpin--;
     }
@@ -527,12 +525,12 @@ static void readResponse(void)
     }
 }
 
-void installHook(int hookNum, void (*func)(void))
+/*void installHook(int hookNum, void (*func)(void))
 {
     hookTable[hookNum].addr  = func;
     hookTable[hookNum].flags = HOOKF_ACTIVE | HOOKF_SKIP_OS;
     hookTable[hookNum].magic = HOOK_MAGIC;
-}
+}*/
 
 /* -------------------------------------------------- */
 /* MAIN                                               */
@@ -554,22 +552,7 @@ int main(void)
             ix++;
         }
 
-        serRxHead = 0;
-        serRxTail = 0;
-        serRxLost = 0;
-
-        // Cria hook na interrupcao de rx 68901 full
-        installHook(HOOK_REC_BUF_FULL, serialRxHook);
-
-        if (*(vmfp + Reg_RSR) & 0x80)
-        {
-            volatile unsigned char dummy;
-            dummy = *(vmfp + Reg_UDR);
-        }
-
-        // Ativa interrupcao de rx full do 68901
-        *(vmfp + Reg_IERA) |= MFP_RX_FULL_BIT;
-        *(vmfp + Reg_IMRA) |= MFP_RX_FULL_BIT;
+        termDiscardPendingSerial();
 
         // Limpa Tela
         termClear();

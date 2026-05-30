@@ -58,6 +58,6 @@ src/term_inic.o: src/term_inic.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	-cmd /c "del /q /f src\*.o lib\*.o *.o *.elf *.bin *.map *.lst 2>nul"
+	powershell -NoProfile -Command "$$p=@('src\*.o','lib\*.o','*.o','*.elf','*.bin','*.map','*.lst'); foreach($$x in $$p){ Remove-Item -Force -ErrorAction SilentlyContinue $$x }; exit 0"
 
 .PHONY: all clean flash ram

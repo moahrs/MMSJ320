@@ -21,6 +21,7 @@ SRC_C = \
 	src/net.c
 
 SRC_S = \
+	src/netcomm_resident.S \
 	src/net_inic.S
 
 OBJ = $(SRC_C:.c=.o) $(SRC_S:.S=.o)
@@ -34,6 +35,7 @@ LINK_OBJ = \
 	src/net_inic.o \
 	src/libc_stub.o \
 	src/mmsj320mfp.o \
+	src/netcomm_resident.o \
 	src/netcomm.o \
 	src/net.o
 
@@ -60,7 +62,10 @@ src/%.o: src/%.c
 src/net_inic.o: src/net_inic.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
+src/netcomm_resident.o: src/netcomm_resident.S
+	$(CC) $(CFLAGS) -c $< -o $@
+
 clean:
-	-cmd /c "del /q /f src\*.o lib\*.o *.o *.elf *.bin *.map *.lst 2>nul"
+	powershell -NoProfile -Command "$$p=@('src\*.o','lib\*.o','*.o','*.elf','*.bin','*.map','*.lst'); foreach($$x in $$p){ Remove-Item -Force -ErrorAction SilentlyContinue $$x }; exit 0"
 
 .PHONY: all clean flash ram

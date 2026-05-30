@@ -28,14 +28,11 @@
 #define TEL_DO   0xFD
 #define TEL_DONT 0xFE
 
-#define SER_RX_SIZE 2048
+#include "netapi.h"
+
+#define SER_RX_SIZE NETAPI_RX_SIZE
 
 #define MFP_RX_FULL_BIT  0x10
-
-volatile unsigned char serRxBuf[SER_RX_SIZE];
-volatile unsigned int serRxHead = 0;
-volatile unsigned int serRxTail = 0;
-volatile unsigned int serRxLost = 0;
 
 static char termBuf[TERM_ROWS][TERM_COLS];
 static unsigned char curX = 0;

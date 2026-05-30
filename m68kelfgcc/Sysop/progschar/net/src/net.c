@@ -476,6 +476,11 @@ int main(void)
         if (startsWithNoCase(arg, "STATUS"))
         {
             mprintf("RX head=%u tail=%u lost=%u\r\n", serRxHead, serRxTail, serRxLost);
+            mprintf("magic=%lx enabled=%u hookMem=%lx size=%lu\r\n",
+                    netApiMagic, netApiEnabled, netApiHookMem, netApiHookSize);
+            mprintf("hookCount=%lu last=%u IERA=%u IMRA=%u RSR=%u\r\n",
+                    netApiHookCount, netApiLastByte,
+                    *(vmfp + Reg_IERA), *(vmfp + Reg_IMRA), *(vmfp + Reg_RSR));
             return 0;
         }
 

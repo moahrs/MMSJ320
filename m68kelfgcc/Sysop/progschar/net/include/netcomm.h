@@ -2,6 +2,7 @@
 #define NETCOMM_H
 
 #include "mmsj320mfp.h"
+#include "netapi.h"
 
 #ifndef HOOK_REC_BUF_FULL
 #define HOOK_REC_BUF_FULL 31
@@ -20,7 +21,7 @@
 #endif
 
 #ifndef SER_RX_SIZE
-#define SER_RX_SIZE 4096
+#define SER_RX_SIZE NETAPI_RX_SIZE
 #endif
 
 #ifndef MFP_RX_FULL_BIT
@@ -33,11 +34,6 @@ typedef struct
     unsigned long flags;
     void (*addr)(void);
 } NET_HOOK;
-
-extern volatile unsigned char serRxBuf[SER_RX_SIZE];
-extern volatile unsigned int serRxHead;
-extern volatile unsigned int serRxTail;
-extern volatile unsigned int serRxLost;
 
 void netCommInstallHook(int hookNum, void (*func)(void));
 void netCommEnable(void);
