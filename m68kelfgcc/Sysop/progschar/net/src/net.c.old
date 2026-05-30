@@ -1,0 +1,128 @@
+/* sheet.c - fonte consolidado */
+
+#include <ctype.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#include "mmsj320api.h"
+#include "mmsj320vdp.h"
+#include "mmsj320mfp.h"
+#include "monitor.h"
+#include "mmsjos.h"
+#include "mgui.h"
+#include "mguiapi.h"
+#include "monitorapi.h"
+#include "mmsjosapi.h"
+
+#include "net.h"
+
+void sendData(unsigned char* b)
+{
+    // TBD
+}
+
+unsigned char recData()
+{
+    // TBD
+
+    return 0;
+}
+
+void ethStart()
+{
+    tstIntsOff();
+    // TBD
+    tstIntsOn();
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char serialReadByteTimeout(unsigned char *pByte, unsigned long pTimeoutSpin)
+{
+    while (pTimeoutSpin)
+    {
+        if (readChar() == 0x1B)  // ESC
+            return 0;
+
+        if ((*(vmfp + Reg_RSR) & 0x80))
+        {
+            *pByte = *(vmfp + Reg_UDR);
+            return 1;
+        }
+
+        pTimeoutSpin--;
+    }
+
+    return 0;
+}
+
+static void readResponse(void)
+{
+    unsigned char c;
+    unsigned long idleTimeout;
+    unsigned long charTimeout;
+
+    idleTimeout = 800000L;   /* espera primeira resposta */
+
+    while (1)
+    {
+        if (serialReadByteTimeout(&c, idleTimeout))
+            break;
+
+        mprintf("Timeout aguardando resposta.\r\n");
+        return;
+    }
+
+    while (1)
+    {
+        printChar(c, 1);
+
+        charTimeout = 120000L;   /* timeout entre chars */
+
+        if (!serialReadByteTimeout(&c, charTimeout))
+            break;
+        
+        if (c == 0x04)
+            break;
+    }
+}
+
+/* -------------------------------------------------- */
+/* MAIN                                               */
+/* -------------------------------------------------- */
+int main(void)
+{
+    unsigned int ix;
+    unsigned char c;
+
+    if (*paramBasic != 0x00)
+    {
+        //tstIntsOff();
+
+        // Remover o primeiro caracter de paramBasic, e mover tudo pra esquerda 1 caracter
+        ix = 0;
+        while (paramBasic[ix] != 0x00)
+        {
+            paramBasic[ix] = paramBasic[ix + 1];
+            ix++;
+        }
+
+        writeLongSerial(paramBasic);
+        writeSerial('\r');
+
+        readResponse();
+
+        //tstIntsOn();
+    }
+    else
+    {
+        mprintf("Usage: NET <comandos>\r\n");
+        mprintf("  Ex: NET AT\r\n");
+        mprintf("      NET ATI\r\n");
+        mprintf("      NET ATIP?\r\n");
+        mprintf("      NET ATUDP=192.168.0.10:5000\r\n");
+        mprintf("      NET SEND OLA\r\n");
+    }
+
+    return 0;
+}
