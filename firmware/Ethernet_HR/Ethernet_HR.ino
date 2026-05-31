@@ -27,8 +27,12 @@ byte mac[] = { 0x02, 0x68, 0x00, 0x00, 0x00, 0x45 };
 
 EthernetUDP Udp;
 EthernetClient tcpClient;
+EthernetServer tcpServer(23);
+
 
 bool tcpMode = false;
+bool tcpListenMode = false;
+uint16_t tcpListenPort = 23;
 char plusBuf[4];
 unsigned char plusPos = 0;
 
@@ -134,7 +138,7 @@ void ledsPoll()
     else
       digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
 
-    if (tcpMode && tcpClient.connected())
+    if ((tcpMode && tcpClient.connected()) || tcpListenMode)
       digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     else
       digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
@@ -186,6 +190,38 @@ bool parseHostPort(char *s, char *host, uint16_t *port)
   return true;
 }
 
+
+void cmdTcpListen(char *arg)
+{
+  uint16_t port;
+
+  if (arg && *arg)
+    port = atoi(arg);
+  else
+    port = 23;
+
+  if (port != 23)
+  {
+    Serial2.print("ERR;LISTEN_PORT_FIXED;23");
+    endResponse();
+    return;
+  }
+
+  if (tcpClient.connected())
+    tcpClient.stop();
+
+  tcpRxClear();
+  tcpListenPort = 23;
+  tcpListenMode = true;
+  tcpMode = false;
+  plusPos = 0;
+
+  tcpServer.begin();
+
+  Serial2.print("OK;LISTEN;23");
+  endResponse();
+}
+
 void cmdTcpConnect(char *arg)
 {
   char host[80];
@@ -222,6 +258,7 @@ void tcpBridgePoll()
   int c;
   uint8_t b;
   int count;
+  bool tcpTx;
 
   if (!tcpMode)
     return;
@@ -236,12 +273,15 @@ void tcpBridgePoll()
     return;
   }
 
+  tcpTx = false;
+
   if (plusPos && (long)(millis() - plusLastMs) >= PLUS_TIMEOUT_MS)
   {
     while (plusPos)
     {
       tcpClient.write('+');
       ledActivity();
+      tcpTx = true;
       plusPos--;
     }
   }
@@ -279,12 +319,17 @@ void tcpBridgePoll()
     {
       tcpClient.write('+');
       ledActivity();
+      tcpTx = true;
       plusPos--;
     }
 
     tcpClient.write((uint8_t)c);
     ledActivity();
+    tcpTx = true;
   }
+
+  if (tcpTx)
+    tcpClient.flush();
 
   /* TCP -> buffer, só lê se tiver espaço */
   count = 0;
@@ -312,6 +357,32 @@ void tcpBridgePoll()
   {
       Serial2.write(b);
       count++;
+  }
+}
+
+
+void tcpListenPoll()
+{
+  EthernetClient newClient;
+
+  if (!tcpListenMode || tcpMode)
+    return;
+
+  newClient = tcpServer.available();
+
+  if (newClient)
+  {
+    if (tcpClient.connected())
+      tcpClient.stop();
+
+    tcpClient = newClient;
+    tcpRxClear();
+    tcpMode = true;
+    plusPos = 0;
+    digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
+    ledActivity();
+
+//    Serial2.print("EVT;CONNECT;INBOUND;23");
   }
 }
 
@@ -458,8 +529,25 @@ Serial.println(cmd);
     cmdSend(cmd + 5);
     endResponse();
   }
+  else if (strncmp(cmd, "ATLISTEN=", 9) == 0)
+  {
+    cmdTcpListen(cmd + 9);
+  }
+  else if (strcmp(cmd, "ATLISTEN") == 0)
+  {
+    cmdTcpListen((char *)"23");
+  }
+  else if (strcmp(cmd, "ATLISTEN?") == 0)
+  {
+    Serial2.print("OK;");
+    Serial2.print(tcpListenMode ? "LISTEN" : "OFF");
+    Serial2.print(";");
+    Serial2.print(tcpListenPort);
+    endResponse();
+  }
   else if (strncmp(cmd, "ATTCP=", 6) == 0)
   {
+    tcpListenMode = false;
     cmdTcpConnect(cmd + 6);
   }
   else if (strcmp(cmd, "ATBUF?") == 0)
@@ -475,6 +563,7 @@ Serial.println(cmd);
       tcpClient.stop();
 
     udpOpen = false;
+    tcpListenMode = false;
     tcpMode = false;
     digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
     Serial2.println("OK;DISCONNECT");
@@ -570,6 +659,7 @@ void loop()
     return;
   }
 
+  tcpListenPoll();
   serialPoll();
   udpPoll();
 }
