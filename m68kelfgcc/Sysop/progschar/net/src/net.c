@@ -28,8 +28,10 @@
 #define X_SUB   0x1A
 
 #define X_TIMEOUT_FIRST  9000000L
+#define X_TIMEOUT_POLL   350000L
 #define X_TIMEOUT_CHAR   900000L
 #define X_RETRY_MAX      10
+#define X_START_RETRY_MAX 80
 
 /* Ajuste conforme RAM livre. XMODEM precisa guardar o arquivo inteiro
    porque o MMSJOS atual expõe saveFile(buffer,size). */
@@ -182,10 +184,10 @@ static int xmodemRecvFile(char *fileName)
     {
         writeSerial(X_CRC);
 
-        if (!xWait(&c, X_TIMEOUT_FIRST))
+        if (!xWait(&c, X_TIMEOUT_POLL))
         {
             retry++;
-            if (retry >= X_RETRY_MAX)
+            if (retry >= X_START_RETRY_MAX)
             {
                 writeSerial(X_CAN);
                 msfree(fileBuf);
