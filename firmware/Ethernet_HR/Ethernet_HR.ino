@@ -12,6 +12,16 @@
 #define RXD2 16
 #define TXD2 17
 
+#define PIN_LED_ON  25
+#define PIN_LED_LAN 26
+#define PIN_LED_ACT 27
+#define PIN_LED_CONN 32
+
+#define LED_ON_LEVEL  HIGH
+#define LED_OFF_LEVEL LOW
+#define LED_ACT_MS    80
+#define LAN_POLL_MS   1000
+
 byte mac[] = { 0x02, 0x68, 0x00, 0x00, 0x00, 0x45 };
 
 EthernetUDP Udp;
@@ -29,6 +39,10 @@ IPAddress remoteIp;
 uint16_t remotePort = 0;
 uint16_t localPort = 5000;
 bool udpOpen = false;
+bool ethernetReady = false;
+bool ledActOn = false;
+unsigned long ledActUntil = 0;
+unsigned long lanPollLast = 0;
 
 #define TCP_RXBUF_SIZE 4096
 
@@ -75,6 +89,54 @@ void tcpRxClear()
   tcpRxHead = 0;
   tcpRxTail = 0;
   tcpRxLost = 0;
+}
+
+void ledsInit()
+{
+  pinMode(PIN_LED_ON, OUTPUT);
+  pinMode(PIN_LED_LAN, OUTPUT);
+  pinMode(PIN_LED_ACT, OUTPUT);
+  pinMode(PIN_LED_CONN, OUTPUT);
+
+  digitalWrite(PIN_LED_ON, LED_ON_LEVEL);
+  digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
+  digitalWrite(PIN_LED_ACT, LED_OFF_LEVEL);
+  digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
+}
+
+void ledActivity()
+{
+  digitalWrite(PIN_LED_ACT, LED_ON_LEVEL);
+  ledActOn = true;
+  ledActUntil = millis() + LED_ACT_MS;
+}
+
+void ledsPoll()
+{
+  unsigned long now;
+
+  now = millis();
+
+  if (ledActOn && (long)(now - ledActUntil) >= 0)
+  {
+    digitalWrite(PIN_LED_ACT, LED_OFF_LEVEL);
+    ledActOn = false;
+  }
+
+  if ((long)(now - lanPollLast) >= LAN_POLL_MS)
+  {
+    lanPollLast = now;
+
+    if (ethernetReady && Ethernet.linkStatus() != LinkOFF)
+      digitalWrite(PIN_LED_LAN, LED_ON_LEVEL);
+    else
+      digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
+
+    if (tcpMode && tcpClient.connected())
+      digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
+    else
+      digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
+  }
 }
 
 void endResponse()
@@ -139,6 +201,8 @@ void cmdTcpConnect(char *arg)
 
   if (tcpClient.connect(host, port))
   {
+    ledActivity();
+    digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     tcpMode = true;
     plusPos = 0;
     /*Serial2.println("OK;CONNECT");
@@ -163,6 +227,7 @@ void tcpBridgePoll()
   if (!tcpClient.connected())
   {
     tcpMode = false;
+    digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
     tcpRxClear();
     Serial2.println("\r\nEVT;DISCONNECT");
     endResponse();
@@ -182,6 +247,7 @@ void tcpBridgePoll()
       {
         tcpClient.stop();
         tcpMode = false;
+        digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
         plusPos = 0;
         tcpRxClear();
 
@@ -199,10 +265,12 @@ void tcpBridgePoll()
     while (plusPos)
     {
       tcpClient.write('+');
+      ledActivity();
       plusPos--;
     }
 
     tcpClient.write((uint8_t)c);
+    ledActivity();
   }
 
   /* TCP -> buffer, só lê se tiver espaço */
@@ -216,7 +284,10 @@ void tcpBridgePoll()
       c = tcpClient.read();
 
       if (c >= 0)
+      {
           tcpRxPut((uint8_t)c);
+          ledActivity();
+      }
 
       count++;
   }
@@ -252,6 +323,8 @@ void initEthernet()
 
   if (Ethernet.begin(mac) == 0)
   {
+    ethernetReady = false;
+    digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
     Serial.println("DHCP FAIL");
     strcpy(vStatusAux,"DHCP FAIL,");
 
@@ -269,6 +342,9 @@ void initEthernet()
   }
   else
   {
+    ethernetReady = true;
+    digitalWrite(PIN_LED_LAN, LED_ON_LEVEL);
+    ledActivity();
     Serial.println("DHCP OK");
     strcpy(vStatusAux,"DHCP OK");
   }
@@ -321,6 +397,7 @@ void cmdSend(char *msg)
   Udp.beginPacket(remoteIp, remotePort);
   Udp.write((const uint8_t *)msg, strlen(msg));
   Udp.endPacket();
+  ledActivity();
 
   Serial2.print("OK");
 }
@@ -386,6 +463,7 @@ Serial.println(cmd);
 
     udpOpen = false;
     tcpMode = false;
+    digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
     Serial2.println("OK;DISCONNECT");
     endResponse();
   }  
@@ -427,6 +505,7 @@ void udpPoll()
 
   if (packetSize)
   {
+    ledActivity();
     Serial2.print("EVT;UDP;");
     Serial2.print(Udp.remoteIP());
     Serial2.print(";");
@@ -448,6 +527,8 @@ void udpPoll()
 
 void setup()
 {
+  ledsInit();
+
   Serial.begin(115200);
   delay(1000);
 
@@ -468,6 +549,8 @@ void setup()
 
 void loop()
 {
+  ledsPoll();
+
   if (tcpMode)
   {
     tcpBridgePoll();

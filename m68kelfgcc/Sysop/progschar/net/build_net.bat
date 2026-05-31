@@ -66,6 +66,6 @@ echo.
 ..\..\elftoexe net.elf net.exe
 echo Artefatos gerados:
 dir net.elf net.exe net.map net.lst
-copy /Y net.exe D:\PROJETOS\MMSJ320\HD_ATU\net.EXE
-copy /Y net.exe F:\net.EXE
+copy /Y net.exe D:\PROJETOS\MMSJ320\HD_ATU\NETWRK\NET.EXE
+copy /Y net.exe F:\NETWRK\NET.EXE
 exit /b 0

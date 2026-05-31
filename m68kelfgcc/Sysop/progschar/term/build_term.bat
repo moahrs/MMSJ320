@@ -66,6 +66,6 @@ echo.
 ..\..\elftoexe term.elf term.exe
 echo Artefatos gerados:
 dir term.elf term.exe term.map term.lst
-copy /Y term.exe D:\PROJETOS\MMSJ320\HD_ATU\TERM.EXE
-copy /Y term.exe F:\TERM.EXE
+copy /Y term.exe D:\PROJETOS\MMSJ320\HD_ATU\NETWRK\TERM.EXE
+copy /Y term.exe F:\NETWRK\TERM.EXE
 exit /b 0

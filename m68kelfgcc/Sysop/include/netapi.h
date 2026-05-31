@@ -27,9 +27,9 @@
 #define netApiHookCount          (*(volatile unsigned long *)NETAPI_HOOK_COUNT_ADDR)
 #define netApiLastByte           (*(volatile unsigned char *)NETAPI_LAST_BYTE_ADDR)
 
-#define serRxHead                (*(volatile unsigned int *)NETAPI_RX_HEAD_ADDR)
-#define serRxTail                (*(volatile unsigned int *)NETAPI_RX_TAIL_ADDR)
-#define serRxLost                (*(volatile unsigned int *)NETAPI_RX_LOST_ADDR)
+#define serRxHead                (*(volatile unsigned short *)NETAPI_RX_HEAD_ADDR)
+#define serRxTail                (*(volatile unsigned short *)NETAPI_RX_TAIL_ADDR)
+#define serRxLost                (*(volatile unsigned short *)NETAPI_RX_LOST_ADDR)
 #define serRxBuf                 ((volatile unsigned char *)NETAPI_RX_BUF_ADDR)
 
 #endif
