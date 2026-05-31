@@ -21,6 +21,7 @@
 #define LED_OFF_LEVEL LOW
 #define LED_ACT_MS    80
 #define LAN_POLL_MS   1000
+#define PLUS_TIMEOUT_MS 1000
 
 byte mac[] = { 0x02, 0x68, 0x00, 0x00, 0x00, 0x45 };
 
@@ -43,6 +44,7 @@ bool ethernetReady = false;
 bool ledActOn = false;
 unsigned long ledActUntil = 0;
 unsigned long lanPollLast = 0;
+unsigned long plusLastMs = 0;
 
 #define TCP_RXBUF_SIZE 4096
 
@@ -234,6 +236,16 @@ void tcpBridgePoll()
     return;
   }
 
+  if (plusPos && (long)(millis() - plusLastMs) >= PLUS_TIMEOUT_MS)
+  {
+    while (plusPos)
+    {
+      tcpClient.write('+');
+      ledActivity();
+      plusPos--;
+    }
+  }
+
   /* serial -> TCP */
   while (Serial2.available())
   {
@@ -242,6 +254,7 @@ void tcpBridgePoll()
     if (c == '+')
     {
       plusPos++;
+      plusLastMs = millis();
 
       if (plusPos >= 3)
       {

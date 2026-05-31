@@ -111,6 +111,19 @@ static void termUnreadSerial(unsigned char c)
     telPushValid = 1;
 }
 
+static unsigned char termWaitSerial(unsigned char *c, unsigned long timeoutSpin)
+{
+    while (timeoutSpin)
+    {
+        if (termReadSerial(c))
+            return 1;
+
+        timeoutSpin--;
+    }
+
+    return 0;
+}
+
 static void termDiscardPendingSerial(void)
 {
     serRxTail = serRxHead;
@@ -288,12 +301,15 @@ static void telnetSkipSubneg(void)
 {
     unsigned char c;
     unsigned char last;
+    unsigned long timeout;
 
     last = 0;
+    timeout = 120000L;
 
     while (1)
     {
-        while (!serialBufGet(&c));
+        if (!termWaitSerial(&c, timeout))
+            return;
 
         if (last == TEL_IAC && c == TEL_SE)
             return;
@@ -373,7 +389,8 @@ static void handleEscSeq(void)
     char parm[16];
     int ix;
 
-    while (!serialBufGet(&c));
+    if (!termWaitSerial(&c, 30000L))
+        return;
 
     if (c == 's')
     {
@@ -395,7 +412,8 @@ static void handleEscSeq(void)
 
     while (1)
     {
-        while (!serialBufGet(&c));
+        if (!termWaitSerial(&c, 30000L))
+            return;
 
         if ((c >= '0' && c <= '9') ||
              c == ';' || c == '!' ||
