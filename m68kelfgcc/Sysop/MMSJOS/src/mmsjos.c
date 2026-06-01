@@ -389,10 +389,10 @@ static unsigned char mmsjosSaveConfig(void)
     strcat((char *)cfg, (char *)mmsjosExecPath);
     strcat((char *)cfg, "\n");
     strcat((char *)cfg, "STARTAT=");
-    strcat((char *)cfg, (char *)startEnv + 0x30);
+    strcat((char *)cfg, (char *)(startEnv + 0x30));
     strcat((char *)cfg, "\n");
     strcat((char *)cfg, "PROMPT=");
-    strcat((char *)cfg, (char *)promptDet + 0x30);
+    strcat((char *)cfg, (char *)(promptDet + 0x30));
     strcat((char *)cfg, "\n");
 
     len = (unsigned long)strlen((char *)cfg);

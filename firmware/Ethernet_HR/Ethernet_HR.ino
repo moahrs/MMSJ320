@@ -138,7 +138,7 @@ void ledsPoll()
     else
       digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
 
-    if ((tcpMode && tcpClient.connected()) || tcpListenMode)
+    if (tcpMode)
       digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     else
       digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
@@ -265,8 +265,10 @@ void tcpBridgePoll()
 
   if (!tcpClient.connected())
   {
+    tcpClient.stop();
     tcpMode = false;
     digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
+    plusPos = 0;
     tcpRxClear();
     Serial2.println("\r\nEVT;DISCONNECT");
     endResponse();

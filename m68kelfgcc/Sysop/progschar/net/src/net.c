@@ -20,6 +20,7 @@
 #include "netcomm.h"
 
 #define X_SOH   0x01
+#define X_STX   0x02
 #define X_EOT   0x04
 #define X_ACK   0x06
 #define X_NAK   0x15
@@ -38,6 +39,8 @@
 #ifndef NET_XFER_MAX
 #define NET_XFER_MAX     262144UL
 #endif
+
+#define NET_FILENAME_MAX 96
 
 static unsigned short xmodemCrc16(unsigned char *buf, unsigned int len)
 {
@@ -95,9 +98,85 @@ static char *skipSpaces(char *s)
     return s;
 }
 
+static void copyCleanFileName(char *dst, char *src)
+{
+    unsigned int ix;
+    unsigned int last;
+
+    ix = 0;
+    last = 0;
+
+    while (*src == ' ' || *src == '\t')
+        src++;
+
+    while (*src && ix < NET_FILENAME_MAX - 1)
+    {
+        dst[ix] = *src++;
+
+        if (dst[ix] != ' ' && dst[ix] != '\t' && dst[ix] != '\r' && dst[ix] != '\n')
+            last = ix + 1;
+
+        ix++;
+    }
+
+    dst[last] = 0;
+}
+
 static unsigned char serialReadByteTimeout(unsigned char *pByte, unsigned long pTimeoutSpin)
 {
     return netCommWait(pByte, pTimeoutSpin);
+}
+
+static unsigned char netSaveFile(char *fileName, unsigned char *buf, unsigned long size)
+{
+    unsigned char chunk[128];
+    unsigned char ret;
+    unsigned short iy;
+    unsigned short chunkSize;
+    unsigned long ix;
+    unsigned long oldCluster;
+
+    oldCluster = fsGetClusterDir();
+
+    if (fsOpenFile(fileName) == RETURN_OK)
+    {
+        ret = fsDelFile(fileName);
+        if (ret != RETURN_OK)
+        {
+            fsSetClusterDir(oldCluster);
+            return ret;
+        }
+    }
+
+    ret = fsCreateFile(fileName);
+    if (ret != RETURN_OK)
+    {
+        fsSetClusterDir(oldCluster);
+        return ret;
+    }
+
+    for (ix = 0; ix < size; ix += 128)
+    {
+        chunkSize = (unsigned short)(size - ix);
+        if (chunkSize > 128)
+            chunkSize = 128;
+
+        for (iy = 0; iy < chunkSize; iy++)
+            chunk[iy] = buf[ix + iy];
+
+        ret = fsWriteFile(fileName, ix, chunk, (unsigned char)chunkSize);
+        if (ret != RETURN_OK)
+        {
+            fsCloseFile(fileName, 0);
+            fsSetClusterDir(oldCluster);
+            return ret;
+        }
+    }
+
+    fsCloseFile(fileName, 1);
+    fsSetClusterDir(oldCluster);
+
+    return RETURN_OK;
 }
 
 static void readResponse(void)
@@ -158,14 +237,23 @@ static int xmodemRecvFile(char *fileName)
     unsigned char c;
     unsigned char blkNo;
     unsigned char blkInv;
-    unsigned char data[128];
+    unsigned char data[1024];
     unsigned char crcHi;
     unsigned char crcLo;
     unsigned short crcRecv;
     unsigned short crcCalc;
     unsigned char expected;
     unsigned int retry;
+    unsigned short blockLen;
     unsigned char ret;
+    char saveName[NET_FILENAME_MAX];
+
+    copyCleanFileName(saveName, fileName);
+    if (saveName[0] == 0)
+    {
+        mprintf("Nome de arquivo vazio.\r\n");
+        return 0;
+    }
 
     fileBuf = (unsigned char *)msmalloc(NET_XFER_MAX);
     if (!fileBuf)
@@ -178,7 +266,7 @@ static int xmodemRecvFile(char *fileName)
     retry = 0;
     fileSize = 0;
 
-    mprintf("XMODEM-CRC recebendo %s...\r\n", fileName);
+    mprintf("XMODEM-CRC/1K recebendo %s...\r\n", saveName);
 
     while (1)
     {
@@ -203,7 +291,8 @@ static int xmodemRecvFile(char *fileName)
         {
             writeSerial(X_ACK);
 
-            ret = saveFile((unsigned char *)fileName, fileBuf, fileSize);
+            mprintf("Salvando %lu bytes em %s...\r\n", fileSize, saveName);
+            ret = netSaveFile(saveName, fileBuf, fileSize);
             if (ret != RETURN_OK)
             {
                 msfree(fileBuf);
@@ -223,7 +312,11 @@ static int xmodemRecvFile(char *fileName)
             return 0;
         }
 
-        if (c != X_SOH)
+        if (c == X_SOH)
+            blockLen = 128;
+        else if (c == X_STX)
+            blockLen = 1024;
+        else
         {
             writeSerial(X_NAK);
             continue;
@@ -235,7 +328,7 @@ static int xmodemRecvFile(char *fileName)
             continue;
         }
 
-        if (!xRecvBytes(data, 128))
+        if (!xRecvBytes(data, blockLen))
         {
             writeSerial(X_NAK);
             continue;
@@ -248,7 +341,7 @@ static int xmodemRecvFile(char *fileName)
         }
 
         crcRecv = (((unsigned short)crcHi) << 8) | crcLo;
-        crcCalc = xmodemCrc16(data, 128);
+        crcCalc = xmodemCrc16(data, blockLen);
 
         if ((unsigned char)(blkNo + blkInv) != 0xFF || crcRecv != crcCalc)
         {
@@ -258,7 +351,7 @@ static int xmodemRecvFile(char *fileName)
 
         if (blkNo == expected)
         {
-            if (fileSize + 128UL > NET_XFER_MAX)
+            if (fileSize + (unsigned long)blockLen > NET_XFER_MAX)
             {
                 writeSerial(X_CAN);
                 msfree(fileBuf);
@@ -266,8 +359,8 @@ static int xmodemRecvFile(char *fileName)
                 return 0;
             }
 
-            memcpy(fileBuf + fileSize, data, 128);
-            fileSize += 128;
+            memcpy(fileBuf + fileSize, data, blockLen);
+            fileSize += blockLen;
             expected++;
             writeSerial(X_ACK);
         }
@@ -292,10 +385,11 @@ static int xmodemSendFile(char *fileName)
     unsigned long pos;
     unsigned int n;
     unsigned char c;
-    unsigned char block[128];
+    unsigned char block[1024];
     unsigned char blkNo;
     unsigned int retry;
     unsigned short crc;
+    unsigned short blockLen;
     unsigned int i;
 
     fileBuf = (unsigned char *)msmalloc(NET_XFER_MAX);
@@ -320,7 +414,7 @@ static int xmodemSendFile(char *fileName)
         return 0;
     }
 
-    mprintf("XMODEM-CRC enviando %s (%ld bytes)...\r\n", fileName, fileSize);
+    mprintf("XMODEM-CRC/1K enviando %s (%ld bytes)...\r\n", fileName, fileSize);
 
     retry = 0;
     while (1)
@@ -351,24 +445,33 @@ static int xmodemSendFile(char *fileName)
 
     while (pos < (unsigned long)fileSize)
     {
+        if (((unsigned long)fileSize - pos) > 128UL)
+            blockLen = 1024;
+        else
+            blockLen = 128;
+
         n = 0;
-        while (n < 128 && pos < (unsigned long)fileSize)
+        while (n < blockLen && pos < (unsigned long)fileSize)
             block[n++] = fileBuf[pos++];
 
-        while (n < 128)
+        while (n < blockLen)
             block[n++] = X_SUB;
 
         retry = 0;
         while (1)
         {
-            writeSerial(X_SOH);
+            if (blockLen == 1024)
+                writeSerial(X_STX);
+            else
+                writeSerial(X_SOH);
+
             writeSerial(blkNo);
             writeSerial(255 - blkNo);
 
-            for (i = 0; i < 128; i++)
+            for (i = 0; i < blockLen; i++)
                 writeSerial(block[i]);
 
-            crc = xmodemCrc16(block, 128);
+            crc = xmodemCrc16(block, blockLen);
             writeSerial((unsigned char)(crc >> 8));
             writeSerial((unsigned char)(crc & 0xFF));
 
