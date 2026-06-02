@@ -14,3 +14,6 @@ typedef struct LIST_WINDOWS
 unsigned char *mguiIdRequest = 0x008D0000;
 unsigned long *mguiRunTask = 0x008D0002; 
 LIST_WINDOWS *mguiListWindows = 0x008D0008;
+
+// Apenas para saber que esse endereço esta sendo usado
+// MMSJ_CONSOLE *activeConsole = 0x008D0100;    // 32 Bytes

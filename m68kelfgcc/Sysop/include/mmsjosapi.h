@@ -186,4 +186,6 @@ unsigned long vRetAlloc(unsigned long pMemInic, unsigned long *pSizeAlloc, unsig
     return (pMemInic + *pSizeAlloc);
 }
 
+MMSJ_CONSOLE *activeConsole = 0x008D0100;   // 32 Bytes
+
 #endif

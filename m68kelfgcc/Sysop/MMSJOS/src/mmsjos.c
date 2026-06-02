@@ -16,7 +16,8 @@
 * 20/04/2026  1.0a04  Moacir Jr.   Ajustes chamar basic com malloc e passagem de parametros
 * 28/04/2026  1.0a05  Moacir Jr.   Convertido para m68k-elf-gcc e retirada do malloc/realloc/free
 * 10/05/2026  1.0a06  Moacir Jr.   Remover uC/OS-II - RTOS
-* 25/05/2026  1.0a07  Moacir Jr.   Piscar Cursor no monitor, Ajustes Gerais
+* 25/05/2026  1.0a07  Moacir Jr.   Piscar Cursor, Ajustes Gerais
+* 01/06/2026  1.0a08  Moacir Jr.   Abstracao de saida e entrada de dados
 ********************************************************************************/
 #include <ctype.h>
 #include <string.h>
@@ -77,6 +78,22 @@ unsigned char vdp_mode; // Modo de video 0 = caracter (32 x 24), 1 = grafico (25
 
 #define RT_FONTDIR 0x8007
 #define RT_FONT    0x8008
+
+MMSJ_CONSOLE *activeConsole = 0x008D0100;   // 32 Bytes
+
+void consoleWriteChar(unsigned char c, char pMove)
+{
+    if (activeConsole->magic && activeConsole->putc)
+        activeConsole->putc(c, pMove);
+    else
+        printChar(c, pMove);
+}
+
+void consoleWriteText(unsigned char *text)
+{
+    while (*text)
+        consoleWriteChar(*text++, 1);
+}
 
 static unsigned int rd16(unsigned char *p)
 {
@@ -198,7 +215,7 @@ int loadMbinAndRun(char *filename, char porig)
         runFromMGUI((unsigned long)vEnderExec, (unsigned long)fileBuf);
     }
 
-    printText("\r\n\0");
+    consoleWriteText("\r\n\0");
 
     return 0;
 }
@@ -321,7 +338,7 @@ char memInit(void);
 
 HEADER *_allocp;
 
-#define versionMMSJOS "1.0a07"
+#define versionMMSJOS "1.0a08"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 #define FS_SECTOR_RETRY_COUNT 3
 #define FS_ENABLE_WRITE_VERIFY 1
@@ -367,9 +384,9 @@ unsigned long fsInit(void)
 //-----------------------------------------------------------------------------
 void fsVer(void)
 {
-    printText("\r\n\0");
-    printText("MMSJ-OS v"versionMMSJOS);
-    printText("\r\n\0");
+    consoleWriteText("\r\n\0");
+    consoleWriteText("MMSJ-OS v"versionMMSJOS);
+    consoleWriteText("\r\n\0");
 }
 
 //-----------------------------------------------------------------------------
@@ -632,36 +649,36 @@ void printDiskError(unsigned char pError)
 {
     unsigned char sqtdtam[10];
 
-    printText("Error: ");
+    consoleWriteText("Error: ");
 
     switch( pError )
     {
-      case ERRO_B_FILE_NOT_FOUND    : printText("File not found"); break;
-      case ERRO_B_READ_DISK         : printText("Reading disk"); break;
-      case ERRO_B_WRITE_DISK        : printText("Writing disk"); break;
-      case ERRO_B_OPEN_DISK         : printText("Opening disk"); break;
-      case ERRO_B_INVALID_NAME      : printText("Invalid Folder or File Name"); break;
-      case ERRO_B_DIR_NOT_FOUND     : printText("Directory not found"); break;
-      case ERRO_B_CREATE_FILE       : printText("Creating file"); break;
-      case ERRO_B_APAGAR_ARQUIVO    : printText("Deleting file"); break;
-      case ERRO_B_FILE_FOUND        : printText("File already exist"); break;
-      case ERRO_B_UPDATE_DIR        : printText("Updating directory"); break;
-      case ERRO_B_OFFSET_READ       : printText("Offset read"); break;
-      case ERRO_B_DISK_FULL         : printText("Disk full"); break;
-      case ERRO_B_READ_FILE         : printText("Reading file"); break;
-      case ERRO_B_WRITE_FILE        : printText("Writing file"); break;
-      case ERRO_B_DIR_FOUND         : printText("Directory already exist"); break;
-      case ERRO_B_CREATE_DIR        : printText("Creating directory"); break;
-      case ERRO_B_DIR_NOT_EMPTY     : printText("Directory not empty"); break;
-      case ERRO_B_NOT_FOUND         : printText("Not found"); break;
+      case ERRO_B_FILE_NOT_FOUND    : consoleWriteText("File not found"); break;
+      case ERRO_B_READ_DISK         : consoleWriteText("Reading disk"); break;
+      case ERRO_B_WRITE_DISK        : consoleWriteText("Writing disk"); break;
+      case ERRO_B_OPEN_DISK         : consoleWriteText("Opening disk"); break;
+      case ERRO_B_INVALID_NAME      : consoleWriteText("Invalid Folder or File Name"); break;
+      case ERRO_B_DIR_NOT_FOUND     : consoleWriteText("Directory not found"); break;
+      case ERRO_B_CREATE_FILE       : consoleWriteText("Creating file"); break;
+      case ERRO_B_APAGAR_ARQUIVO    : consoleWriteText("Deleting file"); break;
+      case ERRO_B_FILE_FOUND        : consoleWriteText("File already exist"); break;
+      case ERRO_B_UPDATE_DIR        : consoleWriteText("Updating directory"); break;
+      case ERRO_B_OFFSET_READ       : consoleWriteText("Offset read"); break;
+      case ERRO_B_DISK_FULL         : consoleWriteText("Disk full"); break;
+      case ERRO_B_READ_FILE         : consoleWriteText("Reading file"); break;
+      case ERRO_B_WRITE_FILE        : consoleWriteText("Writing file"); break;
+      case ERRO_B_DIR_FOUND         : consoleWriteText("Directory already exist"); break;
+      case ERRO_B_CREATE_DIR        : consoleWriteText("Creating directory"); break;
+      case ERRO_B_DIR_NOT_EMPTY     : consoleWriteText("Directory not empty"); break;
+      case ERRO_B_NOT_FOUND         : consoleWriteText("Not found"); break;
       default                       :
         itoa(pError, sqtdtam, 10);
-        printText(sqtdtam);
-        printText(" - Unknown Code");
+        consoleWriteText(sqtdtam);
+        consoleWriteText(" - Unknown Code");
         break;
     }
 
-    printText("!\r\n\0");
+    consoleWriteText("!\r\n\0");
 }
 
 //-----------------------------------------------------------------------------
@@ -673,11 +690,11 @@ void putPrompt(char pAddLine)
     }
     else
     {
-        printText("#:>");
+        consoleWriteText("#:>");
     }
 
     if (pAddLine)
-        printText("\r\n\0");
+        consoleWriteText("\r\n\0");
 }
 
 //-----------------------------------------------------------------------------
@@ -694,6 +711,12 @@ void main(void)
     promptDet = 0;
 
     vdp_mode = VDP_MODE_TEXT;
+
+    activeConsole->flags = NULL;
+    activeConsole->putc = NULL;
+    activeConsole->kbhit = NULL;
+    activeConsole->getc = NULL;
+    activeConsole->magic = NULL;
 
     clearScr();
 
@@ -720,7 +743,7 @@ void main(void)
         mguiFunc(0);
 
     vbuf[0] = '\0';
-    printText("\r\n\0");
+    consoleWriteText("\r\n\0");
     putPrompt(0);
     showCursor();
 
@@ -862,10 +885,10 @@ void inputFunc(void *pdata)
                 {
                     vbufptr--;
 
-                    printChar(0x08, 1);
+                    consoleWriteChar(0x08, 1);
                 }
 
-                printChar(vtec, 1);
+                consoleWriteChar(vtec, 1);
 
                 vbuf[vbufptr++] = vtec;
                 vbuf[vbufptr] = '\0';
@@ -877,14 +900,14 @@ void inputFunc(void *pdata)
                     vbuf[vbufptr] = 0x00;
                     vbufptr--;
 
-                    printChar(0x08, 1);
+                    consoleWriteChar(0x08, 1);
                 }
             }
             else if (vtec == 0x0D || vtec == 0x0A)
             {
                 vRetProcCmd = 1;
 
-                printText("\r\n\0");
+                consoleWriteText("\r\n\0");
 
                 vRetProcCmd = fsOsCommand("\0");
 
@@ -892,7 +915,7 @@ void inputFunc(void *pdata)
                 vbufptr = 0x00;
 
                 if (vRetProcCmd)
-                    printText("\r\n\0");
+                    consoleWriteText("\r\n\0");
 
                 putPrompt(0);
             }
@@ -927,7 +950,7 @@ void basicFunc(void *pData)
 
         // Erro
         if (*startBasic == 1)
-            printText("No memory to run Basic...\r\n\0");
+            consoleWriteText("No memory to run Basic...\r\n\0");
     }
     else
     {
@@ -1117,7 +1140,7 @@ writeLongSerial("\r\n\0");*/
         else if (!strcmp(linhacomando,"VER") && iy == 3)
         {
             fsVer();
-            printText("\r\n\0");
+            consoleWriteText("\r\n\0");
         }
         else if (!strcmp(linhacomando,"LS") && iy == 2)
         {
@@ -1155,12 +1178,12 @@ writeLongSerial("\r\n\0");*/
         else if (!strcmp(linhacomando,"MGUI") && iy == 4)
         {
             mguiFunc(0);
-            printText("\r\n\0");
+            consoleWriteText("\r\n\0");
         }
         else if (!strcmp(linhacomando,"PWD") && iy == 3)
         {
-            printText(vdiratu);
-            printText("\r\n\0");
+            consoleWriteText(vdiratu);
+            consoleWriteText("\r\n\0");
         }
         else if (iy == 2 && (!strcmp(linhacomando,"XX") ||
                              !strcmp(linhacomando,"RM") ||
@@ -1182,7 +1205,7 @@ writeLongSerial("\r\n\0");*/
                 if (vrettype == FIND_PATH_RET_ERROR && !logwildcard)
                 {
                     if (linhaParametro[0] == '\0')
-                        printText("File not found.\r\n\0");
+                        consoleWriteText("File not found.\r\n\0");
                     return 0;
                 }
 
@@ -1214,7 +1237,7 @@ writeLongSerial("\r\n\0");*/
 
             if (fsFindInDir(NULL, TYPE_FIRST_ENTRY) >= ERRO_D_START)
             {
-                printText("File not found..\r\n\0");
+                consoleWriteText("File not found..\r\n\0");
                 if (strcmp(linhacomando,"XX"))
                     vretfat = ERRO_B_NOT_FOUND;
             }
@@ -1445,8 +1468,8 @@ writeLongSerial("\r\n\0");*/
                             }
 
                             // Mostra linha
-                            printText("\r\n\0");
-                            printText(vlinha);
+                            consoleWriteText("\r\n\0");
+                            consoleWriteText(vlinha);
                         }
 
                         vretfat = RETURN_OK;
@@ -1454,7 +1477,7 @@ writeLongSerial("\r\n\0");*/
                         // Verifica se Tem mais arquivos no diretorio
                         if (fsFindInDir(vparam, TYPE_NEXT_ENTRY) >= ERRO_D_START)
                         {
-                            printText("\r\n\0");
+                            consoleWriteText("\r\n\0");
                             break;
                         }
                     }
@@ -1506,8 +1529,8 @@ writeLongSerial("\r\n\0");*/
                             {
                                 if (linhaParametro[0] == '\0')
                                 {
-                                    printText(vparam);
-                                    printText("\r\n\0");
+                                    consoleWriteText(vparam);
+                                    consoleWriteText("\r\n\0");
                                 }
 
                                 vretfat = fsDelFile(vparam);
@@ -1525,7 +1548,7 @@ writeLongSerial("\r\n\0");*/
                         if (!logcopyok)
                         {
                             if (linhaParametro[0] == '\0')
-                                printText("\r\n\0");
+                                consoleWriteText("\r\n\0");
                             break;
                         }
                         else
@@ -1557,8 +1580,8 @@ writeLongSerial("\r\n\0");*/
                         {
                             if (linhaParametro[0] == '\0')
                             {
-                                printText(vparam);
-                                printText("\r\n\0");
+                                consoleWriteText(vparam);
+                                consoleWriteText("\r\n\0");
                             }
 
                             if (fsOpenFile(vparam) != RETURN_OK)
@@ -1657,7 +1680,7 @@ writeLongSerial("\r\n\0");*/
                         if (fsFindInDir(vparam, TYPE_NEXT_ENTRY) >= ERRO_D_START)
                         {
                             if (linhaParametro[0] == '\0')
-                                printText("\r\n\0");
+                                consoleWriteText("\r\n\0");
                             break;
                         }
                     }
@@ -1671,7 +1694,7 @@ writeLongSerial("\r\n\0");*/
                 if (linhaParametro[0] == '\0')
                 {
                     printDiskError(vretfat);
-                    printText("\r\n\0");
+                    consoleWriteText("\r\n\0");
                 }
             }
         }
@@ -1682,7 +1705,7 @@ writeLongSerial("\r\n\0");*/
                 if (fsFindDirPath(vparam, FIND_PATH_PART) == FIND_PATH_RET_ERROR)
                 {
                     if (linhaParametro[0] == '\0')
-                        printText("file not found.\r\n\0");
+                        consoleWriteText("file not found.\r\n\0");
                     vretfat = ERRO_B_NOT_FOUND;
                 }
                 else
@@ -1749,14 +1772,14 @@ writeLongSerial("\r\n\0");*/
                 basicFunc((void *)basicFuncArg);
                 
                 if (*startBasic == 1)
-                    printText("\r\n\0");
+                    consoleWriteText("\r\n\0");
             }
             else if (!strcmp(linhacomando,"PATH") && iy == 4)
             {
                 if (linhaarg[0] == 0x00)
                 {
-                    printText(mmsjosExecPath);
-                    printText("\r\n\0");
+                    consoleWriteText(mmsjosExecPath);
+                    consoleWriteText("\r\n\0");
                 }
                 else
                 {
@@ -1791,14 +1814,14 @@ writeLongSerial("\r\n\0");*/
                         paramBasic[0] = '\0';
                         strcpy(paramBasic, execArg);
                         if (loadMbinAndRun(foundName, 1) != 0)
-                            printText("Error Executing File\r\n\0");
+                            consoleWriteText("Error Executing File\r\n\0");
                     #else
                         // Slot fixo para apps gerais: 0x00880000
                         vEnderExec = 0x00880000;
                         itoa(vEnderExec,sqtdtam,16);
-                        printText("Loading File in \0");
-                        printText(sqtdtam);
-                        printText("h\r\n\0");
+                        consoleWriteText("Loading File in \0");
+                        consoleWriteText(sqtdtam);
+                        consoleWriteText("h\r\n\0");
                         vsizeProg = loadFile(foundName, (unsigned long*)vEnderExec);
                         mmsjosBuildArgPath(linhaarg, execArg, sizeof(execArg));
                         strcpy(paramBasic, execArg);
@@ -1810,7 +1833,7 @@ writeLongSerial("\r\n\0");*/
                         else
                         {
                             if (linhaParametro[0] == '\0')
-                                printText("Loading File Error...\r\n\0");
+                                consoleWriteText("Loading File Error...\r\n\0");
                         }
                     #endif
 
@@ -1822,7 +1845,7 @@ writeLongSerial("\r\n\0");*/
                 {
                     // Se nao tiver, mostra erro
                     if (linhaParametro[0] == '\0')
-                        printText("Invalid Command or File Name\r\n\0");
+                        consoleWriteText("Invalid Command or File Name\r\n\0");
 
                     ix = 255;
                 }
@@ -1843,7 +1866,7 @@ writeLongSerial("\r\n\0");*/
                     if (linhaParametro[0] == '\0')
                     {
                         printDiskError(vretfat);
-                        printText("\r\n\0");
+                        consoleWriteText("\r\n\0");
                     }
                 }
                 else
@@ -1857,9 +1880,9 @@ writeLongSerial("\r\n\0");*/
                         }*/
 
                         vlinha[ix] = '\0';
-                        printText("  Date is \0");
-                        printText(vlinha);
-                        printText("\r\n\0");
+                        consoleWriteText("  Date is \0");
+                        consoleWriteText(vlinha);
+                        consoleWriteText("\r\n\0");
                     }
                     else if (!strcmp(linhacomando,"TIME"))
                     {
@@ -1870,14 +1893,14 @@ writeLongSerial("\r\n\0");*/
                         }*/
 
                         vlinha[ix] = '\0';
-                        printText("  Time is \0");
-                        printText(vlinha);
-                        printText("\r\n\0");
+                        consoleWriteText("  Time is \0");
+                        consoleWriteText(vlinha);
+                        consoleWriteText("\r\n\0");
                     }
                     else if (!strcmp(linhacomando,"FORMAT"))
                     {
                         if (linhaParametro[0] == '\0')
-                            printText("Format disk was successfully\r\n\0");
+                            consoleWriteText("Format disk was successfully\r\n\0");
                     }
                 }
             }
@@ -2651,13 +2674,13 @@ unsigned char fsLoadSerialToFile(char * vfilename)
 
     if (!xaddress)
     {
-        printText("No memory to receive file.\r\n\0");
+        consoleWriteText("No memory to receive file.\r\n\0");
         return ERRO_B_WRITE_FILE;
     }
 
     if (vfilename == 0)
     {
-        printText("Error, file name must be provided!!\r\n\0");
+        consoleWriteText("Error, file name must be provided!!\r\n\0");
 #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         #if defined(USE_MALLOC)
             free(xaddressStart);
@@ -2704,7 +2727,7 @@ unsigned char fsLoadSerialToFile(char * vfilename)
         vSizeTotalRec = lstmGetSize();
 
         // Abre Arquivo
-        printText("Opening File...\r\n\0");
+        consoleWriteText("Opening File...\r\n\0");
 
         if (fsOpenFile(vfilename) != RETURN_OK)
         {
@@ -2719,28 +2742,28 @@ unsigned char fsLoadSerialToFile(char * vfilename)
         }
 
         // Grava no Arquivo
-        printText("Writing File...\r\n\0");
+        consoleWriteText("Writing File...\r\n\0");
 
-        printChar(218,1);
+        consoleWriteChar(218,1);
         for (ix = 0; ix < 20; ix++)
-            printChar(196,1);
-        printChar(191,1);
+            consoleWriteChar(196,1);
+        consoleWriteChar(191,1);
 
-        printText("\r\n\0");
+        consoleWriteText("\r\n\0");
 
-        printChar(179,1);
+        consoleWriteChar(179,1);
         for (ix = 0; ix < 20; ix++)
-            printChar(' ',1);
-        printChar(179,1);
+            consoleWriteChar(' ',1);
+        consoleWriteChar(179,1);
 
-        printText("\r\n\0");
+        consoleWriteText("\r\n\0");
 
-        printChar(192,1);
+        consoleWriteChar(192,1);
         for (ix = 0; ix < 20; ix++)
-            printChar(196,1);
-        printChar(217,1);
+            consoleWriteChar(196,1);
+        consoleWriteChar(217,1);
 
-        printText("\r\n\0");
+        consoleWriteText("\r\n\0");
 
         vcursor = vdp_get_cursor_safe();
 
@@ -2783,7 +2806,7 @@ unsigned char fsLoadSerialToFile(char * vfilename)
             {
                 while (vProgressCount < 20 && (ix + vChunkSize) >= vNextProgress)
                 {
-                    printChar(219, 1);
+                    consoleWriteChar(219, 1);
                     vProgressCount++;
                     vNextProgress += vStep;
                 }
@@ -2793,7 +2816,7 @@ unsigned char fsLoadSerialToFile(char * vfilename)
         vdp_set_cursor(0, vmovposyatu);
 
         // Fecha Arquivo e atualiza metadata de escrita
-        printText("\r\nClosing File...\r\n\0");
+        consoleWriteText("\r\nClosing File...\r\n\0");
 
         fsCloseFile(vfilename, 1);
 
@@ -2807,7 +2830,7 @@ unsigned char fsLoadSerialToFile(char * vfilename)
     }
     else
     {
-        printText("Serial Load Error...");
+        consoleWriteText("Serial Load Error...");
 
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         #if defined(USE_MALLOC)
@@ -2845,9 +2868,9 @@ unsigned char fsLoadSerialToRun(char * vfilename)
     if (!loadSerialToMem2(vEnderExec, 1))
     {
         itoa(vEnderExec,sqtdtam,16);
-        printText("Running at \0");
-        printText(sqtdtam);
-        printText("h\r\n\0");
+        consoleWriteText("Running at \0");
+        consoleWriteText(sqtdtam);
+        consoleWriteText("h\r\n\0");
         runFromOsCmd(vEnderExec);
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         #if defined(USE_MALLOC)
@@ -2859,7 +2882,7 @@ unsigned char fsLoadSerialToRun(char * vfilename)
     }
     else
     {
-        printText("Serial Load Error...");
+        consoleWriteText("Serial Load Error...");
 
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         #if defined(USE_MALLOC)
@@ -3002,24 +3025,24 @@ unsigned short fsReadFile(char * vfilename, unsigned long voffset, unsigned char
 		vsetor = 1;
 
 /*itoa(vsetor, sqtdtam, 10);
-printText(sqtdtam, *vcorf, *vcorb);
-printText(".\n\0");*/
+consoleWriteText(sqtdtam, *vcorf, *vcorb);
+consoleWriteText(".\n\0");*/
 
 /*itoa(voffsec, sqtdtam, 10);
-printText(sqtdtam, *vcorf, *vcorb);
-printText(".\n\0");*/
+consoleWriteText(sqtdtam, *vcorf, *vcorb);
+consoleWriteText(".\n\0");*/
 
 /*itoa(vdisk.sectorSize, sqtdtam, 10);
-printText(sqtdtam, *vcorf, *vcorb);
-printText(".\n\0");*/
+consoleWriteText(sqtdtam, *vcorf, *vcorb);
+consoleWriteText(".\n\0");*/
 
 /*itoa(voffset, sqtdtam, 10);
-printText(sqtdtam, *vcorf, *vcorb);
-printText(".\n\0");*/
+consoleWriteText(sqtdtam, *vcorf, *vcorb);
+consoleWriteText(".\n\0");*/
 
 /*itoa(vsizebuffer, sqtdtam, 10);
-printText(sqtdtam, *vcorf, *vcorb);
-printText(".\n\0");*/
+consoleWriteText(sqtdtam, *vcorf, *vcorb);
+consoleWriteText(".\n\0");*/
 
 	for (ix = 0; ix <= vsetor; ix++) {
     	vtemp = voffset / vdisk.sectorSize;
@@ -3038,8 +3061,8 @@ printText(".\n\0");*/
         vsizebf += vsize;
 
 /*itoa(vsize, sqtdtam, 10);
-printText(sqtdtam, *vcorf, *vcorb);
-printText(".\n\0");*/
+consoleWriteText(sqtdtam, *vcorf, *vcorb);
+consoleWriteText(".\n\0");*/
 
 		// Retorna os dados no buffer
 		for (iy = 0; iy < vsize; iy++) {
@@ -3332,9 +3355,9 @@ unsigned char fsRemoveDir(char * vdirname)
 
     vclusterdir = vretpath.ClusterDir;
 
-    /*printText("Aqui 2 - ");
-    printText(vretpath.Name);
-    printText("\r\n");*/
+    /*consoleWriteText("Aqui 2 - ");
+    consoleWriteText(vretpath.Name);
+    consoleWriteText("\r\n");*/
 
 	if (fsFindInDir(vretpath.Name, TYPE_DIRECTORY) >= ERRO_D_START)
     {
@@ -4395,7 +4418,7 @@ void catFile(unsigned char *parquivo) {
     voffset = 0;
     if (fsFindDirPath(parquivo, FIND_PATH_PART) == FIND_PATH_RET_ERROR)
     {
-        printText("Loading file error...\r\n\0");
+        consoleWriteText("Loading file error...\r\n\0");
         return;
     }
 
@@ -4405,7 +4428,7 @@ void catFile(unsigned char *parquivo) {
     if (fsOpenFile(vretpath.Name) != RETURN_OK)
     {
         vclusterdir = vclusterdiratu;
-        printText("Loading file error...\r\n\0");
+        consoleWriteText("Loading file error...\r\n\0");
         return;
     }
 
@@ -4419,9 +4442,9 @@ void catFile(unsigned char *parquivo) {
         for (ix = 0; ix < vsizeR; ix++)
         {
             if (vbuffer[ix] == 0x0D)
-                printText("\r\0");
+                consoleWriteText("\r\0");
             else if (vbuffer[ix] == 0x0A)
-                printText("\r\n\0");
+                consoleWriteText("\r\n\0");
             else if (vbuffer[ix] == 0x1A || vbuffer[ix] == 0x00)
             {
                 fsCloseFile(vretpath.Name, 0);
@@ -4429,9 +4452,9 @@ void catFile(unsigned char *parquivo) {
                 return;
             }
             else if (vbuffer[ix] >= 0x20 && vbuffer[ix] < 0xFF)
-                printChar(vbuffer[ix], 1);
+                consoleWriteChar(vbuffer[ix], 1);
             else
-                printChar(0x20, 1);
+                consoleWriteChar(0x20, 1);
         }
 
         voffset += vsizeR;
@@ -4440,7 +4463,7 @@ void catFile(unsigned char *parquivo) {
     fsCloseFile(vretpath.Name, 0);
     vclusterdir = vclusterdiratu;
 
-    printText("\r\n\0");
+    consoleWriteText("\r\n\0");
 }
 
 //-----------------------------------------------------------------------------
@@ -5007,7 +5030,7 @@ void printCharG2(unsigned char pchr, unsigned char pmove)
     if (vdp_mode == VDP_MODE_TEXT || vdp_mode == VDP_MODE_G1)
     {
         // Usa processo normal com a fonte Default do monitor
-        printChar(pchr, pmove);
+        consoleWriteChar(pchr, pmove);
     }
     else 
     {
@@ -5016,7 +5039,7 @@ void printCharG2(unsigned char pchr, unsigned char pmove)
         {
             case 0x0A:  // LF
                 if (videoCursorPosRowY + 1 == 24)
-                    printChar(pchr, pmove);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
+                    consoleWriteChar(pchr, pmove);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
                 else 
                 {
                     videoCursorPosRowY = videoCursorPosRowY + 1;
@@ -5050,7 +5073,7 @@ void printCharG2(unsigned char pchr, unsigned char pmove)
                     if (vdp_mode == VDP_MODE_TEXT && videoCursorPosRowY == 24)
                     {
                         videoCursorPosRowY = 23;
-                        printChar(0x0A, pmove);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
+                        consoleWriteChar(0x0A, pmove);    // Pra gerar Scroll, nao tenho acesso ao geraScroll
                     }
                 }
         }

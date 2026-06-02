@@ -203,6 +203,20 @@ void ethStart()
     tstIntsOn();
 }
 
+void myTestPutc(unsigned char c, char pMove)
+{
+    printChar(c, pMove);
+    printChar('.', pMove);
+}
+
+void myTestPuts(unsigned char *s)
+{
+    while (*s)
+        myTestPutc(*s++, 1);
+}
+
+MMSJ_CONSOLE telnetConsole;
+
 /* -------------------------------------------------- */
 /* MAIN                                               */
 /* -------------------------------------------------- */
@@ -218,8 +232,32 @@ int main(void)
         hookTable[i].addr = 0;
     }*/
 
-    mprintf("Iniciando Ethernet...\r\n");
-    ethStart();
+    //mprintf("Iniciando Ethernet...\r\n");
+    //ethStart();
+
+    mprintf("Testando console pra telnet...\r\n");
+    char cmd[] = "LS";
+
+    /*telnetConsole.magic = 0x99;
+    telnetConsole.flags = 0;
+    telnetConsole.putc = myTestPutc;
+    telnetConsole.kbhit = NULL;
+    telnetConsole.getc = NULL;*/
+
+    MMSJ_CONSOLE old;
+    old = *activeConsole;
+    activeConsole->magic = 0x99;
+    activeConsole->flags = 0;
+    activeConsole->putc  = myTestPutc;
+    activeConsole->kbhit = NULL;
+    activeConsole->getc  = NULL;
+    fsOsCommand((unsigned char*)cmd);
+    activeConsole->magic = NULL;
+    activeConsole->flags = NULL;
+    activeConsole->putc  = NULL;
+    activeConsole->kbhit = NULL;
+    activeConsole->getc  = NULL;
+    mprintf("Fim...\r\n");
 
     /*mprintf("Instalando hooks...\r\n");
 

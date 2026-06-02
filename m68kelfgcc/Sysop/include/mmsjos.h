@@ -398,6 +398,14 @@ extern void fsSetMfp(unsigned int Config, unsigned char Value, unsigned char Typ
 extern unsigned int fsGetMfp(unsigned int Config);
 #endif
 
+typedef struct
+{
+    unsigned long magic;
+    unsigned long flags;
+    void (*putc)(unsigned char c, char pMove);
+    int  (*getc)(void);
+    int  (*kbhit)(void);
+} MMSJ_CONSOLE;
 
 typedef struct
 {
