@@ -131,6 +131,114 @@ static void termDiscardPendingSerial(void)
     telPushValid = 0;
 }
 
+static unsigned char termMakeColor(unsigned char fg, unsigned char bg)
+{
+    return (unsigned char)(((fg & 0x0F) << 4) | (bg & 0x0F));
+}
+
+static void termSetColor(unsigned char fg, unsigned char bg)
+{
+    termFg = fg & 0x0F;
+    termBg = bg & 0x0F;
+    termColor = termMakeColor(termFg, termBg);
+}
+
+static void termApplyColor(unsigned char color)
+{
+    (void)color;
+}
+
+static unsigned char termAnsiColor(int n)
+{
+    switch (n)
+    {
+        case 0: return VDP_BLACK;
+        case 1: return VDP_DARK_RED;
+        case 2: return VDP_DARK_GREEN;
+        case 3: return VDP_DARK_YELLOW;
+        case 4: return VDP_DARK_BLUE;
+        case 5: return VDP_MAGENTA;
+        case 6: return VDP_CYAN;
+        case 7: return VDP_WHITE;
+    }
+
+    return VDP_WHITE;
+}
+
+static unsigned char termAnsiBrightColor(int n)
+{
+    switch (n)
+    {
+        case 0: return VDP_GRAY;
+        case 1: return VDP_LIGHT_RED;
+        case 2: return VDP_LIGHT_GREEN;
+        case 3: return VDP_LIGHT_YELLOW;
+        case 4: return VDP_LIGHT_BLUE;
+        case 5: return VDP_MAGENTA;
+        case 6: return VDP_CYAN;
+        case 7: return VDP_WHITE;
+    }
+
+    return VDP_WHITE;
+}
+
+static void termHandleSgr(char *parm)
+{
+    char *p;
+    int n;
+    int first;
+    int directFg;
+    int directBg;
+
+    if (*parm == 0)
+    {
+        termSetColor(VDP_WHITE, VDP_BLACK);
+        return;
+    }
+
+    p = parm;
+    first = 1;
+    directFg = -1;
+    directBg = -1;
+
+    while (1)
+    {
+        n = atoi(p);
+
+        if (n == 0)
+            termSetColor(VDP_WHITE, VDP_BLACK);
+        else if (n >= 30 && n <= 37)
+            termSetColor(termAnsiColor(n - 30), termBg);
+        else if (n >= 40 && n <= 47)
+            termSetColor(termFg, termAnsiColor(n - 40));
+        else if (n >= 90 && n <= 97)
+            termSetColor(termAnsiBrightColor(n - 90), termBg);
+        else if (n >= 100 && n <= 107)
+            termSetColor(termFg, termAnsiBrightColor(n - 100));
+        else if (n >= 1 && n <= 15)
+        {
+            if (first)
+                directFg = n;
+            else
+                directBg = n;
+        }
+
+        first = 0;
+        p = strchr(p, ';');
+        if (!p)
+            break;
+        p++;
+    }
+
+    if (directFg >= 0)
+    {
+        if (directBg >= 0)
+            termSetColor((unsigned char)directFg, (unsigned char)directBg);
+        else
+            termSetColor((unsigned char)directFg, termBg);
+    }
+}
+
 static void termRender(void)
 {
     unsigned char y;
@@ -145,10 +253,12 @@ static void termRender(void)
         for (x = 0; x < VIEW_COLS; x++)
         {
             vdp_set_cursor(x, y);
+            termApplyColor(termColorBuf[y][viewX + x]);
             printChar(termBuf[y][viewX + x], 0);
         }
     }
 
+    termApplyColor(termColor);
     if (curX >= viewX && curX < viewX + VIEW_COLS)
         vdp_set_cursor(curX - viewX, curY);
 }
@@ -176,7 +286,9 @@ static void termDrawChar(unsigned char x, unsigned char y)
         return;
 
     vdp_set_cursor(x - viewX, y);
+    termApplyColor(termColorBuf[y][x]);
     printChar(termBuf[y][x], 0);
+    termApplyColor(termColor);
 }
 
 static void termScroll(void)
@@ -187,11 +299,17 @@ static void termScroll(void)
     for (y = 0; y < TERM_ROWS - 1; y++)
     {
         for (x = 0; x < TERM_COLS; x++)
+        {
             termBuf[y][x] = termBuf[y + 1][x];
+            termColorBuf[y][x] = termColorBuf[y + 1][x];
+        }
     }
 
     for (x = 0; x < TERM_COLS; x++)
+    {
         termBuf[TERM_ROWS - 1][x] = ' ';
+        termColorBuf[TERM_ROWS - 1][x] = termColor;
+    }
 
     curY = TERM_ROWS - 1;
     termRender();
@@ -231,6 +349,7 @@ static void termPutChar(unsigned char c)
     {
         oldX = curX;
         termBuf[curY][oldX] = c;
+        termColorBuf[curY][oldX] = termColor;
         termDrawChar(oldX, curY);
 
         if (curX < TERM_COLS - 1)
@@ -246,8 +365,13 @@ static void termClear(void)
     unsigned char x;
 
     for (y = 0; y < TERM_ROWS; y++)
+    {
         for (x = 0; x < TERM_COLS; x++)
+        {
             termBuf[y][x] = ' ';
+            termColorBuf[y][x] = termColor;
+        }
+    }
 
     curX = 0;
     curY = 0;
@@ -261,7 +385,10 @@ static void termClearLine(char y)
     unsigned char x;
 
     for (x = 0; x < TERM_COLS; x++)
+    {
         termBuf[y][x] = ' ';
+        termColorBuf[y][x] = termColor;
+    }
 
     curX = 0;
     curY = y;
@@ -270,6 +397,7 @@ static void termClearLine(char y)
     for (x = 0; x < VIEW_COLS; x++)
     {
         vdp_set_cursor(x, y);
+        termApplyColor(termColor);
         printChar(' ', 0);
     }
 
@@ -297,201 +425,411 @@ static void telnetSend3(unsigned char a, unsigned char b, unsigned char c)
     writeSerial(c);
 }
 
-static void telnetSkipSubneg(void)
+static void telnetSendTerminalType(void)
 {
-    unsigned char c;
-    unsigned char last;
-    unsigned long timeout;
+    writeSerial(TEL_IAC);
+    writeSerial(TEL_SB);
+    writeSerial(TEL_OPT_TTYPE);
+    writeSerial(TEL_TTYPE_IS);
+    writeLongSerial("ANSI");
+    writeSerial(TEL_IAC);
+    writeSerial(TEL_SE);
+}
 
-    last = 0;
-    timeout = 120000L;
+static void telnetSendNaws(void)
+{
+    writeSerial(TEL_IAC);
+    writeSerial(TEL_SB);
+    writeSerial(TEL_OPT_NAWS);
+    writeSerial(0);
+    writeSerial(80);
+    writeSerial(0);
+    writeSerial(24);
+    writeSerial(TEL_IAC);
+    writeSerial(TEL_SE);
+}
 
-    while (1)
+static void telnetHandleOption(unsigned char cmd, unsigned char opt)
+{
+    switch (cmd)
     {
-        if (!termWaitSerial(&c, timeout))
-            return;
+        case TEL_WILL:
+            if (opt == TEL_OPT_ECHO || opt == TEL_OPT_SGA || opt == TEL_OPT_BINARY)
+                telnetSend3(TEL_IAC, TEL_DO, opt);
+            else
+                telnetSend3(TEL_IAC, TEL_DONT, opt);
+            break;
 
-        if (last == TEL_IAC && c == TEL_SE)
-            return;
+        case TEL_DO:
+            if (opt == TEL_OPT_TTYPE || opt == TEL_OPT_SGA || opt == TEL_OPT_BINARY)
+            {
+                telnetSend3(TEL_IAC, TEL_WILL, opt);
+            }
+            else if (opt == TEL_OPT_NAWS)
+            {
+                telnetSend3(TEL_IAC, TEL_WILL, opt);
+                telnetSendNaws();
+            }
+            else
+            {
+                telnetSend3(TEL_IAC, TEL_WONT, opt);
+            }
+            break;
 
-        last = c;
+        case TEL_WONT:
+        case TEL_DONT:
+            break;
     }
 }
 
-static void handleTelnet(unsigned char cmd)
+static unsigned char termAppendDec(char *buf, unsigned char ix, unsigned int value)
 {
-    unsigned char opt;
+    char tmp[6];
+    unsigned char n;
 
-    switch (cmd)
+    n = 0;
+    if (value == 0)
     {
-        case 0xFB: /* WILL */
-            if (!termReadSerial(&opt))
-                return;
-
-            if (opt == 0xFF)
-            {
-                termUnreadSerial(opt);
-                return;
-            }
-
-            telnetSend3(0xFF, 0xFE, opt); /* DONT */
-            break;
-
-        case 0xFD: /* DO */
-            if (!termReadSerial(&opt))
-                return;
-
-            if (opt == 0xFF)
-            {
-                termUnreadSerial(opt);
-                return;
-            }
-
-            telnetSend3(0xFF, 0xFC, opt); /* WONT */
-            break;
-
-        case 0xFC: /* WONT */
-        case 0xFE: /* DONT */
-            if (!termReadSerial(&opt))
-                return;
-
-            if (opt == 0xFF)
-                termUnreadSerial(opt);
-
-            break;
-
-        case 0xFA: /* SB */
-            telnetSkipSubneg();
-            break;
-
-        case 0xFF:
-            termPutChar(0xFF);
-            break;
-
-        default:
-            break;
+        buf[ix++] = '0';
+        return ix;
     }
+
+    while (value && n < sizeof(tmp))
+    {
+        tmp[n++] = (char)('0' + (value % 10));
+        value /= 10;
+    }
+
+    while (n)
+        buf[ix++] = tmp[--n];
+
+    return ix;
 }
 
 static void termSendCursorReport(void)
 {
     char buf[20];
+    unsigned char ix;
 
     /* ANSI usa base 1, não base 0 */
-    writeLongSerial("\x1B[24;80R");
-    //msprintf(buf, "\x1B[%d;%dR", curY + 1, curX + 1);
-    //writeLongSerial(buf);
+    ix = 0;
+    buf[ix++] = 0x1B;
+    buf[ix++] = '[';
+    ix = termAppendDec(buf, ix, (unsigned int)curY + 1);
+    buf[ix++] = ';';
+    ix = termAppendDec(buf, ix, (unsigned int)curX + 1);
+    buf[ix++] = 'R';
+    buf[ix] = 0;
+
+    writeLongSerial(buf);
 }
 
-static void handleEscSeq(void)
+static void termHandleCsi(unsigned char final, char *parm)
 {
-    unsigned char c;
-    char parm[16];
-    int ix;
-
-    if (!termWaitSerial(&c, 30000L))
-        return;
-
-    if (c == 's')
+    switch (final)
     {
-        savedX = curX;
-        savedY = curY;
-        return;
-    }
-
-    if (c == 'u')
-    {
-        termSetCursor(savedX, savedY);
-        return;
-    }
-
-    if (c != '[')
-        return;
-
-    ix = 0;
-
-    while (1)
-    {
-        if (!termWaitSerial(&c, 30000L))
-            return;
-
-        if ((c >= '0' && c <= '9') ||
-             c == ';' || c == '!' ||
-             c == '?' || c == '>')
+        case 'H': /* cursor position */
+        case 'f':
         {
-            if (ix < 15)
-                parm[ix++] = c;
+            int row, col;
+            ansiGet2(parm, &row, &col);
+            termSetCursor((unsigned char)(col - 1), (unsigned char)(row - 1));
+            break;
         }
-        else
-        {
-            parm[ix] = 0;
-
-            switch (c)
+        case 'J': /* clear screen */
+            if (!strcmp(parm, "2") || parm[0] == 0)
+                termClear();
+            break;
+        case 'n':
+            if (!strcmp(parm, "6"))
+                termSendCursorReport();
+            break;
+        case 'c':
+            /* ESC[0c - identify terminal */
+            writeLongSerial("\x1B[?6c");
+            break;
+        case 'K': /* clear line */
+            termClearLine(curY);
+            break;
+        case 'A': /* cursor up */
             {
-                case 'H': /* cursor position */
-                case 'f':
-                {
-                    int row, col;
-                    ansiGet2(parm, &row, &col);
-                    termSetCursor((unsigned char)(col - 1), (unsigned char)(row - 1));
-                    break;
-                }
-                case 'J': /* clear screen */
-                    if (!strcmp(parm, "2") || parm[0] == 0)
-                        termClear();
-                    break;
-                case 'n':
-                    if (!strcmp(parm, "6"))
-                        termSendCursorReport();
-                    break;                    
-                case 'c':
-                    /* ESC[0c - identify terminal */
-                    writeLongSerial("\x1B[?1;2c");
-                    //writeLongSerial("\x1B[?6c");
-                    break;                    
-                case 'K': /* clear line */
-                    termClearLine(curY);
-                    break;                
-                case 'A': /* cursor up */
-                    {
-                        int n = ansiGetNum(parm, 1);
-                        while (n-- && curY > 0) curY--;
-                        termSetVideoCursor();
-                        break;
-                    }
-                case 'B': /* cursor down */
-                    {
-                        int n = ansiGetNum(parm, 1);
-                        while (n-- && curY < TERM_ROWS - 1) curY++;
-                        termSetVideoCursor();
-                        break;
-                    }
-                case 'C': /* cursor right */
-                    {
-                        int n = ansiGetNum(parm, 1);
-                        while (n-- && curX < TERM_COLS - 1) curX++;
-                        termSetVideoCursor();
-                        break;
-                    }
-                case 'D': /* cursor left */
-                    {
-                        int n = ansiGetNum(parm, 1);
-                        while (n-- && curX > 0) curX--;
-                        termSetVideoCursor();
-                        break;
-                    }
-                case 'm': /* atributos/cor ANSI */
-                    /* por enquanto ignora */
-                    break;
-                case '_':
-                    /* ESC[!_ aparece na BBS; pode ignorar */
-                    break;
-                default:
-                    break;
+                int n = ansiGetNum(parm, 1);
+                while (n-- && curY > 0) curY--;
+                termSetVideoCursor();
+                break;
+            }
+        case 'B': /* cursor down */
+            {
+                int n = ansiGetNum(parm, 1);
+                while (n-- && curY < TERM_ROWS - 1) curY++;
+                termSetVideoCursor();
+                break;
+            }
+        case 'C': /* cursor right */
+            {
+                int n = ansiGetNum(parm, 1);
+                while (n-- && curX < TERM_COLS - 1) curX++;
+                termSetVideoCursor();
+                break;
+            }
+        case 'D': /* cursor left */
+            {
+                int n = ansiGetNum(parm, 1);
+                while (n-- && curX > 0) curX--;
+                termSetVideoCursor();
+                break;
+            }
+        case 'm': /* atributos/cor ANSI */
+            termHandleSgr(parm);
+            break;
+        case 's':
+            savedX = curX;
+            savedY = curY;
+            break;
+        case 'u':
+            termSetCursor(savedX, savedY);
+            break;
+        default:
+            break;
+    }
+}
+
+static void termEscReset(void)
+{
+    termEscState = TERM_ESC_NORMAL;
+    termEscLen = 0;
+    termEscBuf[0] = 0;
+}
+
+static void termEscAdd(unsigned char c)
+{
+    if (termEscLen < sizeof(termEscBuf) - 1)
+    {
+        termEscBuf[termEscLen++] = c;
+        termEscBuf[termEscLen] = 0;
+    }
+}
+
+static void termProcessByte(unsigned char c)
+{
+    switch (termTelState)
+    {
+        case TERM_TEL_NORMAL:
+            if (c == TEL_IAC)
+            {
+                termTelState = TERM_TEL_IAC;
+                return;
+            }
+            break;
+
+        case TERM_TEL_IAC:
+            if (c == TEL_IAC)
+            {
+                termTelState = TERM_TEL_NORMAL;
+                termPutChar(TEL_IAC);
+                return;
             }
 
+            if (c == TEL_WILL || c == TEL_WONT || c == TEL_DO || c == TEL_DONT)
+            {
+                termTelCmd = c;
+                termTelState = TERM_TEL_CMD;
+                return;
+            }
+
+            if (c == TEL_SB)
+            {
+                termTelState = TERM_TEL_SB_OPT;
+                return;
+            }
+
+            termTelState = TERM_TEL_NORMAL;
+            return;
+
+        case TERM_TEL_CMD:
+            telnetHandleOption(termTelCmd, c);
+            termTelState = TERM_TEL_NORMAL;
+            return;
+
+        case TERM_TEL_SB_OPT:
+            termTelSbOpt = c;
+            termTelSbFirst = 1;
+            termTelTTypeSend = 0;
+            termTelState = TERM_TEL_SB;
+            return;
+
+        case TERM_TEL_SB:
+            if (c == TEL_IAC)
+            {
+                termTelState = TERM_TEL_SB_IAC;
+                return;
+            }
+
+            if (termTelSbOpt == TEL_OPT_TTYPE && termTelSbFirst)
+            {
+                termTelSbFirst = 0;
+                if (c == TEL_TTYPE_SEND)
+                    termTelTTypeSend = 1;
+            }
+            return;
+
+        case TERM_TEL_SB_IAC:
+            if (c == TEL_SE)
+            {
+                termTelState = TERM_TEL_NORMAL;
+                if (termTelTTypeSend)
+                {
+                    termTelTTypeSend = 0;
+                    telnetSendTerminalType();
+                }
+            }
+            else if (c == TEL_IAC)
+            {
+                termTelState = TERM_TEL_SB;
+            }
+            else
+            {
+                termTelState = TERM_TEL_SB;
+            }
+            return;
+    }
+
+    if (termUtf8BomState == 0)
+    {
+        if (c == 0xEF)
+        {
+            termUtf8BomState = 1;
             return;
         }
+    }
+    else if (termUtf8BomState == 1)
+    {
+        if (c == 0xBB)
+        {
+            termUtf8BomState = 2;
+            return;
+        }
+        termUtf8BomState = 0;
+    }
+    else
+    {
+        termUtf8BomState = 0;
+        if (c == 0xBF)
+        {
+            termPutChar(' ');
+            termPutChar(' ');
+            termPutChar(' ');
+            return;
+        }
+    }
+
+    if (c >= 0x80 && c <= 0x9F)
+        return;
+
+    switch (termEscState)
+    {
+        case TERM_ESC_NORMAL:
+            if (c == 0x1B)
+            {
+                termEscState = TERM_ESC_ESC;
+                termEscLen = 0;
+                termEscBuf[0] = 0;
+            }
+            else if (c == '[')
+            {
+                termEscState = TERM_ESC_BARE;
+                termEscLen = 0;
+                termEscBuf[0] = 0;
+            }
+            else
+            {
+                termPutChar(c);
+            }
+            break;
+
+        case TERM_ESC_ESC:
+            if (c == '[')
+            {
+                termEscState = TERM_ESC_CSI;
+                termEscLen = 0;
+                termEscBuf[0] = 0;
+            }
+            else if (c == ']')
+            {
+                termEscState = TERM_ESC_OSC;
+            }
+            else if (c == 's')
+            {
+                savedX = curX;
+                savedY = curY;
+                termEscReset();
+            }
+            else if (c == 'u')
+            {
+                termSetCursor(savedX, savedY);
+                termEscReset();
+            }
+            else if (c == '7')
+            {
+                savedX = curX;
+                savedY = curY;
+                termEscReset();
+            }
+            else if (c == '8')
+            {
+                termSetCursor(savedX, savedY);
+                termEscReset();
+            }
+            else if (c == '(' || c == ')' || c == '*' || c == '+' || c == '#')
+            {
+                termEscState = TERM_ESC_IGNORE;
+            }
+            else
+            {
+                termEscReset();
+            }
+            break;
+
+        case TERM_ESC_CSI:
+            if (c >= 0x40 && c <= 0x7E)
+            {
+                termHandleCsi(c, termEscBuf);
+                termEscReset();
+            }
+            else if (c >= 0x20 && c <= 0x3F)
+            {
+                termEscAdd(c);
+            }
+            else
+            {
+                termEscReset();
+            }
+            break;
+
+        case TERM_ESC_OSC:
+            if (c == 0x07)
+                termEscReset();
+            else if (c == 0x1B)
+                termEscState = TERM_ESC_IGNORE;
+            break;
+
+        case TERM_ESC_IGNORE:
+            termEscReset();
+            break;
+
+        case TERM_ESC_BARE:
+            if ((c >= '0' && c <= '9') || c == ';' || c == '?' || c == '!')
+            {
+                termEscState = TERM_ESC_CSI;
+                termEscAdd(c);
+            }
+            else
+            {
+                termEscReset();
+                termPutChar('[');
+                termPutChar(c);
+            }
+            break;
     }
 }
 
@@ -500,9 +838,6 @@ static unsigned char serialReadByteTimeout(unsigned char *pByte, unsigned long p
 {
     while (pTimeoutSpin)
     {
-        if (readChar() == 0x1B)  // ESC
-            return 0;
-
         if (termReadSerial(pByte))
             return 1;
 
@@ -543,6 +878,67 @@ static void readResponse(void)
     }
 }
 
+static unsigned char termHandleKeyboard(void)
+{
+    MMSJ_KEYEVENT k;
+    unsigned char c;
+
+    if (!mmsjKeyGet(&k))
+        return 0;
+
+    if (k.flags == KEY_CTRL_ALT && k.code == 'X')
+        return 1;
+
+    if (termCtrlK)
+    {
+        termCtrlK = 0;
+        if (k.code == 'X' || k.ascii == 'x' || k.ascii == 'X')
+            return 1;
+
+        writeSerial(0x0B);
+    }
+
+    if (k.flags & KEY_CTRL)
+    {
+        if (k.code == 'K')
+        {
+            termCtrlK = 1;
+            return 0;
+        }
+
+        if (k.code >= 'A' && k.code <= 'Z')
+        {
+            writeSerial((unsigned char)(k.code - 'A' + 1));
+            return 0;
+        }
+    }
+
+    if (k.flags == KEY_NONE)
+        c = k.ascii;
+    else
+        c = k.ascii;
+
+    if (c == 0)
+        return 0;
+
+    if (c == KEY_RIGHT)
+    {
+        viewX = 40;
+        termRender();
+        return 0;
+    }
+
+    if (c == KEY_LEFT)
+    {
+        viewX = 0;
+        termRender();
+        return 0;
+    }
+
+    writeSerial(c);
+    return 0;
+}
+
 /*void installHook(int hookNum, void (*func)(void))
 {
     hookTable[hookNum].addr  = func;
@@ -571,6 +967,7 @@ int main(void)
         }
 
         termDiscardPendingSerial();
+        termSetColor(VDP_WHITE, VDP_BLACK);
 
         // Limpa Tela
         termClear();
@@ -586,45 +983,19 @@ int main(void)
         {
             if (termReadSerial(&c))
             {
-                if (c == 0xFF)
-                {
-                    if (termReadSerial(&c))
-                        handleTelnet(c);
-                }
-                else if (c == 0x1B)
-                {
-                    handleEscSeq();
-                }
-                else
-                {
-                    termPutChar(c);
-                }
+                termProcessByte(c);
             }
 
-            c = readChar();
-
-            if (c != 0)
+            if (termHandleKeyboard())
             {
-                if (c == 0x1B)
-                {
-                    writeLongSerial("+++");
-                    writeSerial('\r');
-                    break;
-                }
-                else if (c == KEY_RIGHT)
-                {
-                    viewX = 40;
-                    termRender();
-                    continue;
-                }
-                else if (c == KEY_LEFT)
-                {
-                    viewX = 0;
-                    termRender();
-                    continue;
-                }
+                writeLongSerial("+++");
+                writeSerial('\r');
 
-                writeSerial(c);
+                /* espera e descarta OK;DISCONNECT */
+                termWaitSerial(&c, 800000L);
+                termDiscardPendingSerial();
+
+                break;
             }
         }   
 

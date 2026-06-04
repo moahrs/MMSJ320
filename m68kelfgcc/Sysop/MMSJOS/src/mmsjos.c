@@ -1177,7 +1177,10 @@ writeLongSerial("\r\n\0");*/
         }
         else if (!strcmp(linhacomando,"MGUI") && iy == 4)
         {
-            mguiFunc(0);
+            if (activeConsole->magic)
+                consoleWriteText("Command not allowed.")
+            else 
+                mguiFunc(0);
             consoleWriteText("\r\n\0");
         }
         else if (!strcmp(linhacomando,"PWD") && iy == 3)
@@ -1735,11 +1738,17 @@ writeLongSerial("\r\n\0");*/
             }
             else if (!strcmp(linhacomando,"STOF") && iy == 4) // Arquivo (usa 1 soh)
             {
-                vretfat = fsLoadSerialToFile(linhaarg);  // Carrega da Serial para o Arquivo
+                if (activeConsole->magic)
+                    consoleWriteText("Command not allowed");
+                else
+                    vretfat = fsLoadSerialToFile(linhaarg);  // Carrega da Serial para o Arquivo
             }
             else if (!strcmp(linhacomando,"STOR") && iy == 4) // Arquivo (usa 1 soh)
             {
-                vretfat = fsLoadSerialToRun(linhaarg);  // Carrega da Serial para o Arquivo
+                if (activeConsole->magic)
+                    consoleWriteText("Command not allowed");
+                else
+                    vretfat = fsLoadSerialToRun(linhaarg);  // Carrega da Serial para o Arquivo
             }
             else if (!strcmp(linhacomando,"DATE") && iy == 4)
             {
@@ -1765,14 +1774,19 @@ writeLongSerial("\r\n\0");*/
             }
             else if (!strcmp(linhacomando,"BASIC") && iy == 5)
             {
-                memset(basicFuncArg, 0x00, sizeof(basicFuncArg));
-                if (linhaarg[0] != 0x00)
-                    memcpy(basicFuncArg, linhaarg, sizeof(basicFuncArg) - 1);
+                if (activeConsole->magic)
+                    consoleWriteText("Command not allowed");
+                else
+                {
+                    memset(basicFuncArg, 0x00, sizeof(basicFuncArg));
+                    if (linhaarg[0] != 0x00)
+                        memcpy(basicFuncArg, linhaarg, sizeof(basicFuncArg) - 1);
 
-                basicFunc((void *)basicFuncArg);
-                
-                if (*startBasic == 1)
-                    consoleWriteText("\r\n\0");
+                    basicFunc((void *)basicFuncArg);
+                    
+                    if (*startBasic == 1)
+                        consoleWriteText("\r\n\0");
+                }
             }
             else if (!strcmp(linhacomando,"PATH") && iy == 4)
             {

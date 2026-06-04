@@ -27,6 +27,27 @@
 #define TEL_WONT 0xFC
 #define TEL_DO   0xFD
 #define TEL_DONT 0xFE
+#define TEL_OPT_BINARY 0
+#define TEL_OPT_ECHO 1
+#define TEL_OPT_SGA 3
+#define TEL_OPT_TTYPE 24
+#define TEL_OPT_NAWS 31
+#define TEL_TTYPE_IS 0
+#define TEL_TTYPE_SEND 1
+
+#define TERM_ESC_NORMAL 0
+#define TERM_ESC_ESC    1
+#define TERM_ESC_CSI    2
+#define TERM_ESC_OSC    3
+#define TERM_ESC_IGNORE 4
+#define TERM_ESC_BARE   5
+
+#define TERM_TEL_NORMAL 0
+#define TERM_TEL_IAC    1
+#define TERM_TEL_CMD    2
+#define TERM_TEL_SB_OPT 3
+#define TERM_TEL_SB     4
+#define TERM_TEL_SB_IAC 5
 
 #include "netapi.h"
 
@@ -35,11 +56,25 @@
 #define MFP_RX_FULL_BIT  0x10
 
 static char termBuf[TERM_ROWS][TERM_COLS];
+static unsigned char termColorBuf[TERM_ROWS][TERM_COLS];
 static unsigned char curX = 0;
 static unsigned char curY = 0;
 static unsigned char viewX = 0;   /* 0 ou 40 */
 static unsigned char savedX = 0;
 static unsigned char savedY = 0;
+static unsigned char termFg = VDP_WHITE;
+static unsigned char termBg = VDP_BLACK;
+static unsigned char termColor = (VDP_WHITE << 4) | VDP_BLACK;
+static unsigned char termCtrlK = 0;
+static unsigned char termEscState = TERM_ESC_NORMAL;
+static unsigned char termEscLen = 0;
+static char termEscBuf[32];
+static unsigned char termTelState = TERM_TEL_NORMAL;
+static unsigned char termTelCmd = 0;
+static unsigned char termTelSbOpt = 0;
+static unsigned char termTelSbFirst = 0;
+static unsigned char termTelTTypeSend = 0;
+static unsigned char termUtf8BomState = 0;
 
 static unsigned char telPushValid = 0;
 static unsigned char telPushByte = 0;

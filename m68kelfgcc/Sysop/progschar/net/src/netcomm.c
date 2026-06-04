@@ -63,6 +63,8 @@ void netCommInstallHook(int hookNum, void (*func)(void))
 
 void netCommFlush(void)
 {
+    volatile unsigned char dummy;
+
     serRxHead = 0;
     serRxTail = 0;
     serRxLost = 0;
@@ -71,7 +73,6 @@ void netCommFlush(void)
 
     while (*(vmfp + Reg_RSR) & 0x80)
     {
-        volatile unsigned char dummy;
         dummy = *(vmfp + Reg_UDR);
     }
 }

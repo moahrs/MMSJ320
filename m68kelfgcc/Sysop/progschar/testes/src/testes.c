@@ -203,10 +203,28 @@ void ethStart()
     tstIntsOn();
 }
 
+int serialBufGet(unsigned char *c)
+{
+    if (serRxHead == serRxTail)
+        return 0;
+
+    *c = serRxBuf[serRxTail];
+  
+    serRxTail++;
+    if (serRxTail >= SER_RX_SIZE)
+        serRxTail = 0;
+
+    return 1;
+}
+
+static unsigned char serialReadByte(unsigned char *pByte)
+{
+    return serialBufGet(pByte);
+}
+
 void myTestPutc(unsigned char c, char pMove)
 {
-    printChar(c, pMove);
-    printChar('.', pMove);
+    writeSerial(c);
 }
 
 void myTestPuts(unsigned char *s)
@@ -215,7 +233,7 @@ void myTestPuts(unsigned char *s)
         myTestPutc(*s++, 1);
 }
 
-MMSJ_CONSOLE telnetConsole;
+MMSJ_CONSOLE *telnetConsole;
 
 /* -------------------------------------------------- */
 /* MAIN                                               */
@@ -238,25 +256,27 @@ int main(void)
     mprintf("Testando console pra telnet...\r\n");
     char cmd[] = "LS";
 
-    /*telnetConsole.magic = 0x99;
-    telnetConsole.flags = 0;
-    telnetConsole.putc = myTestPutc;
-    telnetConsole.kbhit = NULL;
-    telnetConsole.getc = NULL;*/
+    telnetConsole->magic = 0x99;
+    telnetConsole->flags = 0;
+    telnetConsole->putc = myTestPutc;
+    telnetConsole->kbhit = NULL;
+    telnetConsole->getc = NULL;
 
     MMSJ_CONSOLE old;
-    old = *activeConsole;
-    activeConsole->magic = 0x99;
+    *old = *activeConsole;
+    /*activeConsole->magic = 0x99;
     activeConsole->flags = 0;
     activeConsole->putc  = myTestPutc;
     activeConsole->kbhit = NULL;
-    activeConsole->getc  = NULL;
+    activeConsole->getc  = NULL;*/
+    *activeConsole = *telnetConsole;
     fsOsCommand((unsigned char*)cmd);
-    activeConsole->magic = NULL;
+    *activeConsole = *old;
+    /*activeConsole->magic = NULL;
     activeConsole->flags = NULL;
     activeConsole->putc  = NULL;
     activeConsole->kbhit = NULL;
-    activeConsole->getc  = NULL;
+    activeConsole->getc  = NULL;*/
     mprintf("Fim...\r\n");
 
     /*mprintf("Instalando hooks...\r\n");

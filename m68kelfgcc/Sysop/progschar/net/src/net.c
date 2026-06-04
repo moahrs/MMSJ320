@@ -536,9 +536,16 @@ static int xmodemSendFile(char *fileName)
 static void showUsage(void)
 {
     mprintf("Usage: NET <comandos>\r\n");
+    mprintf("  NET HELP\r\n");
     mprintf("  NET AT\r\n");
     mprintf("  NET ATI\r\n");
     mprintf("  NET ATIP?\r\n");
+    mprintf("  NET ATSTAT?\r\n");
+    mprintf("  NET ATLISTEN\r\n");
+    mprintf("  NET ATLISTEN?\r\n");
+    mprintf("  NET ATFLUSH\r\n");    
+    mprintf("  NET ATTCP=<host>[:porta]\r\n");
+    mprintf("  NET ATH\r\n");
     mprintf("  NET COMM ENABLE\r\n");
     mprintf("  NET COMM DISABLE\r\n");
     mprintf("  NET COMM STATUS\r\n");
@@ -559,6 +566,12 @@ int main(void)
 
     trimFirstParamSpace();
     cmd = skipSpaces(paramBasic);
+
+    if (startsWithNoCase(cmd, "HELP"))
+    {
+        showUsage();
+        return 0;
+    }
 
     if (startsWithNoCase(cmd, "COMM"))
     {
@@ -621,7 +634,14 @@ int main(void)
         return 0;
     }
 
+
     netCommEnable();
+    netCommFlush();
+    writeLongSerial("ATFLUSH");
+    writeSerial('\r');
+    delayms(20);
+    netCommFlush();
+
     writeLongSerial(cmd);
     writeSerial('\r');
     readResponse();

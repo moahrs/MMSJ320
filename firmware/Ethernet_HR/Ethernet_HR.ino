@@ -193,16 +193,16 @@ bool parseHostPort(char *s, char *host, uint16_t *port)
 
 void cmdTcpListen(char *arg)
 {
-  uint16_t port;
-
-  if (arg && *arg)
-    port = atoi(arg);
-  else
-    port = 23;
-
-  if (port != 23)
+  if (tcpListenMode && !tcpMode)
   {
-    Serial2.print("ERR;LISTEN_PORT_FIXED;23");
+    tcpListenMode = false;
+    tcpRxClear();
+    linePos = 0;
+
+    while (Serial2.available())
+      Serial2.read();
+
+    Serial2.print("OK;LISTEN;OFF");
     endResponse();
     return;
   }
@@ -211,6 +211,7 @@ void cmdTcpListen(char *arg)
     tcpClient.stop();
 
   tcpRxClear();
+  linePos = 0;
   tcpListenPort = 23;
   tcpListenMode = true;
   tcpMode = false;
@@ -218,7 +219,7 @@ void cmdTcpListen(char *arg)
 
   tcpServer.begin();
 
-  Serial2.print("OK;LISTEN;23");
+  Serial2.print("OK;LISTEN;ON;23");
   endResponse();
 }
 
@@ -547,6 +548,18 @@ Serial.println(cmd);
     Serial2.print(tcpListenPort);
     endResponse();
   }
+  else if (strcmp(cmd, "ATFLUSH") == 0)
+  {
+    tcpRxClear();
+    linePos = 0;
+    plusPos = 0;
+
+    while (Serial2.available())
+      Serial2.read();
+
+    Serial2.print("OK;FLUSH");
+    endResponse();
+  }  
   else if (strncmp(cmd, "ATTCP=", 6) == 0)
   {
     tcpListenMode = false;
