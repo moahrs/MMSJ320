@@ -17,10 +17,6 @@
 
 #include "term.h"
 
-typedef int (*termSetFontUseG2Type)(unsigned char vpos);
-#define termSetFontUseG2 ((termSetFontUseG2Type *)(unsigned long)MMSJOS_FUNC_TABLE)[33]
-#define TERM_VDP_DATA (*(volatile unsigned char *)0x00400041)
-
 static int ansiGetNum(char *s, int def)
 {
     if (*s == 0)
@@ -149,224 +145,7 @@ static void termSetColor(unsigned char fg, unsigned char bg)
 
 static void termApplyColor(unsigned char color)
 {
-    setColorVideoG2((unsigned char)((color >> 4) & 0x0F), (unsigned char)(color & 0x0F));
-}
-
-static void termLocate(unsigned char col, unsigned char row)
-{
-    vdp_set_cursor((unsigned char)(col * termFontW), (unsigned char)(row * termFontH));
-}
-
-static void termFillCellRect(unsigned char col, unsigned char row, unsigned char cols, unsigned char rows, unsigned char color)
-{
-    FillRect((unsigned char)(col * termFontW),
-             (unsigned char)(row * termFontH),
-             (unsigned short)(cols * termFontW),
-             (unsigned char)(rows * termFontH),
-             (unsigned char)(color & 0x0F));
-}
-
-static void termWriteTextG2(unsigned char col, unsigned char row, char *text, unsigned char color)
-{
-    termLocate(col, row);
-    termApplyColor(color);
-    mprintf("%s", text);
-}
-
-static void termWriteCharG2(unsigned char col, unsigned char row, unsigned char c, unsigned char color)
-{
-    termCharBuf[0] = (char)c;
-    termCharBuf[1] = 0;
-    termWriteTextG2(col, row, termCharBuf, color);
-}
-
-static void termFastClear(unsigned char color)
-{
-    unsigned int ix;
-
-    color &= 0x0F;
-
-    setWriteAddress(termPatternTable);
-    for (ix = 0; ix < 6144; ix++)
-        TERM_VDP_DATA = 0;
-
-    setWriteAddress(termColorTable);
-    for (ix = 0; ix < 6144; ix++)
-        TERM_VDP_DATA = color;
-}
-
-static void termWriteG2CharAt(unsigned char col, unsigned char row, unsigned char chr, unsigned char color)
-{
-    unsigned short i;
-    unsigned short glyphW;
-    unsigned short glyphH;
-    unsigned short firstCount;
-    unsigned short secondCount;
-    unsigned short srcIndex;
-    unsigned short posX;
-    unsigned short posY;
-    unsigned short modX;
-    unsigned short modY;
-    unsigned short offset;
-    unsigned short offset2;
-    unsigned short charIndex;
-    unsigned short px;
-    unsigned short py;
-    unsigned int firstMask;
-    unsigned int secondMask;
-    unsigned int src16;
-    unsigned int shifted;
-    unsigned int lineChar;
-    unsigned char pixel;
-    unsigned char pixel2;
-    unsigned char colorByte;
-
-    if (!termFontAddr)
-    {
-        termLocate(col, row);
-        termApplyColor(color);
-        printChar(chr, 0);
-        termApplyColor(termColor);
-        return;
-    }
-
-    glyphW = termFontW;
-    glyphH = termFontH;
-    if (glyphW == 0 || glyphW > 8)
-        glyphW = 6;
-    if (glyphH == 0 || glyphH > 8)
-        glyphH = 8;
-
-    if (chr < termFontFirst || chr > termFontLast)
-        chr = ' ';
-
-    charIndex = (unsigned short)(chr - termFontFirst);
-    px = (unsigned short)(col * glyphW);
-    py = (unsigned short)(row * glyphH);
-
-    modX = (unsigned short)(px & 0x07);
-    firstCount = (unsigned short)(8 - modX);
-    if (firstCount > glyphW)
-        firstCount = glyphW;
-    secondCount = (unsigned short)(glyphW - firstCount);
-
-    if (firstCount == 8)
-        firstMask = 0xFF;
-    else
-        firstMask = (((1U << firstCount) - 1U) << (8 - modX - firstCount));
-
-    if (secondCount == 0)
-        secondMask = 0;
-    else if (secondCount == 8)
-        secondMask = 0xFF;
-    else
-        secondMask = (((1U << secondCount) - 1U) << (8 - secondCount));
-
-    colorByte = (unsigned char)((color & 0x0F) | (color & 0xF0));
-
-    for (i = 0; i < glyphH; i++)
-    {
-        srcIndex = (unsigned short)((charIndex << 3) + i);
-        lineChar = *((unsigned char *)(termFontAddr + srcIndex));
-        lineChar &= (0xFFU << (8 - glyphW));
-
-        src16 = (lineChar << 8);
-        shifted = (src16 >> modX);
-
-        posX = (unsigned short)(8 * (px / 8));
-        posY = (unsigned short)(256 * ((py + i) / 8));
-        modY = (unsigned short)((py + i) % 8);
-        offset = (unsigned short)(posX + modY + posY);
-
-        setReadAddress(termPatternTable + offset);
-        setReadAddress(termPatternTable + offset);
-        pixel = TERM_VDP_DATA;
-
-        pixel = (unsigned char)((pixel & (unsigned char)(~firstMask)) |
-                               (((shifted >> 8) & 0xFFU) & firstMask));
-
-        setWriteAddress(termPatternTable + offset);
-        TERM_VDP_DATA = pixel;
-        setWriteAddress(termColorTable + offset);
-        TERM_VDP_DATA = colorByte;
-
-        if (secondMask)
-        {
-            offset2 = (unsigned short)(offset + 8);
-
-            setReadAddress(termPatternTable + offset2);
-            setReadAddress(termPatternTable + offset2);
-            pixel2 = TERM_VDP_DATA;
-
-            pixel2 = (unsigned char)((pixel2 & (unsigned char)(~secondMask)) |
-                                    ((shifted & 0xFFU) & secondMask));
-
-            setWriteAddress(termPatternTable + offset2);
-            TERM_VDP_DATA = pixel2;
-            setWriteAddress(termColorTable + offset2);
-            TERM_VDP_DATA = colorByte;
-        }
-    }
-}
-
-static void termInitVideoG2(void)
-{
-    MGUI_SET_FONT fontInfo;
-
-    termOldVideoMode = getModeVideoOS();
-
-    setModeVideoOS(VDP_MODE_G2);
-
-    termFontLoadMem = (unsigned long *)msmalloc(4096);
-    termFontSaveMem = (unsigned long *)msmalloc(4096);
-
-    if (termFontLoadMem && termFontSaveMem)
-        loadFontUseG2(0, "/MGUI/FONTS/EVE5X8.FON", (unsigned char *)termFontLoadMem, (unsigned char *)termFontSaveMem);
-
-    if (!termSetFontUseG2(0))
-        termSetFontUseG2(99);
-
-    termPatternTable = 0x0000;
-    termColorTable = 0x2000;
-
-    if (getFontUseG2(&fontInfo))
-    {
-        termFontFirst = fontInfo.fc;
-        termFontLast = fontInfo.lc;
-        termFontAddr = fontInfo.addr;
-        if (fontInfo.w > 0 && fontInfo.w <= 8)
-            termFontW = fontInfo.w;
-        if (fontInfo.h > 0 && fontInfo.h <= 8)
-            termFontH = fontInfo.h;
-    }
-    else
-    {
-        termFontFirst = 32;
-        termFontLast = 255;
-        termFontAddr = getVideoFontes();
-        termFontW = 6;
-        termFontH = 8;
-    }
-
-    setColorVideoG2(VDP_WHITE, VDP_BLACK);
-}
-
-static void termRestoreVideo(void)
-{
-    setColorVideoG2(VDP_WHITE, VDP_BLACK);
-    setModeVideoOS(termOldVideoMode);
-
-    if (termFontLoadMem)
-    {
-        msfree(termFontLoadMem);
-        termFontLoadMem = 0;
-    }
-
-    if (termFontSaveMem)
-    {
-        msfree(termFontSaveMem);
-        termFontSaveMem = 0;
-    }
+    (void)color;
 }
 
 static unsigned char termAnsiColor(int n)
@@ -407,71 +186,56 @@ static void termHandleSgr(char *parm)
 {
     char *p;
     int n;
+    int first;
+    int directFg;
+    int directBg;
 
     if (*parm == 0)
     {
-        termBold = 0;
         termSetColor(VDP_WHITE, VDP_BLACK);
         return;
     }
 
     p = parm;
+    first = 1;
+    directFg = -1;
+    directBg = -1;
 
     while (1)
     {
         n = atoi(p);
 
         if (n == 0)
-        {
-            termBold = 0;
             termSetColor(VDP_WHITE, VDP_BLACK);
-        }
-        else if (n == 1)
-        {
-            termBold = 1;
-        }
-        else if (n == 22)
-        {
-            termBold = 0;
-        }
-        else if (n == 39)
-        {
-            termSetColor(VDP_WHITE, termBg);
-        }
-        else if (n == 49)
-        {
-            termSetColor(termFg, VDP_BLACK);
-        }
         else if (n >= 30 && n <= 37)
-        {
-            if (termBold)
-                termSetColor(termAnsiBrightColor(n - 30), termBg);
-            else
-                termSetColor(termAnsiColor(n - 30), termBg);
-        }
+            termSetColor(termAnsiColor(n - 30), termBg);
         else if (n >= 40 && n <= 47)
-        {
             termSetColor(termFg, termAnsiColor(n - 40));
-        }
         else if (n >= 90 && n <= 97)
-        {
             termSetColor(termAnsiBrightColor(n - 90), termBg);
-        }
         else if (n >= 100 && n <= 107)
-        {
             termSetColor(termFg, termAnsiBrightColor(n - 100));
-        }
-        else if (n == 7)
+        else if (n >= 1 && n <= 15)
         {
-            unsigned char fg;
-            fg = termFg;
-            termSetColor(termBg, fg);
+            if (first)
+                directFg = n;
+            else
+                directBg = n;
         }
 
+        first = 0;
         p = strchr(p, ';');
         if (!p)
             break;
         p++;
+    }
+
+    if (directFg >= 0)
+    {
+        if (directBg >= 0)
+            termSetColor((unsigned char)directFg, (unsigned char)directBg);
+        else
+            termSetColor((unsigned char)directFg, termBg);
     }
 }
 
@@ -479,52 +243,24 @@ static void termRender(void)
 {
     unsigned char y;
     unsigned char x;
-    unsigned char srcX;
-    unsigned char runStart;
-    unsigned char runLen;
-    unsigned char runColor;
 
-    if (termUseFastG2)
-        termFastClear(termBg);
-    else
-        termFillCellRect(0, 0, VIEW_COLS, TERM_ROWS, termBg);
+    vdp_set_cursor(0, 0);
 
     for (y = 0; y < TERM_ROWS; y++)
     {
-        x = 0;
-        while (x < VIEW_COLS)
+        vdp_set_cursor(0, y);
+
+        for (x = 0; x < VIEW_COLS; x++)
         {
-            if (termUseFastG2)
-            {
-                termWriteG2CharAt(x, y, termBuf[y][viewX + x], termColorBuf[y][viewX + x]);
-                x++;
-            }
-            else
-            {
-                srcX = viewX + x;
-                runColor = termColorBuf[y][srcX];
-                runStart = x;
-                runLen = 0;
-
-                while (x < VIEW_COLS && runLen < VIEW_COLS)
-                {
-                    srcX = viewX + x;
-                    if (termColorBuf[y][srcX] != runColor)
-                        break;
-
-                    termLineBuf[runLen++] = termBuf[y][srcX];
-                    x++;
-                }
-
-                termLineBuf[runLen] = 0;
-                termWriteTextG2(runStart, y, termLineBuf, runColor);
-            }
+            vdp_set_cursor(x, y);
+            termApplyColor(termColorBuf[y][viewX + x]);
+            printChar(termBuf[y][viewX + x], 0);
         }
     }
 
     termApplyColor(termColor);
     if (curX >= viewX && curX < viewX + VIEW_COLS)
-        termLocate(curX - viewX, curY);
+        vdp_set_cursor(curX - viewX, curY);
 }
 
 static unsigned char termIsVisible(unsigned char x)
@@ -541,7 +277,7 @@ static unsigned char termIsVisible(unsigned char x)
 static void termSetVideoCursor(void)
 {
     if (termIsVisible(curX))
-        termLocate(curX - viewX, curY);
+        vdp_set_cursor(curX - viewX, curY);
 }
 
 static void termDrawChar(unsigned char x, unsigned char y)
@@ -549,14 +285,10 @@ static void termDrawChar(unsigned char x, unsigned char y)
     if (!termIsVisible(x))
         return;
 
-    if (termUseFastG2)
-    {
-        termWriteG2CharAt(x - viewX, y, termBuf[y][x], termColorBuf[y][x]);
-    }
-    else
-    {
-        termWriteCharG2(x - viewX, y, termBuf[y][x], termColorBuf[y][x]);
-    }
+    vdp_set_cursor(x - viewX, y);
+    termApplyColor(termColorBuf[y][x]);
+    printChar(termBuf[y][x], 0);
+    termApplyColor(termColor);
 }
 
 static void termScroll(void)
@@ -645,16 +377,7 @@ static void termClear(void)
     curY = 0;
     viewX = 0;
 
-    if (termUseFastG2)
-    {
-        termFastClear(termBg);
-        termSetVideoCursor();
-    }
-    else
-    {
-        termFillCellRect(0, 0, VIEW_COLS, TERM_ROWS, termBg);
-        termSetVideoCursor();
-    }
+    termRender();
 }
 
 static void termClearLine(char y)
@@ -670,14 +393,12 @@ static void termClearLine(char y)
     curX = 0;
     curY = y;
 
-    if (!termUseFastG2)
+    vdp_set_cursor(0, y);
+    for (x = 0; x < VIEW_COLS; x++)
     {
-        termFillCellRect(0, y, VIEW_COLS, 1, termBg);
-    }
-    else
-    {
-        for (x = 0; x < VIEW_COLS; x++)
-            termWriteG2CharAt(x, y, ' ', termColor);
+        vdp_set_cursor(x, y);
+        termApplyColor(termColor);
+        printChar(' ', 0);
     }
 
     termSetVideoCursor();
@@ -1014,6 +735,12 @@ static void termProcessByte(unsigned char c)
                 termEscLen = 0;
                 termEscBuf[0] = 0;
             }
+            else if (c == '[')
+            {
+                termEscState = TERM_ESC_BARE;
+                termEscLen = 0;
+                termEscBuf[0] = 0;
+            }
             else
             {
                 termPutChar(c);
@@ -1088,6 +815,20 @@ static void termProcessByte(unsigned char c)
 
         case TERM_ESC_IGNORE:
             termEscReset();
+            break;
+
+        case TERM_ESC_BARE:
+            if ((c >= '0' && c <= '9') || c == ';' || c == '?' || c == '!')
+            {
+                termEscState = TERM_ESC_CSI;
+                termEscAdd(c);
+            }
+            else
+            {
+                termEscReset();
+                termPutChar('[');
+                termPutChar(c);
+            }
             break;
     }
 }
@@ -1226,7 +967,6 @@ int main(void)
         }
 
         termDiscardPendingSerial();
-        termInitVideoG2();
         termSetColor(VDP_WHITE, VDP_BLACK);
 
         // Limpa Tela
@@ -1260,7 +1000,6 @@ int main(void)
         }   
 
         //tstIntsOn();
-        termRestoreVideo();
     }
     else
     {

@@ -157,29 +157,6 @@ static void termLocate(unsigned char col, unsigned char row)
     vdp_set_cursor((unsigned char)(col * termFontW), (unsigned char)(row * termFontH));
 }
 
-static void termFillCellRect(unsigned char col, unsigned char row, unsigned char cols, unsigned char rows, unsigned char color)
-{
-    FillRect((unsigned char)(col * termFontW),
-             (unsigned char)(row * termFontH),
-             (unsigned short)(cols * termFontW),
-             (unsigned char)(rows * termFontH),
-             (unsigned char)(color & 0x0F));
-}
-
-static void termWriteTextG2(unsigned char col, unsigned char row, char *text, unsigned char color)
-{
-    termLocate(col, row);
-    termApplyColor(color);
-    mprintf("%s", text);
-}
-
-static void termWriteCharG2(unsigned char col, unsigned char row, unsigned char c, unsigned char color)
-{
-    termCharBuf[0] = (char)c;
-    termCharBuf[1] = 0;
-    termWriteTextG2(col, row, termCharBuf, color);
-}
-
 static void termFastClear(unsigned char color)
 {
     unsigned int ix;
@@ -316,13 +293,6 @@ static void termInitVideoG2(void)
     termOldVideoMode = getModeVideoOS();
 
     setModeVideoOS(VDP_MODE_G2);
-
-    termFontLoadMem = (unsigned long *)msmalloc(4096);
-    termFontSaveMem = (unsigned long *)msmalloc(4096);
-
-    if (termFontLoadMem && termFontSaveMem)
-        loadFontUseG2(0, "/MGUI/FONTS/EVE5X8.FON", (unsigned char *)termFontLoadMem, (unsigned char *)termFontSaveMem);
-
     if (!termSetFontUseG2(0))
         termSetFontUseG2(99);
 
@@ -355,18 +325,6 @@ static void termRestoreVideo(void)
 {
     setColorVideoG2(VDP_WHITE, VDP_BLACK);
     setModeVideoOS(termOldVideoMode);
-
-    if (termFontLoadMem)
-    {
-        msfree(termFontLoadMem);
-        termFontLoadMem = 0;
-    }
-
-    if (termFontSaveMem)
-    {
-        msfree(termFontSaveMem);
-        termFontSaveMem = 0;
-    }
 }
 
 static unsigned char termAnsiColor(int n)
@@ -479,45 +437,28 @@ static void termRender(void)
 {
     unsigned char y;
     unsigned char x;
-    unsigned char srcX;
-    unsigned char runStart;
-    unsigned char runLen;
-    unsigned char runColor;
 
     if (termUseFastG2)
         termFastClear(termBg);
     else
-        termFillCellRect(0, 0, VIEW_COLS, TERM_ROWS, termBg);
+        termLocate(0, 0);
 
     for (y = 0; y < TERM_ROWS; y++)
     {
-        x = 0;
-        while (x < VIEW_COLS)
+        if (!termUseFastG2)
+            termLocate(0, y);
+
+        for (x = 0; x < VIEW_COLS; x++)
         {
             if (termUseFastG2)
             {
                 termWriteG2CharAt(x, y, termBuf[y][viewX + x], termColorBuf[y][viewX + x]);
-                x++;
             }
             else
             {
-                srcX = viewX + x;
-                runColor = termColorBuf[y][srcX];
-                runStart = x;
-                runLen = 0;
-
-                while (x < VIEW_COLS && runLen < VIEW_COLS)
-                {
-                    srcX = viewX + x;
-                    if (termColorBuf[y][srcX] != runColor)
-                        break;
-
-                    termLineBuf[runLen++] = termBuf[y][srcX];
-                    x++;
-                }
-
-                termLineBuf[runLen] = 0;
-                termWriteTextG2(runStart, y, termLineBuf, runColor);
+                termLocate(x, y);
+                termApplyColor(termColorBuf[y][viewX + x]);
+                printChar(termBuf[y][viewX + x], 0);
             }
         }
     }
@@ -555,7 +496,10 @@ static void termDrawChar(unsigned char x, unsigned char y)
     }
     else
     {
-        termWriteCharG2(x - viewX, y, termBuf[y][x], termColorBuf[y][x]);
+        termLocate(x - viewX, y);
+        termApplyColor(termColorBuf[y][x]);
+        printChar(termBuf[y][x], 0);
+        termApplyColor(termColor);
     }
 }
 
@@ -652,8 +596,7 @@ static void termClear(void)
     }
     else
     {
-        termFillCellRect(0, 0, VIEW_COLS, TERM_ROWS, termBg);
-        termSetVideoCursor();
+        termRender();
     }
 }
 
@@ -670,14 +613,18 @@ static void termClearLine(char y)
     curX = 0;
     curY = y;
 
-    if (!termUseFastG2)
+    for (x = 0; x < VIEW_COLS; x++)
     {
-        termFillCellRect(0, y, VIEW_COLS, 1, termBg);
-    }
-    else
-    {
-        for (x = 0; x < VIEW_COLS; x++)
+        if (termUseFastG2)
+        {
             termWriteG2CharAt(x, y, ' ', termColor);
+        }
+        else
+        {
+            termLocate(x, y);
+            termApplyColor(termColor);
+            printChar(' ', 0);
+        }
     }
 
     termSetVideoCursor();

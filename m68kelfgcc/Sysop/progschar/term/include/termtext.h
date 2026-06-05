@@ -40,6 +40,7 @@
 #define TERM_ESC_CSI    2
 #define TERM_ESC_OSC    3
 #define TERM_ESC_IGNORE 4
+#define TERM_ESC_BARE   5
 
 #define TERM_TEL_NORMAL 0
 #define TERM_TEL_IAC    1
@@ -61,23 +62,9 @@ static unsigned char curY = 0;
 static unsigned char viewX = 0;   /* 0 ou 40 */
 static unsigned char savedX = 0;
 static unsigned char savedY = 0;
-static unsigned char termFontW = 6;
-static unsigned char termFontH = 8;
-static unsigned char termFontFirst = 32;
-static unsigned char termFontLast = 255;
-static unsigned long termFontAddr = 0;
-static unsigned int termPatternTable = 0;
-static unsigned int termColorTable = 0;
-static unsigned char termUseFastG2 = 0;
-static unsigned long *termFontLoadMem = 0;
-static unsigned long *termFontSaveMem = 0;
-static char termLineBuf[VIEW_COLS + 1];
-static char termCharBuf[2];
-static unsigned char termOldVideoMode = VDP_MODE_TEXT;
 static unsigned char termFg = VDP_WHITE;
 static unsigned char termBg = VDP_BLACK;
 static unsigned char termColor = (VDP_WHITE << 4) | VDP_BLACK;
-static unsigned char termBold = 0;
 static unsigned char termCtrlK = 0;
 static unsigned char termEscState = TERM_ESC_NORMAL;
 static unsigned char termEscLen = 0;
@@ -118,4 +105,3 @@ extern void tstIntsOff(void);
 extern void tstIntsOn(void);
 
 #endif
-
