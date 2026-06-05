@@ -21,6 +21,8 @@ typedef int (*termSetFontUseG2Type)(unsigned char vpos);
 #define termSetFontUseG2 ((termSetFontUseG2Type *)(unsigned long)MMSJOS_FUNC_TABLE)[33]
 #define TERM_VDP_DATA (*(volatile unsigned char *)0x00400041)
 
+static void termWriteG2CharAt(unsigned char col, unsigned char row, unsigned char chr, unsigned char color);
+
 static int ansiGetNum(char *s, int def)
 {
     if (*s == 0)
@@ -178,6 +180,46 @@ static void termWriteCharG2(unsigned char col, unsigned char row, unsigned char 
     termCharBuf[0] = (char)c;
     termCharBuf[1] = 0;
     termWriteTextG2(col, row, termCharBuf, color);
+}
+
+static void termRenderLine(unsigned char y)
+{
+    unsigned char x;
+    unsigned char srcX;
+    unsigned char runStart;
+    unsigned char runLen;
+    unsigned char runColor;
+
+    if (termUseFastG2)
+    {
+        for (x = 0; x < VIEW_COLS; x++)
+            termWriteG2CharAt(x, y, termBuf[y][viewX + x], termColorBuf[y][viewX + x]);
+        return;
+    }
+
+    termFillCellRect(0, y, VIEW_COLS, 1, termBg);
+
+    x = 0;
+    while (x < VIEW_COLS)
+    {
+        srcX = viewX + x;
+        runColor = termColorBuf[y][srcX];
+        runStart = x;
+        runLen = 0;
+
+        while (x < VIEW_COLS && runLen < VIEW_COLS)
+        {
+            srcX = viewX + x;
+            if (termColorBuf[y][srcX] != runColor)
+                break;
+
+            termLineBuf[runLen++] = termBuf[y][srcX];
+            x++;
+        }
+
+        termLineBuf[runLen] = 0;
+        termWriteTextG2(runStart, y, termLineBuf, runColor);
+    }
 }
 
 static void termFastClear(unsigned char color)
@@ -478,49 +520,12 @@ static void termHandleSgr(char *parm)
 static void termRender(void)
 {
     unsigned char y;
-    unsigned char x;
-    unsigned char srcX;
-    unsigned char runStart;
-    unsigned char runLen;
-    unsigned char runColor;
 
     if (termUseFastG2)
         termFastClear(termBg);
-    else
-        termFillCellRect(0, 0, VIEW_COLS, TERM_ROWS, termBg);
 
     for (y = 0; y < TERM_ROWS; y++)
-    {
-        x = 0;
-        while (x < VIEW_COLS)
-        {
-            if (termUseFastG2)
-            {
-                termWriteG2CharAt(x, y, termBuf[y][viewX + x], termColorBuf[y][viewX + x]);
-                x++;
-            }
-            else
-            {
-                srcX = viewX + x;
-                runColor = termColorBuf[y][srcX];
-                runStart = x;
-                runLen = 0;
-
-                while (x < VIEW_COLS && runLen < VIEW_COLS)
-                {
-                    srcX = viewX + x;
-                    if (termColorBuf[y][srcX] != runColor)
-                        break;
-
-                    termLineBuf[runLen++] = termBuf[y][srcX];
-                    x++;
-                }
-
-                termLineBuf[runLen] = 0;
-                termWriteTextG2(runStart, y, termLineBuf, runColor);
-            }
-        }
-    }
+        termRenderLine(y);
 
     termApplyColor(termColor);
     if (curX >= viewX && curX < viewX + VIEW_COLS)
@@ -580,7 +585,21 @@ static void termScroll(void)
     }
 
     curY = TERM_ROWS - 1;
-    termRender();
+
+    for (y = 0; y < TERM_ROWS - 1; y++)
+        termRenderLine(y);
+
+    if (termUseFastG2)
+    {
+        for (x = 0; x < VIEW_COLS; x++)
+            termWriteG2CharAt(x, TERM_ROWS - 1, ' ', termColor);
+    }
+    else
+    {
+        termFillCellRect(0, TERM_ROWS - 1, VIEW_COLS, 1, termBg);
+    }
+
+    termSetVideoCursor();
 }
 
 static void termPutChar(unsigned char c)
@@ -801,6 +820,49 @@ static void termSendCursorReport(void)
     buf[ix] = 0;
 
     writeLongSerial(buf);
+    termCprEchoArmed = 1;
+    termCprEchoState = TERM_CPR_NONE;
+}
+
+static unsigned char termDropCursorReportEcho(unsigned char c)
+{
+    if (!termCprEchoArmed)
+        return 0;
+
+    if (termCprEchoState == TERM_CPR_NONE)
+    {
+        if (c == ';')
+        {
+            termCprEchoState = TERM_CPR_WAIT_DIGIT;
+            return 1;
+        }
+
+        termCprEchoArmed = 0;
+        return 0;
+    }
+
+    if (termCprEchoState == TERM_CPR_WAIT_DIGIT)
+    {
+        if (c >= '0' && c <= '9')
+        {
+            termCprEchoState = TERM_CPR_DIGITS;
+            return 1;
+        }
+
+        termCprEchoArmed = 0;
+        termCprEchoState = TERM_CPR_NONE;
+        return 0;
+    }
+
+    if (c >= '0' && c <= '9')
+        return 1;
+
+    termCprEchoArmed = 0;
+    termCprEchoState = TERM_CPR_NONE;
+    if (c == 'R')
+        return 1;
+
+    return 0;
 }
 
 static void termHandleCsi(unsigned char final, char *parm)
@@ -887,6 +949,17 @@ static void termEscAdd(unsigned char c)
         termEscBuf[termEscLen++] = c;
         termEscBuf[termEscLen] = 0;
     }
+}
+
+static unsigned char termIsBareCsiFinal(unsigned char c)
+{
+    if (c == 'H' || c == 'J' || c == 'K' || c == 'A')
+        return 1;
+    if (c == 'B' || c == 'C' || c == 'D' || c == 'm')
+        return 1;
+    if (c == 's' || c == 'u')
+        return 1;
+    return 0;
 }
 
 static void termProcessByte(unsigned char c)
@@ -1005,12 +1078,21 @@ static void termProcessByte(unsigned char c)
     if (c >= 0x80 && c <= 0x9F)
         return;
 
+    if (termDropCursorReportEcho(c))
+        return;
+
     switch (termEscState)
     {
         case TERM_ESC_NORMAL:
             if (c == 0x1B)
             {
                 termEscState = TERM_ESC_ESC;
+                termEscLen = 0;
+                termEscBuf[0] = 0;
+            }
+            else if (c == '[')
+            {
+                termEscState = TERM_ESC_BARE;
                 termEscLen = 0;
                 termEscBuf[0] = 0;
             }
@@ -1088,6 +1170,25 @@ static void termProcessByte(unsigned char c)
 
         case TERM_ESC_IGNORE:
             termEscReset();
+            break;
+
+        case TERM_ESC_BARE:
+            if ((c >= '0' && c <= '9') || c == ';' || c == '?' || c == '!')
+            {
+                termEscState = TERM_ESC_CSI;
+                termEscAdd(c);
+            }
+            else if (termIsBareCsiFinal(c))
+            {
+                termHandleCsi(c, termEscBuf);
+                termEscReset();
+            }
+            else
+            {
+                termEscReset();
+                termPutChar('[');
+                termPutChar(c);
+            }
             break;
     }
 }

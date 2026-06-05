@@ -19,7 +19,8 @@
 
 #define MFTPD_MAGIC 0x4D465450UL /* MFTP */
 
-MMSJ_CONSOLE *mftpConsole;
+static MMSJ_CONSOLE mftpOldConsole;
+static unsigned char mftpConsoleInstalled = 0;
 
 int serialBufGet(unsigned char *c)
 {
@@ -106,13 +107,24 @@ static int mftpReadLine(char *buf, int max)
 
 static void mftpConsoleInstall(void)
 {
-    mftpConsole->magic = MFTPD_MAGIC;
-    mftpConsole->flags = 0;
-    mftpConsole->putc  = mftpPutc;
-    mftpConsole->getc  = NULL;
-    mftpConsole->kbhit = NULL;
+    mftpOldConsole = *activeConsole;
 
-    *activeConsole = *mftpConsole;
+    activeConsole->magic = MFTPD_MAGIC;
+    activeConsole->flags = 0;
+    activeConsole->putc  = mftpPutc;
+    activeConsole->getc  = NULL;
+    activeConsole->kbhit = NULL;
+
+    mftpConsoleInstalled = 1;
+}
+
+static void mftpConsoleUninstall(void)
+{
+    if (mftpConsoleInstalled)
+    {
+        *activeConsole = mftpOldConsole;
+        mftpConsoleInstalled = 0;
+    }
 }
 
 /* -------------------------------------------------- */
@@ -137,12 +149,17 @@ int main(void)
         if (!strcmp(cmd, "HELP"))
         {
             mftpPuts((unsigned char*)"Commands:\r\n");
+            mftpPuts((unsigned char*)"  VER\r\n");
             mftpPuts((unsigned char*)"  DIR\r\n");
             mftpPuts((unsigned char*)"  QUIT\r\n");
         }
         else if (!strcmp(cmd, "DIR"))
         {
             fsOsCommand((unsigned char*)"LS");
+        }
+        else if (!strcmp(cmd, "VER"))
+        {
+            fsOsCommand((unsigned char*)"VER");
         }
         else if (!strcmp(cmd, "QUIT"))
         {
@@ -155,11 +172,7 @@ int main(void)
         }
     }
 
-    activeConsole->magic = 0;
-    activeConsole->flags = 0;
-    activeConsole->putc = NULL;
-    activeConsole->getc = NULL;
-    activeConsole->kbhit = NULL;
+    mftpConsoleUninstall();
 
     return 0;
 }

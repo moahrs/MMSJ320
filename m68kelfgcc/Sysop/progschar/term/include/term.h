@@ -40,6 +40,11 @@
 #define TERM_ESC_CSI    2
 #define TERM_ESC_OSC    3
 #define TERM_ESC_IGNORE 4
+#define TERM_ESC_BARE   5
+
+#define TERM_CPR_NONE       0
+#define TERM_CPR_WAIT_DIGIT 1
+#define TERM_CPR_DIGITS     2
 
 #define TERM_TEL_NORMAL 0
 #define TERM_TEL_IAC    1
@@ -88,6 +93,8 @@ static unsigned char termTelSbOpt = 0;
 static unsigned char termTelSbFirst = 0;
 static unsigned char termTelTTypeSend = 0;
 static unsigned char termUtf8BomState = 0;
+static unsigned char termCprEchoArmed = 0;
+static unsigned char termCprEchoState = TERM_CPR_NONE;
 
 static unsigned char telPushValid = 0;
 static unsigned char telPushByte = 0;

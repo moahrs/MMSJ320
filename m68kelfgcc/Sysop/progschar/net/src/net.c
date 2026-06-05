@@ -33,6 +33,7 @@
 #define X_TIMEOUT_CHAR   900000L
 #define X_RETRY_MAX      10
 #define X_START_RETRY_MAX 80
+#define X_START_BURST    6
 
 /* Ajuste conforme RAM livre. XMODEM precisa guardar o arquivo inteiro
    porque o MMSJOS atual expõe saveFile(buffer,size). */
@@ -230,6 +231,32 @@ static int xRecvBytes(unsigned char *blk, unsigned int len)
     return 1;
 }
 
+static void xDrainLocalInput(unsigned long quietSpin)
+{
+    unsigned char c;
+    unsigned long idle;
+
+    idle = quietSpin;
+    while (idle)
+    {
+        if (netCommGet(&c))
+            idle = quietSpin;
+        else
+            idle--;
+    }
+}
+
+static void xSendStartBurst(void)
+{
+    unsigned int i;
+
+    for (i = 0; i < X_START_BURST; i++)
+    {
+        writeSerial(X_CRC);
+        delayms(20);
+    }
+}
+
 static int xmodemRecvFile(char *fileName)
 {
     unsigned char *fileBuf;
@@ -267,6 +294,8 @@ static int xmodemRecvFile(char *fileName)
     fileSize = 0;
 
     mprintf("XMODEM-CRC/1K recebendo %s...\r\n", saveName);
+    xDrainLocalInput(180000L);
+    xSendStartBurst();
 
     while (1)
     {

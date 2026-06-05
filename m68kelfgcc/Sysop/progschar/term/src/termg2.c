@@ -748,6 +748,49 @@ static void termSendCursorReport(void)
     buf[ix] = 0;
 
     writeLongSerial(buf);
+    termCprEchoArmed = 1;
+    termCprEchoState = TERM_CPR_NONE;
+}
+
+static unsigned char termDropCursorReportEcho(unsigned char c)
+{
+    if (!termCprEchoArmed)
+        return 0;
+
+    if (termCprEchoState == TERM_CPR_NONE)
+    {
+        if (c == ';')
+        {
+            termCprEchoState = TERM_CPR_WAIT_DIGIT;
+            return 1;
+        }
+
+        termCprEchoArmed = 0;
+        return 0;
+    }
+
+    if (termCprEchoState == TERM_CPR_WAIT_DIGIT)
+    {
+        if (c >= '0' && c <= '9')
+        {
+            termCprEchoState = TERM_CPR_DIGITS;
+            return 1;
+        }
+
+        termCprEchoArmed = 0;
+        termCprEchoState = TERM_CPR_NONE;
+        return 0;
+    }
+
+    if (c >= '0' && c <= '9')
+        return 1;
+
+    termCprEchoArmed = 0;
+    termCprEchoState = TERM_CPR_NONE;
+    if (c == 'R')
+        return 1;
+
+    return 0;
 }
 
 static void termHandleCsi(unsigned char final, char *parm)
@@ -834,6 +877,17 @@ static void termEscAdd(unsigned char c)
         termEscBuf[termEscLen++] = c;
         termEscBuf[termEscLen] = 0;
     }
+}
+
+static unsigned char termIsBareCsiFinal(unsigned char c)
+{
+    if (c == 'H' || c == 'J' || c == 'K' || c == 'A')
+        return 1;
+    if (c == 'B' || c == 'C' || c == 'D' || c == 'm')
+        return 1;
+    if (c == 's' || c == 'u')
+        return 1;
+    return 0;
 }
 
 static void termProcessByte(unsigned char c)
@@ -952,12 +1006,21 @@ static void termProcessByte(unsigned char c)
     if (c >= 0x80 && c <= 0x9F)
         return;
 
+    if (termDropCursorReportEcho(c))
+        return;
+
     switch (termEscState)
     {
         case TERM_ESC_NORMAL:
             if (c == 0x1B)
             {
                 termEscState = TERM_ESC_ESC;
+                termEscLen = 0;
+                termEscBuf[0] = 0;
+            }
+            else if (c == '[')
+            {
+                termEscState = TERM_ESC_BARE;
                 termEscLen = 0;
                 termEscBuf[0] = 0;
             }
@@ -1035,6 +1098,25 @@ static void termProcessByte(unsigned char c)
 
         case TERM_ESC_IGNORE:
             termEscReset();
+            break;
+
+        case TERM_ESC_BARE:
+            if ((c >= '0' && c <= '9') || c == ';' || c == '?' || c == '!')
+            {
+                termEscState = TERM_ESC_CSI;
+                termEscAdd(c);
+            }
+            else if (termIsBareCsiFinal(c))
+            {
+                termHandleCsi(c, termEscBuf);
+                termEscReset();
+            }
+            else
+            {
+                termEscReset();
+                termPutChar('[');
+                termPutChar(c);
+            }
             break;
     }
 }
