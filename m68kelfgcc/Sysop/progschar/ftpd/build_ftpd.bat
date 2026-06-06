@@ -28,13 +28,13 @@ goto do_custom
 
 :do_flash
 echo Modo: FLASH (TEXT_ORIGIN=0x00020000)
-make flash
+make -B flash
 if errorlevel 1 exit /b 1
 goto done
 
 :do_ram
 echo Modo: RAM (TEXT_ORIGIN=0x00000000)
-make ram
+make -B ram
 if errorlevel 1 exit /b 1
 goto done
 
