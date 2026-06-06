@@ -1311,22 +1311,50 @@ static unsigned char termHandleKeyboard(void)
 /* -------------------------------------------------- */
 /* MAIN                                               */
 /* -------------------------------------------------- */
-int main(void)
+static void termTrimParamPathPrefix(void)
 {
     unsigned int ix;
-    unsigned char c;
+    unsigned int src;
 
-    if (*paramBasic != 0x00)
+    src = 0;
+    ix = 0;
+    while (paramBasic[ix] != 0x00)
     {
-        //tstIntsOff();
+        if (paramBasic[ix] == '/' || paramBasic[ix] == '\\')
+            src = ix + 1;
+        ix++;
+    }
 
-        // Remover o primeiro caracter de paramBasic, e mover tudo pra esquerda 1 caracter
+    if (src != 0)
+    {
+        ix = 0;
+        while (paramBasic[src] != 0x00)
+        {
+            paramBasic[ix++] = paramBasic[src++];
+        }
+        paramBasic[ix] = 0x00;
+    }
+
+    if (paramBasic[0] == ' ')
+    {
         ix = 0;
         while (paramBasic[ix] != 0x00)
         {
             paramBasic[ix] = paramBasic[ix + 1];
             ix++;
         }
+    }
+}
+
+int main(void)
+{
+    unsigned char c;
+
+    if (*paramBasic != 0x00)
+    {
+        //tstIntsOff();
+
+        termTrimParamPathPrefix();
 
         termDiscardPendingSerial();
         termInitVideoG2();

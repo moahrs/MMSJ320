@@ -67,9 +67,40 @@ static unsigned short xmodemCrc16(unsigned char *buf, unsigned int len)
     return crc;
 }
 
+static void trimParamPathPrefix(void)
+{
+    unsigned int ix;
+    unsigned int src;
+
+    src = 0;
+    ix = 0;
+    while (paramBasic[ix] != 0x00)
+    {
+        if (paramBasic[ix] == '/' || paramBasic[ix] == '\\')
+            src = ix + 1;
+        ix++;
+    }
+
+    if (src == 0)
+        return;
+
+    ix = 0;
+    while (paramBasic[src] != 0x00)
+    {
+        paramBasic[ix++] = paramBasic[src++];
+    }
+
+    paramBasic[ix] = 0x00;
+}
+
 static void trimFirstParamSpace(void)
 {
     unsigned int ix;
+
+    trimParamPathPrefix();
+
+    if (paramBasic[0] != ' ')
+        return;
 
     ix = 0;
     while (paramBasic[ix] != 0x00)
