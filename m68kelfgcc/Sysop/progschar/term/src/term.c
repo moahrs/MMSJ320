@@ -42,6 +42,8 @@ static void ansiGet2(char *s, int *a, int *b)
         return;
 
     p = strchr(s, ';');
+    if (!p)
+        p = strchr(s, ',');
 
     if (p)
     {
@@ -878,7 +880,7 @@ static void termHandleCsi(unsigned char final, char *parm)
             break;
         }
         case 'J': /* clear screen */
-            if (!strcmp(parm, "2") || parm[0] == 0)
+            if (!strcmp(parm, "0") || !strcmp(parm, "2") || parm[0] == 0)
                 termClear();
             break;
         case 'n':
@@ -953,7 +955,7 @@ static void termEscAdd(unsigned char c)
 
 static unsigned char termIsBareCsiFinal(unsigned char c)
 {
-    if (c == 'H' || c == 'J' || c == 'K' || c == 'A')
+    if (c == 'H' || c == 'f' || c == 'J' || c == 'K' || c == 'A')
         return 1;
     if (c == 'B' || c == 'C' || c == 'D' || c == 'm')
         return 1;
@@ -1173,7 +1175,7 @@ static void termProcessByte(unsigned char c)
             break;
 
         case TERM_ESC_BARE:
-            if ((c >= '0' && c <= '9') || c == ';' || c == '?' || c == '!')
+            if ((c >= '0' && c <= '9') || c == ';' || c == ',' || c == '?' || c == '!')
             {
                 termEscState = TERM_ESC_CSI;
                 termEscAdd(c);
@@ -1226,7 +1228,7 @@ static void readResponse(void)
 
     while (1)
     {
-        termPutChar(c);
+        termProcessByte(c);
 
         charTimeout = 120000L;   /* timeout entre chars */
 
