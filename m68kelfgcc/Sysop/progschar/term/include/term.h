@@ -84,6 +84,7 @@ static unsigned char termBg = VDP_BLACK;
 static unsigned char termColor = (VDP_WHITE << 4) | VDP_BLACK;
 static unsigned char termBold = 0;
 static unsigned char termCtrlK = 0;
+static unsigned char termDrawBusy = 0;
 static unsigned char termEscState = TERM_ESC_NORMAL;
 static unsigned char termEscLen = 0;
 static char termEscBuf[32];

@@ -23,6 +23,15 @@ typedef int (*termSetFontUseG2Type)(unsigned char vpos);
 
 static void termWriteG2CharAt(unsigned char col, unsigned char row, unsigned char chr, unsigned char color);
 
+static void termDiscardPendingKeys(void)
+{
+    MMSJ_KEYEVENT k;
+
+    while (mmsjKeyGet(&k))
+    {
+    }
+}
+
 static int ansiGetNum(char *s, int def)
 {
     if (*s == 0)
@@ -523,6 +532,8 @@ static void termRender(void)
 {
     unsigned char y;
 
+    termDrawBusy = 1;
+
     if (termUseFastG2)
         termFastClear(termBg);
 
@@ -532,6 +543,9 @@ static void termRender(void)
     termApplyColor(termColor);
     if (curX >= viewX && curX < viewX + VIEW_COLS)
         termLocate(curX - viewX, curY);
+
+    termDrawBusy = 0;
+    termDiscardPendingKeys();
 }
 
 static unsigned char termIsVisible(unsigned char x)
@@ -570,6 +584,13 @@ static void termScroll(void)
 {
     unsigned char y;
     unsigned char x;
+    unsigned short visibleWidth;
+    unsigned short scrollPixels;
+    MGUI_SAVESCR scrollSave;
+    unsigned char savedOk;
+
+    termDrawBusy = 1;
+    savedOk = 0;
 
     for (y = 0; y < TERM_ROWS - 1; y++)
     {
@@ -588,20 +609,42 @@ static void termScroll(void)
 
     curY = TERM_ROWS - 1;
 
-    for (y = 0; y < TERM_ROWS - 1; y++)
-        termRenderLine(y);
+    visibleWidth = (unsigned short)(VIEW_COLS * termFontW);
+    if (visibleWidth > 256)
+        visibleWidth = 256;
 
-    if (termUseFastG2)
+    scrollPixels = (unsigned short)((TERM_ROWS - 1) * termFontH);
+    if (visibleWidth > 0 && scrollPixels > 0)
     {
-        for (x = 0; x < VIEW_COLS; x++)
-            termWriteG2CharAt(x, TERM_ROWS - 1, ' ', termColor);
-    }
-    else
-    {
-        termFillCellRect(0, TERM_ROWS - 1, VIEW_COLS, 1, termBg);
+        scrollSave.pat = 0;
+        scrollSave.cor = 0;
+        scrollSave.size = 0;
+        SaveScreenNew(&scrollSave,
+                      0,
+                      termFontH,
+                      (unsigned short)(visibleWidth - 1),
+                      (unsigned short)(scrollPixels - 1));
+
+        if (scrollSave.pat && scrollSave.cor && scrollSave.size != 0)
+        {
+            scrollSave.yi = 0;
+            scrollSave.yf = (unsigned short)(scrollPixels - 1);
+            RestoreScreen(&scrollSave);
+            savedOk = 1;
+        }
     }
 
+    if (!savedOk)
+    {
+        for (y = 0; y < TERM_ROWS - 1; y++)
+            termRenderLine(y);
+    }
+
+    termFillCellRect(0, TERM_ROWS - 1, VIEW_COLS, 1, termBg);
     termSetVideoCursor();
+
+    termDrawBusy = 0;
+    termDiscardPendingKeys();
 }
 
 static void termPutChar(unsigned char c)
@@ -653,6 +696,8 @@ static void termClear(void)
     unsigned char y;
     unsigned char x;
 
+    termDrawBusy = 1;
+
     for (y = 0; y < TERM_ROWS; y++)
     {
         for (x = 0; x < TERM_COLS; x++)
@@ -676,6 +721,9 @@ static void termClear(void)
         termFillCellRect(0, 0, VIEW_COLS, TERM_ROWS, termBg);
         termSetVideoCursor();
     }
+
+    termDrawBusy = 0;
+    termDiscardPendingKeys();
 }
 
 static void termClearLine(char y)
@@ -1244,6 +1292,12 @@ static unsigned char termHandleKeyboard(void)
 {
     MMSJ_KEYEVENT k;
     unsigned char c;
+
+    if (termDrawBusy)
+    {
+        termDiscardPendingKeys();
+        return 0;
+    }
 
     if (!mmsjKeyGet(&k))
         return 0;
