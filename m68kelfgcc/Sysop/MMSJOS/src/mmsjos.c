@@ -345,12 +345,16 @@ HEADER *_allocp;
 
 static unsigned char basicFuncArg[64];
 static unsigned char mmsjosExecPath[256];
+#define MMSJ_CMD_HISTORY_MAX 15
+#define MMSJ_CMD_HISTORY_LEN 128
+static unsigned char mmsjosCmdHistory[MMSJ_CMD_HISTORY_MAX][MMSJ_CMD_HISTORY_LEN];
+static unsigned char mmsjosCmdHistoryCount = 0;
 
 static void mmsjosSetDefaultExecPath(void);
 static unsigned char mmsjosSaveConfig(void);
 static void mmsjosLoadConfig(void);
 static void mmsjosBuildExeName(const unsigned char *cmd, unsigned char *out, unsigned short outSize);
-static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char *outName, unsigned long *outCluster);
+static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char *outName, unsigned char *outPath, unsigned short outPathSize, unsigned long *outCluster);
 static void mmsjosBuildArgPath(const unsigned char *arg, unsigned char *out, unsigned short outSize);
 
 void keyboardFunc(void *pdata);
@@ -559,7 +563,7 @@ static void mmsjosBuildArgPath(const unsigned char *arg, unsigned char *out, uns
 }
 
 //-----------------------------------------------------------------------------
-static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char *outName, unsigned long *outCluster)
+static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char *outName, unsigned char *outPath, unsigned short outPathSize, unsigned long *outCluster)
 {
     unsigned long curCluster;
     unsigned char pathBuf[256];
@@ -567,6 +571,8 @@ static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char
     unsigned short i;
 
     curCluster = vclusterdir;
+    if (outPathSize > 0)
+        outPath[0] = 0;
 
     if (strchr((char *)progName, '/'))
     {
@@ -576,6 +582,11 @@ static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char
             if (fsFindInDir(vretpath.Name, TYPE_FILE) < ERRO_D_START)
             {
                 strcpy((char *)outName, vretpath.Name);
+                if (outPathSize > 0)
+                {
+                    strncpy((char *)outPath, (char *)progName, outPathSize - 1);
+                    outPath[outPathSize - 1] = 0;
+                }
                 *outCluster = vretpath.ClusterDir;
                 vclusterdir = curCluster;
                 return 1;
@@ -589,6 +600,11 @@ static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char
     if (fsFindInDir((char *)progName, TYPE_FILE) < ERRO_D_START)
     {
         strcpy((char *)outName, (char *)progName);
+        if (outPathSize > 0)
+        {
+            strncpy((char *)outPath, (char *)progName, outPathSize - 1);
+            outPath[outPathSize - 1] = 0;
+        }
         *outCluster = vclusterdir;
         vclusterdir = curCluster;
         return 1;
@@ -633,6 +649,11 @@ static unsigned char mmsjosFindExecutable(unsigned char *progName, unsigned char
             if (fsFindInDir(vretpath.Name, TYPE_FILE) < ERRO_D_START)
             {
                 strcpy((char *)outName, vretpath.Name);
+                if (outPathSize > 0)
+                {
+                    strncpy((char *)outPath, (char *)candidate, outPathSize - 1);
+                    outPath[outPathSize - 1] = 0;
+                }
                 *outCluster = vretpath.ClusterDir;
                 vclusterdir = curCluster;
                 return 1;
@@ -743,6 +764,9 @@ void main(void)
         mguiFunc(0);
 
     vbuf[0] = '\0';
+    memset(mmsjosCmdHistory, 0, sizeof(mmsjosCmdHistory));
+    mmsjosCmdHistoryCount = 0;
+
     consoleWriteText("\r\n\0");
     putPrompt(0);
     showCursor();
@@ -839,6 +863,63 @@ void keyboardFunc(void *pdata)
 }
 
 //-----------------------------------------------------------------------------
+static void mmsjosHistoryAdd(unsigned char *line)
+{
+    unsigned char i;
+
+    if (!line || line[0] == 0)
+        return;
+
+    if (mmsjosCmdHistoryCount > MMSJ_CMD_HISTORY_MAX)
+        mmsjosCmdHistoryCount = 0;
+
+    if (mmsjosCmdHistoryCount > 0)
+    {
+        if (!strcmp((char *)mmsjosCmdHistory[mmsjosCmdHistoryCount - 1], (char *)line))
+            return;
+    }
+
+    if (mmsjosCmdHistoryCount < MMSJ_CMD_HISTORY_MAX)
+    {
+        strncpy((char *)mmsjosCmdHistory[mmsjosCmdHistoryCount], (char *)line, MMSJ_CMD_HISTORY_LEN - 1);
+        mmsjosCmdHistory[mmsjosCmdHistoryCount][MMSJ_CMD_HISTORY_LEN - 1] = 0;
+        mmsjosCmdHistoryCount++;
+        return;
+    }
+
+    for (i = 0; i < MMSJ_CMD_HISTORY_MAX - 1; i++)
+        strcpy((char *)mmsjosCmdHistory[i], (char *)mmsjosCmdHistory[i + 1]);
+
+    strncpy((char *)mmsjosCmdHistory[MMSJ_CMD_HISTORY_MAX - 1], (char *)line, MMSJ_CMD_HISTORY_LEN - 1);
+    mmsjosCmdHistory[MMSJ_CMD_HISTORY_MAX - 1][MMSJ_CMD_HISTORY_LEN - 1] = 0;
+}
+
+//-----------------------------------------------------------------------------
+static void mmsjosInputClearLine(unsigned char *line, unsigned char *pos)
+{
+    while (*pos > 0)
+    {
+        consoleWriteChar(0x08, 1);
+        consoleWriteChar(' ', 1);
+        consoleWriteChar(0x08, 1);
+        (*pos)--;
+    }
+
+    line[0] = 0;
+}
+
+//-----------------------------------------------------------------------------
+static void mmsjosInputLoadLine(unsigned char *line, unsigned char *pos, unsigned char *src)
+{
+    mmsjosInputClearLine(line, pos);
+
+    strncpy((char *)line, (char *)src, MMSJ_CMD_HISTORY_LEN - 1);
+    line[MMSJ_CMD_HISTORY_LEN - 1] = 0;
+    *pos = (unsigned char)strlen((char *)line);
+    consoleWriteText(line);
+}
+
+//-----------------------------------------------------------------------------
 void inputFunc(void *pdata)
 {
     unsigned char vtec, vtecant = 0;
@@ -846,6 +927,7 @@ void inputFunc(void *pdata)
     int countCursor = 0;
     unsigned char vbufptr = 0;
     MMSJ_KEYEVENT k;
+    int histPos = -1;
     
     while (1)
     {
@@ -867,7 +949,44 @@ void inputFunc(void *pdata)
         
         if (mmsjKeyGet(&k))
         {
-            if (k.flags != 0x00) // CTRL/ALT/Etc
+            if (k.code == KEY_UP)
+            {
+                if (mmsjosCmdHistoryCount > 0)
+                {
+                    hideCursor();
+
+                    if (histPos < 0)
+                        histPos = mmsjosCmdHistoryCount - 1;
+                    else if (histPos > 0)
+                        histPos--;
+
+                    mmsjosInputLoadLine(vbuf, &vbufptr, mmsjosCmdHistory[histPos]);
+                    showCursor();
+                    countCursor = 0;
+                }
+            }
+            else if (k.code == KEY_DOWN)
+            {
+                if (histPos >= 0)
+                {
+                    hideCursor();
+
+                    if (histPos < mmsjosCmdHistoryCount - 1)
+                    {
+                        histPos++;
+                        mmsjosInputLoadLine(vbuf, &vbufptr, mmsjosCmdHistory[histPos]);
+                    }
+                    else
+                    {
+                        histPos = -1;
+                        mmsjosInputClearLine(vbuf, &vbufptr);
+                    }
+
+                    showCursor();
+                    countCursor = 0;
+                }
+            }
+            else if (k.flags != 0x00) // CTRL/ALT/Etc
             {
             }
             else
@@ -880,6 +999,8 @@ void inputFunc(void *pdata)
 
             if (vtec >= 0x20 && vtec != 0x7F)   // Caracter Printavel menos o DeLete
             {
+                histPos = -1;
+
                 // Digitcao Normal
                 if (vbufptr > 127)
                 {
@@ -895,6 +1016,8 @@ void inputFunc(void *pdata)
             }
             else if (vtec == 0x08)  // Backspace
             {
+                histPos = -1;
+
                 if (vbufptr > 0)
                 {
                     vbuf[vbufptr] = 0x00;
@@ -906,9 +1029,11 @@ void inputFunc(void *pdata)
             else if (vtec == 0x0D || vtec == 0x0A)
             {
                 vRetProcCmd = 1;
+                histPos = -1;
 
                 consoleWriteText("\r\n\0");
 
+                mmsjosHistoryAdd(vbuf);
                 vRetProcCmd = fsOsCommand("\0");
 
                 vbuf[0] = '\0';
@@ -1178,7 +1303,7 @@ writeLongSerial("\r\n\0");*/
         else if (!strcmp(linhacomando,"MGUI") && iy == 4)
         {
             if (activeConsole->magic)
-                consoleWriteText("Command not allowed.")
+                consoleWriteText("Command not allowed.");
             else 
                 mguiFunc(0);
             consoleWriteText("\r\n\0");
@@ -1810,24 +1935,25 @@ writeLongSerial("\r\n\0");*/
             {
                 unsigned char progName[80];
                 unsigned char foundName[32];
+                unsigned char foundPath[160];
                 unsigned char execArg[128];
                 unsigned long foundCluster;
                 unsigned long oldCluster;
+                unsigned long oldClusterDirAtu;
 
                 mmsjosBuildExeName(linhacomando, progName, sizeof(progName));
 
                 foundCluster = vclusterdir;
-                if (mmsjosFindExecutable(progName, foundName, &foundCluster))
+                if (mmsjosFindExecutable(progName, foundName, foundPath, sizeof(foundPath), &foundCluster))
                 {
                     oldCluster = vclusterdir;
-                    vclusterdir = foundCluster;
-                    vretpath.ClusterDirAtu = foundCluster; /* ensure loadFileSize starts from right dir */
+                    oldClusterDirAtu = vretpath.ClusterDirAtu;
 
                     #ifdef USE_RELOC_LOAD_PROGS
                         mmsjosBuildArgPath(linhaarg, execArg, sizeof(execArg));
                         paramBasic[0] = '\0';
                         strcpy(paramBasic, execArg);
-                        if (loadMbinAndRun(foundName, 1) != 0)
+                        if (loadMbinAndRun((char *)foundPath, 1) != 0)
                             consoleWriteText("Error Executing File\r\n\0");
                     #else
                         // Slot fixo para apps gerais: 0x00880000
@@ -1836,7 +1962,7 @@ writeLongSerial("\r\n\0");*/
                         consoleWriteText("Loading File in \0");
                         consoleWriteText(sqtdtam);
                         consoleWriteText("h\r\n\0");
-                        vsizeProg = loadFile(foundName, (unsigned long*)vEnderExec);
+                        vsizeProg = loadFile(foundPath, (unsigned long*)vEnderExec);
                         mmsjosBuildArgPath(linhaarg, execArg, sizeof(execArg));
                         strcpy(paramBasic, execArg);
                         strcat(paramBasic, ",");
@@ -1852,6 +1978,7 @@ writeLongSerial("\r\n\0");*/
                     #endif
 
                     vclusterdir = oldCluster;
+                    vretpath.ClusterDirAtu = oldClusterDirAtu;
 
                     ix = 255;
                 }
