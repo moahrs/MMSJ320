@@ -74,6 +74,8 @@ extern unsigned char *mguiIdRequest;
 extern unsigned long *mguiRunTask;
 extern LIST_WINDOWS *mguiListWindows;
 
+unsigned char mguiFontUseAll = 99;
+
 #define versionMgui "1.0a02"
 #define __EM_OBRAS__ 1
 
@@ -327,7 +329,7 @@ void clearScrW(unsigned char color)
 //-----------------------------------------------------------------------------
 void vdp_set_cursor_pos_gui(unsigned char direction)
 {
-    unsigned char pMoveIdX = 6, pMoveIdY = 8;
+    unsigned char pMoveIdX = addrSetFontUseG2.w, pMoveIdY = addrSetFontUseG2.h;
     VDP_COORD vcursor;
 
     vcursor = vdp_get_cursor_safe();
@@ -1780,6 +1782,7 @@ static void deskDrawIcon(unsigned char slot)
     unsigned char namebuf[9];
     unsigned char i, nlen;
     unsigned char hlColor;
+    unsigned char centerX;
 
     deskSlotXY(slot, &ix, &iy);
 
@@ -1811,10 +1814,11 @@ static void deskDrawIcon(unsigned char slot)
     namebuf[nlen] = '\0';
 
     /* 5px/char: row of 8 chars = 40px; left pad = (48-40)/2 = 4px */
-    writesxy(ix + 4, iy + DESK_ICON_IMG_H + 1, 1, (unsigned char*)namebuf, vcorwf, hlColor);
+    centerX = (((8 * addrSetFontUseG2.w) - (strlen(namebuf) * addrSetFontUseG2.w)) / 2);
+    writesxy(ix + centerX + 4, iy + DESK_ICON_IMG_H + 1, 1, (unsigned char*)namebuf, vcorwf, hlColor);
 
     /* Extension (up to 3 chars) – centred: 3*5=15px, pad=(48-15)/2=16px*/
-    if (d->ext[0])
+    if (d->ext[0] && strcmp(d->ext,"EXE"))  // qdo EXE nao imprime
         writesxy(ix + 16, iy + DESK_ICON_IMG_H + 9, 1, (unsigned char*)d->ext, vcorwf, hlColor);
 }
 
@@ -2209,7 +2213,7 @@ void restoreMGUI(void)
 
     vIndicaDialog = 0;
 
-    if (!setFontUseG2(0) )   // Seta fonte 0 = 5x8 
+    if (!setFontUseG2(mguiFontUseAll) )   // Seta fonte 0 = 5x8 
         setFontUseG2(99);    // Fonte default 6x8, caso nao tenha conseguido carregar a fonte 0
 }
 
@@ -2231,6 +2235,9 @@ void redrawScreen(void)
     vdp_init(VDP_MODE_G2, vcorwb2, 0, 0);
     vdp_set_bdcolor(vcorwb2);
 
+    if (!setFontUseG2(mguiFontUseAll) )   // Seta fonte 0 = 5x8 
+        setFontUseG2(99);    // Fonte default 6x8, caso nao tenha conseguido carregar a fonte 0
+
     mouseX = 128;
     mouseY = 96;
     redrawMain();
@@ -2240,9 +2247,6 @@ void redrawScreen(void)
     statusVdpSprite = vdp_sprite_set_position(spthdlmouse, mouseX, mouseY);
     
     vIndicaDialog = 0;
-
-    if (!setFontUseG2(0) )   // Seta fonte 0 = 5x8 
-        setFontUseG2(99);    // Fonte default 6x8, caso nao tenha conseguido carregar a fonte 0
 
     mouseBtnPresDouble = 0; 
 }
@@ -2288,7 +2292,7 @@ void startMGI(void) {
     
     errorMalloc = 0;
 
-    setFontUseG2(99);    // Fonte default 6x8
+    setFontUseG2(mguiFontUseAll);    // Fonte default 6x8 = 99
 
     vdp_get_cfg(&mgui_pattern_table, &mgui_color_table);
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
@@ -2423,6 +2427,9 @@ void startMGI(void) {
 
         iyy = 0;
 
+        memset(tmp, 0x00, sizeof(tmp));
+        mguiCfgGetBuf(memPosConfig, "START", "FONT", tmp, sizeof(tmp));
+
         // Loop de carregamento das fontes, lendo o nome do arquivo para mostrar na tela e depois carregar a fonte usando o nome completo (com caminho) para carregar a fonte na memoria. O loop para quando encontra
         while (pDir[ixx].Name[0] != 0)
         {
@@ -2437,6 +2444,9 @@ void startMGI(void) {
 
             if (loadFontUseG2(iyy, vnomeall, memLoadFileFont, memVideoFonts))
                 continue;
+
+            if (tmp[0] != 0x00 && !strcmp(pDir[ixx - 1].Name,tmp))
+                mguiFontUseAll = iyy;
 
             iyy++;
 

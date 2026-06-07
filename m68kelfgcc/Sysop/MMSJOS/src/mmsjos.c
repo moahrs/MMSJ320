@@ -5700,6 +5700,43 @@ int setFontUseG2(unsigned char vpos)
 }
 
 //-----------------------------------------------------------------------------
+static void fontNameFromPath(unsigned char *dst, unsigned char *src)
+{
+    unsigned char *base;
+    unsigned char *p;
+    unsigned char *dot;
+    unsigned char ix;
+
+    base = src;
+    dot = 0;
+
+    p = src;
+    while (*p)
+    {
+        if (*p == '/' || *p == '\\')
+        {
+            base = p + 1;
+            dot = 0;
+        }
+        else if (*p == '.')
+        {
+            dot = p;
+        }
+
+        p++;
+    }
+
+    ix = 0;
+    p = base;
+    while (*p && p != dot && ix < 11)
+    {
+        dst[ix++] = *p++;
+    }
+
+    dst[ix] = 0x00;
+}
+
+//-----------------------------------------------------------------------------
 int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bufLoad, unsigned char *bufSave)
 {
     unsigned long cfgSize;
@@ -5707,6 +5744,7 @@ int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bu
     int ix, iz;
     FON_INFO fi;
     unsigned char sqtdtam[20];
+    unsigned char fontFileName[12];
 
     // Carrega a fonte usando o nome completo (com caminho) para carregar a fonte na memoria. O loop para quando encontra
     cfgSize = loadFile(fileName, bufLoad);
@@ -5729,7 +5767,8 @@ int loadFontUseG2(unsigned char vpos, unsigned char *fileName, unsigned char *bu
         isizelastfont += 5;
 
         // Guarda Lista Carregada
-        strcpy(listFontsUseG2[vpos].name, fi.fontName);                
+        fontNameFromPath(fontFileName, fileName);
+        strcpy(listFontsUseG2[vpos].name, fontFileName);                
         listFontsUseG2[vpos].fc = 0;
         listFontsUseG2[vpos].lc = 255;
         listFontsUseG2[vpos].w  = fi.dfPixWidth & 0xFF;
