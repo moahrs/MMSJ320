@@ -387,6 +387,7 @@ static int mftpRecvFile(char *fileName)
     unsigned int retry;
     unsigned short blockLen;
     unsigned char ret;
+    unsigned char started;
     char saveName[MFTP_FILENAME_MAX];
 
     mftpCopyCleanFileName(saveName, fileName);
@@ -406,6 +407,7 @@ static int mftpRecvFile(char *fileName)
     expected = 1;
     retry = 0;
     fileSize = 0;
+    started = 0;
 
     mprintf("MFTP-XFER PUT %s MAX %lu\r\n", saveName, MFTP_XFER_MAX);
     mftpDrainInput(180000L);
@@ -421,7 +423,8 @@ static int mftpRecvFile(char *fileName)
             return 0;
         }
 
-        writeSerial(X_CRC);
+        if (!started)
+            writeSerial(X_CRC);
 
         if (!mftpXWait(&c, X_TIMEOUT_POLL))
         {
@@ -441,6 +444,10 @@ static int mftpRecvFile(char *fileName)
                 mprintf("\r\nTimeout XMODEM.\r\n");
                 return 0;
             }
+
+            if (started)
+                writeSerial(X_NAK);
+
             continue;
         }
 
@@ -480,6 +487,8 @@ static int mftpRecvFile(char *fileName)
             writeSerial(X_NAK);
             continue;
         }
+
+        started = 1;
 
         if (!mftpXWait(&blkNo, X_TIMEOUT_CHAR) || !mftpXWait(&blkInv, X_TIMEOUT_CHAR))
         {

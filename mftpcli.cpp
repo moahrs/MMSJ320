@@ -610,6 +610,7 @@ static int xmodemRecvFile(const char *fileName)
     int blockLen;
     int i;
     long received;
+    int started;
 
     fp = fopen(fileName, "wb");
     if (!fp)
@@ -621,6 +622,7 @@ static int xmodemRecvFile(const char *fileName)
     expected = 1;
     retry = 0;
     received = 0;
+    started = 0;
 
     printf("Recebendo XMODEM em %s...\n", fileName);
     while (1)
@@ -631,7 +633,8 @@ static int xmodemRecvFile(const char *fileName)
             return 0;
         }
 
-        netWriteByte(X_CRC);
+        if (!started)
+            netWriteByte(X_CRC);
 
         if (!netReadByteTimeout(&c, X_TIMEOUT_FIRST_MS))
         {
@@ -643,6 +646,10 @@ static int xmodemRecvFile(const char *fileName)
                 printf("\nTimeout XMODEM.\n");
                 return 0;
             }
+
+            if (started)
+                netWriteByte(X_NAK);
+
             continue;
         }
 
@@ -672,6 +679,8 @@ static int xmodemRecvFile(const char *fileName)
             netWriteByte(X_NAK);
             continue;
         }
+
+        started = 1;
 
         if (!netReadByteTimeout(&blkNo, X_TIMEOUT_CHAR_MS) ||
             !netReadByteTimeout(&blkInv, X_TIMEOUT_CHAR_MS))
