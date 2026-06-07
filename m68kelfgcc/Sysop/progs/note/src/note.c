@@ -44,6 +44,8 @@
 #define CMD_REPLACE     9
 #define CMD_FIND_AGAIN 10
 #define CMD_ABOUT      11
+#define CMD_GOTO_LINE  12
+#define CMD_RUN        13
 
 static unsigned char noteCfgColor[16];
 static unsigned long noteLineStorage[NOTE_MAX_LINES];
@@ -94,6 +96,9 @@ static unsigned char noteSaveAsPrompt(void);
 static unsigned char noteOpenPrompt(void);
 static unsigned char noteConfirmLoseChanges(void);
 static unsigned char noteExitRequest(void);
+static unsigned char noteIsBasFile(void);
+static unsigned char noteGotoLinePrompt(void);
+static unsigned char noteRunBasicFile(void);
 static void noteDrawMenuBar(void);
 static void noteDrawStatus(void);
 static void noteDrawVisibleRow(unsigned short row);
@@ -1311,6 +1316,96 @@ static unsigned char noteExitRequest(void)
 }
 
 //-----------------------------------------------------------------------------
+static unsigned char noteIsBasFile(void)
+{
+    unsigned char *dot;
+
+    dot = (unsigned char *)strrchr((char *)noteFileName, '.');
+    if (!dot)
+        return 0;
+
+    if (toupper(dot[1]) != 'B')
+        return 0;
+    if (toupper(dot[2]) != 'A')
+        return 0;
+    if (toupper(dot[3]) != 'S')
+        return 0;
+    if (dot[4] != 0x00)
+        return 0;
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char noteGotoLinePrompt(void)
+{
+    unsigned char lineTxt[NOTE_INPUT_MAX];
+    unsigned short lineNo;
+    unsigned short len;
+
+    lineTxt[0] = 0;
+    if (!notePromptStatus((unsigned char *)"Go to line: ", lineTxt, sizeof(lineTxt)))
+        return 0;
+
+    lineNo = (unsigned short)atoi((char *)lineTxt);
+    if (lineNo == 0)
+    {
+        noteSetMessage((unsigned char *)"Invalid line");
+        return 0;
+    }
+
+    if (lineNo > noteLineCount)
+        lineNo = noteLineCount;
+
+    noteCurLine = (unsigned short)(lineNo - 1);
+    len = noteLineLen(noteCurLine);
+    if (noteCurCol > len)
+        noteCurCol = len;
+
+    noteClearSelection();
+    noteEnsureCursorVisible();
+    noteSetMessage((unsigned char *)"Line");
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char noteRunBasicFile(void)
+{
+    unsigned char cmd[160];
+
+    if (!noteIsBasFile())
+    {
+        noteSetMessage((unsigned char *)"Only .BAS");
+        return 1;
+    }
+
+    if (noteDirty)
+    {
+        if (!noteSaveCurrent())
+            return 1;
+    }
+
+    cmd[0] = 0;
+    strcpy((char *)cmd, "BASIC ");
+    strncat((char *)cmd, (char *)noteFileName, sizeof(cmd) - 7);
+    cmd[sizeof(cmd) - 1] = 0;
+
+    fsOsCommand(cmd);
+
+    vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
+    vdp_set_bdcolor(VDP_BLACK);
+    if (!setFontUseG2(0))
+        setFontUseG2(99);
+
+    showWindow("Note Editor v1.0\0", 0, 0, 255, 191, BTNONE);
+    noteDrawMenuBar();
+    noteDrawEditorPage(1);
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
 static void noteDrawMenuBar(void)
 {
     FillRect(1, NOTE_MENU_Y, 252, NOTE_MENU_H, nvcorbg);
@@ -1904,11 +1999,17 @@ static unsigned char noteHandleKey(unsigned int keyRaw)
         if (code == 'F')
             return noteExecCommand(CMD_FIND);
 
+        if (code == 'G')
+            return noteExecCommand(CMD_GOTO_LINE);
+
         if (code == 'H')
             return noteExecCommand(CMD_REPLACE);
 
         if (code == 'L')
             return noteExecCommand(CMD_FIND_AGAIN);
+
+        if (code == 'R')
+            return noteExecCommand(CMD_RUN);
 
         return 1;
     }
@@ -2082,7 +2183,13 @@ static unsigned char notePopupMenu(unsigned char menuId)
         items[0] = (unsigned char *)"Copy     Ctrl+C";
         items[1] = (unsigned char *)"Paste    Ctrl+V";
         items[2] = (unsigned char *)"Cut";
-        count = 3;
+        items[3] = (unsigned char *)"Go Line  Ctrl+G";
+        count = 4;
+        if (noteIsBasFile())
+        {
+            items[4] = (unsigned char *)"Run      Ctrl+R";
+            count = 5;
+        }
         x = 46;
     }
     else if (menuId == MENU_SEARCH)
@@ -2147,6 +2254,8 @@ static unsigned char notePopupMenu(unsigned char menuId)
                         if (i == 0) cmd = CMD_COPY;
                         if (i == 1) cmd = CMD_PASTE;
                         if (i == 2) cmd = CMD_CUT;
+                        if (i == 3) cmd = CMD_GOTO_LINE;
+                        if (i == 4) cmd = CMD_RUN;
                     }
                     else if (menuId == MENU_SEARCH)
                     {
@@ -2243,6 +2352,18 @@ static unsigned char noteExecCommand(unsigned char cmd)
     if (cmd == CMD_FIND_AGAIN)
     {
         noteFindNext(noteSearchText, 1);
+        return 1;
+    }
+
+    if (cmd == CMD_GOTO_LINE)
+    {
+        noteGotoLinePrompt();
+        return 1;
+    }
+
+    if (cmd == CMD_RUN)
+    {
+        noteRunBasicFile();
         return 1;
     }
 
