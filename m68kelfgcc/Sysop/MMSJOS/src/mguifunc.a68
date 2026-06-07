@@ -31,3 +31,4 @@ mgui_func_table:
             dc.l _fillin
             dc.l _getColorData
             dc.l _button
+            dc.l _combobox

@@ -158,6 +158,7 @@ static unsigned char deskSelected = 0xFF;      /* selected slot 0..24, 0xFF=none
 #define MGUI_WT_BUTTON   2
 #define MGUI_WT_RADIO    3
 #define MGUI_WT_TOGGLE   4
+#define MGUI_WT_COMBO    5
 
 typedef struct
 {
@@ -1341,6 +1342,213 @@ void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned sh
 }
 
 //-------------------------------------------------------------------------
+static unsigned char comboCopyToken(unsigned char *dst, unsigned char *src, unsigned char max)
+{
+    unsigned char ix;
+
+    ix = 0;
+    while (*src && *src != ',' && ix < (unsigned char)(max - 1))
+    {
+        dst[ix++] = *src++;
+    }
+    dst[ix] = 0;
+
+    while (*src && *src != ',')
+        src++;
+
+    if (*src == ',')
+        src++;
+
+    return ix;
+}
+
+//-------------------------------------------------------------------------
+static unsigned char comboFindLabel(unsigned char *vopt, unsigned char *vvar, unsigned char *label, unsigned char max)
+{
+    unsigned char key[24];
+    unsigned char firstKey[24];
+    unsigned char firstLabel[48];
+    unsigned char firstSet;
+    unsigned char match;
+
+    firstSet = 0;
+    label[0] = 0;
+
+    while (*vopt)
+    {
+        comboCopyToken(key, vopt, sizeof(key));
+        while (*vopt && *vopt != ',') vopt++;
+        if (*vopt == ',') vopt++;
+
+        comboCopyToken(label, vopt, max);
+        while (*vopt && *vopt != ',') vopt++;
+        if (*vopt == ',') vopt++;
+
+        if (!firstSet)
+        {
+            strcpy(firstKey, key);
+            strcpy(firstLabel, label);
+            firstSet = 1;
+        }
+
+        match = 0;
+        if (vvar[0] != 0 && strcmp(vvar, key) == 0)
+            match = 1;
+
+        if (match)
+            return 1;
+    }
+
+    if (firstSet)
+    {
+        if (vvar[0] == 0)
+            strcpy(vvar, firstKey);
+        strcpy(label, firstLabel);
+        return 1;
+    }
+
+    return 0;
+}
+
+//-------------------------------------------------------------------------
+static unsigned char comboPopup(unsigned char *vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned short width)
+{
+    MGUI_SAVESCR save;
+    MGUI_MOUSE m;
+    unsigned char *optBase;
+    unsigned char key[24];
+    unsigned char label[48];
+    unsigned char count;
+    unsigned char i;
+    unsigned char iy;
+    unsigned char prevBtn;
+    unsigned char changed;
+    unsigned short h;
+
+    count = 0;
+    optBase = vopt;
+    while (vopt[0])
+    {
+        while (*vopt && *vopt != ',') vopt++;
+        if (*vopt == ',') vopt++;
+        while (*vopt && *vopt != ',') vopt++;
+        if (*vopt == ',') vopt++;
+        count++;
+    }
+
+    if (count == 0)
+        return 0;
+
+    if (count > 8)
+        count = 8;
+
+    h = (unsigned short)(count * 10 + 4);
+    SaveScreenNew(&save, x, (unsigned short)(y + 12), width, h);
+
+    FillRect(x, (unsigned short)(y + 12), width, h, vcorwb);
+    DrawRect(x, (unsigned short)(y + 12), width, h, vcorwf);
+
+    vopt = optBase;
+    prevBtn = 0;
+    changed = 0;
+
+    i = 0;
+    while (i < count)
+    {
+        comboCopyToken(key, vopt, sizeof(key));
+        while (*vopt && *vopt != ',') vopt++;
+        if (*vopt == ',') vopt++;
+
+        comboCopyToken(label, vopt, sizeof(label));
+        while (*vopt && *vopt != ',') vopt++;
+        if (*vopt == ',') vopt++;
+
+        iy = (unsigned char)(y + 15 + (i * 10));
+        FillRect((unsigned char)(x + 2), iy, (unsigned short)(width - 4), 8, vcorwb);
+        if (strcmp(vvar, key) == 0)
+            writesxy((unsigned short)(x + 4), iy, 1, label, vcorwb, vcorwf);
+        else
+            writesxy((unsigned short)(x + 4), iy, 1, label, vcorwf, vcorwb);
+
+        i++;
+    }
+
+    while (1)
+    {
+        getMouseData(0, &m);
+        getMouseData(1, &m);
+
+        if ((mguiListWindows[*mguiIdRequest].keyTec & 0xFF) == 0x1B)
+            break;
+
+        if (m.mouseButton == 0x01 && prevBtn != 0x01)
+        {
+            if (m.vpostx >= x && m.vpostx <= (x + width) &&
+                m.vposty >= (y + 12) && m.vposty <= (y + 12 + h))
+            {
+                i = (unsigned char)((m.vposty - (y + 14)) / 10);
+                if (i < count)
+                {
+                    vopt = optBase;
+                    while (i)
+                    {
+                        while (*vopt && *vopt != ',') vopt++;
+                        if (*vopt == ',') vopt++;
+                        while (*vopt && *vopt != ',') vopt++;
+                        if (*vopt == ',') vopt++;
+                        i--;
+                    }
+
+                    comboCopyToken(key, vopt, sizeof(key));
+                    strcpy(vvar, key);
+                    changed = 1;
+                }
+            }
+            break;
+        }
+
+        prevBtn = m.mouseButton;
+    }
+
+    RestoreScreen(&save);
+    return changed;
+}
+
+//-------------------------------------------------------------------------
+void combobox(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo)
+{
+    unsigned char thisIdx;
+    unsigned char isFocused;
+    unsigned char borderColor;
+    unsigned char label[48];
+    unsigned char vdisp;
+    MGUI_INPUT inp;
+
+    thisIdx = mguiWidgetRegister(id, MGUI_WT_COMBO);
+    inp = mguiWidgetProcess(thisIdx, x, y, pwidth, 12, vtipo);
+    isFocused = inp.focused;
+    borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
+    vdisp = 0;
+
+    comboFindLabel(vopt, vvar, label, sizeof(label));
+
+    if ((vtipo == WINOPER || vtipo == WINFULL) && (inp.clicked || inp.key == 0x0D))
+    {
+        if (comboPopup(vopt, vvar, x, y, pwidth))
+            vdisp = 1;
+        comboFindLabel(vopt, vvar, label, sizeof(label));
+    }
+
+    if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
+    {
+        FillRect(x, y, pwidth, 12, vcorwb);
+        DrawRect(x, y, pwidth, 12, borderColor);
+        writesxy((unsigned short)(x + 3), (unsigned short)(y + 2), 1, label, vcorwf, vcorwb);
+        writesxy((unsigned short)(x + pwidth - 8), (unsigned short)(y + 2), 1, "v", borderColor, vcorwb);
+    }
+}
+
+//-------------------------------------------------------------------------
 void radioset(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo)
 {
     unsigned char cc, xc;
@@ -2292,7 +2500,7 @@ void startMGI(void) {
     
     errorMalloc = 0;
 
-    setFontUseG2(mguiFontUseAll);    // Fonte default 6x8 = 99
+    setFontUseG2(99);    // Fonte default 6x8 = 99
 
     vdp_get_cfg(&mgui_pattern_table, &mgui_color_table);
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
@@ -3892,272 +4100,4 @@ static unsigned char mguiToUpper(unsigned char c)
 }
 
 #ifndef __EM_OBRAS__
-//-----------------------------------------------------------------------------
-void desenhaIconesUsuario(void) {
-  unsigned short vx, vy;
-  unsigned char lc, lcok, *ptr_ico, *ptr_prg, *ptr_pos;
-
-  // COLOCAR ICONSPERLINE = 10
-  // COLOCAR SPACEICONS = 8
-
-  *next_pos = 0;
-
-  ptr_pos = vFinalOS + (MEM_POS_MGICFG + 16);
-  ptr_ico = ptr_pos + 32;
-  ptr_prg = ptr_ico + 320;
-
-  for(lc = 0; lc <= (ICONSPERLINE * 4 - 1); lc++) {
-    ptr_pos = ptr_pos + lc;
-    ptr_ico = ptr_ico + (lc * 10);
-    ptr_prg = ptr_prg + (lc * 10);
-
-    if (*ptr_prg != 0 && *ptr_ico != 0) {
-      if (*ptr_pos <= (ICONSPERLINE - 1)) {
-        vx = COLINIICONS + (24 + SPACEICONS) * *ptr_pos;
-        vy = 40;
-      }
-      else if (*ptr_pos <= (ICONSPERLINE * 2 - 1)) {
-        vx = COLINIICONS + (24 + SPACEICONS) * (*ptr_pos - ICONSPERLINE);
-        vy = 72;
-      }
-      else if (*ptr_pos <= (ICONSPERLINE * 3 - 1)) {
-        vx = COLINIICONS + (24 + SPACEICONS) * (*ptr_pos - ICONSPERLINE);
-        vy = 104;
-      }
-      else {
-        vx = COLINIICONS + (24 + SPACEICONS) * (*ptr_pos - ICONSPERLINE * 2);
-        vy = 136;
-      }
-
-      lcok = lc + 20;
-
-      SendIcone(lcok);
-      MostraIcone(vx, vy, lcok);
-
-      *next_pos = *next_pos + 1;
-    }
-  }
-}
-
-//-----------------------------------------------------------------------------
-void SendIcone_24x24(unsigned char vicone)
-{
-    unsigned char vnomefile[12];
-    unsigned char *ptr_prg;
-    unsigned long *ptr_viconef;
-    unsigned short ix, iy, iz, pw, ph;
-    unsigned char* pimage;
-    unsigned char ic;
-
-    ptr_prg = vFinalOS + (MEM_POS_MGICFG + 16) + 32 + 320;
-
-    // Procura Icone no Disco se Nao for Padrao
-    if (vicone >= 20)
-    {
-        vicone -= 20;
-        ptr_prg = ptr_prg + (vicone * 10);
-        _strcat(vnomefile,*ptr_prg,".ICO");
-        loadFile(vnomefile, (unsigned long*)0x00FF9FF8);   // 12K espaco pra carregar arquivo. Colocar logica pra pegar tamanho e alocar espaco
-        vicone += 20;
-        if (*verro)
-            vicone = 9;
-        else
-            ptr_viconef = viconef;
-    }
-
-    if (vicone < 20)
-        ptr_viconef = vFinalOS + (MEM_POS_ICONES + (1152 * vicone));
-
-    ic = 0;
-    iz = 0;
-    pw = 24;
-    ph = 24;
-    pimage = ptr_viconef;
-
-    // Acumula dados, enviando em 9 vezes de 64 x 16 bits
-    *vpicg = 0x04;
-    *vpicg = 0xDE;
-    *vpicg = pw;
-    *vpicg = ph;
-    *vpicg = vicone;
-
-    *vpicg = 130;
-    *vpicg = 0xDE;
-    *vpicg = ic;
-
-    for (ix = 0; ix < 576; ix++)
-    {
-        *vpicg = *pimage++ & 0x00FF;
-        *vpicg = *pimage++ & 0x00FF;
-        iz++;
-
-        if (iz == 64 && ic < 8)
-        {
-            ic++;
-
-            *vpicg = 130;
-            *vpicg = 0xDE;
-            *vpicg = ic;
-
-            iz = 0;
-        }
-    }
-}
-
-//-----------------------------------------------------------------------------
-void SendIcone(unsigned char vicone)
-{
-    unsigned char vnomefile[12];
-    unsigned char *ptr_prg;
-    unsigned long *ptr_viconef;
-    unsigned short ix, iy, iz, pw, ph;
-    unsigned char* pimage;
-    unsigned char ic;
-
-    ptr_prg = vFinalOS + (MEM_POS_MGICFG + 16) + 32 + 320;
-
-    // Procura Icone no Disco se Nao for Padrao
-    if (vicone >= 20)
-    {
-        vicone -= 20;
-        ptr_prg = ptr_prg + (vicone * 10);
-        _strcat(vnomefile,*ptr_prg,".ICO");
-        loadFile(vnomefile, (unsigned long*)0x00FF9FF8);   // 12K espaco pra carregar arquivo. Colocar logica pra pegar tamanho e alocar espaco
-        vicone += 20;
-        if (*verro)
-            vicone = 9;
-        else
-            ptr_viconef = viconef;
-    }
-
-    if (vicone < 20)
-        ptr_viconef = vFinalOS + (MEM_POS_ICONES + (4608 * vicone));
-
-    ic = 0;
-    iz = 0;
-    pw = 48;
-    ph = 48;
-    pimage = ptr_viconef;
-
-    // Acumula dados, enviando em 36 vezes de 64 x 16 bits
-    *vpicg = 0x04;
-    *vpicg = 0xDE;
-    *vpicg = pw;
-    *vpicg = ph;
-    *vpicg = vicone;
-
-    *vpicg = 130;
-    *vpicg = 0xDE;
-    *vpicg = ic;
-
-    for (ix = 0; ix < 2304; ix++)
-    {
-        *vpicg = *pimage++ & 0x00FF;
-        *vpicg = *pimage++ & 0x00FF;
-        iz++;
-
-        if (iz == 64 && ic < 35)
-        {
-            ic++;
-
-            *vpicg = 130;
-            *vpicg = 0xDE;
-            *vpicg = ic;
-
-            iz = 0;
-        }
-    }
-}
-
-//------------------------------------------------------------------------
-void VerifyMouse(unsigned char vtipo) {
-}
-
-//-------------------------------------------------------------------------
-void new_icon(void) {
-}
-
-//-------------------------------------------------------------------------
-void del_icon(void) {
-}
-
-//-------------------------------------------------------------------------
-void mgi_setup(void) {
-}
-
-//-------------------------------------------------------------------------
-void executeCmd(void) {
-    unsigned char vstring[64], vwb;
-
-    vstring[0] = '\0';
-
-    strcpy(vparamstr,"Execute");
-    vparam[0] = 10;
-    vparam[1] = 40;
-    vparam[2] = 280;
-    vparam[3] = 50;
-    vparam[4] = BTOK | BTCANCEL;
-    showWindow();
-
-    writesxy(12,55,1,"Execute:",vcorwf,vcorwb);
-
-    {
-    unsigned char wmode = WINFULL;
-    while (1) {
-        fillin(0,vstring, 84, 55, 160, wmode);
-        if (button(1, "OK", 18, 78, 44, 10, wmode))
-        {
-            vwb = BTOK;
-            break;
-        }
-
-        if (button(2, "CANCEL", 66, 78, 44, 10, wmode))
-        {
-            vwb = BTCANCEL;
-            break;
-        }
-        wmode = WINOPER;
-
-        if (vwb == BTOK || vwb == BTCANCEL)
-            break;
-    }
-    }
-
-    if (vwb == BTOK) {
-        strcpy(vbuf, vstring);
-
-        MostraIcone(144, 104, ICON_HOURGLASS);  // Mostra Ampulheta
-
-        // Chama processador de comandos
-        processCmd();
-
-        while (*vxmaxold != 0) {
-            vwb = waitButton();
-
-            if (vwb == BTCLOSE)
-                break;
-        }
-
-        if (*vxmaxold != 0) {
-            *vxmax = *vxmaxold;
-            *vymax = *vymaxold;
-            *vcol = 0;
-            *vlin = 0;
-            *voverx = 0;
-            *vovery = 0;
-            *vxmaxold = 0;
-            *vymaxold = 0;
-        }
-
-        *vbuf = 0x00;  // Zera Buffer do teclado
-    }
-}
-
-//-------------------------------------------------------------------------
-void combobox(unsigned char* vopt, unsigned char *vvar,unsigned char x, unsigned char y, unsigned char vtipo) {
-}
-
-//-------------------------------------------------------------------------
-void editor(unsigned char* vtexto, unsigned char *vvar,unsigned char x, unsigned char y, unsigned char vtipo) {
-}
 #endif

@@ -115,6 +115,7 @@ static void noteDrawCursorBar(void);
 static void noteDrawTextCell(unsigned short line, unsigned short col);
 static unsigned char noteIsCellSelected(unsigned short line, unsigned short col);
 static unsigned char noteToUpper(unsigned char c);
+static void noteUpperString(unsigned char *s);
 static unsigned char noteCharAt(unsigned short line, unsigned short col);
 static unsigned char noteGetMouseTextPos(unsigned short mx, unsigned short my, unsigned short *line, unsigned short *col);
 static unsigned char noteHandleKey(unsigned int keyRaw);
@@ -1254,6 +1255,8 @@ static unsigned char noteSaveAsPrompt(void)
     if (nm[0] == 0)
         return 0;
 
+    noteUpperString(nm);
+
     if (!noteSaveFileByName(nm))
     {
         noteSetMessage((unsigned char *)"Save error");
@@ -1277,6 +1280,8 @@ static unsigned char noteOpenPrompt(void)
 
     if (nm[0] == 0)
         return 0;
+
+    noteUpperString(nm);
 
     if (!noteLoadFileByName(nm))
     {
@@ -1828,6 +1833,16 @@ static unsigned char noteToUpper(unsigned char c)
         return (unsigned char)(c - ('a' - 'A'));
 
     return c;
+}
+
+//-----------------------------------------------------------------------------
+static void noteUpperString(unsigned char *s)
+{
+    while (*s)
+    {
+        *s = noteToUpper(*s);
+        s++;
+    }
 }
 
 //-----------------------------------------------------------------------------

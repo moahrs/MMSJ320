@@ -83,6 +83,7 @@ typedef void (*radiosetType)(unsigned char id, unsigned char* vopt, unsigned cha
 typedef void (*fillinType)(unsigned char id, unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
 typedef void (*getColorDataType)(MGUI_COLOR *pColor);
 typedef unsigned char (*buttonType)(unsigned char id, unsigned char* title, unsigned short xib, unsigned short yib, unsigned short pwidth, unsigned short height, unsigned char vtipo);
+typedef void (*comboboxType)(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
 
 // MMSJOS UCOSII Struct for Functions
 
@@ -162,6 +163,8 @@ typedef unsigned char (*buttonType)(unsigned char id, unsigned char* title, unsi
 #define fillin ((fillinType *)(unsigned long)MGUI_FUNC_TABLE)[29] // Índice da função
 #define getColorData ((getColorDataType *)(unsigned long)MGUI_FUNC_TABLE)[30] // Índice da função
 #define button ((buttonType *)(unsigned long)MGUI_FUNC_TABLE)[31] // Índice da função
+
+#define combobox ((comboboxType *)(unsigned long)MGUI_FUNC_TABLE)[32] // Indice da funcao
 
 // MMSJOS UCOSII define Functions
 
