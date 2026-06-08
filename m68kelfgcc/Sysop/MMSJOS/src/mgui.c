@@ -23,6 +23,8 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
+#define MMSJ320API_DECLARE_ONLY
+#include "mmsj320api.h"
 #include "mmsj320vdp.h"
 #include "mmsj320mfp.h"
 #include "mmsjos.h"
@@ -75,6 +77,11 @@ extern unsigned long *mguiRunTask;
 extern LIST_WINDOWS *mguiListWindows;
 
 unsigned char mguiFontUseAll = 99;
+unsigned char vDateAtuAux[12] = {'1','2','/','3','0','/','1','9','7','2',0x00};
+unsigned char vTimeAtuAux[7] = {'0','5',':','0','1',0x00};
+volatile unsigned char mguiClockTicks = 0;
+volatile unsigned char mguiClockDirty = 1;
+static int mguiClockLastMinute = -1;
 
 #define versionMgui "1.0a02"
 #define __EM_OBRAS__ 1
@@ -126,6 +133,9 @@ unsigned char bufOut[128];
 unsigned int timeToDoubleClick = 0xFFFF;
 
 static unsigned char mguiToUpper(unsigned char c);
+static void mguiClockPut2(unsigned char *dst, int val);
+static void mguiClockDraw(void);
+static void mguiClockReadRtc(unsigned char force);
 
 //=============================================================================
 // DESKTOP ICONS
@@ -2154,6 +2164,7 @@ static void deskOpenIcon(unsigned char slot)
                     TrocaSpriteMouse(MOUSE_POINTER);
                     message("Error Executing File\0", BTCLOSE, 0);
                 }
+                mguiClockDirty = 1;
             #else
                 vsizefile = loadFile((unsigned char*)vnomefile,
                                      (unsigned short*)ADDR_EXEC_PROG);
@@ -2204,6 +2215,7 @@ static void deskOpenIcon(unsigned char slot)
                 TrocaSpriteMouse(MOUSE_POINTER);
                 message("Error Executing File\0", BTCLOSE, 0);
             }
+            mguiClockDirty = 1;
         #else
             vsizefile = loadFile((unsigned char*)execProg,
                                  (unsigned short*)ADDR_EXEC_PROG);
@@ -2595,12 +2607,12 @@ void startMGI(void) {
         loadFile("/MGUI/IMAGES/ICOFOLD.PBM", imgsMenuSys);
         writesxy(137,170,1,"ICORUN.PBM ",vcorwf,vcorwb);
         loadFile("/MGUI/IMAGES/ICORUN.PBM", (imgsMenuSys + 64));
-        writesxy(137,170,1,"ICOSET.PBM ",vcorwf,vcorwb);
-        loadFile("/MGUI/IMAGES/ICOSET.PBM", (imgsMenuSys + 128));
         writesxy(137,170,1,"ICOOFF.PBM ",vcorwf,vcorwb);
-        loadFile("/MGUI/IMAGES/ICOOFF.PBM", (imgsMenuSys + 192));
+        loadFile("/MGUI/IMAGES/ICOOFF.PBM", (imgsMenuSys + 128));
         writesxy(137,170,1,"ICOOS.PBM  ",vcorwf,vcorwb);
-        loadFile("/MGUI/IMAGES/ICOOS.PBM", (imgsMenuSys + 256));
+        loadFile("/MGUI/IMAGES/ICOOS.PBM", (imgsMenuSys + 192));
+        writesxy(137,170,1,"ICOSET.PBM ",vcorwf,vcorwb);
+        loadFile("/MGUI/IMAGES/ICOSET.PBM", (imgsMenuSys + 256));
     }
     else
     {
@@ -2690,6 +2702,20 @@ void startMGI(void) {
         mguiListWindows[6].zOrder = 0;
         mguiListWindows[6].active = 1;
 
+        // Inicializa o MFP e configura o pino SQW para 1Hz
+        if (rtc_init_with_sqw() == 0) 
+        {
+            *(vmfp + Reg_IMRB) &= (unsigned char)~MFP_GPIO2;
+            *(vmfp + Reg_IERB) &= (unsigned char)~MFP_GPIO2;
+
+            hookTable[HOOK_GPIO2].addr   = &mguiClockHook1Hz;
+            hookTable[HOOK_GPIO2].flags  = HOOKF_ACTIVE | HOOKF_SKIP_OS;
+            hookTable[HOOK_GPIO2].magic  = HOOK_MAGIC;
+
+            *(vmfp + Reg_IERB) |= MFP_GPIO2;
+            *(vmfp + Reg_IMRB) |= MFP_GPIO2;
+        }
+
         // Inicia Controles de Tela (Mouse e Teclado)
         while(1)
         {
@@ -2698,6 +2724,13 @@ void startMGI(void) {
             if (!editortela())
                 break;
         }
+
+        *(vmfp + Reg_IMRB) &= (unsigned char)~MFP_GPIO2;
+        *(vmfp + Reg_IERB) &= (unsigned char)~MFP_GPIO2;
+
+        hookTable[HOOK_GPIO2].magic  = 0x00;
+        hookTable[HOOK_GPIO2].addr   = 0x00;
+        hookTable[HOOK_GPIO2].flags  = 0x00;
 
         #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
             #ifdef USE_MALLOC
@@ -2964,6 +2997,8 @@ void redrawMain(void) {
 
     bgcolorMgui = VDP_BLACK; // cores.bg;
 
+    mguiClockReadRtc(1);
+
     clearScrW(bgcolorMgui);
 
     // Desenhar Barra Menu Principal / Status
@@ -2973,6 +3008,101 @@ void redrawMain(void) {
     deskDrawAll();
 
     TrocaSpriteMouse(MOUSE_POINTER);
+}
+
+//-----------------------------------------------------------------------------
+static void mguiClockPut2(unsigned char *dst, int val)
+{
+    unsigned char tens;
+
+    tens = 0;
+    while (val >= 10)
+    {
+        val -= 10;
+        tens++;
+    }
+
+    dst[0] = (unsigned char)('0' + tens);
+    dst[1] = (unsigned char)('0' + val);
+}
+
+//-----------------------------------------------------------------------------
+static void mguiClockDraw(void)
+{
+    unsigned int vx, vy;
+
+    vx = COLMENU + 48;
+    vy = LINMENU;
+
+    FillRect(vx, vy, 20, 16, vcorwf);
+    vx += 24;
+    writesxy(vx, vy, 5, vDateAtuAux, vcorwf, vcorwb2);
+    writesxy(vx, vy + 8, 5, vTimeAtuAux, vcorwf, vcorwb2);
+    FillRect(vx + 54, vy, 10, 16, vcorwf);
+
+    mguiClockDirty = 0;
+}
+
+//-----------------------------------------------------------------------------
+static void mguiClockReadRtc(unsigned char force)
+{
+    DateTimeData system_clock;
+
+    if (rtc_read_datetime(&system_clock) != 0)
+        return;
+
+    if (!force && system_clock.minutes == mguiClockLastMinute)
+        return;
+
+    mguiClockLastMinute = system_clock.minutes;
+
+    mguiClockPut2(&vDateAtuAux[0], system_clock.month);
+    vDateAtuAux[2] = '/';
+    mguiClockPut2(&vDateAtuAux[3], system_clock.day);
+    vDateAtuAux[5] = '/';
+    vDateAtuAux[6] = '2';
+    vDateAtuAux[7] = '0';
+    mguiClockPut2(&vDateAtuAux[8], system_clock.year);
+    vDateAtuAux[10] = 0x00;
+
+    mguiClockPut2(&vTimeAtuAux[0], system_clock.hours);
+    vTimeAtuAux[2] = ':';
+    mguiClockPut2(&vTimeAtuAux[3], system_clock.minutes);
+    vTimeAtuAux[5] = 0x00;
+
+    mguiClockDirty = 1;
+}
+
+//-----------------------------------------------------------------------------
+void mguiClockHook1Hz(void)
+{
+    if (mguiClockTicks < 60)
+        mguiClockTicks++;
+}
+
+//-----------------------------------------------------------------------------
+void mguiClockRefresh(void)
+{
+    if (!mguiListWindows[6].active)
+        return;
+
+    if (vIndicaDialog)
+        return;
+
+    if (*mguiRunTask)
+        return;
+
+    if (mguiClockTicks >= 60)
+    {
+        mguiClockTicks = 0;
+        mguiClockReadRtc(0);
+    }
+
+    if (mguiClockDirty)
+    {
+        mguiClockDirty = 0;
+        mguiClockDraw();
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -2987,7 +3117,8 @@ void desenhaMenu(void)
     vx = COLMENU;
     vy = LINMENU;
 
-    for (lc = 0; lc <= 3; lc++)
+    // Icone de menu e run
+    for (lc = 0; lc <= 1; lc++)
     {
         idx = lc * 64;
         putImagePbmP4((imgsMenuSys + idx), vx, vy);
@@ -2996,6 +3127,20 @@ void desenhaMenu(void)
         /*MostraIcone(vx, vy, lc,vcorwf, vcorwb);
         vx += 16;*/
     }
+
+    // Data e Hora
+    mguiClockDraw();
+
+    // Nome e Versao
+    writesxy(150 , vy, 5, "MMC-320   MGUI", vcorwf, vcorwb2);
+    writesxy(170 , vy + 8, 5, versionMgui, vcorwf, vcorwb2);
+
+    // Icone de Sair
+    FillRect(226,vy,10,16,vcorwf);
+    lc = 2;
+    idx = lc * 64;
+    vx = 240;
+    putImagePbmP4((imgsMenuSys + idx), vx, vy);
 
     DrawLine(0, 20 /*10*/, cursor.maxx, 20 /*10*/, vcorwf);
 
@@ -3011,6 +3156,8 @@ unsigned char editortela(void)
     unsigned char *ptr_prg;
     int key;
     MMSJ_KEYEVENT k;
+
+    mguiClockRefresh();
 
     // Verifica se clicou no simbolo de sair
     if (mouseBtnPres == 0x04) // Meio - Para reiniciar o sprite do mouse que as vezes nao aparece assim que roda o prog
@@ -3530,10 +3677,19 @@ unsigned char new_menu(void)
     {
         menuFunc(NULL);
     }
-    else {
-        for (lc = 1; lc <= 4; lc++) {
+    else if (vpostx >= 238 && vpostx <= 255)
+    {
+        mpos = message("Do you want to exit ?\0", BTYES | BTNO, 0);
+        if (mpos == BTYES)
+            vresp = 0;
+    }
+    else 
+    {
+        for (lc = 1; lc <= 1; lc++) 
+        {
             mx = COLMENU + (24 * lc);
-            if (vpostx >= mx && vpostx <= (mx + 16)) {
+            if (vpostx >= mx && vpostx <= (mx + 16)) 
+            {
 /*                InvertRect( mx, 4, 8, 8);
                 InvertRect( mx, 4, 8, 8);*/
                 break;
@@ -3544,14 +3700,15 @@ unsigned char new_menu(void)
             case 1: // RUN
                 runBin();
                 break;
-            case 2: // SETUP
-                break;
-            case 3: // EXIT
+            /*case 2: // EXIT
                 mpos = message("Do you want to exit ?\0", BTYES | BTNO, 0);
                 if (mpos == BTYES)
                     vresp = 0;
                 break;
-            /*case 4: // MMSJOS
+            case 3: // MMSJOS
+                break;
+            case 4: // SETUP
+                configMgui();
                 break;*/
         }
     }
@@ -3657,6 +3814,53 @@ void menuFunc(void *pData)
     }
 
     RestoreScreen(&endSaveMenu);
+}
+
+//-----------------------------------------------------------------------------
+void configMgui (void)
+{
+/*    unsigned short ix;
+    unsigned char vwb, vresp;
+    MGUI_SAVESCR vsavescr;
+
+    vnamein[0] = '\0';
+    vfilename[0] = '\0';
+    vfullpath[0] = '\0';
+
+    SaveScreenNew(&vsavescr, 10,40,240,60);
+    showWindow("Config",10,40,240,50,BTOK | BTCANCEL);
+
+    writesxy(12,57,8,"File Name:",vcorwf,vcorwb);
+
+    {
+        unsigned char wmode = WINFULL;
+        while (1)
+        {
+            fillin(0, vnamein, 78, 57, 130, wmode);
+            if (button(1, "OK", 18, 78, 44, 10, wmode))
+            {
+                vwb = BTOK;
+                break;
+            }
+
+            if (button(2, "CANCEL", 66, 78, 44, 10, wmode))
+            {
+                vwb = BTCANCEL;
+                break;
+            }
+
+            wmode = WINOPER;
+
+            if (vwb == BTOK || vwb == BTCANCEL)
+                break;
+        }
+    }
+
+    RestoreScreen(&vsavescr);
+
+    if (vwb != BTOK)
+        return;
+*/
 }
 
 //-----------------------------------------------------------------------------
@@ -3792,6 +3996,7 @@ void runBin(void)
                 TrocaSpriteMouse(MOUSE_POINTER);
                 message("Error Executing File\0", BTCLOSE, 0);
             }
+            mguiClockDirty = 1;
         #else
             vsizefile = loadFile((unsigned char*)execProg,
                                  (unsigned short*)ADDR_EXEC_PROG);

@@ -3,6 +3,15 @@
 * Author: Moacir Silveira Junior (moacir.silveira@gmail.com)
 * Date: 10/01/2025
 *------------------------------------------------------------------------------*/
+#ifndef MMSJ320API_H
+#define MMSJ320API_H
+
+#ifdef MMSJ320API_DECLARE_ONLY
+#define MMSJ320API_VAR(type, name, addr) extern type name
+#else
+#define MMSJ320API_VAR(type, name, addr) type name = (type)(addr)
+#endif
+
 // Alternate definitions
 //typedef void                    VOID;
 //typedef char                    CHAR;
@@ -11,31 +20,34 @@
 //typedef unsigned long           DWORD;                          /* 32-bit unsigned */
 
 // Pointers to I/O devices
-unsigned char *vdsk  = 0x00200000; // DISK Arduino Uno, r/w
-unsigned char *vdskc = 0x00200001; // DISK Arduino Uno, r/w Command
-unsigned char *vdskp = 0x00200005; // DISK Arduino Uno, r/w Command Param
-unsigned char *vdskd = 0x00200003; // DISK Arduino Uno, r/w Data
+MMSJ320API_VAR(unsigned char *, vdsk,  0x00200000); // DISK Arduino Uno, r/w
+MMSJ320API_VAR(unsigned char *, vdskc, 0x00200001); // DISK Arduino Uno, r/w Command
+MMSJ320API_VAR(unsigned char *, vdskp, 0x00200005); // DISK Arduino Uno, r/w Command Param
+MMSJ320API_VAR(unsigned char *, vdskd, 0x00200003); // DISK Arduino Uno, r/w Data
+#ifndef MMSJ320API_DECLARE_ONLY
 unsigned char *vdest = 0x00000000; // Endereco destino + endre�o base
+
+#endif
 
 // Pointer to Variables
 // Usando memoria ram de sistema (0x00600000 - 0x0063FFFF) - 256KB
 
-unsigned short *errorBufferAddrBus   = 0x0060F208; // 64 words
+MMSJ320API_VAR(unsigned short *, errorBufferAddrBus, 0x0060F208); // 64 words
                                  // to 0x0060F288
-unsigned short *traceData            = 0x0060F28A; // 512 words
+MMSJ320API_VAR(unsigned short *, traceData, 0x0060F28A); // 512 words
                                  // to 0x0060F68A
-unsigned long *tracePointer          = 0x0060F68C;
-unsigned long *traceA7               = 0x0060F692;
-unsigned short *regA7                = 0x0060F696;
-unsigned char *hasMmsjosLoaded       = 0x0060F6A0; // Flag para verificar se o MMSJOS foi carregado
-unsigned char *startBasic            = 0x0060F6A2; // Ponteiro para o inicio do Basic, onde o monitor/mmsjos vai passar o endereco de onde esta carregado o basic, para o basic iniciar a execucao a partir desse endereco
-unsigned long *startBasic0           = 0x0060F6A4; // Ponteiro para o inicio do Basic, onde o monitor/mmsjos vai passar o endereco de onde esta carregado o basic, para o basic iniciar a execucao a partir desse endereco
-unsigned long *startBasic1           = 0x0060F6A8; // Ponteiro para o inicio do Basic, onde o monitor/mmsjos vai passar o endereco de onde esta carregado o basic, para o basic iniciar a execucao a partir desse endereco
-unsigned long *startBasic2           = 0x0060F6AC; 
-unsigned long *startBasic3           = 0x0060F6B0;
-unsigned long *startBasic4           = 0x0060F6B4;
-unsigned long *startBasic5           = 0x0060F6B8;
-unsigned char *paramBasic            = 0x0060F6BC; // 255 bytes para passagem de parametros do monitor/mmsjos para o basic
+MMSJ320API_VAR(unsigned long *, tracePointer, 0x0060F68C);
+MMSJ320API_VAR(unsigned long *, traceA7, 0x0060F692);
+MMSJ320API_VAR(unsigned short *, regA7, 0x0060F696);
+MMSJ320API_VAR(unsigned char *, hasMmsjosLoaded, 0x0060F6A0); // Flag para verificar se o MMSJOS foi carregado
+MMSJ320API_VAR(unsigned char *, startBasic, 0x0060F6A2); // Ponteiro para o inicio do Basic, onde o monitor/mmsjos vai passar o endereco de onde esta carregado o basic, para o basic iniciar a execucao a partir desse endereco
+MMSJ320API_VAR(unsigned long *, startBasic0, 0x0060F6A4); // Ponteiro para o inicio do Basic, onde o monitor/mmsjos vai passar o endereco de onde esta carregado o basic, para o basic iniciar a execucao a partir desse endereco
+MMSJ320API_VAR(unsigned long *, startBasic1, 0x0060F6A8); // Ponteiro para o inicio do Basic, onde o monitor/mmsjos vai passar o endereco de onde esta carregado o basic, para o basic iniciar a execucao a partir desse endereco
+MMSJ320API_VAR(unsigned long *, startBasic2, 0x0060F6AC); 
+MMSJ320API_VAR(unsigned long *, startBasic3, 0x0060F6B0);
+MMSJ320API_VAR(unsigned long *, startBasic4, 0x0060F6B4);
+MMSJ320API_VAR(unsigned long *, startBasic5, 0x0060F6B8);
+MMSJ320API_VAR(unsigned char *, paramBasic, 0x0060F6BC); // 255 bytes para passagem de parametros do monitor/mmsjos para o basic
 
 #define HOOK_MAGIC      0x4D4A
 
@@ -86,7 +98,7 @@ typedef struct
     unsigned long (*addr)(void);
 } HOOK;
 
-HOOK *hookTable                      = 0x0060F7BC; 
+MMSJ320API_VAR(HOOK *, hookTable, 0x0060F7BC); 
                                  // to 0x0060F954
 
 /*unsigned char *kbdvprim = 0x00609B3C;
@@ -205,3 +217,4 @@ unsigned char *Ps2PairChk    = 0x0060E904;*/
 
 #define NUMBER_OF_DIGITS 32   /* space for NUMBER_OF_DIGITS + '\0' */
 
+#endif

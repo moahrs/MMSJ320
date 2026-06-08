@@ -176,6 +176,8 @@ void drawButtons(unsigned short xib, unsigned short yib);
 void drawButtonsnew(unsigned char *vbuttons, unsigned char *pbbutton, unsigned short xib, unsigned short yib);
 void redrawMain(void);
 void desenhaMenu(void);
+void mguiClockHook1Hz(void);
+void mguiClockRefresh(void);
 unsigned char editortela(void);
 unsigned char new_menu(void);
 void TrocaSpriteMouse(unsigned char vicone);

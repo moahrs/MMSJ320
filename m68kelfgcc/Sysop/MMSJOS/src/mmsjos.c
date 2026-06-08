@@ -74,6 +74,19 @@ void OSTaskResume(int taskId)
 }
 //---------------------------------
 
+int i2c_init(void);
+void i2c_start(void);
+void i2c_stop(void);
+int i2c_write(unsigned char byte);
+void i2c_delay(void);
+int read_sda(void);
+void set_scl(int high);
+void set_sda(int high);
+unsigned char int_to_bcd(int val);
+int bcd_to_int(unsigned char bcd);
+int parse_date_arg(unsigned char *sdate, int *month, int *day, int *year);
+int parse_time_arg(unsigned char *stime, int *hour, int *minute, int *second);
+
 unsigned char vdp_mode; // Modo de video 0 = caracter (32 x 24), 1 = grafico (256 x 192)
 
 #define RT_FONTDIR 0x8007
@@ -754,6 +767,7 @@ void main(void)
     mprintf("OS> Total Memory %dKB. Free %dKB\r\n", 1256, 1024);
     mprintf("OS> Starting Management Memory... %s.\r\n", !memInit() ? "Done" : "Error");
     mprintf("OS> Mounting Disk... %s.\r\n", !fsInit() ? "Done" : "Error");
+    mprintf("OS> Starting i2c... %s.\r\n", !i2c_init() ? "Done" : "Error");
     fsChangeDir("/");
     
     mprintf("OS> Loading MMSJOS Config File... ");
@@ -1877,11 +1891,11 @@ writeLongSerial("\r\n\0");*/
             }
             else if (!strcmp(linhacomando,"DATE") && iy == 4)
             {
-                // TBD
+                funcDate(linhaarg);
             }
             else if (!strcmp(linhacomando,"TIME") && iy == 4)
             {
-                // TBD
+                funcTime(linhaarg);
             }
             else if (!strcmp(linhacomando,"FORMAT") && iy == 6)
             {
@@ -2010,16 +2024,10 @@ writeLongSerial("\r\n\0");*/
                         consoleWriteText("\r\n\0");
                     }
                 }
-                else
+                /*else
                 {
                     if (!strcmp(linhacomando,"DATE"))
                     {
-                        /*for(ix = 0; ix <= 9; ix++)
-                        {
-                            recPic();
-                            vlinha[ix] = vbytepic;
-                        }*/
-
                         vlinha[ix] = '\0';
                         consoleWriteText("  Date is \0");
                         consoleWriteText(vlinha);
@@ -2027,12 +2035,6 @@ writeLongSerial("\r\n\0");*/
                     }
                     else if (!strcmp(linhacomando,"TIME"))
                     {
-                        /*for(ix = 0; ix <= 7; ix++)
-                        {
-                            recPic();
-                            vlinha[ix] = vbytepic;
-                        }*/
-
                         vlinha[ix] = '\0';
                         consoleWriteText("  Time is \0");
                         consoleWriteText(vlinha);
@@ -2043,7 +2045,7 @@ writeLongSerial("\r\n\0");*/
                         if (linhaParametro[0] == '\0')
                             consoleWriteText("Format disk was successfully\r\n\0");
                     }
-                }
+                }*/
             }
         }
     }
@@ -4551,6 +4553,236 @@ unsigned char fsSectorWrite(unsigned long vsector, unsigned char* vbuffer, unsig
 }
 
 //-----------------------------------------------------------------------------
+static int is_dec_digit(unsigned char ch)
+{
+    return (ch >= '0' && ch <= '9');
+}
+
+//-----------------------------------------------------------------------------
+static int dec2(unsigned char *s)
+{
+    return ((int)(s[0] - '0') * 10) + (int)(s[1] - '0');
+}
+
+//-----------------------------------------------------------------------------
+static int dec4(unsigned char *s)
+{
+    return ((int)(s[0] - '0') * 1000) +
+           ((int)(s[1] - '0') * 100) +
+           ((int)(s[2] - '0') * 10) +
+           (int)(s[3] - '0');
+}
+
+//-----------------------------------------------------------------------------
+static int is_leap_year(int year)
+{
+    if ((year % 400) == 0)
+        return 1;
+
+    if ((year % 100) == 0)
+        return 0;
+
+    return ((year % 4) == 0);
+}
+
+//-----------------------------------------------------------------------------
+static int days_in_month(int month, int year)
+{
+    switch (month) {
+        case 1:  return 31;
+        case 2:  return is_leap_year(year) ? 29 : 28;
+        case 3:  return 31;
+        case 4:  return 30;
+        case 5:  return 31;
+        case 6:  return 30;
+        case 7:  return 31;
+        case 8:  return 31;
+        case 9:  return 30;
+        case 10: return 31;
+        case 11: return 30;
+        case 12: return 31;
+    }
+
+    return 0;
+}
+
+//-----------------------------------------------------------------------------
+int parse_date_arg(unsigned char *sdate, int *month, int *day, int *year)
+{
+    int parsed_month;
+    int parsed_day;
+    int parsed_year;
+
+    if (!sdate || !sdate[0])
+        return 0;
+
+    if (!is_dec_digit(sdate[0]) || !is_dec_digit(sdate[1]) ||
+        sdate[2] != '/' ||
+        !is_dec_digit(sdate[3]) || !is_dec_digit(sdate[4]) ||
+        sdate[5] != '/' ||
+        !is_dec_digit(sdate[6]) || !is_dec_digit(sdate[7]) ||
+        !is_dec_digit(sdate[8]) || !is_dec_digit(sdate[9]) ||
+        sdate[10] != '\0') {
+        return 0;
+    }
+
+    parsed_month = dec2(&sdate[0]);
+    parsed_day = dec2(&sdate[3]);
+    parsed_year = dec4(&sdate[6]);
+
+    if (parsed_year < 2000 || parsed_year > 2099)
+        return 0;
+
+    if (parsed_month < 1 || parsed_month > 12)
+        return 0;
+
+    if (parsed_day < 1 || parsed_day > days_in_month(parsed_month, parsed_year))
+        return 0;
+
+    *month = parsed_month;
+    *day = parsed_day;
+    *year = parsed_year - 2000;
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+int parse_time_arg(unsigned char *stime, int *hour, int *minute, int *second)
+{
+    int parsed_hour;
+    int parsed_minute;
+    int parsed_second;
+
+    if (!stime || !stime[0])
+        return 0;
+
+    if (!is_dec_digit(stime[0]) || !is_dec_digit(stime[1]) ||
+        stime[2] != ':' ||
+        !is_dec_digit(stime[3]) || !is_dec_digit(stime[4])) {
+        return 0;
+    }
+
+    parsed_hour = dec2(&stime[0]);
+    parsed_minute = dec2(&stime[3]);
+    parsed_second = 0;
+
+    if (stime[5] == ':') {
+        if (!is_dec_digit(stime[6]) || !is_dec_digit(stime[7]) ||
+            stime[8] != '\0') {
+            return 0;
+        }
+
+        parsed_second = dec2(&stime[6]);
+    }
+    else if (stime[5] != '\0') {
+        return 0;
+    }
+
+    if (parsed_hour < 0 || parsed_hour > 23)
+        return 0;
+
+    if (parsed_minute < 0 || parsed_minute > 59)
+        return 0;
+
+    if (parsed_second < 0 || parsed_second > 59)
+        return 0;
+
+    *hour = parsed_hour;
+    *minute = parsed_minute;
+    *second = parsed_second;
+
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+void funcDate(unsigned char *sdate)
+{
+    DateTimeData system_clock;
+    int status;
+
+    status = rtc_read_datetime(&system_clock);
+    
+    if (status == 0) 
+    {
+        if (sdate && sdate[0]) 
+        {
+            int new_month;
+            int new_day;
+            int new_year;
+
+            if (!parse_date_arg(sdate, &new_month, &new_day, &new_year)) 
+            {
+                mprintf("Invalid date. Use mm/dd/aaaa\r\n");
+                return;
+            }
+
+            system_clock.day         = new_day; 
+            system_clock.month       = new_month;
+            system_clock.year        = new_year; 
+
+            if (rtc_set_datetime(&system_clock) != 0) 
+            {
+                mprintf("Error Updating Date\r\n");
+                return;
+            }
+        }
+
+        // No final sempre mostra a data atual
+        mprintf("  Date is %02d/%02d/20%02d\r\n", 
+                system_clock.month, 
+                system_clock.day,
+                system_clock.year);
+    }
+    else
+    {
+        mprintf("Error Reading RTC");
+    }
+}
+
+//-----------------------------------------------------------------------------
+void funcTime(unsigned char *stime)
+{
+    DateTimeData system_clock;
+    int status;
+
+    status = rtc_read_datetime(&system_clock);
+    
+    if (status == 0) 
+    {
+        if (stime && stime[0]) {
+            int new_hour;
+            int new_minute;
+            int new_second;
+
+            if (!parse_time_arg(stime, &new_hour, &new_minute, &new_second)) {
+                mprintf("Invalid time. Use hh:mm or hh:mm:ss\r\n");
+                return;
+            }
+
+            system_clock.hours         = new_hour;
+            system_clock.minutes       = new_minute;
+            system_clock.seconds       = new_second;
+
+            if (rtc_set_datetime(&system_clock) != 0) 
+            {
+                mprintf("Error Updating Date\r\n");
+                return;
+            }
+        }
+
+        // No final sempre mostra a hora atual
+        mprintf("  Time is %02d:%02d:%02d\r\n", 
+                system_clock.hours, 
+                system_clock.minutes,
+                system_clock.seconds);
+    }
+    else
+    {
+        mprintf("Error Reading RTC");
+    }
+}
+
+//-----------------------------------------------------------------------------
 void catFile(unsigned char *parquivo) {
     unsigned long voffset, vsizeR, vclusterdiratu;
     unsigned short ix;
@@ -5327,14 +5559,107 @@ void msprintf_long_dec(char **dst, long v)
 }
 
 //-----------------------------------------------------------------------------
+void msprintf_ulong_dec_width(char **dst, unsigned long v, int width, char pad)
+{
+    char tmp[11];
+    int n;
+
+    n = 0;
+
+    if (v == 0)
+        tmp[n++] = '0';
+    else
+    {
+        while (v && n < 10)
+        {
+            tmp[n++] = (char)('0' + (v % 10));
+            v /= 10;
+        }
+    }
+
+    while (width > n)
+    {
+        **dst = pad;
+        (*dst)++;
+        width--;
+    }
+
+    while (n > 0)
+    {
+        **dst = tmp[--n];
+        (*dst)++;
+    }
+}
+
+//-----------------------------------------------------------------------------
+void msprintf_long_dec_width(char **dst, long v, int width, char pad)
+{
+    unsigned long u;
+
+    if (v < 0)
+    {
+        **dst = '-';
+        (*dst)++;
+        if (width > 0)
+            width--;
+
+        u = (unsigned long)(-(v + 1));
+        u++;
+    }
+    else
+    {
+        u = (unsigned long)v;
+    }
+
+    msprintf_ulong_dec_width(dst, u, width, pad);
+}
+
+//-----------------------------------------------------------------------------
+void msprintf_ulong_hex_width(char **dst, unsigned long v, int width, char pad)
+{
+    char tmp[8];
+    int n;
+    int d;
+
+    n = 0;
+
+    if (v == 0)
+        tmp[n++] = '0';
+    else
+    {
+        while (v && n < 8)
+        {
+            d = (int)(v & 0x0F);
+            tmp[n++] = d < 10 ? '0' + d : 'A' + d - 10;
+            v >>= 4;
+        }
+    }
+
+    while (width > n)
+    {
+        **dst = pad;
+        (*dst)++;
+        width--;
+    }
+
+    while (n > 0)
+    {
+        **dst = tmp[--n];
+        (*dst)++;
+    }
+}
+
+//-----------------------------------------------------------------------------
 void msprintf(char *buffer, const char *fmt, ...)
 {
     va_list ap;
     char *dst;
     char *s;
     int ival;
+    int width;
     long lval;
     unsigned long ulval;
+    char pad;
 
     dst = buffer;
 
@@ -5353,6 +5678,21 @@ void msprintf(char *buffer, const char *fmt, ...)
         if (*fmt == 0)
             break;
 
+        pad = ' ';
+        width = 0;
+
+        if (*fmt == '0')
+        {
+            pad = '0';
+            fmt++;
+        }
+
+        while (*fmt >= '0' && *fmt <= '9')
+        {
+            width = (width * 10) + (*fmt - '0');
+            fmt++;
+        }
+
         switch (*fmt)
         {
             case 's':
@@ -5368,18 +5708,27 @@ void msprintf(char *buffer, const char *fmt, ...)
             case 'd':
             case 'i':
                 ival = va_arg(ap, int);
-                msprintf_long_dec(&dst, (long)ival);
+                if (width > 0)
+                    msprintf_long_dec_width(&dst, (long)ival, width, pad);
+                else
+                    msprintf_long_dec(&dst, (long)ival);
                 break;
 
             case 'u':
                 ulval = (unsigned long)va_arg(ap, unsigned int);
-                msprintf_ulong_dec(&dst, ulval);
+                if (width > 0)
+                    msprintf_ulong_dec_width(&dst, ulval, width, pad);
+                else
+                    msprintf_ulong_dec(&dst, ulval);
                 break;
 
             case 'x':
             case 'X':
                 ulval = (unsigned long)va_arg(ap, unsigned int);
-                msprintf_ulong_hex(&dst, ulval);
+                if (width > 0)
+                    msprintf_ulong_hex_width(&dst, ulval, width, pad);
+                else
+                    msprintf_ulong_hex(&dst, ulval);
                 break;
 
             case 'l':
@@ -5388,17 +5737,26 @@ void msprintf(char *buffer, const char *fmt, ...)
                 if (*fmt == 'd' || *fmt == 'i')
                 {
                     lval = va_arg(ap, long);
-                    msprintf_long_dec(&dst, lval);
+                    if (width > 0)
+                        msprintf_long_dec_width(&dst, lval, width, pad);
+                    else
+                        msprintf_long_dec(&dst, lval);
                 }
                 else if (*fmt == 'u')
                 {
                     ulval = va_arg(ap, unsigned long);
-                    msprintf_ulong_dec(&dst, ulval);
+                    if (width > 0)
+                        msprintf_ulong_dec_width(&dst, ulval, width, pad);
+                    else
+                        msprintf_ulong_dec(&dst, ulval);
                 }
                 else if (*fmt == 'x' || *fmt == 'X')
                 {
                     ulval = va_arg(ap, unsigned long);
-                    msprintf_ulong_hex(&dst, ulval);
+                    if (width > 0)
+                        msprintf_ulong_hex_width(&dst, ulval, width, pad);
+                    else
+                        msprintf_ulong_hex(&dst, ulval);
                 }
                 else
                 {
@@ -5523,14 +5881,101 @@ void mprintf_ulong_hex(unsigned long v)
 }
 
 //-----------------------------------------------------------------------------
+void mprintf_ulong_dec_width(unsigned long v, int width, char pad)
+{
+    char tmp[11];
+    int n;
+
+    n = 0;
+
+    if (v == 0)
+        tmp[n++] = '0';
+    else
+    {
+        while (v && n < 10)
+        {
+            tmp[n++] = (char)('0' + (v % 10));
+            v /= 10;
+        }
+    }
+
+    while (width > n)
+    {
+        printCharG2(pad, 1);
+        width--;
+    }
+
+    while (n > 0)
+        printCharG2(tmp[--n], 1);
+}
+
+//-----------------------------------------------------------------------------
+void mprintf_long_dec_width(long v, int width, char pad)
+{
+    unsigned long u;
+
+    if (v < 0)
+    {
+        printCharG2('-', 1);
+        if (width > 0)
+            width--;
+
+        u = (unsigned long)(-(v + 1));
+        u++;
+    }
+    else
+    {
+        u = (unsigned long)v;
+    }
+
+    mprintf_ulong_dec_width(u, width, pad);
+}
+
+//-----------------------------------------------------------------------------
+void mprintf_ulong_hex_width(unsigned long v, int width, char pad)
+{
+    char tmp[8];
+    int n;
+    int d;
+
+    n = 0;
+
+    if (v == 0)
+        tmp[n++] = '0';
+    else
+    {
+        while (v && n < 8)
+        {
+            d = (int)(v & 0x0F);
+            if (d < 10)
+                tmp[n++] = (char)('0' + d);
+            else
+                tmp[n++] = (char)('A' + d - 10);
+            v >>= 4;
+        }
+    }
+
+    while (width > n)
+    {
+        printCharG2(pad, 1);
+        width--;
+    }
+
+    while (n > 0)
+        printCharG2(tmp[--n], 1);
+}
+
+//-----------------------------------------------------------------------------
 void mprintf(const char *fmt, ...)
 {
     va_list ap;
     int v, ival;
+    int width;
     long lval;
     unsigned long ulval;
     char *s;
     char c;
+    char pad;
 
     va_start(ap, fmt);
 
@@ -5547,6 +5992,21 @@ void mprintf(const char *fmt, ...)
 
         if (*fmt == 0)
             break;
+
+        pad = ' ';
+        width = 0;
+
+        if (*fmt == '0')
+        {
+            pad = '0';
+            fmt++;
+        }
+
+        while (*fmt >= '0' && *fmt <= '9')
+        {
+            width = (width * 10) + (*fmt - '0');
+            fmt++;
+        }
 
         switch (*fmt)
         {
@@ -5571,12 +6031,18 @@ void mprintf(const char *fmt, ...)
             case 'd':
             case 'i':
                 ival = va_arg(ap, int);
-                mprintf_long_dec((long)ival);
+                if (width > 0)
+                    mprintf_long_dec_width((long)ival, width, pad);
+                else
+                    mprintf_long_dec((long)ival);
                 break;
 
             case 'u':
                 ulval = (unsigned long)va_arg(ap, unsigned int);
-                mprintf_ulong_dec(ulval);
+                if (width > 0)
+                    mprintf_ulong_dec_width(ulval, width, pad);
+                else
+                    mprintf_ulong_dec(ulval);
                 break;
 
             case 'x':
@@ -5591,7 +6057,16 @@ void mprintf(const char *fmt, ...)
 
                 if (u == 0)
                 {
-                    printCharG2('0', 1);
+                    if (width > 0)
+                        mprintf_ulong_hex_width(0, width, pad);
+                    else
+                        printCharG2('0', 1);
+                    break;
+                }
+
+                if (width > 0)
+                {
+                    mprintf_ulong_hex_width(u, width, pad);
                     break;
                 }
 
@@ -5617,17 +6092,26 @@ void mprintf(const char *fmt, ...)
                 if (*fmt == 'd' || *fmt == 'i')
                 {
                     lval = va_arg(ap, long);
-                    mprintf_long_dec(lval);
+                    if (width > 0)
+                        mprintf_long_dec_width(lval, width, pad);
+                    else
+                        mprintf_long_dec(lval);
                 }
                 else if (*fmt == 'u')
                 {
                     ulval = va_arg(ap, unsigned long);
-                    mprintf_ulong_dec(ulval);
+                    if (width > 0)
+                        mprintf_ulong_dec_width(ulval, width, pad);
+                    else
+                        mprintf_ulong_dec(ulval);
                 }
                 else if (*fmt == 'x' || *fmt == 'X')
                 {
                     ulval = va_arg(ap, unsigned long);
-                    mprintf_ulong_hex(ulval);
+                    if (width > 0)
+                        mprintf_ulong_hex_width(ulval, width, pad);
+                    else
+                        mprintf_ulong_hex(ulval);
                 }
                 else
                 {
@@ -6219,4 +6703,291 @@ void fsListDir(FILES_DIR * dir, unsigned char *param)
     }
 
     vclusterdir = vclusterdiratu;
+}
+
+//-----------------------------------------------------------------------------
+// Short delay to respect DS1307 I2C clock speed (max 100 kHz)
+//-----------------------------------------------------------------------------
+void i2c_delay(void) {
+    volatile int i;
+    for(i = 0; i < 10; i++); // Adjust based on your 68000 clock speed
+}
+
+//-----------------------------------------------------------------------------
+// Initialize MFP Pins
+//-----------------------------------------------------------------------------
+int i2c_init(void) {
+    // Set pins as Inputs initially (floating high via external pull-ups)
+    MFP_DDR &= ~(SDA_PIN | SCL_PIN);
+    // Write 0 to Data Register so pins pull low when switched to outputs
+    MFP_PDR &= ~(SDA_PIN | SCL_PIN); 
+
+    return 0;
+}
+
+// Set SDA High (Floating) or Low (Driven)
+void set_sda(int high) {
+    if (high) {
+        MFP_DDR &= ~SDA_PIN; // Input = Float High
+    } else {
+        MFP_DDR |= SDA_PIN;  // Output = Drives Low
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Set SCL High (Floating) or Low (Driven)
+//-----------------------------------------------------------------------------
+void set_scl(int high) {
+    if (high) {
+        MFP_DDR &= ~SCL_PIN; // Input = Float High
+    } else {
+        MFP_DDR |= SCL_PIN;  // Output = Drives Low
+    }
+}
+
+int read_sda(void) {
+    return (MFP_PDR & SDA_PIN) ? 1 : 0;
+}
+
+//-----------------------------------------------------------------------------
+// I2C Signaling Protocols
+//-----------------------------------------------------------------------------
+void i2c_start(void) {
+    set_sda(1); set_scl(1); i2c_delay();
+    set_sda(0); i2c_delay();
+    set_scl(0); i2c_delay();
+}
+
+void i2c_stop(void) {
+    set_sda(0); i2c_delay();
+    set_scl(1); i2c_delay();
+    set_sda(1); i2c_delay();
+}
+
+//-----------------------------------------------------------------------------
+// Write a byte over I2C and return the ACK status
+//-----------------------------------------------------------------------------
+int i2c_write(unsigned char byte) {
+    int i;
+    for (i = 0; i < 8; i++) {
+        set_sda((byte & 0x80) ? 1 : 0);
+        byte <<= 1;
+        i2c_delay();
+        set_scl(1); i2c_delay();
+        set_scl(0); i2c_delay();
+    }
+    // Read ACK bit
+    set_sda(1); i2c_delay();
+    set_scl(1); i2c_delay();
+    int ack = read_sda();
+    set_scl(0); i2c_delay();
+    return ack; // 0 means ACK, 1 means NACK
+}
+
+//-----------------------------------------------------------------------------
+int rtc_init_with_sqw(void) {
+    // 1. Inicializa os pinos de I/O do MC68901 MFP
+    i2c_init(); 
+    
+    // 2. Inicia a transmissão I2C em modo de escrita
+    i2c_start();
+    if (i2c_write(DS1307_ADDR_WRITE) != 0) {
+        i2c_stop();
+        return -1; // Erro de hardware / comunicação
+    }
+    
+    // 3. Aponta para o registrador de Controle (0x07)
+    i2c_write(DS1307_REG_CONTROL); 
+    
+    // 4. Escreve 0x10 (Ativa SQWE e define frequência para 1Hz)
+    i2c_write(0x10); 
+    
+    // 5. Finaliza a transmissão
+    i2c_stop();
+    
+    return 0; // Sucesso!
+}
+
+//-----------------------------------------------------------------------------
+// Convert BCD to regular integer format
+//-----------------------------------------------------------------------------
+int bcd_to_int(unsigned char bcd) {
+    return ((bcd >> 4) * 10) + (bcd & 0x0F);
+}
+
+//-----------------------------------------------------------------------------
+// Read raw seconds register from RTC
+//-----------------------------------------------------------------------------
+int rtc_get_seconds(void) {
+    unsigned char raw_seconds = 0;
+    
+    i2c_start();
+    if (i2c_write(DS1307_ADDR_WRITE) == 0) { // Select Device
+        i2c_write(0x00);                    // Point to Seconds Register (0x00)
+        
+        i2c_start();                        // Repeated Start
+        i2c_write(DS1307_ADDR_READ);        // Set Read Mode
+        
+        // Read byte with NACK (last byte to read)
+        int i;
+        set_sda(1); // Ensure float high
+        for (i = 0; i < 8; i++) {
+            set_scl(1); i2c_delay();
+            raw_seconds = (raw_seconds << 1) | read_sda();
+            set_scl(0); i2c_delay();
+        }
+        // Send NACK to terminate transfer
+        set_sda(1); set_scl(1); i2c_delay(); set_scl(0); 
+    }
+    i2c_stop();
+    
+    return bcd_to_int(raw_seconds & 0x7F); // Strip CH (Clock Halt) bit 7
+}
+
+//-----------------------------------------------------------------------------
+unsigned char int_to_bcd(int val) {
+    unsigned int v;
+    unsigned int tens;
+
+    v = (unsigned int)val;
+    tens = 0;
+
+    while (v >= 10) {
+        v -= 10;
+        tens++;
+    }
+
+    return (unsigned char)((tens << 4) | v);
+}
+
+//-----------------------------------------------------------------------------
+int rtc_set_datetime(DateTimeData *dt) {
+    unsigned char bcd_sec, bcd_min, bcd_hour;
+    unsigned char bcd_dow, bcd_day, bcd_month, bcd_year;
+
+    // Convert all fields to BCD
+    bcd_sec   = int_to_bcd(dt->seconds);
+    bcd_min   = int_to_bcd(dt->minutes);
+    bcd_hour  = int_to_bcd(dt->hours);
+    bcd_dow   = int_to_bcd(dt->day_of_week);
+    bcd_day   = int_to_bcd(dt->day);
+    bcd_month = int_to_bcd(dt->month);
+    bcd_year  = int_to_bcd(dt->year);
+
+    // Ensure Clock Halt (CH) bit 7 is 0 to run the oscillator
+    bcd_sec &= 0x7F;
+
+    i2c_start();
+    
+    // Select DS1307 in Write Mode
+    if (i2c_write(DS1307_ADDR_WRITE) != 0) {
+        i2c_stop();
+        return -1; // Bus error
+    }
+    
+    // Start at register 0x00
+    i2c_write(0x00); 
+    
+    // Write all 7 registers sequentially (internal address auto-increments)
+    i2c_write(bcd_sec);   // 0x00
+    i2c_write(bcd_min);   // 0x01
+    i2c_write(bcd_hour);  // 0x02
+    i2c_write(bcd_dow);   // 0x03
+    i2c_write(bcd_day);   // 0x04
+    i2c_write(bcd_month); // 0x05
+    i2c_write(bcd_year);  // 0x06
+    
+    i2c_stop();
+    return 0; // Success
+}
+
+//-----------------------------------------------------------------------------
+int rtc_read_datetime(DateTimeData *dt) {
+    unsigned char raw[7];
+    int i, j;
+
+    i2c_start();
+    if (i2c_write(DS1307_ADDR_WRITE) != 0) {
+        i2c_stop();
+        return -1;
+    }
+    
+    i2c_write(0x00); // Point to register 0x00
+    
+    i2c_start(); // Repeated start
+    if (i2c_write(DS1307_ADDR_READ) != 0) {
+        i2c_stop();
+        return -1;
+    }
+    
+    // Read the first 6 registers with ACK
+    for (j = 0; j < 6; j++) {
+        raw[j] = 0;
+        set_sda(1); // Float input
+        for (i = 0; i < 8; i++) {
+            set_scl(1); i2c_delay();
+            raw[j] = (raw[j] << 1) | read_sda();
+            set_scl(0); i2c_delay();
+        }
+        // Send ACK
+        set_sda(0); set_scl(1); i2c_delay(); set_scl(0); 
+    }
+
+    // Read the 7th register (Year) with NACK to end transmission
+    raw[6] = 0;
+    set_sda(1); 
+    for (i = 0; i < 8; i++) {
+        set_scl(1); i2c_delay();
+        raw[6] = (raw[6] << 1) | read_sda();
+        set_scl(0); i2c_delay();
+    }
+    // Send NACK
+    set_sda(1); set_scl(1); i2c_delay(); set_scl(0); 
+    
+    i2c_stop();
+
+    // Check Clock Halt bit
+    if (raw[0] & 0x80) {
+        return -2; // Clock is stopped
+    }
+
+    // Convert BCD values back to standard integers
+    dt->seconds     = bcd_to_int(raw[0] & 0x7F);
+    dt->minutes     = bcd_to_int(raw[1]);
+    dt->hours       = bcd_to_int(raw[2] & 0x3F); // 24-hour mode masking
+    dt->day_of_week = bcd_to_int(raw[3] & 0x07);
+    dt->day         = bcd_to_int(raw[4] & 0x3F);
+    dt->month       = bcd_to_int(raw[5] & 0x1F);
+    dt->year        = bcd_to_int(raw[6]);
+
+    return 0; // Success
+}
+
+//-----------------------------------------------------------------------------
+void showDateTime(void)
+{
+    DateTimeData system_clock;
+    int status;
+    
+    status = rtc_read_datetime(&system_clock);
+    
+    if (status == 0) 
+    {
+        mprintf("20%d-%d-%d %d:%d:%d (W: %d)\r", 
+                system_clock.year, 
+                system_clock.month, 
+                system_clock.day,
+                system_clock.hours, 
+                system_clock.minutes, 
+                system_clock.seconds,
+                system_clock.day_of_week);
+    } 
+    else if (status == -1) 
+    {
+        mprintf("Bus Error: Communication failed.\r\n");
+    } 
+    else if (status == -2) 
+    {
+        mprintf("Warning: Oscillator is disabled.\r\n");
+    }
 }

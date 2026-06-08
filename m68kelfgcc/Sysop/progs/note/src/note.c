@@ -5,7 +5,7 @@
 *    Programador : Moacir Jr.
 *--------------------------------------------------------------------------------
 * Data        Versao  Responsavel  Motivo
-* 12/05/2026  1.0     Copilot      Evolucao de viewer para editor com menus
+* 12/05/2026  1.0     Moacir Jr    Evolucao de viewer para editor com menus
 ********************************************************************************/
 
 #include <ctype.h>
