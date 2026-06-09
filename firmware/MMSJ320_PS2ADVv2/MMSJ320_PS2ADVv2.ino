@@ -747,7 +747,17 @@ unsigned int ps2ToAsciiABNT2(unsigned int k)
   caps = (k & PS2_CAPS) != 0;
 
   if (k & (PS2_CTRL | PS2_ALT | PS2_ALT_GR))
-    return k | K_RAW_FLAG;
+  {
+    if (shift)
+      out = keyMapABNT2[ch].shift;
+    else
+      out = keyMapABNT2[ch].normal;
+
+    if (out == 0)
+      out = ch;
+
+    return K_RAW_FLAG | (k & (PS2_SHIFT | PS2_CTRL | PS2_ALT | PS2_ALT_GR)) | out;
+  }
 
   if (ch >= 'A' && ch <= 'Z')
   {
