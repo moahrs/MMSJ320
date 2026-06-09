@@ -156,6 +156,7 @@ typedef struct {
     char filename[9];   /* up to 8 chars of name, zero-terminated           */
     char ext[4];        /* extension 3 chars + null                         */
     char path[20];      /* directory path, e.g. "/" or "/DOCS"              */
+    char askParam;      /* 0 = open direct, 1 = ask parameters before open   */
     char active;        /* 1 = occupied                                     */
 } DESK_ICON;
 
@@ -1836,14 +1837,14 @@ static void deskSlotXY(unsigned char slot, unsigned short *px, unsigned char *py
 
 //-----------------------------------------------------------------------------
 // Parse MGUIDESK.CFG (stored in memDeskCfg) into deskIcons[].
-// Entry format in [ICONS]: NN=FILENAME.EXT,/PATH
-//   e.g.  00=NOTES.TXT,/
-//         01=HELLO.BAS,/BASIC
+// Entry format in [ICONS]: NN=FILENAME.EXT,/PATH,ASKPARAM
+//   e.g.  00=NOTES.TXT,/,0
+//         01=HELLO.BAS,/BASIC,1
 //-----------------------------------------------------------------------------
 static void deskLoadConfig(void)
 {
     unsigned char slot;
-    char key[3], val[32], *comma, *dot, *p;
+    char key[3], val[48], *comma, *comma2, *dot, *p;
     unsigned char i;
 
     memset(deskIcons, 0, sizeof(deskIcons));
@@ -1861,7 +1862,7 @@ static void deskLoadConfig(void)
         if (!mguiCfgGetBuf(memDeskCfg, "ICONS", key, val, sizeof(val)))
             continue;
 
-        /* val = "FILENAME.EXT,/PATH" */
+        /* val = "FILENAME.EXT,/PATH,ASKPARAM" */
         comma = strchr(val, ',');
         if (!comma)
             continue;
@@ -1885,6 +1886,10 @@ static void deskLoadConfig(void)
 
         /* copy path (up to 19 chars) */
         p = comma + 1;
+        comma2 = strchr(p, ',');
+        if (comma2)
+            *comma2 = '\0';
+
         for (i = 0; i < 19 && p[i]; i++)
             deskIcons[slot].path[i] = p[i];
         deskIcons[slot].path[i] = '\0';
@@ -1893,6 +1898,10 @@ static void deskLoadConfig(void)
             deskIcons[slot].path[0] = '/';
             deskIcons[slot].path[1] = '\0';
         }
+
+        deskIcons[slot].askParam = 0;
+        if (comma2 && comma2[1] == '1')
+            deskIcons[slot].askParam = 1;
 
         deskIcons[slot].active = 1;
     }
@@ -1904,7 +1913,7 @@ static void deskLoadConfig(void)
 static void deskSaveConfig(void)
 {
     unsigned char slot, i, offset;
-    unsigned char linebuf[48];
+    unsigned char linebuf[64];
     char *p;
     unsigned char vErro;
 
@@ -1932,7 +1941,7 @@ static void deskSaveConfig(void)
         {
             if (!deskIcons[slot].active)
                 continue;
-            /* Format: NN=FILENAME.EXT,/PATH\r\n */
+            /* Format: NN=FILENAME.EXT,/PATH,ASKPARAM\r\n */
             offset = 0;
             linebuf[offset++] = (unsigned char)('0' + slot / 10);
             linebuf[offset++] = (unsigned char)('0' + slot % 10);
@@ -1948,6 +1957,8 @@ static void deskSaveConfig(void)
             linebuf[offset++] = ',';
             for (i = 0; deskIcons[slot].path[i] && offset < 46; i++)
                 linebuf[offset++] = deskIcons[slot].path[i];
+            linebuf[offset++] = ',';
+            linebuf[offset++] = deskIcons[slot].askParam ? '1' : '0';
             linebuf[offset++] = '\r';
             linebuf[offset++] = '\n';
 
@@ -2333,6 +2344,7 @@ static void deskAddIconDialog(void)
     deskIcons[slot].ext[3] = '\0';
     strncpy(deskIcons[slot].path, vpath, 19);
     deskIcons[slot].path[19] = '\0';
+    deskIcons[slot].askParam = 0;
     deskIcons[slot].active = 1;
 
     deskSaveConfig();

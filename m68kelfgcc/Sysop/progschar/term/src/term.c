@@ -1257,6 +1257,38 @@ static unsigned char serialReadByteTimeout(unsigned char *pByte, unsigned long p
     return 0;
 }
 
+static void readResponseProc(unsigned char *s)
+{
+    unsigned char c;
+    unsigned long idleTimeout;
+    unsigned long charTimeout;
+
+    idleTimeout = 800000L;   /* espera primeira resposta */
+
+    while (1)
+    {
+        if (serialReadByteTimeout(&c, idleTimeout))
+            break;
+
+        mprintf("Timeout aguardando resposta.\r\n");
+        return;
+    }
+
+    while (1)
+    {
+        *s++ = c;
+        *s = 0x00;
+
+        charTimeout = 120000L;   /* timeout entre chars */
+
+        if (!serialReadByteTimeout(&c, charTimeout))
+            break;
+        
+        if (c == 0x04)
+            break;
+    }
+}
+
 static void readResponse(void)
 {
     unsigned char c;
@@ -1403,6 +1435,9 @@ static void termTrimParamPathPrefix(void)
 int main(void)
 {
     unsigned char c;
+    unsigned char cCmd[128];
+    long vTimeOut = 8;
+    char listenOn = 1;
 
     if (*paramBasic != 0x00)
     {
@@ -1411,6 +1446,40 @@ int main(void)
         termTrimParamPathPrefix();
 
         termDiscardPendingSerial();
+
+        // Verifica se esta em modo Listen, se sim, tira
+        while(vTimeOut--)
+        {
+            writeLongSerial("ATLISTEN?");
+            writeSerial('\r');
+            
+            readResponseProc(&cCmd);
+
+            if (!strncmp(cCmd,"OK;",3))
+            {
+                if (strncmp(cCmd,"OK;OFF",6))  // se nao bater, esta no Listen
+                {
+                    // Desliga
+                    writeLongSerial("ATLISTEN");
+                    writeSerial('\r');                    
+                    readResponseProc(&cCmd);
+                }
+                else
+                {
+                    listenOn = 0;
+                    break;
+                }
+            }
+        }
+
+        if (listenOn)
+        {
+            if (*startBasic == 1)
+                mprintf("Unable to unset Listen");
+
+            return 1;
+        }
+
         termInitVideoG2();
         termSetColor(VDP_WHITE, VDP_BLACK);
 
@@ -1449,9 +1518,18 @@ int main(void)
     }
     else
     {
-        mprintf("Usage: TERM <destino>[:port]\r\n");
-        mprintf("  Ex: TERM bbs.utilityinf.com.br:6522\r\n");
-        mprintf("      :port = default 23 if not used");
+        if (*startBasic == 1)
+        {
+            mprintf("Usage: TERM <destino>[:port]\r\n");
+            mprintf("  Ex: TERM bbs.utilityinf.com.br:6522\r\n");
+            mprintf("      :port = default 23 if not used");
+        }
+    }
+
+    if (*startBasic == 1)
+    {
+        setModeVideoOS(VDP_MODE_TEXT);
+        clearScr();
     }
 
     return 0;

@@ -740,6 +740,38 @@ static int mftpSendFile(char *fileName)
     return 1;
 }
 
+static void readResponseProc(unsigned char *s)
+{
+    unsigned char c;
+    unsigned long idleTimeout;
+    unsigned long charTimeout;
+
+    idleTimeout = 800000L;   /* espera primeira resposta */
+
+    while (1)
+    {
+        if (mftpReadByteTimeout(&c, idleTimeout))
+            break;
+
+        mprintf("Timeout aguardando resposta.\r\n");
+        return;
+    }
+
+    while (1)
+    {
+        *s++ = c;
+        *s = 0x00;
+
+        charTimeout = 120000L;   /* timeout entre chars */
+
+        if (!mftpReadByteTimeout(&c, charTimeout))
+            break;
+        
+        if (c == 0x04)
+            break;
+    }
+}
+
 /* -------------------------------------------------- */
 /* MAIN                                               */
 /* -------------------------------------------------- */
@@ -749,6 +781,42 @@ int main(void)
     char cmd[80];
     char *arg;
     int readLen;
+    long vTimeOut = 8;
+    unsigned char cCmd[128];
+    char listenOn = 0;
+
+    // Verifica se esta em modo Listen, se sim, tira
+    while(vTimeOut--)
+    {
+        writeLongSerial("ATLISTEN?");
+        writeSerial('\r');
+        
+        readResponseProc(&cCmd);
+
+        if (!strncmp(cCmd,"OK;",3))
+        {
+            if (!strncmp(cCmd,"OK;OFF",6))  // se bater, nao esta no Listen
+            {
+                // Liga
+                writeLongSerial("ATLISTEN");
+                writeSerial('\r');                    
+                readResponseProc(&cCmd);
+            }
+            else
+            {
+                listenOn = 1;
+                break;
+            }
+        }
+    }
+
+    if (!listenOn)
+    {
+        if (*startBasic == 1)
+            mprintf("Unable to set Listen");
+
+        return 1;
+    }
 
     mftpConsoleInstall();
 
