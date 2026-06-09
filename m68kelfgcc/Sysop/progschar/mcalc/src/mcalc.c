@@ -1215,40 +1215,48 @@ void vc_start() {
     unsigned long *memLoadFont;
     unsigned long *memSaveFont;
 
-    memLoadFont = (unsigned long *)msmalloc(4096);
-    memSaveFont = (unsigned long *)msmalloc(4096);
-
-    if (loadFontUseG2(0, "/MGUI/FONTS/EVE5X8.FON", memLoadFont, memSaveFont))
+    if (*startBasic == 1)
     {
-        msfree(memLoadFont);
-        msfree(memSaveFont);
-        setModeVideoOS(VDP_MODE_TEXT);
-        clearScr();
-        mprintf("Failed to load font 5x8.");
-        return;
-    }
+        memLoadFont = (unsigned long *)msmalloc(4096);
+        memSaveFont = (unsigned long *)msmalloc(4096);
 
-    if (!setFontUseG2(0))
+        if (loadFontUseG2(0, "/MGUI/FONTS/EVE5X8.FON", memLoadFont, memSaveFont))
+        {
+            msfree(memLoadFont);
+            msfree(memSaveFont);
+            setModeVideoOS(VDP_MODE_TEXT);
+            clearScr();
+            mprintf("Failed to load font 5x8.");
+            return;
+        }
+
+        if (!setFontUseG2(0))
+        {
+            msfree(memLoadFont);
+            msfree(memSaveFont);
+            setModeVideoOS(VDP_MODE_TEXT);
+            clearScr();
+            mprintf("Failed to set font 5x8.");
+            return;
+        }
+
+        if (!getFontUseG2(&addrSetFontUseG2))
+        {
+            msfree(memLoadFont);
+            msfree(memSaveFont);
+            setModeVideoOS(VDP_MODE_TEXT);
+            clearScr();
+            mprintf("Failed to get font 5x8.");
+            return;
+        }
+
+        msfree(memLoadFont);
+    }
+    else
     {
-        msfree(memLoadFont);
-        msfree(memSaveFont);
-        setModeVideoOS(VDP_MODE_TEXT);
-        clearScr();
-        mprintf("Failed to set font 5x8.");
-        return;
+        setFontUseG2(0);
+        getFontUseG2(&addrSetFontUseG2);
     }
-
-    if (!getFontUseG2(&addrSetFontUseG2))
-    {
-        msfree(memLoadFont);
-        msfree(memSaveFont);
-        setModeVideoOS(VDP_MODE_TEXT);
-        clearScr();
-        mprintf("Failed to get font 5x8.");
-        return;
-    }
-
-    msfree(memLoadFont);
 
     draw_size = SHEET_COL_WIDTH_DEFAULT;
     init_table();
@@ -1306,10 +1314,9 @@ void vc_start() {
 	
 	char ch = getch();
 
-    msfree(memSaveFont);
-
     if (*startBasic == 1)
     {
+        msfree(memSaveFont);
         setModeVideoOS(VDP_MODE_TEXT);
         clearScr();
     }

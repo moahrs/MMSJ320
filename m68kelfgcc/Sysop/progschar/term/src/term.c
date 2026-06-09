@@ -366,18 +366,23 @@ static void termInitVideoG2(void)
 {
     MGUI_SET_FONT fontInfo;
 
-    termOldVideoMode = getModeVideoOS();
+    if (*startBasic == 1)
+    {
+        termOldVideoMode = getModeVideoOS();
 
-    setModeVideoOS(VDP_MODE_G2);
+        setModeVideoOS(VDP_MODE_G2);
 
-    termFontLoadMem = (unsigned long *)msmalloc(4096);
-    termFontSaveMem = (unsigned long *)msmalloc(4096);
+        termFontLoadMem = (unsigned long *)msmalloc(4096);
+        termFontSaveMem = (unsigned long *)msmalloc(4096);
 
-    if (termFontLoadMem && termFontSaveMem)
-        loadFontUseG2(0, "/MGUI/FONTS/EVE5X8.FON", (unsigned char *)termFontLoadMem, (unsigned char *)termFontSaveMem);
+        if (termFontLoadMem && termFontSaveMem)
+            loadFontUseG2(0, "/MGUI/FONTS/EVE5X8.FON", (unsigned char *)termFontLoadMem, (unsigned char *)termFontSaveMem);
 
-    if (!termSetFontUseG2(0))
-        termSetFontUseG2(99);
+        if (!termSetFontUseG2(0))
+            termSetFontUseG2(99);
+    }
+    else
+        clearScrW(VDP_BLACK);
 
     termPatternTable = 0x0000;
     termColorTable = 0x2000;
@@ -406,19 +411,22 @@ static void termInitVideoG2(void)
 
 static void termRestoreVideo(void)
 {
-    setColorVideoG2(VDP_WHITE, VDP_BLACK);
-    setModeVideoOS(termOldVideoMode);
-
-    if (termFontLoadMem)
+    if (*startBasic == 1)
     {
-        msfree(termFontLoadMem);
-        termFontLoadMem = 0;
-    }
+        setColorVideoG2(VDP_WHITE, VDP_BLACK);
+        setModeVideoOS(termOldVideoMode);
 
-    if (termFontSaveMem)
-    {
-        msfree(termFontSaveMem);
-        termFontSaveMem = 0;
+        if (termFontLoadMem)
+        {
+            msfree(termFontLoadMem);
+            termFontLoadMem = 0;
+        }
+
+        if (termFontSaveMem)
+        {
+            msfree(termFontSaveMem);
+            termFontSaveMem = 0;
+        }
     }
 }
 
@@ -1270,7 +1278,6 @@ static void readResponseProc(unsigned char *s)
         if (serialReadByteTimeout(&c, idleTimeout))
             break;
 
-        mprintf("Timeout aguardando resposta.\r\n");
         return;
     }
 
@@ -1429,6 +1436,17 @@ static void termTrimParamPathPrefix(void)
             paramBasic[ix] = paramBasic[ix + 1];
             ix++;
         }
+    }
+
+    ix = 0;
+    while (paramBasic[ix] != 0x00)
+    {
+        if (paramBasic[ix] == ',')
+        {
+            paramBasic[ix] = 0x00;
+            break;
+        }
+        ix++;
     }
 }
 

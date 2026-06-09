@@ -2136,14 +2136,16 @@ static void deskOpenIcon(unsigned char slot)
     DESK_ICON *d = &deskIcons[slot];
     char execProg[64];
     char vnomefile[48];
-    char vtmpparam[64];
+    char vtmpparam[128];
     unsigned char *vEndExec;
     unsigned long vsizefile;
     MGUI_SAVESCR vsavescr;
 
     if (!d->active) return;
 
+    vtmpparam[0] = '\0';
     execProg[0] = '\0';
+
     SaveScreenNew(&vsavescr, 0, 0, 255, 192);
 
     /* Build full path: path + "/" + filename + "." + ext */
@@ -2161,6 +2163,12 @@ static void deskOpenIcon(unsigned char slot)
     if (d->ext[0])
         mguiCfgGetBuf(memPosConfig, "EXEC", d->ext, execProg, sizeof(execProg));
 
+    if (d->askParam)
+    {
+        askParamToExec(&vtmpparam);
+        mguiClockDirty = 1;
+    }
+
     TrocaSpriteMouse(MOUSE_HOURGLASS);
 
     if (!execProg[0])
@@ -2170,6 +2178,9 @@ static void deskOpenIcon(unsigned char slot)
         {
             #ifdef USE_RELOC_LOAD_PROGS
                 paramBasic[0] = '\0';
+                if (vtmpparam[0])
+                    strcpy(paramBasic,vtmpparam);
+
                 if (loadMbinAndRun(vnomefile, 2) != 0)
                 {
                     TrocaSpriteMouse(MOUSE_POINTER);
@@ -3873,6 +3884,50 @@ void configMgui (void)
     if (vwb != BTOK)
         return;
 */
+}
+
+//-----------------------------------------------------------------------------
+void askParamToExec(unsigned char *vParam)
+{
+    unsigned short ix;
+    unsigned char vwb, vresp;
+    MGUI_SAVESCR vsavescr;
+
+    vParam[0] = '\0';
+
+    SaveScreenNew(&vsavescr, 10,40,240,60);
+    showWindow("Parameter",10,40,240,50,BTOK | BTCANCEL);
+
+    writesxy(12,57,8,"Param:",vcorwf,vcorwb);
+
+    {
+        unsigned char wmode = WINFULL;
+        while (1)
+        {
+            fillin(0, vParam, 78, 57, 130, wmode);
+            if (button(1, "OK", 18, 78, 44, 10, wmode))
+            {
+                vwb = BTOK;
+                break;
+            }
+
+            if (button(2, "CANCEL", 66, 78, 44, 10, wmode))
+            {
+                vwb = BTCANCEL;
+                break;
+            }
+
+            wmode = WINOPER;
+
+            if (vwb == BTOK || vwb == BTCANCEL)
+                break;
+        }
+    }
+
+    RestoreScreen(&vsavescr);
+
+    if (vwb != BTOK)
+        vParam[0] = '\0';
 }
 
 //-----------------------------------------------------------------------------
