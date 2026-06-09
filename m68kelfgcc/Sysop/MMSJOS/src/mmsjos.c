@@ -86,6 +86,7 @@ unsigned char int_to_bcd(int val);
 int bcd_to_int(unsigned char bcd);
 int parse_date_arg(unsigned char *sdate, int *month, int *day, int *year);
 int parse_time_arg(unsigned char *stime, int *hour, int *minute, int *second);
+void fsGetCurrentDirDateTime(unsigned short *pdate, unsigned short *ptime);
 
 unsigned char vdp_mode; // Modo de video 0 = caracter (32 x 24), 1 = grafico (256 x 192)
 
@@ -312,7 +313,7 @@ unsigned long fsFindNextCluster(unsigned long vclusteratual, unsigned char vtype
 unsigned long fsFindClusterFree(unsigned char vtype);
 unsigned int bcd2dec(unsigned int bcd);
 int getDateTimeAtu(void);
-unsigned short datetimetodir(unsigned char hr_day, unsigned char min_month, unsigned char sec_year, unsigned char vtype);
+unsigned short datetimetodir(unsigned char hr_day, unsigned char min_month, unsigned short sec_year, unsigned char vtype);
 unsigned long pow(int val, int pot);
 int hex2int(char ch);
 unsigned long hexToLong(char *pHex);
@@ -2613,6 +2614,49 @@ unsigned char fsCreateFile(char * vfilename)
 }
 
 //-------------------------------------------------------------------------
+void fsGetCurrentDirDateTime(unsigned short *pdate, unsigned short *ptime)
+{
+    DateTimeData dt;
+    unsigned short year;
+
+    if (rtc_read_datetime(&dt) != 0)
+    {
+        dt.seconds = 0;
+        dt.minutes = 0;
+        dt.hours = 0;
+        dt.day = 1;
+        dt.month = 1;
+        dt.year = 24;
+    }
+
+    year = (unsigned short)(2000 + dt.year);
+
+    if (year < 1980)
+        year = 1980;
+
+    if (dt.month < 1 || dt.month > 12)
+        dt.month = 1;
+
+    if (dt.day < 1 || dt.day > 31)
+        dt.day = 1;
+
+    if (dt.hours < 0 || dt.hours > 23)
+        dt.hours = 0;
+
+    if (dt.minutes < 0 || dt.minutes > 59)
+        dt.minutes = 0;
+
+    if (dt.seconds < 0 || dt.seconds > 59)
+        dt.seconds = 0;
+
+    if (pdate)
+        *pdate = datetimetodir((unsigned char)dt.day, (unsigned char)dt.month, year, CONV_DATA);
+
+    if (ptime)
+        *ptime = datetimetodir((unsigned char)dt.hours, (unsigned char)dt.minutes, (unsigned short)dt.seconds, CONV_HORA);
+}
+
+//-------------------------------------------------------------------------
 unsigned char fsOpenFile(char * vfilename)
 {
 	unsigned short vdirdate, vbytepic;
@@ -2622,14 +2666,7 @@ unsigned char fsOpenFile(char * vfilename)
 	if (fsFindInDir(vfilename, TYPE_FILE) >= ERRO_D_START)
 		return ERRO_B_FILE_NOT_FOUND;
 
-	// Ler Data/Hora do PIC
-    // TBD
-    ds1307[3] = 01;
-    ds1307[4] = 01;
-    ds1307[5] = 2024;
-
-	// Converte para a Data/Hora da FAT32
-	vdirdate = datetimetodir(ds1307[3], ds1307[4], ds1307[5], CONV_DATA);
+	fsGetCurrentDirDateTime(&vdirdate, 0);
 
 	// Grava nova data no lastaccess
 	vdir.LastAccessDate  = vdirdate;
@@ -2651,18 +2688,7 @@ unsigned char fsCloseFile(char * vfilename, unsigned char vupdated)
 
 	if (fsFindInDir(vfilename, TYPE_FILE) < ERRO_D_START) {
 		if (vupdated) {
-			// Ler Data/Hora do DS1307 - I2C
-            // TBD
-            ds1307[3] = 01;
-            ds1307[4] = 01;
-            ds1307[5] = 2024;
-            ds1307[0] = 00;
-            ds1307[1] = 00;
-            ds1307[2] = 00;
-
-			// Converte para a Data/Hora da FAT32
-			vdirtime = datetimetodir(ds1307[0], ds1307[1], ds1307[2], CONV_HORA);
-			vdirdate = datetimetodir(ds1307[3], ds1307[4], ds1307[5], CONV_DATA);
+			fsGetCurrentDirDateTime(&vdirdate, &vdirtime);
 
 			// Grava nova data no lastaccess e nova data/hora no update date/time
 			vdir.LastAccessDate  = vdirdate;
@@ -3773,17 +3799,7 @@ unsigned long fsFindInDir(char * vname, unsigned char vtype)
 							else
 								gDataBuffer[ix + 11] = ATTR_DIRECTORY;
 
-							// Ler Data/Hora do DS1307 - I2C
-                            ds1307[3] = 01;
-                            ds1307[4] = 01;
-                            ds1307[5] = 2024;
-                            ds1307[0] = 00;
-                            ds1307[1] = 00;
-                            ds1307[2] = 00;
-
-						    // Converte para a Data/Hora da FAT32
-							vdirtime = datetimetodir(ds1307[0], ds1307[1], ds1307[2], CONV_HORA);
-							vdirdate = datetimetodir(ds1307[3], ds1307[4], ds1307[5], CONV_DATA);
+							fsGetCurrentDirDateTime(&vdirdate, &vdirtime);
 
 							// Coloca dados no buffer para gravacao
 							ikk = ix + 12;
@@ -4976,11 +4992,13 @@ unsigned long loadFileSize(unsigned char *parquivo, void* xaddress, unsigned lon
 }
 
 //-------------------------------------------------------------------------
-unsigned short datetimetodir(unsigned char hr_day, unsigned char min_month, unsigned char sec_year, unsigned char vtype)
+unsigned short datetimetodir(unsigned char hr_day, unsigned char min_month, unsigned short sec_year, unsigned char vtype)
 {
 	unsigned short vconv = 0, vtemp;
 
 	if (vtype == CONV_DATA) {
+        if (sec_year < 1980)
+            sec_year = 1980;
 	    vtemp = sec_year - 1980;
 		vconv  = (unsigned short)(vtemp & 0x7F) << 9;
 		vconv |= (unsigned short)(min_month & 0x0F) << 5;
@@ -5400,7 +5418,7 @@ void printCharG2(unsigned char pchr, unsigned char pmove)
     fgcolor = vdpcolor.fg;
     bgcolor = vdpcolor.bg;
 
-    if (vdp_mode == VDP_MODE_TEXT || vdp_mode == VDP_MODE_G1)
+    if (vdp_mode == VDP_MODE_TEXT || vdp_mode == VDP_MODE_G1 || activeConsole->magic)
     {
         // Usa processo normal com a fonte Default do monitor
         consoleWriteChar(pchr, pmove);

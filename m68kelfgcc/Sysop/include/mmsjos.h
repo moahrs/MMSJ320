@@ -358,7 +358,7 @@ extern unsigned long fsFindNextCluster(unsigned long vclusteratual, unsigned cha
 extern unsigned long fsFindClusterFree(unsigned char vtype);
 extern unsigned int bcd2dec(unsigned int bcd);
 extern int getDateTimeAtu(void);
-extern unsigned short datetimetodir(unsigned char hr_day, unsigned char min_month, unsigned char sec_year, unsigned char vtype);
+extern unsigned short datetimetodir(unsigned char hr_day, unsigned char min_month, unsigned short sec_year, unsigned char vtype);
 extern unsigned long pow(int val, int pot);
 extern int hex2int(char ch);
 extern unsigned long hexToLong(char *pHex);

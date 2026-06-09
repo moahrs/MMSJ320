@@ -1,11 +1,11 @@
-/* sheet.c - fonte consolidado */
+/********************************************************************************
+*    Programa    : wftp.c
+*    Objetivo    : Interface MGUI para o servidor MFTP/FTPD
+********************************************************************************/
 
-#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdio.h>
 
-#include "mmsj320api.h"
 #include "mmsj320vdp.h"
 #include "mmsj320mfp.h"
 #include "monitor.h"
@@ -14,25 +14,68 @@
 #include "mguiapi.h"
 #include "monitorapi.h"
 #include "mmsjosapi.h"
+#include "mmsj320api.h"
 
-#include "ftpd.h"
+#include "wftp.h"
 
 static unsigned char mftpAbortRequested = 0;
+static unsigned char wftpCancelRequested = 0;
+static unsigned char wftpMousePrev = 0;
 
 static unsigned char mftpLocalAbort(void)
 {
-    MMSJ_KEYEVENT k;
+    unsigned char vRetCanc;
 
-    if (mftpAbortRequested)
+    vRetCanc = wftpAbortExtra();
+
+    mftpAbortRequested = vRetCanc;
+
+    return vRetCanc;
+}
+
+unsigned char wftpAbortExtra(void)
+{
+    MGUI_MOUSE m;
+    unsigned int keyRaw;
+    unsigned char code;
+    unsigned char flags;
+
+    if (wftpCancelRequested)
         return 1;
 
-    if (!mmsjKeyGet(&k))
-        return 0;
+    getMouseData(0, &m);
+    getMouseData(1, &m);
 
-    if (k.flags == KEY_CTRL_ALT && k.code == 'X')
+    if (m.mouseButton == 0x01 && wftpMousePrev != 0x01)
     {
-        mftpAbortRequested = 1;
-        return 1;
+        if (m.vpostx >= (WFTP_X + WFTP_W - 13) && m.vpostx <= (WFTP_X + WFTP_W - 3) &&
+            m.vposty >= (WFTP_Y + 2) && m.vposty <= (WFTP_Y + 12))
+        {
+            wftpCancelRequested = 1;
+            return 1;
+        }
+
+        if (m.vpostx >= WFTP_BTN_X && m.vpostx <= (WFTP_BTN_X + WFTP_BTN_W) &&
+            m.vposty >= WFTP_BTN_Y && m.vposty <= (WFTP_BTN_Y + WFTP_BTN_H))
+        {
+            wftpCancelRequested = 1;
+            return 1;
+        }
+    }
+    wftpMousePrev = m.mouseButton;
+
+    keyRaw = (unsigned int)mguiListWindows[6].keyTec;
+    if (keyRaw)
+    {
+        mguiListWindows[6].keyTec = 0;
+        code = (unsigned char)(keyRaw & 0xFF);
+        flags = (unsigned char)((keyRaw >> 8) & 0xFF);
+
+        if (flags == KEY_CTRL_ALT && (code == 'X' || code == 'x'))
+        {
+            wftpCancelRequested = 1;
+            return 1;
+        }
     }
 
     return 0;
@@ -40,11 +83,26 @@ static unsigned char mftpLocalAbort(void)
 
 #include "ftpdcomm.h"
 
-/* -------------------------------------------------- */
-/* MAIN                                               */
-/* -------------------------------------------------- */
+static unsigned char wftpFg;
+static unsigned char wftpBg;
+static unsigned char wftpMousePrev;
+static unsigned char wftpCancelRequested;
 
-int main(void)
+static void wftpDrawButton(void)
+{
+    FillRect(WFTP_BTN_X, WFTP_BTN_Y, WFTP_BTN_W, WFTP_BTN_H, wftpBg);
+    DrawRoundRect(WFTP_BTN_X, WFTP_BTN_Y, WFTP_BTN_W, WFTP_BTN_H, 1, wftpFg);
+    writesxy(WFTP_BTN_X + 14, WFTP_BTN_Y + 4, 1, (unsigned char *)"Cancel", wftpFg, wftpBg);
+}
+
+static void wftpDrawWindow(void)
+{
+    showWindow("WFTP\0", WFTP_X, WFTP_Y, WFTP_W, WFTP_H, BTCLOSE);
+    writesxy(WFTP_X + 31, WFTP_Y + 24, 1, (unsigned char *)"Running...", wftpFg, wftpBg);
+    wftpDrawButton();
+}
+
+void procFtpd(void)
 {
     char cmd[80];
     char *arg;
@@ -169,7 +227,35 @@ int main(void)
         }
     }
 
-    mftpConsoleUninstall();
+    mftpConsoleUninstall();    
+}
+
+int main(void)
+{
+    MGUI_SAVESCR save;
+    VDP_COLOR color;
+
+    if (*startBasic != 2)
+        return;
+
+    TrocaSpriteMouse(MOUSE_POINTER);
+
+    getColorData(&color);
+    wftpFg = color.fg;
+    wftpBg = color.bg;
+    if (wftpFg == wftpBg)
+        wftpFg = VDP_WHITE;
+
+    wftpMousePrev = 0;
+    wftpCancelRequested = 0;
+
+    SaveScreenNew(&save, WFTP_X, WFTP_Y, WFTP_W, WFTP_H);
+    wftpDrawWindow();
+
+    procFtpd();
+
+    RestoreScreen(&save);
+    TrocaSpriteMouse(MOUSE_POINTER);
 
     return 0;
 }
