@@ -73,7 +73,7 @@ static unsigned char termFontLast = 255;
 static unsigned long termFontAddr = 0;
 static unsigned int termPatternTable = 0;
 static unsigned int termColorTable = 0;
-static unsigned char termUseFastG2 = 0;
+static unsigned char termUseFastG2 = 1;
 static unsigned long *termFontLoadMem = 0;
 static unsigned long *termFontSaveMem = 0;
 static char termLineBuf[VIEW_COLS + 1];
