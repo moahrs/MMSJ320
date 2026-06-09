@@ -1990,6 +1990,26 @@ static unsigned char noteHandleKey(unsigned int keyRaw)
 
     if (flags == KEY_CTRL || flags == KEY_CTRL_SHIFT || flags == KEY_CTRL_ALT)
     {
+        if (code == KEY_HOME)
+        {
+            noteCurLine = 0;
+            noteCurCol = 0;
+            noteEnsureCursorVisible();
+            return 1;
+        }
+
+        if (code == KEY_END)
+        {
+            if (noteLineCount > 0)
+                noteCurLine = noteLineCount - 1;
+            else
+                noteCurLine = 0;
+
+            noteCurCol = noteLineLen(noteCurLine);
+            noteEnsureCursorVisible();
+            return 1;
+        }
+
         code = (unsigned char)toupper(code);
 
         if (code == 'O')
@@ -2111,6 +2131,45 @@ static unsigned char noteHandleKey(unsigned int keyRaw)
     if (code == KEY_HOME)
     {
         noteCurCol = 0;
+        noteEnsureCursorVisible();
+        return 1;
+    }
+
+    if (code == KEY_END)
+    {
+        noteCurCol = noteLineLen(noteCurLine);
+        noteEnsureCursorVisible();
+        return 1;
+    }
+
+    if (code == KEY_PAGEUP)
+    {
+        if (noteCurLine > NOTE_VISIBLE)
+            noteCurLine -= NOTE_VISIBLE;
+        else
+            noteCurLine = 0;
+
+        len = noteLineLen(noteCurLine);
+        if (noteCurCol > len)
+            noteCurCol = len;
+
+        noteEnsureCursorVisible();
+        return 1;
+    }
+
+    if (code == KEY_PAGEDOWN)
+    {
+        if ((unsigned long)noteCurLine + NOTE_VISIBLE < noteLineCount)
+            noteCurLine += NOTE_VISIBLE;
+        else if (noteLineCount > 0)
+            noteCurLine = noteLineCount - 1;
+        else
+            noteCurLine = 0;
+
+        len = noteLineLen(noteCurLine);
+        if (noteCurCol > len)
+            noteCurCol = len;
+
         noteEnsureCursorVisible();
         return 1;
     }

@@ -3940,6 +3940,9 @@ void runBin(void)
     unsigned char vUseFixedAddr;
     unsigned long vsizefilemalloc;
     char *vdot;
+    char vProgIsMgui = 1;
+    char vProgIsBasic = 0;
+
     MGUI_SAVESCR vsavescr;
 
     vnamein[0] = '\0';
@@ -3991,56 +3994,70 @@ void runBin(void)
 
     vfilename[ix] = '\0';
 
-    vdot = 0;
-    for (ix = 0; vfilename[ix] != '\0'; ix++)
-    {
-        if (vfilename[ix] == '.')
-            vdot = &vfilename[ix];
-    }
+    strcpy(vfullpath, vfilename);
 
-    if (!vdot)
+    if (strncmp(vfullpath, "BASIC", 5) == 0)
     {
-        if (strlen(vfilename) > 59)
-        {
-            message("Invalid file name length\0", BTCLOSE, 0);
-            return;
-        }
-
-    #ifdef USE_RELOC_LOAD_PROGS
-        strcat(vfilename, ".EXE");
+        vProgIsMgui = 0;
+        vProgIsBasic = 1;
     }
-    else if (strcmp(vdot, ".EXE") != 0)
-    {
-        message("Only .EXE files are allowed\0", BTCLOSE, 0);
-        return;
-    }
-    #else
-        strcat(vfilename, ".BIN");
-    }
-    else if (strcmp(vdot, ".BIN") != 0)
-    {
-        message("Only .BIN files are allowed\0", BTCLOSE, 0);
-        return;
-    }
-    #endif
 
     if (vfilename[0] == '/')
-        strcpy(vfullpath, vfilename);
-    else
+    {
+        // Verifica se arquivo existe
+        vsizefilemalloc = fsInfoFile(vfullpath, INFO_SIZE);
+        if (vsizefilemalloc == ERRO_D_NOT_FOUND)
+        {
+            vProgIsMgui = 0;
+            message("File not found...\0", BTCLOSE, 0);
+            return;
+        }
+    }
+    else if (!vProgIsBasic)
     {
         strcpy(vfullpath, "/MGUI/PROGS/");
         strcat(vfullpath, vfilename);
-    }
 
-    vresp = message("Run selected file ?\0",(BTYES | BTNO), 0);
-    if (vresp != BTYES)
-        return;
+        vdot = 0;
+        for (ix = 0; vfilename[ix] != '\0'; ix++)
+        {
+            if (vfilename[ix] == '.')
+                vdot = &vfilename[ix];
+        }
 
-    vsizefilemalloc = fsInfoFile(vfullpath, INFO_SIZE);
-    if (vsizefilemalloc == ERRO_D_NOT_FOUND)
-    {
-        message("File not found...\0", BTCLOSE, 0);
-        return;
+        if (!vdot)
+        {
+            if (strlen(vfilename) > 59)
+            {
+                message("Invalid file name length\0", BTCLOSE, 0);
+                return;
+            }
+
+        #ifdef USE_RELOC_LOAD_PROGS
+            strcat(vfilename, ".EXE");
+        }
+        else if (strcmp(vdot, ".EXE") != 0)
+        {
+            message("Only .EXE files are allowed\0", BTCLOSE, 0);
+            return;
+        }
+        #else
+            strcat(vfilename, ".BIN");
+        }
+        else if (strcmp(vdot, ".BIN") != 0)
+        {
+            message("Only .BIN files are allowed\0", BTCLOSE, 0);
+            return;
+        }
+        #endif        
+
+        // Verifica se arquivo existe
+        vsizefilemalloc = fsInfoFile(vfullpath, INFO_SIZE);
+        if (vsizefilemalloc == ERRO_D_NOT_FOUND)
+        {
+            vProgIsMgui = 0;
+            strcpy(vfullpath, vfilename);
+        }
     }
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
@@ -4048,13 +4065,13 @@ void runBin(void)
 
     SaveScreenNew(&vsavescr, 0,0,255,191);
 
-    if (strncmp(vfullpath, "BASIC", 5) == 0)
+    if (vProgIsBasic)
     {
         /* Run BASIC with file as argument */
         fsOsCommand((unsigned char*)vfullpath);
         restoreMGUI(); // in case BASIC redraw mgui (basic exit in text mode)
     }
-    else
+    else if (vProgIsMgui)
     {
         /* execProg is a full path to an EXE/BIN that should open this file */
         #ifdef USE_RELOC_LOAD_PROGS
@@ -4072,6 +4089,12 @@ void runBin(void)
             else
                 message("Loading Error...\0", BTCLOSE, 0);
         #endif
+    }
+    else    // se nao eh nenhum dos 2, vai tentar encontrar no MMSJOS 
+    {
+        /* Run OS Command with argument */
+        fsOsCommand((unsigned char*)vfullpath);
+        restoreMGUI(); // in case OS Command, redraw mgui (MMSJOS exit in text mode)
     }
 
     RestoreScreen(&vsavescr);

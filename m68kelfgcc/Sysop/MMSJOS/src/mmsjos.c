@@ -1265,17 +1265,27 @@ writeLongSerial("\r\n\0");*/
     // Processar e definir o que fazer
     if (linhacomando[0] != 0)
     {
+        // Se nao veio do ambiente MMSJOS, entra em modo texto
+        if (*startBasic != 1)
+        {
+            setModeVideoOS(VDP_MODE_TEXT);
+            clearScr();
+        }
+
         if (!strcmp(linhacomando,"CLS") && iy == 3)
         {
-            clearScr();
+            if (*startBasic == 1)
+                clearScr();
         }
         else if (!strcmp(linhacomando,"CLEAR") && iy == 5)
         {
-            clearScr();
+            if (*startBasic == 1)
+                clearScr();
         }
         else if (!strcmp(linhacomando,"QUIT") && iy == 4)
         {
-            return 99;
+            if (*startBasic ==1)
+                return 99;
         }
         else if (!strcmp(linhacomando,"VER") && iy == 3)
         {
@@ -1317,7 +1327,7 @@ writeLongSerial("\r\n\0");*/
         }
         else if (!strcmp(linhacomando,"MGUI") && iy == 4)
         {
-            if (activeConsole->magic)
+            if (activeConsole->magic || *startBasic != 1)
                 consoleWriteText("Command not allowed.");
             else 
                 mguiFunc(0);
@@ -1878,14 +1888,14 @@ writeLongSerial("\r\n\0");*/
             }
             else if (!strcmp(linhacomando,"STOF") && iy == 4) // Arquivo (usa 1 soh)
             {
-                if (activeConsole->magic)
+                if (activeConsole->magic || *startBasic != 1)
                     consoleWriteText("Command not allowed");
                 else
                     vretfat = fsLoadSerialToFile(linhaarg);  // Carrega da Serial para o Arquivo
             }
             else if (!strcmp(linhacomando,"STOR") && iy == 4) // Arquivo (usa 1 soh)
             {
-                if (activeConsole->magic)
+                if (activeConsole->magic || *startBasic != 1)
                     consoleWriteText("Command not allowed");
                 else
                     vretfat = fsLoadSerialToRun(linhaarg);  // Carrega da Serial para o Arquivo
@@ -2047,6 +2057,12 @@ writeLongSerial("\r\n\0");*/
                             consoleWriteText("Format disk was successfully\r\n\0");
                     }
                 }*/
+            }
+
+            if (*startBasic != 1 && strncmp(linhacomando,"BASIC",5))    // Se nao veio do ambiente mmsjos e nao foi comando Basic. mostra messagem
+            {
+                consoleWriteText("Press any key to continue...\r\n\0");
+                while(readChar() == 0);
             }
         }
     }
