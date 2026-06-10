@@ -23,6 +23,7 @@ SRC_S = \
 	src/ftpd_inic.S
 
 OBJ = $(SRC_C:.c=.o) $(SRC_S:.S=.o)
+OBJ += src/netcomm_runtime.o src/netcomm_resident.o
 
 # Ordem de link:
 # 1) ftpd_inic.S
@@ -32,6 +33,8 @@ LINK_OBJ = \
 	src/ftpd_inic.o \
 	src/libc_stub.o \
 	src/mmsj320mfp.o \
+	src/netcomm_resident.o \
+	src/netcomm_runtime.o \
 	src/ftpd.o
 
 all: $(TARGET) $(BIN) $(LST)
@@ -52,6 +55,12 @@ $(LST): $(TARGET)
 	$(OBJDUMP) -x -d $(TARGET) > $(LST)
 
 src/%.o: src/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/netcomm_runtime.o: ../../common/netcomm_runtime.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/netcomm_resident.o: ../net/src/netcomm_resident.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
 src/ftpd_inic.o: src/ftpd_inic.S

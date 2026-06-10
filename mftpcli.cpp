@@ -302,6 +302,12 @@ static int waitForPrompt(void)
     return waitForPromptMs(8000);
 }
 
+static int waitForPromptAfterXfer(void)
+{
+    printf("Aguardando conclusao no MMSJ320...\n");
+    return waitForPromptMs(120000);
+}
+
 static int waitForXferReady(void)
 {
     unsigned char c;
@@ -838,7 +844,7 @@ int main(int argc, char **argv)
             netSendLine(remoteCmd);
             if (!waitForXferReady() || !xmodemSendFile(localName))
                 netWriteByte(X_CAN);
-            waitForPrompt();
+            waitForPromptAfterXfer();
             continue;
         }
 
@@ -860,7 +866,7 @@ int main(int argc, char **argv)
             netSendLine(remoteCmd);
             if (!waitForXferReady() || !xmodemRecvFile(localName))
                 netWriteByte(X_CAN);
-            waitForPrompt();
+            waitForPromptAfterXfer();
             continue;
         }
 

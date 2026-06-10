@@ -15,6 +15,7 @@
 #include "monitorapi.h"
 #include "mmsjosapi.h"
 #include "mmsj320api.h"
+#include "netcomm_runtime.h"
 
 #include "wftp.h"
 
@@ -85,8 +86,6 @@ unsigned char wftpAbortExtra(void)
 
 static unsigned char wftpFg;
 static unsigned char wftpBg;
-static unsigned char wftpMousePrev;
-static unsigned char wftpCancelRequested;
 
 static void wftpDrawButton(void)
 {
@@ -110,6 +109,8 @@ void procFtpd(void)
     long vTimeOut = 8;
     unsigned char cCmd[128];
     char listenOn = 0;
+
+    netCommEnable();
 
     // Verifica se esta em modo Listen, se sim, tira
     while(vTimeOut--)

@@ -14,6 +14,7 @@
 #include "mguiapi.h"
 #include "monitorapi.h"
 #include "mmsjosapi.h"
+#include "netcomm_runtime.h"
 
 #include "ftpd.h"
 
@@ -52,6 +53,8 @@ int main(void)
     long vTimeOut = 8;
     unsigned char cCmd[128];
     char listenOn = 0;
+
+    netCommEnable();
 
     // Verifica se esta em modo Listen, se sim, tira
     while(vTimeOut--)

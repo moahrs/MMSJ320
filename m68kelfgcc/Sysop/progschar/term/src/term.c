@@ -14,6 +14,7 @@
 #include "mguiapi.h"
 #include "monitorapi.h"
 #include "mmsjosapi.h"
+#include "netcomm_runtime.h"
 
 #include "term.h"
 
@@ -685,6 +686,15 @@ static void termPutChar(unsigned char c)
         return;
     }
 
+    if (c == 9)
+    {
+        do {
+            termPutChar(' ');
+        } while ((curX & 7) != 0 && curX < TERM_COLS - 1);
+
+        return;
+    }
+
     if (c >= 32)
     {
         oldX = curX;
@@ -988,6 +998,18 @@ static void termHandleCsi(unsigned char final, char *parm)
         case 'u':
             termSetCursor(savedX, savedY);
             break;
+        case 'G': /* horizontal absolute */
+        {
+            int n = ansiGetNum(parm, 1);
+            termSetCursor((unsigned char)(n - 1), curY);
+            break;
+        }
+        case 'd': /* vertical absolute */
+        {
+            int n = ansiGetNum(parm, 1);
+            termSetCursor(curX, (unsigned char)(n - 1));
+            break;
+        }            
         default:
             break;
     }
@@ -1133,8 +1155,11 @@ static void termProcessByte(unsigned char c)
         }
     }
 
-    if (c >= 0x80 && c <= 0x9F)
-        return;
+    if (!termCp437)
+    {
+        if (c >= 0x80 && c <= 0x9F)
+            return;
+    }
 
     if (termDropCursorReportEcho(c))
         return;
@@ -1197,6 +1222,24 @@ static void termProcessByte(unsigned char c)
             {
                 termEscState = TERM_ESC_IGNORE;
             }
+            else if (c == 'D') /* Index */
+            {
+                if (curY < TERM_ROWS - 1) curY++;
+                else termScroll();
+                termEscReset();
+            }
+            else if (c == 'M') /* Reverse Index */
+            {
+                if (curY > 0) curY--;
+                termEscReset();
+            }
+            else if (c == 'E') /* Next line */
+            {
+                curX = 0;
+                if (curY < TERM_ROWS - 1) curY++;
+                else termScroll();
+                termEscReset();
+            }            
             else
             {
                 termEscReset();
@@ -1450,6 +1493,72 @@ static void termTrimParamPathPrefix(void)
     }
 }
 
+static unsigned char termUpperChar(unsigned char c)
+{
+    if (c >= 'a' && c <= 'z')
+        return (unsigned char)(c - 'a' + 'A');
+
+    return c;
+}
+
+static unsigned char termIsNoCp437Token(char *s, unsigned int len)
+{
+    char opt[] = "NOCP437";
+    unsigned int ix;
+
+    if (len != 7)
+        return 0;
+
+    for (ix = 0; ix < 7; ix++)
+    {
+        if (termUpperChar((unsigned char)s[ix]) != opt[ix])
+            return 0;
+    }
+
+    return 1;
+}
+
+static void termParseOptions(void)
+{
+    unsigned int src;
+    unsigned int dst;
+    unsigned int start;
+    unsigned int len;
+    unsigned int ix;
+
+    termCp437 = 1;
+    src = 0;
+    dst = 0;
+
+    while (paramBasic[src] != 0x00)
+    {
+        while (paramBasic[src] == ' ' || paramBasic[src] == '\t')
+            src++;
+
+        if (paramBasic[src] == 0x00)
+            break;
+
+        start = src;
+        while (paramBasic[src] != 0x00 && paramBasic[src] != ' ' && paramBasic[src] != '\t')
+            src++;
+
+        len = src - start;
+        if (termIsNoCp437Token((char *)&paramBasic[start], len))
+        {
+            termCp437 = 0;
+            continue;
+        }
+
+        if (dst != 0)
+            paramBasic[dst++] = ' ';
+
+        for (ix = 0; ix < len; ix++)
+            paramBasic[dst++] = paramBasic[start + ix];
+    }
+
+    paramBasic[dst] = 0x00;
+}
+
 int main(void)
 {
     unsigned char c;
@@ -1462,7 +1571,9 @@ int main(void)
         //tstIntsOff();
 
         termTrimParamPathPrefix();
+        termParseOptions();
 
+        netCommEnable();
         termDiscardPendingSerial();
 
         // Verifica se esta em modo Listen, se sim, tira

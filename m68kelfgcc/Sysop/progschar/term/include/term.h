@@ -100,6 +100,8 @@ static unsigned char termCprEchoState = TERM_CPR_NONE;
 static unsigned char telPushValid = 0;
 static unsigned char telPushByte = 0;
 
+char termCp437 = 1;
+
 /* -------------------------------------------------- */
 /* CONTEXTOS                                          */
 /* -------------------------------------------------- */

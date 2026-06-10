@@ -356,9 +356,10 @@ void tcpBridgePoll()
   /* buffer -> serial */
   count = 0;
 
-  while (count < 16 && tcpRxGet(&b))
+  while (count < 1 && tcpRxGet(&b))
   {
       Serial2.write(b);
+      delayMicroseconds(1000);
       count++;
   }
 }

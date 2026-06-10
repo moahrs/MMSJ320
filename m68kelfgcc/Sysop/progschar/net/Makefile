@@ -25,6 +25,7 @@ SRC_S = \
 	src/net_inic.S
 
 OBJ = $(SRC_C:.c=.o) $(SRC_S:.S=.o)
+OBJ += src/netcomm_runtime.o
 
 # Ordem de link:
 # 1) net_inic.S
@@ -35,6 +36,7 @@ LINK_OBJ = \
 	src/net_inic.o \
 	src/libc_stub.o \
 	src/mmsj320mfp.o \
+	src/netcomm_runtime.o \
 	src/netcomm_resident.o \
 	src/netcomm.o \
 	src/net.o
@@ -57,6 +59,9 @@ $(LST): $(TARGET)
 	$(OBJDUMP) -x -d $(TARGET) > $(LST)
 
 src/%.o: src/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/netcomm_runtime.o: ../../common/netcomm_runtime.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 src/net_inic.o: src/net_inic.S

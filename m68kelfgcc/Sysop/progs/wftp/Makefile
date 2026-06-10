@@ -24,6 +24,8 @@ SRC_S = \
 OBJ = \
 	src/libc_stub.o \
 	src/mmsj320mfp.o \
+	src/netcomm_runtime.o \
+	src/netcomm_resident.o \
 	src/wftp.o \
 	src/wftp_inic.o
 
@@ -31,6 +33,8 @@ LINK_OBJ = \
 	src/wftp_inic.o \
 	src/libc_stub.o \
 	src/mmsj320mfp.o \
+	src/netcomm_resident.o \
+	src/netcomm_runtime.o \
 	src/wftp.o
 
 all: $(TARGET) $(BIN) $(LST)
@@ -54,6 +58,12 @@ src/libc_stub.o: src/libc_stub.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 src/mmsj320mfp.o: src/mmsj320mfp.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/netcomm_runtime.o: ../../common/netcomm_runtime.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+src/netcomm_resident.o: ../../progschar/net/src/netcomm_resident.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
 src/wftp.o: src/wftp.c
