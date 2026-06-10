@@ -1746,8 +1746,6 @@ static void noteDrawCursorBar(void)
 {
     unsigned short sx;
     unsigned short sy;
-    unsigned short cellW;
-    unsigned char cursorChar[2];
 
     if (noteCurLine < noteTopLine || noteCurLine >= (unsigned short)(noteTopLine + NOTE_VISIBLE))
         return;
@@ -1761,11 +1759,7 @@ static void noteDrawCursorBar(void)
     if (sx >= 252 || sy >= NOTE_STATUS_Y)
         return;
 
-    cellW = (NOTE_CHAR_W > 1) ? (NOTE_CHAR_W - 1) : NOTE_CHAR_W;
-    FillRect(sx, sy, cellW, NOTE_CHAR_H, nvcorfg);
-    cursorChar[0] = noteCharAt(noteCurLine, noteCurCol);
-    cursorChar[1] = 0;
-    writesxy(sx, sy, 8, cursorChar, nvcorbg, nvcorfg);
+    FillRect(sx, sy, 1, NOTE_CHAR_H, nvcorfg);
 }
 
 //-----------------------------------------------------------------------------

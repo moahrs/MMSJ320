@@ -9,7 +9,7 @@
 #define NOTE_TEXT_X      3
 #define NOTE_CHARS_LINE  39
 
-#define NOTE_CHAR_W      6
+#define NOTE_CHAR_W      5
 #define NOTE_CHAR_H      8
 
 #define NOTE_SCRL_X      246
