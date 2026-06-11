@@ -182,6 +182,8 @@ static unsigned char mguiWidgetCount = 0;
 static unsigned char mguiWidgetOnFocusIdx = 0;
 static unsigned char mguiWidgetLeaveFocusIdx = 255;
 static unsigned char mguiWidgetTabLatch = 0;
+static unsigned short mguiFillinCursor[24];
+static unsigned short mguiFillinOffset[24];
 //static unsigned char mguiWidgetWinfullLatch = 0;
 
 static void mguiWidgetFocusReset(void)
@@ -1250,6 +1252,11 @@ void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned sh
     unsigned short cc = 0;
     unsigned short len;
     unsigned short maxChars;
+    unsigned short maxStore;
+    unsigned short cursor;
+    unsigned short offset;
+    unsigned short visibleLen;
+    unsigned short srcPos;
     unsigned char cchar;
     unsigned char vdisp = 0;
     unsigned char vtmp[2];
@@ -1282,17 +1289,47 @@ void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned sh
     maxChars = (unsigned short)(pwidth / 6);
     if (maxChars > 0)
         maxChars = (unsigned short)(maxChars - 1);
+    if (maxChars == 0)
+        maxChars = 1;
+
+    maxStore = 127;
+    len = (unsigned short)strlen(vvar);
+    if (len > maxStore)
+    {
+        vvar[maxStore] = 0x00;
+        len = maxStore;
+    }
+
+    cursor = mguiFillinCursor[thisIdx];
+    offset = mguiFillinOffset[thisIdx];
+
+    if (cursor > len)
+        cursor = len;
+    if (offset > len)
+        offset = len;
 
     if (isFocused && (vtipo == WINOPER || vtipo == WINFULL))
     {
-        len = (unsigned short)strlen(vvar);
+        if (inp.clicked)
+        {
+            cursor = len;
+            vdisp = 1;
+        }
 
         if (inp.key >= 0x20 && inp.key < 0x7F)
         {
-            if (len < maxChars)
+            if (len < maxStore)
             {
-                vvar[len] = inp.key;
+                cc = len;
+                while (cc > cursor)
+                {
+                    vvar[cc] = vvar[cc - 1];
+                    cc--;
+                }
+                vvar[cursor] = inp.key;
                 vvar[len + 1] = 0x00;
+                cursor++;
+                len++;
                 vdisp = 1;
             }
         }
@@ -1303,15 +1340,78 @@ void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned sh
                 case 0x0D:  // Enter
                     break;
                 case 0x08:  // BackSpace
-                    if (len > 0)
+                    if (cursor > 0)
                     {
-                        vvar[len - 1] = 0x00;
+                        cursor--;
+                        cc = cursor;
+                        while (cc < len)
+                        {
+                            vvar[cc] = vvar[cc + 1];
+                            cc++;
+                        }
+                        len--;
+                        vdisp = 1;
+                    }
+                    break;
+                case KEY_DELETE:
+                    if (cursor < len)
+                    {
+                        cc = cursor;
+                        while (cc < len)
+                        {
+                            vvar[cc] = vvar[cc + 1];
+                            cc++;
+                        }
+                        len--;
+                        vdisp = 1;
+                    }
+                    break;
+                case KEY_LEFT:
+                    if (cursor > 0)
+                    {
+                        cursor--;
+                        vdisp = 1;
+                    }
+                    break;
+                case KEY_RIGHT:
+                    if (cursor < len)
+                    {
+                        cursor++;
+                        vdisp = 1;
+                    }
+                    break;
+                case KEY_HOME:
+                    if (cursor != 0)
+                    {
+                        cursor = 0;
+                        vdisp = 1;
+                    }
+                    break;
+                case KEY_END:
+                    if (cursor != len)
+                    {
+                        cursor = len;
                         vdisp = 1;
                     }
                     break;
             }
         }
     }
+
+    if (cursor < offset)
+        offset = cursor;
+    if (cursor > (unsigned short)(offset + maxChars))
+        offset = (unsigned short)(cursor - maxChars);
+    if (len > maxChars && offset > (unsigned short)(len - maxChars))
+    {
+        if (cursor < len)
+            offset = (unsigned short)(len - maxChars);
+    }
+    if (len <= maxChars)
+        offset = 0;
+
+    mguiFillinCursor[thisIdx] = cursor;
+    mguiFillinOffset[thisIdx] = offset;
 
     if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
     {
@@ -1327,12 +1427,17 @@ void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned sh
 
         cc = 0;
         len = (unsigned short)strlen(vvar);
-        if (len > maxChars)
-            len = maxChars;
+        if (offset > len)
+            offset = len;
 
-        while (cc < len)
+        visibleLen = (unsigned short)(len - offset);
+        if (visibleLen > maxChars)
+            visibleLen = maxChars;
+
+        while (cc < visibleLen)
         {
-            cchar = vvar[cc];
+            srcPos = (unsigned short)(offset + cc);
+            cchar = vvar[srcPos];
             vtmp[0] = cchar;
             vtmp[1] = 0x00;
 
@@ -1342,11 +1447,17 @@ void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned sh
 
         if (isFocused)
         {
-            if ((x + (len * 6) + 6) < (x + pwidth))
+            if (cursor < offset)
+                cursor = offset;
+            if (cursor > (unsigned short)(offset + maxChars))
+                cursor = (unsigned short)(offset + maxChars);
+
+            cc = (unsigned short)(cursor - offset);
+            if ((x + (cc * 6) + 6) < (x + pwidth))
             {
                 vtmp[0] = '|';
                 vtmp[1] = 0x00;
-                writesxy(x + (len * 6), y + 1, 6, vtmp, borderColor, vcorwb);
+                writesxy(x + (cc * 6), y + 1, 6, vtmp, borderColor, vcorwb);
             }
         }
     }
