@@ -170,6 +170,8 @@ static unsigned char deskSelected = 0xFF;      /* selected slot 0..24, 0xFF=none
 #define MGUI_WT_RADIO    3
 #define MGUI_WT_TOGGLE   4
 #define MGUI_WT_COMBO    5
+#define MGUI_WT_SPIN     6
+#define MGUI_WT_BROWSER  7
 
 typedef struct
 {
@@ -184,6 +186,9 @@ static unsigned char mguiWidgetLeaveFocusIdx = 255;
 static unsigned char mguiWidgetTabLatch = 0;
 static unsigned short mguiFillinCursor[24];
 static unsigned short mguiFillinOffset[24];
+static unsigned short mguiBrowseVScroll[24];
+static unsigned short mguiBrowseHScroll[24];
+static unsigned short mguiBrowseSelected[24];
 //static unsigned char mguiWidgetWinfullLatch = 0;
 
 static void mguiWidgetFocusReset(void)
@@ -1546,6 +1551,7 @@ static unsigned char comboPopup(unsigned char *vopt, unsigned char *vvar, unsign
     unsigned char prevBtn;
     unsigned char changed;
     unsigned short h;
+    unsigned short popupY;
 
     count = 0;
     optBase = vopt;
@@ -1561,14 +1567,23 @@ static unsigned char comboPopup(unsigned char *vopt, unsigned char *vvar, unsign
     if (count == 0)
         return 0;
 
-    if (count > 8)
-        count = 8;
+    if (count > 16)
+        count = 16;
 
     h = (unsigned short)(count * 10 + 4);
-    SaveScreenNew(&save, x, (unsigned short)(y + 12), width, h);
+    popupY = (unsigned short)(y + 12);
+    if (popupY + h > 191)
+    {
+        if (h < 191)
+            popupY = (unsigned short)(191 - h);
+        else
+            popupY = 0;
+    }
 
-    FillRect(x, (unsigned short)(y + 12), width, h, vcorwb);
-    DrawRect(x, (unsigned short)(y + 12), width, h, vcorwf);
+    SaveScreenNew(&save, x, popupY, width, h);
+
+    FillRect(x, popupY, width, h, vcorwb);
+    DrawRect(x, popupY, width, h, vcorwf);
 
     vopt = optBase;
     prevBtn = 0;
@@ -1585,7 +1600,7 @@ static unsigned char comboPopup(unsigned char *vopt, unsigned char *vvar, unsign
         while (*vopt && *vopt != ',') vopt++;
         if (*vopt == ',') vopt++;
 
-        iy = (unsigned char)(y + 15 + (i * 10));
+        iy = (unsigned char)(popupY + 3 + (i * 10));
         FillRect((unsigned char)(x + 2), iy, (unsigned short)(width - 4), 8, vcorwb);
         if (strcmp(vvar, key) == 0)
             writesxy((unsigned short)(x + 4), iy, 1, label, vcorwb, vcorwf);
@@ -1606,9 +1621,9 @@ static unsigned char comboPopup(unsigned char *vopt, unsigned char *vvar, unsign
         if (m.mouseButton == 0x01 && prevBtn != 0x01)
         {
             if (m.vpostx >= x && m.vpostx <= (x + width) &&
-                m.vposty >= (y + 12) && m.vposty <= (y + 12 + h))
+                m.vposty >= popupY && m.vposty <= (popupY + h))
             {
-                i = (unsigned char)((m.vposty - (y + 14)) / 10);
+                i = (unsigned char)((m.vposty - (popupY + 2)) / 10);
                 if (i < count)
                 {
                     vopt = optBase;
@@ -1668,6 +1683,1267 @@ void combobox(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsign
         writesxy((unsigned short)(x + 3), (unsigned short)(y + 2), 1, label, vcorwf, vcorwb);
         writesxy((unsigned short)(x + pwidth - 8), (unsigned short)(y + 2), 1, "v", borderColor, vcorwb);
     }
+}
+
+//-------------------------------------------------------------------------
+static void spinParseOptions(unsigned char *vopt, long *vmin, long *vmax, long *vstep)
+{
+    char tmp[16];
+    unsigned char ix;
+
+    *vmin = 0;
+    *vmax = 9999;
+    *vstep = 1;
+
+    if (!vopt || !vopt[0])
+        return;
+
+    ix = 0;
+    while (*vopt && *vopt != ',' && ix < sizeof(tmp) - 1)
+        tmp[ix++] = *vopt++;
+    tmp[ix] = 0;
+    if (ix)
+        *vmin = atol(tmp);
+
+    if (*vopt == ',')
+        vopt++;
+
+    ix = 0;
+    while (*vopt && *vopt != ',' && ix < sizeof(tmp) - 1)
+        tmp[ix++] = *vopt++;
+    tmp[ix] = 0;
+    if (ix)
+        *vmax = atol(tmp);
+
+    if (*vopt == ',')
+        vopt++;
+
+    ix = 0;
+    while (*vopt && *vopt != ',' && ix < sizeof(tmp) - 1)
+        tmp[ix++] = *vopt++;
+    tmp[ix] = 0;
+    if (ix)
+        *vstep = atol(tmp);
+
+    if (*vstep <= 0)
+        *vstep = 1;
+    if (*vmax < *vmin)
+        *vmax = *vmin;
+}
+
+static void spinLongToString(long val, unsigned char *dst)
+{
+    char tmp[12];
+    unsigned char ix;
+    unsigned char neg;
+
+    ix = 0;
+    neg = 0;
+
+    if (val < 0)
+    {
+        neg = 1;
+        val = -val;
+    }
+
+    if (val == 0)
+        tmp[ix++] = '0';
+    else
+    {
+        while (val && ix < sizeof(tmp) - 1)
+        {
+            tmp[ix++] = (char)('0' + (val % 10));
+            val /= 10;
+        }
+    }
+
+    if (neg)
+        *dst++ = '-';
+
+    while (ix)
+        *dst++ = tmp[--ix];
+
+    *dst = 0;
+}
+
+static void spinClamp(unsigned char *vvar, long vmin, long vmax)
+{
+    long val;
+
+    if (vvar[0] == 0)
+        return;
+
+    val = atol((char *)vvar);
+    if (val < vmin)
+        val = vmin;
+    if (val > vmax)
+        val = vmax;
+
+    spinLongToString(val, vvar);
+}
+
+void spinbutton(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo)
+{
+    unsigned char thisIdx;
+    unsigned char isFocused;
+    unsigned char borderColor;
+    unsigned char cchar;
+    unsigned char vtmp[2];
+    unsigned char vdisp;
+    unsigned short textWidth;
+    unsigned short maxChars;
+    unsigned short len;
+    unsigned short cursor;
+    unsigned short offset;
+    unsigned short cc;
+    unsigned short visibleLen;
+    unsigned short srcPos;
+    long vmin;
+    long vmax;
+    long vstep;
+    long val;
+    MGUI_INPUT inp;
+    MGUI_MOUSE m;
+
+    thisIdx = mguiWidgetRegister(id, MGUI_WT_SPIN);
+    inp = mguiWidgetProcess(thisIdx, x, y, pwidth, 12, vtipo);
+    isFocused = inp.focused;
+    borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
+    vdisp = 0;
+
+    spinParseOptions(vopt, &vmin, &vmax, &vstep);
+
+    if (pwidth > 12)
+        textWidth = (unsigned short)(pwidth - 10);
+    else
+        textWidth = pwidth;
+
+    maxChars = (unsigned short)(textWidth / 6);
+    if (maxChars > 0)
+        maxChars = (unsigned short)(maxChars - 1);
+    if (maxChars == 0)
+        maxChars = 1;
+
+    len = (unsigned short)strlen(vvar);
+    if (len > 11)
+    {
+        vvar[11] = 0;
+        len = 11;
+    }
+
+    cursor = mguiFillinCursor[thisIdx];
+    offset = mguiFillinOffset[thisIdx];
+    if (cursor > len)
+        cursor = len;
+    if (offset > len)
+        offset = len;
+
+    if (isFocused && (vtipo == WINOPER || vtipo == WINFULL))
+    {
+        if (inp.clicked)
+        {
+            getMouseData(0, &m);
+            if (m.vpostx >= (x + textWidth) && m.vpostx <= (x + pwidth))
+            {
+                val = atol((char *)vvar);
+                if (m.vposty <= (y + 5))
+                    val += vstep;
+                else
+                    val -= vstep;
+
+                if (val < vmin)
+                    val = vmin;
+                if (val > vmax)
+                    val = vmax;
+
+                spinLongToString(val, vvar);
+                len = (unsigned short)strlen(vvar);
+                cursor = len;
+                vdisp = 1;
+            }
+            else
+            {
+                cursor = len;
+                vdisp = 1;
+            }
+        }
+
+        if (inp.key >= '0' && inp.key <= '9')
+        {
+            if (len < 11)
+            {
+                cc = len;
+                while (cc > cursor)
+                {
+                    vvar[cc] = vvar[cc - 1];
+                    cc--;
+                }
+                vvar[cursor] = inp.key;
+                vvar[len + 1] = 0;
+                cursor++;
+                len++;
+                spinClamp(vvar, vmin, vmax);
+                len = (unsigned short)strlen(vvar);
+                if (cursor > len)
+                    cursor = len;
+                vdisp = 1;
+            }
+        }
+        else
+        {
+            switch (inp.key)
+            {
+                case KEY_UP:
+                    val = atol((char *)vvar);
+                    val += vstep;
+                    if (val > vmax) val = vmax;
+                    spinLongToString(val, vvar);
+                    len = (unsigned short)strlen(vvar);
+                    cursor = len;
+                    vdisp = 1;
+                    break;
+                case KEY_DOWN:
+                    val = atol((char *)vvar);
+                    val -= vstep;
+                    if (val < vmin) val = vmin;
+                    spinLongToString(val, vvar);
+                    len = (unsigned short)strlen(vvar);
+                    cursor = len;
+                    vdisp = 1;
+                    break;
+                case KEY_BACKSPACE:
+                    if (cursor > 0)
+                    {
+                        cursor--;
+                        cc = cursor;
+                        while (cc < len)
+                        {
+                            vvar[cc] = vvar[cc + 1];
+                            cc++;
+                        }
+                        len--;
+                        vdisp = 1;
+                    }
+                    break;
+                case KEY_DELETE:
+                    if (cursor < len)
+                    {
+                        cc = cursor;
+                        while (cc < len)
+                        {
+                            vvar[cc] = vvar[cc + 1];
+                            cc++;
+                        }
+                        len--;
+                        vdisp = 1;
+                    }
+                    break;
+                case KEY_LEFT:
+                    if (cursor > 0)
+                    {
+                        cursor--;
+                        vdisp = 1;
+                    }
+                    break;
+                case KEY_RIGHT:
+                    if (cursor < len)
+                    {
+                        cursor++;
+                        vdisp = 1;
+                    }
+                    break;
+                case KEY_HOME:
+                    cursor = 0;
+                    vdisp = 1;
+                    break;
+                case KEY_END:
+                    cursor = len;
+                    vdisp = 1;
+                    break;
+            }
+        }
+    }
+
+    if (cursor < offset)
+        offset = cursor;
+    if (cursor > (unsigned short)(offset + maxChars))
+        offset = (unsigned short)(cursor - maxChars);
+    if (len <= maxChars)
+        offset = 0;
+
+    mguiFillinCursor[thisIdx] = cursor;
+    mguiFillinOffset[thisIdx] = offset;
+
+    if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
+    {
+        if (mguiWidgetOnFocusIdx == thisIdx)
+            mguiWidgetLeaveFocusIdx = mguiWidgetOnFocusIdx;
+
+        FillRect(x, y, pwidth, 12, vcorwb);
+        DrawRect(x, y, pwidth, 12, borderColor);
+
+        FillRect((unsigned char)(x + textWidth), y, 10, 12, vcorwb2);
+        DrawVertLine((unsigned char)(x + textWidth), y, 12, borderColor);
+        writesxy((unsigned short)(x + textWidth + 2), (unsigned short)(y + 1), 1, "^", borderColor, vcorwb2);
+        writesxy((unsigned short)(x + textWidth + 2), (unsigned short)(y + 6), 1, "v", borderColor, vcorwb2);
+
+        cc = 0;
+        len = (unsigned short)strlen(vvar);
+        if (offset > len)
+            offset = len;
+
+        visibleLen = (unsigned short)(len - offset);
+        if (visibleLen > maxChars)
+            visibleLen = maxChars;
+
+        while (cc < visibleLen)
+        {
+            srcPos = (unsigned short)(offset + cc);
+            cchar = vvar[srcPos];
+            vtmp[0] = cchar;
+            vtmp[1] = 0;
+
+            writesxy((unsigned short)(x + 3 + (cc * 6)), (unsigned short)(y + 2), 1, vtmp, vcorwf, vcorwb);
+            cc++;
+        }
+
+        if (isFocused)
+        {
+            if (cursor < offset)
+                cursor = offset;
+            if (cursor > (unsigned short)(offset + maxChars))
+                cursor = (unsigned short)(offset + maxChars);
+
+            cc = (unsigned short)(cursor - offset);
+            if ((x + 3 + (cc * 6) + 6) < (x + textWidth))
+            {
+                vtmp[0] = '|';
+                vtmp[1] = 0;
+                writesxy((unsigned short)(x + 3 + (cc * 6)), (unsigned short)(y + 2), 1, vtmp, borderColor, vcorwb);
+            }
+        }
+    }
+}
+
+//-------------------------------------------------------------------------
+static unsigned short browseReadNum(unsigned char **p)
+{
+    unsigned short v;
+
+    v = 0;
+    while (**p == ' ' || **p == '\t')
+        (*p)++;
+
+    while (**p >= '0' && **p <= '9')
+    {
+        v = (unsigned short)((v * 10) + (**p - '0'));
+        (*p)++;
+    }
+
+    while (**p && **p != ',')
+        (*p)++;
+
+    if (**p == ',')
+        (*p)++;
+
+    return v;
+}
+
+static void browseParseOptions(unsigned char *vopt, unsigned char *cols, unsigned char *widths)
+{
+    unsigned char i;
+    unsigned short n;
+
+    *cols = 1;
+    for (i = 0; i < 12; i++)
+        widths[i] = 10;
+
+    if (!vopt || !vopt[0])
+        return;
+
+    n = browseReadNum(&vopt);
+    if (n > 0 && n <= 12)
+        *cols = (unsigned char)n;
+
+    for (i = 0; i < *cols; i++)
+    {
+        n = browseReadNum(&vopt);
+        if (n > 0 && n < 40)
+            widths[i] = (unsigned char)n;
+    }
+}
+
+static unsigned short browseCountLines(unsigned char *data)
+{
+    unsigned short count;
+    unsigned char lastWasNl;
+
+    count = 0;
+    lastWasNl = 1;
+
+    while (*data)
+    {
+        if (lastWasNl)
+        {
+            count++;
+            lastWasNl = 0;
+        }
+
+        if (*data == '\n')
+            lastWasNl = 1;
+
+        data++;
+    }
+
+    return count;
+}
+
+static unsigned char *browseGetLine(unsigned char *data, unsigned short lineNo, unsigned short *lineLen)
+{
+    unsigned short cur;
+    unsigned char *start;
+
+    cur = 0;
+    start = data;
+
+    while (*data && cur < lineNo)
+    {
+        if (*data == '\n')
+        {
+            cur++;
+            start = data + 1;
+        }
+        data++;
+    }
+
+    *lineLen = 0;
+    data = start;
+    while (*data && *data != '\n' && *data != '\r')
+    {
+        (*lineLen)++;
+        data++;
+    }
+
+    return start;
+}
+
+static void browseCopyFirstCol(unsigned char *line, unsigned short lineLen, unsigned char *dst)
+{
+    unsigned short ix;
+
+    if (!dst)
+        return;
+
+    ix = 0;
+    while (ix < lineLen && line[ix] != ',' && ix < 31)
+    {
+        dst[ix] = line[ix];
+        ix++;
+    }
+    dst[ix] = 0;
+}
+
+static void browseComposeLine(unsigned char *line, unsigned short lineLen, unsigned char cols, unsigned char *widths, unsigned char *out, unsigned short outMax)
+{
+    unsigned char col;
+    unsigned char cw;
+    unsigned char used;
+    unsigned short src;
+    unsigned short outIx;
+
+    src = 0;
+    outIx = 0;
+
+    for (col = 0; col < cols && outIx < outMax - 1; col++)
+    {
+        cw = widths[col];
+        used = 0;
+
+        while (src < lineLen && line[src] != ',' && used < cw && outIx < outMax - 1)
+        {
+            out[outIx++] = line[src++];
+            used++;
+        }
+
+        while (src < lineLen && line[src] != ',')
+            src++;
+
+        if (src < lineLen && line[src] == ',')
+            src++;
+
+        while (used < cw && outIx < outMax - 1)
+        {
+            out[outIx++] = ' ';
+            used++;
+        }
+
+        if (col < cols - 1 && outIx < outMax - 1)
+            out[outIx++] = '|';
+    }
+
+    out[outIx] = 0;
+}
+
+void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigned char *vsel, unsigned short x, unsigned short y, unsigned short pwidth, unsigned short pheight, unsigned char vtipo)
+{
+    unsigned char thisIdx;
+    unsigned char isFocused;
+    unsigned char borderColor;
+    unsigned char cols;
+    unsigned char widths[12];
+    unsigned char lineBuf[160];
+    unsigned char showBuf[80];
+    unsigned char vdisp;
+    unsigned short totalLines;
+    unsigned short totalRows;
+    unsigned short visibleRows;
+    unsigned short row;
+    unsigned short lineLen;
+    unsigned short maxLineChars;
+    unsigned short visibleChars;
+    unsigned short maxHScroll;
+    unsigned short vScroll;
+    unsigned short hScroll;
+    unsigned short selected;
+    unsigned short copyIx;
+    unsigned short srcIx;
+    unsigned short textWidth;
+    unsigned short textHeight;
+    unsigned short thumb;
+    unsigned short thumbPos;
+    unsigned char *line;
+    MGUI_INPUT inp;
+    MGUI_MOUSE m;
+
+    if (!vdata)
+        return;
+
+    thisIdx = mguiWidgetRegister(id, MGUI_WT_BROWSER);
+    inp = mguiWidgetProcess(thisIdx, x, y, pwidth, pheight, vtipo);
+    isFocused = inp.focused;
+    borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
+    vdisp = 0;
+
+    browseParseOptions(vopt, &cols, widths);
+
+    textWidth = pwidth;
+    textHeight = pheight;
+    if (textWidth > 8)
+        textWidth = (unsigned short)(textWidth - 7);
+    if (textHeight > 8)
+        textHeight = (unsigned short)(textHeight - 7);
+
+    visibleChars = (unsigned short)((textWidth - 4) / 6);
+    if (visibleChars > sizeof(showBuf) - 1)
+        visibleChars = sizeof(showBuf) - 1;
+    if (visibleChars == 0)
+        visibleChars = 1;
+
+    totalLines = browseCountLines(vdata);
+    totalRows = 0;
+    if (totalLines > 1)
+        totalRows = (unsigned short)(totalLines - 1);
+
+    visibleRows = 0;
+    if (textHeight > 12)
+        visibleRows = (unsigned short)((textHeight - 10) / 10);
+    if (visibleRows == 0)
+        visibleRows = 1;
+
+    vScroll = mguiBrowseVScroll[thisIdx];
+    hScroll = mguiBrowseHScroll[thisIdx];
+    selected = mguiBrowseSelected[thisIdx];
+
+    if (selected >= totalRows && totalRows > 0)
+        selected = (unsigned short)(totalRows - 1);
+    if (vScroll >= totalRows && totalRows > 0)
+        vScroll = (unsigned short)(totalRows - 1);
+
+    maxLineChars = 0;
+    for (row = 0; row < cols; row++)
+        maxLineChars = (unsigned short)(maxLineChars + widths[row] + 1);
+    if (maxLineChars > 0)
+        maxLineChars--;
+
+    maxHScroll = 0;
+    if (maxLineChars > visibleChars)
+        maxHScroll = (unsigned short)(maxLineChars - visibleChars);
+    if (hScroll > maxHScroll)
+        hScroll = maxHScroll;
+
+    if (isFocused && (vtipo == WINOPER || vtipo == WINFULL))
+    {
+        if (inp.key == KEY_UP && selected > 0)
+        {
+            selected--;
+            if (selected < vScroll)
+                vScroll = selected;
+            vdisp = 1;
+        }
+        else if (inp.key == KEY_DOWN && selected + 1 < totalRows)
+        {
+            selected++;
+            if (selected >= vScroll + visibleRows)
+                vScroll = (unsigned short)(selected - visibleRows + 1);
+            vdisp = 1;
+        }
+        else if (inp.key == KEY_LEFT && hScroll > 0)
+        {
+            hScroll--;
+            vdisp = 1;
+        }
+        else if (inp.key == KEY_RIGHT && hScroll < maxHScroll)
+        {
+            hScroll++;
+            vdisp = 1;
+        }
+        else if (inp.key == KEY_PAGEUP)
+        {
+            if (selected > visibleRows)
+                selected = (unsigned short)(selected - visibleRows);
+            else
+                selected = 0;
+            vScroll = selected;
+            vdisp = 1;
+        }
+        else if (inp.key == KEY_PAGEDOWN)
+        {
+            selected = (unsigned short)(selected + visibleRows);
+            if (selected >= totalRows && totalRows > 0)
+                selected = (unsigned short)(totalRows - 1);
+            if (selected >= visibleRows)
+                vScroll = (unsigned short)(selected - visibleRows + 1);
+            vdisp = 1;
+        }
+
+        if (inp.clicked)
+        {
+            getMouseData(0, &m);
+
+            if (m.vpostx >= x && m.vpostx < x + textWidth &&
+                m.vposty >= y + 12 && m.vposty < y + textHeight)
+            {
+                row = (unsigned short)((m.vposty - y - 12) / 10);
+                if (vScroll + row < totalRows)
+                {
+                    selected = (unsigned short)(vScroll + row);
+                    vdisp = 1;
+                }
+            }
+            else if (m.vpostx >= x + textWidth && m.vpostx <= x + pwidth &&
+                     m.vposty >= y && m.vposty < y + textHeight && totalRows > visibleRows)
+            {
+                row = (unsigned short)(((unsigned long)(m.vposty - y) * (unsigned long)totalRows) / textHeight);
+                if (row + visibleRows > totalRows)
+                    row = (unsigned short)(totalRows - visibleRows);
+                vScroll = row;
+                selected = row;
+                vdisp = 1;
+            }
+            else if (m.vposty >= y + textHeight && m.vposty <= y + pheight && maxHScroll > 0)
+            {
+                hScroll = (unsigned short)(((unsigned long)(m.vpostx - x) * (unsigned long)(maxHScroll + 1)) / textWidth);
+                if (hScroll > maxHScroll)
+                    hScroll = maxHScroll;
+                vdisp = 1;
+            }
+        }
+    }
+
+    if (selected >= vScroll + visibleRows && totalRows > visibleRows)
+        vScroll = (unsigned short)(selected - visibleRows + 1);
+
+    mguiBrowseVScroll[thisIdx] = vScroll;
+    mguiBrowseHScroll[thisIdx] = hScroll;
+    mguiBrowseSelected[thisIdx] = selected;
+
+    if (vsel && totalRows > 0)
+    {
+        line = browseGetLine(vdata, (unsigned short)(selected + 1), &lineLen);
+        browseCopyFirstCol(line, lineLen, vsel);
+    }
+
+    if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
+    {
+        FillRect(x, y, pwidth, (unsigned char)pheight, vcorwb);
+        DrawRect(x, y, pwidth, pheight, borderColor);
+
+        line = browseGetLine(vdata, 0, &lineLen);
+        browseComposeLine(line, lineLen, cols, widths, lineBuf, sizeof(lineBuf));
+
+        copyIx = 0;
+        srcIx = hScroll;
+        while (copyIx < visibleChars && lineBuf[srcIx])
+            showBuf[copyIx++] = lineBuf[srcIx++];
+        showBuf[copyIx] = 0;
+
+        FillRect((unsigned char)(x + 1), (unsigned char)(y + 1), (unsigned short)(textWidth - 2), 9, vcorwb2);
+        writesxy((unsigned short)(x + 2), (unsigned short)(y + 2), 1, showBuf, vcorwf, vcorwb2);
+        FillRect(x, (unsigned char)(y + 11), textWidth, 1, borderColor);
+
+        row = 0;
+        while (row < visibleRows && vScroll + row < totalRows)
+        {
+            line = browseGetLine(vdata, (unsigned short)(vScroll + row + 1), &lineLen);
+            browseComposeLine(line, lineLen, cols, widths, lineBuf, sizeof(lineBuf));
+
+            copyIx = 0;
+            srcIx = hScroll;
+            while (copyIx < visibleChars && lineBuf[srcIx])
+                showBuf[copyIx++] = lineBuf[srcIx++];
+            showBuf[copyIx] = 0;
+
+            if (vScroll + row == selected)
+            {
+                FillRect((unsigned char)(x + 1), (unsigned char)(y + 12 + (row * 10)), (unsigned short)(textWidth - 2), 9, vcorwf);
+                writesxy((unsigned short)(x + 2), (unsigned short)(y + 13 + (row * 10)), 1, showBuf, vcorwb, vcorwf);
+            }
+            else
+            {
+                FillRect((unsigned char)(x + 1), (unsigned char)(y + 12 + (row * 10)), (unsigned short)(textWidth - 2), 9, vcorwb);
+                writesxy((unsigned short)(x + 2), (unsigned short)(y + 13 + (row * 10)), 1, showBuf, vcorwf, vcorwb);
+            }
+
+            row++;
+        }
+
+        if (totalRows > visibleRows)
+        {
+            FillRect((unsigned char)(x + textWidth), y, 6, (unsigned char)textHeight, vcorwb);
+            DrawRect((unsigned short)(x + textWidth), y, 6, textHeight, borderColor);
+
+            thumb = (unsigned short)(((unsigned long)visibleRows * (unsigned long)textHeight) / totalRows);
+            if (thumb < 4)
+                thumb = 4;
+            thumbPos = (unsigned short)(((unsigned long)vScroll * (unsigned long)textHeight) / totalRows);
+            if (thumbPos + thumb > textHeight)
+                thumbPos = (unsigned short)(textHeight - thumb);
+
+            FillRect((unsigned char)(x + textWidth + 1), (unsigned char)(y + thumbPos), 4, (unsigned char)thumb, borderColor);
+        }
+
+        if (maxHScroll > 0)
+        {
+            FillRect(x, (unsigned char)(y + textHeight), textWidth, 6, vcorwb);
+            DrawRect(x, (unsigned short)(y + textHeight), textWidth, 6, borderColor);
+
+            thumb = (unsigned short)(((unsigned long)visibleChars * (unsigned long)textWidth) / maxLineChars);
+            if (thumb < 4)
+                thumb = 4;
+            thumbPos = (unsigned short)(((unsigned long)hScroll * (unsigned long)textWidth) / (maxHScroll + 1));
+            if (thumbPos + thumb > textWidth)
+                thumbPos = (unsigned short)(textWidth - thumb);
+
+            FillRect((unsigned char)(x + thumbPos), (unsigned char)(y + textHeight + 1), thumb, 4, borderColor);
+        }
+    }
+}
+
+//-------------------------------------------------------------------------
+static unsigned char menuTokenCopy(unsigned char *dst, unsigned char *src, unsigned char max)
+{
+    unsigned char ix;
+
+    ix = 0;
+    while (*src && *src != ';' && ix < (unsigned char)(max - 1))
+    {
+        dst[ix++] = *src++;
+    }
+    dst[ix] = 0;
+
+    return ix;
+}
+
+static unsigned char *menuNextToken(unsigned char *src)
+{
+    while (*src && *src != ';')
+        src++;
+    if (*src == ';')
+        src++;
+    return src;
+}
+
+static MGUI_MENU_FUNC menuFindFunc(MGUI_MENU_BIND *binds, unsigned char *name)
+{
+    unsigned char ix;
+
+    if (!binds || !name || !name[0])
+        return 0;
+
+    ix = 0;
+    while (binds[ix].name)
+    {
+        if (!strcmp((char *)binds[ix].name, (char *)name))
+            return binds[ix].func;
+        ix++;
+    }
+
+    return 0;
+}
+
+static unsigned short menuShortcutRaw(unsigned char *shortcut)
+{
+    unsigned char flags;
+    unsigned char code;
+    unsigned char tok[16];
+    unsigned char ix;
+    unsigned char *p;
+
+    if (!shortcut || shortcut[0] != '#')
+        return 0;
+
+    p = shortcut + 1;
+    flags = KEY_NONE;
+    code = 0;
+
+    while (*p)
+    {
+        ix = 0;
+        while (*p && *p != '+' && ix < sizeof(tok) - 1)
+            tok[ix++] = mguiToUpper(*p++);
+        tok[ix] = 0;
+        if (*p == '+')
+            p++;
+
+        if (!strcmp((char *)tok, "CTRL"))
+            flags |= KEY_CTRL;
+        else if (!strcmp((char *)tok, "ALT"))
+            flags |= KEY_ALT;
+        else if (!strcmp((char *)tok, "SHIFT"))
+            flags |= 0x40;
+        else if (tok[0])
+            code = tok[0];
+    }
+
+    if ((flags & KEY_CTRL) && (flags & KEY_ALT))
+        flags = KEY_CTRL_ALT;
+    else if (flags & KEY_CTRL)
+        flags = KEY_CTRL;
+    else if (flags & KEY_ALT)
+        flags = KEY_ALT;
+    else
+        flags = KEY_NONE;
+
+    return (unsigned short)((flags << 8) | code);
+}
+
+static unsigned char menuBuildItem(unsigned char *start, unsigned char *label, unsigned char *shortcut, unsigned char *funcName)
+{
+    unsigned char token[32];
+    unsigned char gotLabel;
+
+    label[0] = 0;
+    shortcut[0] = 0;
+    funcName[0] = 0;
+    gotLabel = 0;
+
+    while (*start && *start != '@')
+    {
+        menuTokenCopy(token, start, sizeof(token));
+        start = menuNextToken(start);
+
+        if (token[0] == '#')
+        {
+            strcpy((char *)shortcut, (char *)token);
+        }
+        else if (token[0] == '=')
+        {
+            strcpy((char *)funcName, (char *)(token + 1));
+            return gotLabel;
+        }
+        else if (token[0])
+        {
+            if (gotLabel)
+                strcat((char *)label, "/");
+            strcat((char *)label, (char *)token);
+            gotLabel = 1;
+        }
+    }
+
+    return 0;
+}
+
+static unsigned char menuTopCount(unsigned char *menuDef)
+{
+    unsigned char count;
+    unsigned char name[20];
+    unsigned short seen[20];
+    unsigned char ix;
+    unsigned char cur;
+    unsigned char *p;
+
+    count = 0;
+    cur = 0;
+    p = menuDef;
+    while (*p)
+    {
+        if (*p == '@')
+        {
+            p++;
+            menuTokenCopy(name, p, sizeof(name));
+
+            seen[0] = 0;
+            ix = 0;
+            while (ix < cur)
+            {
+                if (!strcmp((char *)name, (char *)(menuDef + seen[ix])))
+                    break;
+                ix++;
+            }
+
+            if (ix == cur && cur < sizeof(seen))
+            {
+                seen[cur++] = (unsigned short)(p - menuDef);
+                count++;
+            }
+        }
+        p++;
+    }
+
+    return count;
+}
+
+static unsigned char *menuFindTop(unsigned char *menuDef, unsigned char topIndex, unsigned char *topName)
+{
+    unsigned char cur;
+    unsigned short seen[20];
+    unsigned char ix;
+    unsigned char *p;
+
+    cur = 0;
+    seen[0] = 0;
+    p = menuDef;
+    while (*p)
+    {
+        if (*p == '@')
+        {
+            p++;
+            menuTokenCopy(topName, p, 20);
+
+            ix = 0;
+            while (ix < cur)
+            {
+                if (!strcmp((char *)topName, (char *)(menuDef + seen[ix])))
+                    break;
+                ix++;
+            }
+
+            if (ix == cur)
+            {
+                if (cur == topIndex)
+                    return menuNextToken(p);
+
+                if (cur < sizeof(seen))
+                    seen[cur] = (unsigned short)(p - menuDef);
+                cur++;
+            }
+        }
+        p++;
+    }
+
+    topName[0] = 0;
+    return 0;
+}
+
+static unsigned char menuPopup(unsigned char *menuDef, MGUI_MENU_BIND *binds, unsigned char topIndex, unsigned short x, unsigned short y)
+{
+    MGUI_SAVESCR save;
+    MGUI_MOUSE m;
+    unsigned char topName[20];
+    unsigned char label[48];
+    unsigned char shortcut[20];
+    unsigned char funcName[24];
+    unsigned char itemStart[10];
+    unsigned char itemCount;
+    unsigned char selected;
+    unsigned char prevBtn;
+    unsigned char ix;
+    unsigned short width;
+    unsigned short h;
+    unsigned char *p;
+    MGUI_MENU_FUNC fn;
+
+    fn = 0;
+    if (!menuFindTop(menuDef, topIndex, topName))
+        return 0;
+
+    itemCount = 0;
+    width = 54;
+    p = menuDef;
+    while (*p && itemCount < 10)
+    {
+        if (*p == '@')
+        {
+            p++;
+            menuTokenCopy(label, p, sizeof(label));
+            p = menuNextToken(p);
+
+            if (!strcmp((char *)label, (char *)topName))
+            {
+                itemStart[itemCount] = (unsigned char)(p - menuDef);
+                if (menuBuildItem(p, label, shortcut, funcName))
+                {
+                    if ((unsigned short)(strlen((char *)label) * 6 + 18) > width)
+                        width = (unsigned short)(strlen((char *)label) * 6 + 18);
+                    itemCount++;
+                }
+            }
+        }
+        else
+            p++;
+    }
+
+    if (!itemCount)
+        return 0;
+
+    h = (unsigned short)(itemCount * 10 + 4);
+    SaveScreenNew(&save, x, y, width, h);
+    FillRect(x, y, width, h, vcorwb);
+    DrawRect(x, y, width, h, vcorwf);
+
+    for (ix = 0; ix < itemCount; ix++)
+    {
+        p = menuDef + itemStart[ix];
+        menuBuildItem(p, label, shortcut, funcName);
+        writesxy((unsigned short)(x + 3), (unsigned short)(y + 3 + (ix * 10)), 1, label, vcorwf, vcorwb);
+    }
+
+    prevBtn = 0;
+    selected = 255;
+    while (selected == 255)
+    {
+        getMouseData(0, &m);
+        getMouseData(1, &m);
+
+        if (m.mouseButton == 0x01 && prevBtn != 0x01)
+        {
+            if (m.vpostx >= x && m.vpostx <= x + width &&
+                m.vposty >= y && m.vposty <= y + h)
+            {
+                selected = (unsigned char)((m.vposty - y - 2) / 10);
+                if (selected >= itemCount)
+                    selected = 255;
+            }
+            else
+            {
+                break;
+            }
+        }
+        prevBtn = m.mouseButton;
+    }
+
+    if (selected != 255)
+    {
+        p = menuDef + itemStart[selected];
+        if (menuBuildItem(p, label, shortcut, funcName))
+        {
+            fn = menuFindFunc(binds, funcName);
+        }
+    }
+
+    RestoreScreen(&save);
+    if (selected != 255 && fn)
+        fn();
+
+    return 1;
+}
+
+static unsigned char menuShortcutExec(unsigned char *menuDef, MGUI_MENU_BIND *binds, unsigned short raw)
+{
+    unsigned char label[48];
+    unsigned char shortcut[20];
+    unsigned char funcName[24];
+    unsigned char token[32];
+    unsigned char *p;
+    MGUI_MENU_FUNC fn;
+
+    if (!raw)
+        return 0;
+
+    p = menuDef;
+    while (*p)
+    {
+        if (*p == '@')
+        {
+            p = menuNextToken(p + 1);
+            continue;
+        }
+
+        if (menuBuildItem(p, label, shortcut, funcName))
+        {
+            if (menuShortcutRaw(shortcut) == raw)
+            {
+                fn = menuFindFunc(binds, funcName);
+                if (fn)
+                    fn();
+                return 1;
+            }
+        }
+
+        while (*p && *p != '@')
+        {
+            menuTokenCopy(token, p, sizeof(token));
+            p = menuNextToken(p);
+            if (token[0] == '=')
+                break;
+        }
+    }
+
+    return 0;
+}
+
+void menuBar(unsigned char *menuDef, MGUI_MENU_BIND *binds, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo)
+{
+    static unsigned char menuMouseLatch = 0;
+    unsigned char count;
+    unsigned char ix;
+    unsigned char topName[20];
+    unsigned char *p;
+    unsigned short tx;
+    unsigned short raw;
+    MGUI_MOUSE m;
+
+    if (!menuDef)
+        return;
+
+    count = menuTopCount(menuDef);
+    if (!count)
+        return;
+
+    if (vtipo == WINFULL || vtipo == WINDISP)
+    {
+        FillRect((unsigned char)(x + 1), (unsigned char)(y + 12), (unsigned short)(pwidth - 2), 10, vcorwb);
+        tx = (unsigned short)(x + 4);
+        for (ix = 0; ix < count; ix++)
+        {
+            p = menuFindTop(menuDef, ix, topName);
+            if (p)
+            {
+                writesxy(tx, (unsigned short)(y + 14), 1, topName, vcorwf, vcorwb);
+                tx = (unsigned short)(tx + (strlen((char *)topName) * 6) + 12);
+            }
+        }
+        DrawHoriLine(x, (unsigned short)(y + 22), pwidth, vcorwf);
+    }
+
+    if (vtipo != WINOPER && vtipo != WINFULL)
+        return;
+
+    getMouseData(0, &m);
+    getMouseData(1, &m);
+
+    if (m.mouseButton != 0x01)
+        menuMouseLatch = 0;
+
+    if (m.mouseButton == 0x01 &&
+        !menuMouseLatch &&
+        m.vpostx >= x && m.vpostx <= x + pwidth &&
+        m.vposty >= y + 12 && m.vposty <= y + 22)
+    {
+        menuMouseLatch = 1;
+        tx = (unsigned short)(x + 4);
+        for (ix = 0; ix < count; ix++)
+        {
+            p = menuFindTop(menuDef, ix, topName);
+            if (p)
+            {
+                if (m.vpostx >= tx && m.vpostx <= tx + (strlen((char *)topName) * 6) + 8)
+                {
+                    menuPopup(menuDef, binds, ix, tx, (unsigned short)(y + 23));
+                    break;
+                }
+                tx = (unsigned short)(tx + (strlen((char *)topName) * 6) + 12);
+            }
+        }
+    }
+
+    raw = (unsigned short)mguiListWindows[*mguiIdRequest].keyTec;
+    if (menuShortcutExec(menuDef, binds, raw))
+        mguiListWindows[*mguiIdRequest].keyTec = 0;
+}
+
+//-------------------------------------------------------------------------
+unsigned char mguiDialog(unsigned char *title, unsigned short x, unsigned short y, unsigned short w, unsigned short h, MGUI_DIALOG_ITEM *items)
+{
+    MGUI_SAVESCR save;
+    MGUI_DIALOG_ITEM *it;
+    unsigned char ret;
+    unsigned char wmode;
+    unsigned short ax;
+    unsigned short ay;
+    unsigned short saveH;
+
+    ret = 0;
+    saveH = h;
+    if ((unsigned short)(y + saveH) < 191)
+        saveH = (unsigned short)(saveH + 10);
+    if ((unsigned short)(y + saveH) > 191)
+        saveH = (unsigned short)(191 - y);
+
+    SaveScreenNew(&save, x, y, w, (unsigned char)saveH);
+    showWindow(title, (unsigned char)x, (unsigned char)y, w, (unsigned char)h, BTNONE);
+
+    wmode = WINFULL;
+    while (!ret)
+    {
+        it = items;
+        while (it->type != MGUI_DLG_END)
+        {
+            ax = (unsigned short)(x + it->x);
+            ay = (unsigned short)(y + it->y);
+
+            if (it->type == MGUI_DLG_LABEL)
+            {
+                if (wmode == WINFULL)
+                    writesxy(ax, ay, 1, it->text, vcorwf, vcorwb);
+            }
+            else if (it->type == MGUI_DLG_FILLIN)
+            {
+                fillin(it->id, it->var, ax, ay, it->w, wmode);
+            }
+            else if (it->type == MGUI_DLG_BUTTON)
+            {
+                if (button(it->id, it->text, ax, ay, it->w, it->h, wmode))
+                    ret = it->id;
+            }
+            else if (it->type == MGUI_DLG_COMBOBOX)
+            {
+                combobox(it->id, it->opt, it->var, ax, ay, it->w, wmode);
+            }
+            else if (it->type == MGUI_DLG_SPIN)
+            {
+                spinbutton(it->id, it->opt, it->var, ax, ay, it->w, wmode);
+            }
+            else if (it->type == MGUI_DLG_TOGGLE)
+            {
+                togglebox(it->id, it->text, it->var, ax, ay, wmode);
+            }
+            else if (it->type == MGUI_DLG_RADIOSET)
+            {
+                radioset(it->id, it->opt, it->var, ax, ay, wmode);
+            }
+            else if (it->type == MGUI_DLG_RECT)
+            {
+                if (wmode == WINFULL)
+                    DrawRect(ax, ay, it->w, it->h, vcorwf);
+            }
+            else if (it->type == MGUI_DLG_BROWSER)
+            {
+                browse(it->id, it->opt, it->var, it->text, ax, ay, it->w, it->h, wmode);
+            }
+            else if (it->type == MGUI_DLG_MENUBAR)
+            {
+                menuBar(it->text, (MGUI_MENU_BIND *)it->var, ax, ay, it->w, wmode);
+            }
+
+            it++;
+        }
+
+        wmode = WINOPER;
+    }
+
+    RestoreScreen(&save);
+    return ret;
 }
 
 //-------------------------------------------------------------------------
@@ -2741,12 +4017,13 @@ void startMGI(void) {
         loadFile("/MGUI/IMAGES/ICOFOLD.PBM", imgsMenuSys);
         writesxy(137,170,1,"ICORUN.PBM ",vcorwf,vcorwb);
         loadFile("/MGUI/IMAGES/ICORUN.PBM", (imgsMenuSys + 64));
-        writesxy(137,170,1,"ICOOFF.PBM ",vcorwf,vcorwb);
-        loadFile("/MGUI/IMAGES/ICOOFF.PBM", (imgsMenuSys + 128));
-        writesxy(137,170,1,"ICOOS.PBM  ",vcorwf,vcorwb);
-        loadFile("/MGUI/IMAGES/ICOOS.PBM", (imgsMenuSys + 192));
         writesxy(137,170,1,"ICOSET.PBM ",vcorwf,vcorwb);
-        loadFile("/MGUI/IMAGES/ICOSET.PBM", (imgsMenuSys + 256));
+        loadFile("/MGUI/IMAGES/ICOSET.PBM", (imgsMenuSys + 128));        
+        writesxy(137,170,1,"ICOOFF.PBM ",vcorwf,vcorwb);
+        loadFile("/MGUI/IMAGES/ICOOFF.PBM", (imgsMenuSys + 192));
+        writesxy(137,170,1,"ICOOS.PBM  ",vcorwf,vcorwb);
+        loadFile("/MGUI/IMAGES/ICOOS.PBM", (imgsMenuSys + 256));
+
     }
     else
     {
@@ -3165,11 +4442,11 @@ static void mguiClockDraw(void)
 {
     unsigned int vx, vy;
 
-    vx = COLMENU + 48;
+    vx = COLMENU + 72;
     vy = LINMENU;
 
-    FillRect(vx, vy, 20, 16, vcorwf);
-    vx += 24;
+    FillRect(vx, vy, 2, 16, vcorwf);
+    vx += 4;
     writesxy(vx, vy, 5, vDateAtuAux, vcorwf, vcorwb2);
     writesxy(vx, vy + 8, 5, vTimeAtuAux, vcorwf, vcorwb2);
     FillRect(vx + 54, vy, 10, 16, vcorwf);
@@ -3252,7 +4529,7 @@ void desenhaMenu(void)
     vy = LINMENU;
 
     // Icone de menu e run
-    for (lc = 0; lc <= 1; lc++)
+    for (lc = 0; lc <= 2; lc++)
     {
         idx = lc * 64;
         putImagePbmP4((imgsMenuSys + idx), vx, vy);
@@ -3271,7 +4548,7 @@ void desenhaMenu(void)
 
     // Icone de Sair
     FillRect(226,vy,10,16,vcorwf);
-    lc = 2;
+    lc = 3;
     idx = lc * 64;
     vx = 240;
     putImagePbmP4((imgsMenuSys + idx), vx, vy);
@@ -3819,7 +5096,7 @@ unsigned char new_menu(void)
     }
     else 
     {
-        for (lc = 1; lc <= 1; lc++) 
+        for (lc = 1; lc <= 2; lc++) 
         {
             mx = COLMENU + (24 * lc);
             if (vpostx >= mx && vpostx <= (mx + 16)) 
@@ -3834,15 +5111,15 @@ unsigned char new_menu(void)
             case 1: // RUN
                 runBin();
                 break;
-            /*case 2: // EXIT
+            case 2: // SETUP
+                configMgui();
+                break;
+            /*case 3: // EXIT
                 mpos = message("Do you want to exit ?\0", BTYES | BTNO, 0);
                 if (mpos == BTYES)
                     vresp = 0;
                 break;
-            case 3: // MMSJOS
-                break;
-            case 4: // SETUP
-                configMgui();
+            case 4: // MMSJOS
                 break;*/
         }
     }
@@ -3951,50 +5228,473 @@ void menuFunc(void *pData)
 }
 
 //-----------------------------------------------------------------------------
+static void mguiCfgAppendChar(unsigned char *dst, unsigned short *pos, unsigned short max, unsigned char c)
+{
+    if (*pos < (unsigned short)(max - 1))
+    {
+        dst[*pos] = c;
+        (*pos)++;
+        dst[*pos] = 0;
+    }
+}
+
+static void mguiCfgAppendStr(unsigned char *dst, unsigned short *pos, unsigned short max, unsigned char *s)
+{
+    while (*s)
+    {
+        mguiCfgAppendChar(dst, pos, max, *s);
+        s++;
+    }
+}
+
+static unsigned char mguiCfgLineIsSection(unsigned char *p, unsigned short len, char *section)
+{
+    unsigned short slen;
+
+    while (len && (*p == ' ' || *p == '\t'))
+    {
+        p++;
+        len--;
+    }
+
+    slen = (unsigned short)strlen(section);
+    if (len < slen + 2)
+        return 0;
+
+    if (*p != '[')
+        return 0;
+
+    p++;
+    if (strncmp((char *)p, section, slen) != 0)
+        return 0;
+
+    return p[slen] == ']';
+}
+
+static unsigned char mguiCfgLineKey(unsigned char *p, unsigned short len, char *key)
+{
+    unsigned short klen;
+
+    while (len && (*p == ' ' || *p == '\t'))
+    {
+        p++;
+        len--;
+    }
+
+    klen = (unsigned short)strlen(key);
+    if (len < klen)
+        return 0;
+
+    if (strncmp((char *)p, key, klen) != 0)
+        return 0;
+
+    return (p[klen] == ' ' || p[klen] == '\t' || p[klen] == '=');
+}
+
+static void mguiCfgAppendStartKeys(unsigned char *dst, unsigned short *pos, unsigned short max, unsigned char *fg, unsigned char *bg, unsigned char *font)
+{
+    mguiCfgAppendStr(dst, pos, max, (unsigned char *)"COLOR_F=");
+    mguiCfgAppendStr(dst, pos, max, fg);
+    mguiCfgAppendStr(dst, pos, max, (unsigned char *)"\r\nCOLOR_B=");
+    mguiCfgAppendStr(dst, pos, max, bg);
+    mguiCfgAppendStr(dst, pos, max, (unsigned char *)"\r\nFONT=");
+    mguiCfgAppendStr(dst, pos, max, font);
+    mguiCfgAppendStr(dst, pos, max, (unsigned char *)"\r\n");
+}
+
+static unsigned char mguiCfgSaveStart(unsigned char *fg, unsigned char *bg, unsigned char *font)
+{
+    static unsigned char out[SIZE_LOAD_CFG_MEM];
+    unsigned char *p;
+    unsigned char *line;
+    unsigned short len;
+    unsigned short pos;
+    unsigned char inStart;
+    unsigned char foundStart;
+    unsigned char skipLine;
+
+    pos = 0;
+    out[0] = 0;
+    p = memPosConfig;
+    inStart = 0;
+    foundStart = 0;
+
+    if (!p)
+        return 0;
+
+    while (*p)
+    {
+        line = p;
+        len = 0;
+        while (p[len] && p[len] != '\r' && p[len] != '\n')
+            len++;
+
+        if (len && line[0] == '[')
+        {
+            if (inStart)
+                inStart = 0;
+
+            if (mguiCfgLineIsSection(line, len, "START"))
+            {
+                foundStart = 1;
+                inStart = 1;
+                while (len--)
+                    mguiCfgAppendChar(out, &pos, sizeof(out), *line++);
+                mguiCfgAppendStr(out, &pos, sizeof(out), (unsigned char *)"\r\n");
+                mguiCfgAppendStartKeys(out, &pos, sizeof(out), fg, bg, font);
+
+                while (*p && *p != '\n')
+                    p++;
+                if (*p == '\n')
+                    p++;
+                continue;
+            }
+        }
+
+        skipLine = 0;
+        if (inStart)
+        {
+            if (mguiCfgLineKey(line, len, "COLOR_F") ||
+                mguiCfgLineKey(line, len, "COLOR_B") ||
+                mguiCfgLineKey(line, len, "FONT"))
+                skipLine = 1;
+        }
+
+        if (!skipLine)
+        {
+            while (len--)
+                mguiCfgAppendChar(out, &pos, sizeof(out), *line++);
+            mguiCfgAppendStr(out, &pos, sizeof(out), (unsigned char *)"\r\n");
+        }
+
+        while (*p && *p != '\n')
+            p++;
+        if (*p == '\n')
+            p++;
+    }
+
+    if (!foundStart)
+    {
+        pos = 0;
+        out[0] = 0;
+        mguiCfgAppendStr(out, &pos, sizeof(out), (unsigned char *)"[START]\r\n");
+        mguiCfgAppendStartKeys(out, &pos, sizeof(out), fg, bg, font);
+        mguiCfgAppendStr(out, &pos, sizeof(out), (unsigned char *)"\r\n");
+        mguiCfgAppendStr(out, &pos, sizeof(out), memPosConfig);
+    }
+
+    if (saveFile((unsigned char *)"/MGUI/MGUI.CFG", out, pos) != RETURN_OK)
+        return 0;
+
+    if (pos < SIZE_LOAD_CFG_MEM)
+    {
+        memcpy(memPosConfig, out, pos);
+        memPosConfig[pos] = 0;
+    }
+
+    return 1;
+}
+
+static void mguiCfgSectionToBrowse(char *section, unsigned char *out, unsigned short max)
+{
+    unsigned char *p;
+    unsigned char *line;
+    unsigned char *eq;
+    unsigned short len;
+    unsigned short pos;
+    unsigned char inSection;
+    unsigned char ix;
+
+    pos = 0;
+    out[0] = 0;
+    mguiCfgAppendStr(out, &pos, max, (unsigned char *)"Field,Value\n");
+
+    p = memPosConfig;
+    inSection = 0;
+
+    while (p && *p)
+    {
+        line = p;
+        len = 0;
+        while (p[len] && p[len] != '\r' && p[len] != '\n')
+            len++;
+
+        if (len && line[0] == '[')
+            inSection = mguiCfgLineIsSection(line, len, section);
+        else if (inSection && len && line[0] != ';' && line[0] != '#')
+        {
+            eq = line;
+            ix = 0;
+            while (ix < len && *eq != '=')
+            {
+                eq++;
+                ix++;
+            }
+
+            if (ix < len && *eq == '=')
+            {
+                ix = 0;
+                while (line + ix < eq)
+                {
+                    if (line[ix] != ' ' && line[ix] != '\t')
+                        mguiCfgAppendChar(out, &pos, max, line[ix]);
+                    ix++;
+                }
+
+                mguiCfgAppendChar(out, &pos, max, ',');
+                eq++;
+                while (eq < line + len)
+                {
+                    if (*eq == ',')
+                        mguiCfgAppendChar(out, &pos, max, ';');
+                    else
+                        mguiCfgAppendChar(out, &pos, max, *eq);
+                    eq++;
+                }
+                mguiCfgAppendChar(out, &pos, max, '\n');
+            }
+        }
+
+        while (*p && *p != '\n')
+            p++;
+        if (*p == '\n')
+            p++;
+    }
+}
+
+//-----------------------------------------------------------------------------
 void configMgui (void)
 {
-/*    unsigned short ix;
-    unsigned char vwb, vresp;
-    MGUI_SAVESCR vsavescr;
+    static unsigned char colorFg[4];
+    static unsigned char colorBg[4];
+    static unsigned char fontSel[12];
+    static unsigned char execSel[32];
+    static unsigned char iconTypeSel[32];
+    static unsigned char iconFileSel[32];
+    static unsigned char fontOpt[192];
+    static unsigned char execData[768];
+    static unsigned char iconTypeData[768];
+    static unsigned char iconFileData[768];
+    static MGUI_DIALOG_ITEM items[18];
+    unsigned char ret;
+    unsigned char ix;
 
-    vnamein[0] = '\0';
-    vfilename[0] = '\0';
-    vfullpath[0] = '\0';
+    msprintf(colorFg, "%u", vcorwf);
+    msprintf(colorBg, "%u", vcorwb);
 
-    SaveScreenNew(&vsavescr, 10,40,240,60);
-    showWindow("Config",10,40,240,50,BTOK | BTCANCEL);
+    if (addrSetFontUseG2.name[0])
+        strcpy(fontSel, addrSetFontUseG2.name);
+    else
+        strcpy(fontSel, "DEFAULT");
 
-    writesxy(12,57,8,"File Name:",vcorwf,vcorwb);
+    execSel[0] = 0;
+    iconTypeSel[0] = 0;
+    iconFileSel[0] = 0;
 
+    strcpy(fontOpt, "DEFAULT,Default");
+    for (ix = 0; ix < 4; ix++)
     {
-        unsigned char wmode = WINFULL;
-        while (1)
+        if (listFontsUseG2[ix].name[0])
         {
-            fillin(0, vnamein, 78, 57, 130, wmode);
-            if (button(1, "OK", 18, 78, 44, 10, wmode))
-            {
-                vwb = BTOK;
-                break;
-            }
-
-            if (button(2, "CANCEL", 66, 78, 44, 10, wmode))
-            {
-                vwb = BTCANCEL;
-                break;
-            }
-
-            wmode = WINOPER;
-
-            if (vwb == BTOK || vwb == BTCANCEL)
-                break;
+            strcat(fontOpt, ",");
+            strcat(fontOpt, listFontsUseG2[ix].name);
+            strcat(fontOpt, ",");
+            strcat(fontOpt, listFontsUseG2[ix].name);
         }
     }
 
-    RestoreScreen(&vsavescr);
+    mguiCfgSectionToBrowse("EXEC", execData, sizeof(execData));
+    mguiCfgSectionToBrowse("ICONTYPE", iconTypeData, sizeof(iconTypeData));
+    mguiCfgSectionToBrowse("ICONFILE", iconFileData, sizeof(iconFileData));
 
-    if (vwb != BTOK)
+    items[0].type = MGUI_DLG_LABEL;
+    items[0].id = 0;
+    items[0].x = 8;
+    items[0].y = 16;
+    items[0].w = 0;
+    items[0].h = 0;
+    items[0].text = "Color:";
+    items[0].opt = 0;
+    items[0].var = 0;
+
+    items[1].type = MGUI_DLG_LABEL;
+    items[1].id = 0;
+    items[1].x = 8;
+    items[1].y = 30;
+    items[1].w = 0;
+    items[1].h = 0;
+    items[1].text = "Foreground:";
+    items[1].opt = 0;
+    items[1].var = 0;
+
+    items[2].type = MGUI_DLG_COMBOBOX;
+    items[2].id = 1;
+    items[2].x = 82;
+    items[2].y = 27;
+    items[2].w = 68;
+    items[2].h = 0;
+    items[2].text = 0;
+    items[2].opt = "0,Transp,1,Black,2,Med Green,3,Lt Green,4,Dk Blue,5,Lt Blue,6,Dk Red,7,Cyan,8,Med Red,9,Lt Red,10,Dk Yellow,11,Lt Yellow,12,Dk Green,13,Magenta,14,Gray,15,White";
+    items[2].var = colorFg;
+
+    items[3].type = MGUI_DLG_LABEL;
+    items[3].id = 0;
+    items[3].x = 8;
+    items[3].y = 45;
+    items[3].w = 0;
+    items[3].h = 0;
+    items[3].text = "Background:";
+    items[3].opt = 0;
+    items[3].var = 0;
+
+    items[4].type = MGUI_DLG_COMBOBOX;
+    items[4].id = 2;
+    items[4].x = 82;
+    items[4].y = 42;
+    items[4].w = 68;
+    items[4].h = 0;
+    items[4].text = 0;
+    items[4].opt = items[2].opt;
+    items[4].var = colorBg;
+
+    items[5].type = MGUI_DLG_LABEL;
+    items[5].id = 0;
+    items[5].x = 8;
+    items[5].y = 64;
+    items[5].w = 0;
+    items[5].h = 0;
+    items[5].text = "Font:";
+    items[5].opt = 0;
+    items[5].var = 0;
+
+    items[6].type = MGUI_DLG_COMBOBOX;
+    items[6].id = 3;
+    items[6].x = 82;
+    items[6].y = 61;
+    items[6].w = 68;
+    items[6].h = 0;
+    items[6].text = 0;
+    items[6].opt = fontOpt;
+    items[6].var = fontSel;
+
+    items[7].type = MGUI_DLG_LABEL;
+    items[7].id = 0;
+    items[7].x = 8;
+    items[7].y = 88;
+    items[7].w = 0;
+    items[7].h = 0;
+    items[7].text = "[EXEC]";
+    items[7].opt = 0;
+    items[7].var = 0;
+
+    items[8].type = MGUI_DLG_BROWSER;
+    items[8].id = 4;
+    items[8].x = 8;
+    items[8].y = 100;
+    items[8].w = 116;
+    items[8].h = 54;
+    items[8].text = execSel;
+    items[8].opt = "2,8,28";
+    items[8].var = execData;
+
+    items[9].type = MGUI_DLG_LABEL;
+    items[9].id = 0;
+    items[9].x = 132;
+    items[9].y = 88;
+    items[9].w = 0;
+    items[9].h = 0;
+    items[9].text = "[ICONTYPE]";
+    items[9].opt = 0;
+    items[9].var = 0;
+
+    items[10].type = MGUI_DLG_BROWSER;
+    items[10].id = 5;
+    items[10].x = 132;
+    items[10].y = 100;
+    items[10].w = 116;
+    items[10].h = 54;
+    items[10].text = iconTypeSel;
+    items[10].opt = "2,8,24";
+    items[10].var = iconTypeData;
+
+    items[11].type = MGUI_DLG_LABEL;
+    items[11].id = 0;
+    items[11].x = 164;
+    items[11].y = 16;
+    items[11].w = 0;
+    items[11].h = 0;
+    items[11].text = "[ICONFILE]";
+    items[11].opt = 0;
+    items[11].var = 0;
+
+    items[12].type = MGUI_DLG_BROWSER;
+    items[12].id = 6;
+    items[12].x = 164;
+    items[12].y = 28;
+    items[12].w = 84;
+    items[12].h = 58;
+    items[12].text = iconFileSel;
+    items[12].opt = "2,8,20";
+    items[12].var = iconFileData;
+
+    items[13].type = MGUI_DLG_BUTTON;
+    items[13].id = BTOK;
+    items[13].x = 74;
+    items[13].y = 164;
+    items[13].w = 44;
+    items[13].h = 10;
+    items[13].text = "OK";
+    items[13].opt = 0;
+    items[13].var = 0;
+
+    items[14].type = MGUI_DLG_BUTTON;
+    items[14].id = BTCANCEL;
+    items[14].x = 126;
+    items[14].y = 164;
+    items[14].w = 44;
+    items[14].h = 10;
+    items[14].text = "CANCEL";
+    items[14].opt = 0;
+    items[14].var = 0;
+
+    items[15].type = MGUI_DLG_END;
+    items[15].id = 0;
+    items[15].x = 0;
+    items[15].y = 0;
+    items[15].w = 0;
+    items[15].h = 0;
+    items[15].text = 0;
+    items[15].opt = 0;
+    items[15].var = 0;
+
+    ret = mguiDialog("Config", 0, 0, 255, 181, items);
+
+    if (ret != BTOK)
         return;
-*/
+
+    vcorwf = (unsigned char)atoi(colorFg);
+    vcorwb = (unsigned char)atoi(colorBg);
+
+    if (!strcmp(fontSel, "DEFAULT"))
+    {
+        mguiFontUseAll = 99;
+        setFontUseG2(99);
+    }
+    else
+    {
+        for (ix = 0; ix < 4; ix++)
+        {
+            if (listFontsUseG2[ix].name[0] && !strcmp(fontSel, listFontsUseG2[ix].name))
+            {
+                mguiFontUseAll = ix;
+                setFontUseG2(ix);
+                break;
+            }
+        }
+    }
+
+    if (!mguiCfgSaveStart(colorFg, colorBg, fontSel))
+        message("Error saving MGUI.CFG\0", BTCLOSE, 0);
 }
 
 //-----------------------------------------------------------------------------
@@ -4045,7 +5745,7 @@ void askParamToExec(unsigned char *vParam)
 void runBin(void)
 {
     unsigned short ix;
-    unsigned char vwb, vresp;
+    unsigned char vwb;
     unsigned char vnamein[64], vfilename[64], vfullpath[96];
     unsigned char *vEndExec;
     unsigned char vUseFixedAddr;
@@ -4053,43 +5753,64 @@ void runBin(void)
     char *vdot;
     char vProgIsMgui = 1;
     char vProgIsBasic = 0;
-
     MGUI_SAVESCR vsavescr;
+    MGUI_DIALOG_ITEM dlgItems[5];
 
     vnamein[0] = '\0';
     vfilename[0] = '\0';
     vfullpath[0] = '\0';
 
-    SaveScreenNew(&vsavescr, 10,40,240,60);
-    showWindow("Run",10,40,240,50,BTOK | BTCANCEL);
+    dlgItems[0].type = MGUI_DLG_LABEL;
+    dlgItems[0].id = 0;
+    dlgItems[0].x = 2;
+    dlgItems[0].y = 17;
+    dlgItems[0].w = 0;
+    dlgItems[0].h = 0;
+    dlgItems[0].text = "File Name:";
+    dlgItems[0].opt = 0;
+    dlgItems[0].var = 0;
 
-    writesxy(12,57,8,"File Name:",vcorwf,vcorwb);
+    dlgItems[1].type = MGUI_DLG_FILLIN;
+    dlgItems[1].id = 0;
+    dlgItems[1].x = 68;
+    dlgItems[1].y = 17;
+    dlgItems[1].w = 130;
+    dlgItems[1].h = 0;
+    dlgItems[1].text = 0;
+    dlgItems[1].opt = 0;
+    dlgItems[1].var = vnamein;
 
-    {
-        unsigned char wmode = WINFULL;
-        while (1)
-        {
-            fillin(0, vnamein, 78, 57, 130, wmode);
-            if (button(1, "OK", 18, 78, 44, 10, wmode))
-            {
-                vwb = BTOK;
-                break;
-            }
+    dlgItems[2].type = MGUI_DLG_BUTTON;
+    dlgItems[2].id = BTOK;
+    dlgItems[2].x = 8;
+    dlgItems[2].y = 38;
+    dlgItems[2].w = 44;
+    dlgItems[2].h = 10;
+    dlgItems[2].text = "OK";
+    dlgItems[2].opt = 0;
+    dlgItems[2].var = 0;
 
-            if (button(2, "CANCEL", 66, 78, 44, 10, wmode))
-            {
-                vwb = BTCANCEL;
-                break;
-            }
+    dlgItems[3].type = MGUI_DLG_BUTTON;
+    dlgItems[3].id = BTCANCEL;
+    dlgItems[3].x = 56;
+    dlgItems[3].y = 38;
+    dlgItems[3].w = 44;
+    dlgItems[3].h = 10;
+    dlgItems[3].text = "CANCEL";
+    dlgItems[3].opt = 0;
+    dlgItems[3].var = 0;
 
-            wmode = WINOPER;
+    dlgItems[4].type = MGUI_DLG_END;
+    dlgItems[4].id = 0;
+    dlgItems[4].x = 0;
+    dlgItems[4].y = 0;
+    dlgItems[4].w = 0;
+    dlgItems[4].h = 0;
+    dlgItems[4].text = 0;
+    dlgItems[4].opt = 0;
+    dlgItems[4].var = 0;
 
-            if (vwb == BTOK || vwb == BTCANCEL)
-                break;
-        }
-    }
-
-    RestoreScreen(&vsavescr);
+    vwb = mguiDialog("Run", 10, 40, 240, 50, dlgItems);
 
     if (vwb != BTOK)
         return;

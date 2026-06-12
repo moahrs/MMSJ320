@@ -95,7 +95,7 @@ extern unsigned char *memVideoFonts; // Fontes para Video, formato igual ao do V
 #define WINFULL     0x02
 
 #define LINHAMENU      22
-#define COLMENU       8
+#define COLMENU       4
 #define LINMENU       1
 
 #define ICONSPERLINE   8  // Quantidade de Icones por linha
@@ -104,6 +104,39 @@ extern unsigned char *memVideoFonts; // Fontes para Video, formato igual ao do V
 
 #define MOUSE_POINTER 1
 #define MOUSE_HOURGLASS 2
+
+#define MGUI_DLG_END       0
+#define MGUI_DLG_LABEL     1
+#define MGUI_DLG_FILLIN    2
+#define MGUI_DLG_BUTTON    3
+#define MGUI_DLG_COMBOBOX  4
+#define MGUI_DLG_SPIN      5
+#define MGUI_DLG_TOGGLE    6
+#define MGUI_DLG_RADIOSET  7
+#define MGUI_DLG_RECT      8
+#define MGUI_DLG_BROWSER   9
+#define MGUI_DLG_MENUBAR   10
+
+typedef void (*MGUI_MENU_FUNC)(void);
+
+typedef struct
+{
+    unsigned char *name;
+    MGUI_MENU_FUNC func;
+} MGUI_MENU_BIND;
+
+typedef struct
+{
+    unsigned char type;
+    unsigned char id;
+    unsigned short x;
+    unsigned short y;
+    unsigned short w;
+    unsigned short h;
+    unsigned char *text;
+    unsigned char *opt;
+    unsigned char *var;
+} MGUI_DIALOG_ITEM;
 
 #define ICON_HOME  50
 #define ICON_RUN  51
@@ -186,14 +219,18 @@ void runFromMguiCmd(void);
 void runBin(void);
 void importFile(void);
 void putImagePbmP4(unsigned char* memoria, unsigned short ix, unsigned short iy);
+unsigned char mguiDialog(unsigned char *title, unsigned short x, unsigned short y, unsigned short w, unsigned short h, MGUI_DIALOG_ITEM *items);
 
 // -------------------------------------------------------------------------------
 // Elementos
 // -------------------------------------------------------------------------------
 void showWindow(unsigned char* bstr, unsigned char x1, unsigned char y1, unsigned short pwidth, unsigned char pheight, unsigned char bbutton);
+void menuBar(unsigned char *menuDef, MGUI_MENU_BIND *binds, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
 void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
 unsigned char button(unsigned char id, unsigned char *title, unsigned short xib, unsigned short yib, unsigned short width, unsigned short height, unsigned char vtipo);
 void radioset(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
 void togglebox(unsigned char id, unsigned char* bstr, unsigned char *vvar, unsigned short x, unsigned short y, unsigned char vtipo);
 void combobox(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
+void spinbutton(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
+void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigned char *vsel, unsigned short x, unsigned short y, unsigned short pwidth, unsigned short pheight, unsigned char vtipo);
 #endif

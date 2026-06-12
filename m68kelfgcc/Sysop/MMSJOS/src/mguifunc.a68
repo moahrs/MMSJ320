@@ -35,4 +35,8 @@ mgui_func_table:
             dc.l _rtc_set_datetime
             dc.l _rtc_read_datetime
             dc.l _rtc_init_with_sqw
+            dc.l _spinbutton
+            dc.l _mguiDialog
+            dc.l _browse
+            dc.l _menuBar
             
