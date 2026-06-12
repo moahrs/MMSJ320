@@ -18,6 +18,7 @@
 * 10/05/2026  1.0a06  Moacir Jr.   Remover uC/OS-II - RTOS
 * 25/05/2026  1.0a07  Moacir Jr.   Piscar Cursor, Ajustes Gerais
 * 01/06/2026  1.0a08  Moacir Jr.   Abstracao de saida e entrada de dados
+* 10/06/2026  1.0a09  Moacir Jr.   Inclusao de data e hora
 ********************************************************************************/
 #include <ctype.h>
 #include <string.h>
@@ -352,7 +353,7 @@ char memInit(void);
 
 HEADER *_allocp;
 
-#define versionMMSJOS "1.0a08"
+#define versionMMSJOS "1.0a09"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 #define FS_SECTOR_RETRY_COUNT 3
 #define FS_ENABLE_WRITE_VERIFY 1

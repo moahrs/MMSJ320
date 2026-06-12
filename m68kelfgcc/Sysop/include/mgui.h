@@ -129,6 +129,7 @@ typedef struct
 {
     unsigned char type;
     unsigned char id;
+    unsigned char ret;
     unsigned short x;
     unsigned short y;
     unsigned short w;

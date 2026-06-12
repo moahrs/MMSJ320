@@ -12,6 +12,7 @@
 * 13/04/2026  0.7a03  Moacir Jr.   Ajustes para o mouse e o sprite do ponteiro
 * 10/05/2026  0.7a04  Moacir Jr.   Remover uC/OS-II - RTOS
 * 16/05/2026  1.0a02  Moacir Jr.   Versao publicacao
+* 11/06/2026  1.1a01  Moacir Jr.   Inclusao de Novos elementos, ajustes criar janela
 *--------------------------------------------------------------------------------
 *
 *--------------------------------------------------------------------------------
@@ -83,7 +84,7 @@ volatile unsigned char mguiClockTicks = 0;
 volatile unsigned char mguiClockDirty = 1;
 static int mguiClockLastMinute = -1;
 
-#define versionMgui "1.0a02"
+#define versionMgui "1.1a01"
 #define __EM_OBRAS__ 1
 
 unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
@@ -180,10 +181,12 @@ typedef struct
 } MGUI_WIDGET_FOCUS;
 
 static MGUI_WIDGET_FOCUS mguiWidgetFocus[24];
+static unsigned char mguiWidgetUsed[24];
 static unsigned char mguiWidgetCount = 0;
 static unsigned char mguiWidgetOnFocusIdx = 0;
 static unsigned char mguiWidgetLeaveFocusIdx = 255;
 static unsigned char mguiWidgetTabLatch = 0;
+static unsigned char mguiWidgetFocusInit = 0;
 static unsigned short mguiFillinCursor[24];
 static unsigned short mguiFillinOffset[24];
 static unsigned short mguiBrowseVScroll[24];
@@ -197,33 +200,54 @@ static void mguiWidgetFocusReset(void)
     mguiWidgetOnFocusIdx = 0;
     mguiWidgetLeaveFocusIdx = 255;
     mguiWidgetTabLatch = 0;
+    mguiWidgetFocusInit = 0;
+    memset(mguiWidgetUsed, 0, sizeof(mguiWidgetUsed));
 }
 
 static char mguiWidgetRegister(unsigned char id, unsigned char type)
 {
-/*    unsigned char i;
+    if (id >= 24)
+        return -1;
 
-    for (i = 0; i < mguiWidgetCount; i++)
+    if (!mguiWidgetUsed[id])
     {
-        if (mguiWidgetFocus[i].id == id)
-            return i;
+        mguiWidgetUsed[id] = 1;
+        if (!mguiWidgetFocusInit)
+        {
+            mguiWidgetOnFocusIdx = id;
+            mguiWidgetFocusInit = 1;
+        }
     }
 
-    if (mguiWidgetCount < 24)
+    if (id > mguiWidgetCount)
+        mguiWidgetCount = id;
+
+    mguiWidgetFocus[id].id = id;
+    mguiWidgetFocus[id].type = type;
+
+    return id;
+}
+
+static unsigned char mguiWidgetNextFocus(unsigned char cur)
+{
+    unsigned char ix;
+
+    if (!mguiWidgetFocusInit)
+        return cur;
+
+    ix = cur;
+    while (1)
     {
-        if (mguiWidgetCount == 0)
-            mguiWidgetOnFocusIdx = 0;  // primeiro widget registrado e o foco default*/
+        ix++;
+        if (ix > mguiWidgetCount)
+            ix = 0;
 
-        if (id > mguiWidgetCount)
-            mguiWidgetCount = id;
+        if (mguiWidgetUsed[ix])
+            return ix;
 
-        mguiWidgetFocus[id].id = id;
-        mguiWidgetFocus[id].type = type;
-
-        return (id);
-    //}
-
-    return -1;
+        if (ix == cur)
+            return cur;
+    }
 }
 
 //-------------------------------------------------------------------------
@@ -259,6 +283,7 @@ static MGUI_INPUT mguiWidgetProcess(unsigned char thisIdx,
         vmouseData.vpostx >= wx && vmouseData.vpostx <= (wx + ww) &&
         vmouseData.vposty >= wy && vmouseData.vposty <= (wy + wh))
     {
+        mguiWidgetLeaveFocusIdx = mguiWidgetOnFocusIdx;
         mguiWidgetOnFocusIdx = thisIdx;
         result.clicked = 1;
     }
@@ -284,9 +309,8 @@ static MGUI_INPUT mguiWidgetProcess(unsigned char thisIdx,
         {
             if (!mguiWidgetTabLatch)
             {
-                mguiWidgetOnFocusIdx++;
-                if (mguiWidgetOnFocusIdx > mguiWidgetCount)
-                    mguiWidgetOnFocusIdx = 0;
+                mguiWidgetLeaveFocusIdx = mguiWidgetOnFocusIdx;
+                mguiWidgetOnFocusIdx = mguiWidgetNextFocus(mguiWidgetOnFocusIdx);
                 mguiWidgetTabLatch = 1;
             }
             result.key    = KEY_NONE;
@@ -1213,7 +1237,7 @@ unsigned char button(unsigned char id, unsigned char *title, unsigned short xib,
     MGUI_INPUT inp;
 
     if (vtipo == WINFULL)
-        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_COMBO);
     else
         thisIdx = id;
 
@@ -1273,7 +1297,7 @@ void fillin(unsigned char id, unsigned char* vvar, unsigned short x, unsigned sh
     MGUI_INPUT inp;
 
     if (vtipo == WINFULL)
-        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_BROWSER);
     else
         thisIdx = id;
         
@@ -1659,9 +1683,15 @@ void combobox(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsign
     unsigned char borderColor;
     unsigned char label[48];
     unsigned char vdisp;
+    unsigned char oldFocusIdx;
     MGUI_INPUT inp;
 
-    thisIdx = mguiWidgetRegister(id, MGUI_WT_COMBO);
+    if (vtipo == WINFULL)
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+    else
+        thisIdx = id;
+
+    oldFocusIdx = mguiWidgetOnFocusIdx;
     inp = mguiWidgetProcess(thisIdx, x, y, pwidth, 12, vtipo);
     isFocused = inp.focused;
     borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
@@ -1676,8 +1706,17 @@ void combobox(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsign
         comboFindLabel(vopt, vvar, label, sizeof(label));
     }
 
+    if (oldFocusIdx != mguiWidgetOnFocusIdx || (mguiWidgetOnFocusIdx == thisIdx && mguiWidgetLeaveFocusIdx != mguiWidgetOnFocusIdx))
+    {
+        if (oldFocusIdx == thisIdx || mguiWidgetOnFocusIdx == thisIdx)
+            vdisp = 1;
+    }
+
     if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
     {
+        if (mguiWidgetOnFocusIdx == thisIdx)
+            mguiWidgetLeaveFocusIdx = mguiWidgetOnFocusIdx;
+
         FillRect(x, y, pwidth, 12, vcorwb);
         DrawRect(x, y, pwidth, 12, borderColor);
         writesxy((unsigned short)(x + 3), (unsigned short)(y + 2), 1, label, vcorwf, vcorwb);
@@ -1802,10 +1841,16 @@ void spinbutton(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsi
     long vmax;
     long vstep;
     long val;
+    unsigned char oldFocusIdx;
     MGUI_INPUT inp;
     MGUI_MOUSE m;
 
-    thisIdx = mguiWidgetRegister(id, MGUI_WT_SPIN);
+    if (vtipo == WINFULL)
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+    else
+        thisIdx = id;
+
+    oldFocusIdx = mguiWidgetOnFocusIdx;
     inp = mguiWidgetProcess(thisIdx, x, y, pwidth, 12, vtipo);
     isFocused = inp.focused;
     borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
@@ -1973,6 +2018,12 @@ void spinbutton(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsi
 
     mguiFillinCursor[thisIdx] = cursor;
     mguiFillinOffset[thisIdx] = offset;
+
+    if (oldFocusIdx != mguiWidgetOnFocusIdx || (mguiWidgetOnFocusIdx == thisIdx && mguiWidgetLeaveFocusIdx != mguiWidgetOnFocusIdx))
+    {
+        if (oldFocusIdx == thisIdx || mguiWidgetOnFocusIdx == thisIdx)
+            vdisp = 1;
+    }
 
     if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
     {
@@ -2212,19 +2263,32 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
     unsigned short thumb;
     unsigned short thumbPos;
     unsigned char *line;
+    unsigned char oldFocusIdx;
     MGUI_INPUT inp;
     MGUI_MOUSE m;
 
     if (!vdata)
         return;
 
-    thisIdx = mguiWidgetRegister(id, MGUI_WT_BROWSER);
+    if (vtipo == WINFULL)
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+    else
+        thisIdx = id;
+
+    oldFocusIdx = mguiWidgetOnFocusIdx;
     inp = mguiWidgetProcess(thisIdx, x, y, pwidth, pheight, vtipo);
     isFocused = inp.focused;
     borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
     vdisp = 0;
 
     browseParseOptions(vopt, &cols, widths);
+
+    if (vtipo == WINFULL)
+    {
+        mguiBrowseVScroll[thisIdx] = 0;
+        mguiBrowseHScroll[thisIdx] = 0;
+        mguiBrowseSelected[thisIdx] = 0;
+    }
 
     textWidth = pwidth;
     textHeight = pheight;
@@ -2363,8 +2427,17 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
         browseCopyFirstCol(line, lineLen, vsel);
     }
 
+    if (oldFocusIdx != mguiWidgetOnFocusIdx || (mguiWidgetOnFocusIdx == thisIdx && mguiWidgetLeaveFocusIdx != mguiWidgetOnFocusIdx))
+    {
+        if (oldFocusIdx == thisIdx || mguiWidgetOnFocusIdx == thisIdx)
+            vdisp = 1;
+    }
+
     if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
     {
+        if (mguiWidgetOnFocusIdx == thisIdx)
+            mguiWidgetLeaveFocusIdx = mguiWidgetOnFocusIdx;
+
         FillRect(x, y, pwidth, (unsigned char)pheight, vcorwb);
         DrawRect(x, y, pwidth, pheight, borderColor);
 
@@ -2916,7 +2989,7 @@ unsigned char mguiDialog(unsigned char *title, unsigned short x, unsigned short 
             else if (it->type == MGUI_DLG_BUTTON)
             {
                 if (button(it->id, it->text, ax, ay, it->w, it->h, wmode))
-                    ret = it->id;
+                    ret = it->ret;
             }
             else if (it->type == MGUI_DLG_COMBOBOX)
             {
@@ -2965,6 +3038,7 @@ void radioset(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsign
     unsigned char cchar, vdisp = 0;
     unsigned char thisIdx, isFocused, borderColor;
     unsigned short pheight;
+    unsigned char oldFocusIdx;
     MGUI_INPUT inp;
 
     pheight = 10;
@@ -2976,7 +3050,12 @@ void radioset(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsign
         cc++;
     }
 
-    thisIdx = mguiWidgetRegister(id, MGUI_WT_RADIO);
+    if (vtipo == WINFULL)
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+    else
+        thisIdx = id;
+
+    oldFocusIdx = mguiWidgetOnFocusIdx;
     inp = mguiWidgetProcess(thisIdx, x, y, 140, pheight, vtipo);
     isFocused = inp.focused;
     borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
@@ -3003,7 +3082,16 @@ void radioset(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsign
   xc = 0;
   cc = 0;
 
+    if (oldFocusIdx != mguiWidgetOnFocusIdx || (mguiWidgetOnFocusIdx == thisIdx && mguiWidgetLeaveFocusIdx != mguiWidgetOnFocusIdx))
+    {
+        if (oldFocusIdx == thisIdx || mguiWidgetOnFocusIdx == thisIdx)
+            vdisp = 1;
+    }
+
   while(vtipo == WINDISP || vtipo == WINFULL || vdisp) {
+        if (mguiWidgetOnFocusIdx == thisIdx)
+            mguiWidgetLeaveFocusIdx = mguiWidgetOnFocusIdx;
+
         if (isFocused)
             DrawRect(x - 2, y - 2, 146, pheight + 2, borderColor);
 
@@ -3041,10 +3129,16 @@ void togglebox(unsigned char id, unsigned char* bstr, unsigned char *vvar, unsig
     unsigned char cchar, vdisp = 0;
     unsigned char thisIdx, isFocused, borderColor;
     unsigned short twidth;
+    unsigned char oldFocusIdx;
     MGUI_INPUT inp;
 
     twidth = 10 + (unsigned short)(strlen(bstr) * 6);
-    thisIdx = mguiWidgetRegister(id, MGUI_WT_TOGGLE);
+    if (vtipo == WINFULL)
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+    else
+        thisIdx = id;
+
+    oldFocusIdx = mguiWidgetOnFocusIdx;
     inp = mguiWidgetProcess(thisIdx, x, y, twidth, 8, vtipo);
     isFocused = inp.focused;
     borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
@@ -3068,8 +3162,17 @@ void togglebox(unsigned char id, unsigned char* bstr, unsigned char *vvar, unsig
     vdisp = 1;
   }
 
+    if (oldFocusIdx != mguiWidgetOnFocusIdx || (mguiWidgetOnFocusIdx == thisIdx && mguiWidgetLeaveFocusIdx != mguiWidgetOnFocusIdx))
+    {
+        if (oldFocusIdx == thisIdx || mguiWidgetOnFocusIdx == thisIdx)
+            vdisp = 1;
+    }
+
   if (vtipo == WINDISP || vtipo == WINFULL || vdisp)
   {
+        if (mguiWidgetOnFocusIdx == thisIdx)
+            mguiWidgetLeaveFocusIdx = mguiWidgetOnFocusIdx;
+
         if (isFocused)
             DrawRect(x - 2, y - 1, twidth + 4, 10, borderColor);
 
@@ -4555,8 +4658,8 @@ void desenhaMenu(void)
     mguiClockDraw();
 
     // Nome e Versao
-    writesxy(152 , vy, 5, "MMC-320   MGUI", vcorwf, vcorwb2);
-    writesxy(172 , vy + 8, 5, versionMgui, vcorwf, vcorwb2);
+    writesxy(154 , vy, 5, "MMC-320   MGUI", vcorwf, vcorwb2);
+    writesxy(174 , vy + 8, 5, versionMgui, vcorwf, vcorwb2);
 
     // Icone de Sair
     FillRect(226,vy,10,16,vcorwf);
@@ -5091,10 +5194,11 @@ void TrocaSpriteMouse(unsigned char vicone)
 //-------------------------------------------------------------------------
 unsigned char new_menu(void)
 {
-    unsigned short lc;
+    unsigned short lc, vx;
     unsigned char vresp, mpos, mtqresp;
 
     vresp = 1;
+    vx = COLMENU + 72 + 6;
 
     if (vpostx >= COLMENU && vpostx <= (COLMENU + 16))
     {
@@ -5105,6 +5209,10 @@ unsigned char new_menu(void)
         mpos = message("Do you want to exit ?\0", BTYES | BTNO, 0);
         if (mpos == BTYES)
             vresp = 0;
+    }
+    else if (vpostx >= vx && vpostx <= vx + 54)
+    {
+        updateDateTime();
     }
     else 
     {
@@ -5419,7 +5527,7 @@ static void mguiCfgSectionToBrowse(char *section, unsigned char *out, unsigned s
 
     pos = 0;
     out[0] = 0;
-    mguiCfgAppendStr(out, &pos, max, (unsigned char *)"Field,Value\n");
+    mguiCfgAppendStr(out, &pos, max, (unsigned char *)"Ext,Prog\r\n");
 
     p = memPosConfig;
     inSection = 0;
@@ -5463,7 +5571,7 @@ static void mguiCfgSectionToBrowse(char *section, unsigned char *out, unsigned s
                         mguiCfgAppendChar(out, &pos, max, *eq);
                     eq++;
                 }
-                mguiCfgAppendChar(out, &pos, max, '\n');
+                mguiCfgAppendStr(out, &pos, max, (unsigned char *)"\r\n");
             }
         }
 
@@ -5472,6 +5580,151 @@ static void mguiCfgSectionToBrowse(char *section, unsigned char *out, unsigned s
         if (*p == '\n')
             p++;
     }
+}
+
+//-----------------------------------------------------------------------------
+void updateDateTime(void)
+{
+    static unsigned char month[5];
+    static unsigned char day[5];
+    static unsigned char year[7];
+    static unsigned char hour[5];
+    static unsigned char minute[5];
+    static MGUI_DIALOG_ITEM items[18];
+    DateTimeData system_clock;
+    unsigned char ret;
+    int vyear;
+
+    if (rtc_read_datetime(&system_clock) != 0)
+    {
+        message("Error Reading RTC\0", BTCLOSE, 0);
+        return;
+    }
+
+    vyear = system_clock.year;
+    if (vyear >= 0 && vyear < 100)
+        vyear += 2000;
+
+    msprintf(month, "%d", system_clock.month);
+    msprintf(day, "%d", system_clock.day);
+    msprintf(year, "%d", vyear);
+    msprintf(hour, "%d", system_clock.hours);
+    msprintf(minute, "%d", system_clock.minutes);
+
+    memset(items, 0, sizeof(items));
+
+    items[0].type = MGUI_DLG_LABEL;
+    items[0].id = 0;
+    items[0].x = 12;
+    items[0].y = 18;
+    items[0].text = "Date:";
+
+    items[1].type = MGUI_DLG_SPIN;
+    items[1].id = 1;
+    items[1].x = 56;
+    items[1].y = 16;
+    items[1].w = 34;
+    items[1].opt = "1,12,1";
+    items[1].var = month;
+
+    items[2].type = MGUI_DLG_LABEL;
+    items[2].id = 0;
+    items[2].x = 94;
+    items[2].y = 18;
+    items[2].text = "/";
+
+    items[3].type = MGUI_DLG_SPIN;
+    items[3].id = 2;
+    items[3].x = 104;
+    items[3].y = 16;
+    items[3].w = 34;
+    items[3].opt = "1,31,1";
+    items[3].var = day;
+
+    items[4].type = MGUI_DLG_LABEL;
+    items[4].id = 0;
+    items[4].x = 142;
+    items[4].y = 18;
+    items[4].text = "/";
+
+    items[5].type = MGUI_DLG_SPIN;
+    items[5].id = 3;
+    items[5].x = 152;
+    items[5].y = 16;
+    items[5].w = 56;
+    items[5].opt = "0,9999,1";
+    items[5].var = year;
+
+    items[6].type = MGUI_DLG_LABEL;
+    items[6].id = 0;
+    items[6].x = 12;
+    items[6].y = 40;
+    items[6].text = "Time:";
+
+    items[7].type = MGUI_DLG_SPIN;
+    items[7].id = 4;
+    items[7].x = 56;
+    items[7].y = 38;
+    items[7].w = 34;
+    items[7].opt = "0,23,1";
+    items[7].var = hour;
+
+    items[8].type = MGUI_DLG_LABEL;
+    items[8].id = 0;
+    items[8].x = 94;
+    items[8].y = 40;
+    items[8].text = ":";
+
+    items[9].type = MGUI_DLG_SPIN;
+    items[9].id = 5;
+    items[9].x = 104;
+    items[9].y = 38;
+    items[9].w = 34;
+    items[9].opt = "0,59,1";
+    items[9].var = minute;
+
+    items[10].type = MGUI_DLG_BUTTON;
+    items[10].id = 6;
+    items[10].ret = BTOK;
+    items[10].x = 56;
+    items[10].y = 66;
+    items[10].w = 44;
+    items[10].h = 10;
+    items[10].text = "OK";
+
+    items[11].type = MGUI_DLG_BUTTON;
+    items[11].id = 7;
+    items[11].ret = BTCANCEL;
+    items[11].x = 110;
+    items[11].y = 66;
+    items[11].w = 54;
+    items[11].h = 10;
+    items[11].text = "CANCEL";
+
+    items[12].type = MGUI_DLG_END;
+
+    ret = mguiDialog("Date/Time", 20, 48, 216, 92, items);
+    if (ret != BTOK)
+        return;
+
+    system_clock.month = atoi(month);
+    system_clock.day = atoi(day);
+    vyear = atoi(year);
+    system_clock.year = vyear % 100;
+    system_clock.hours = atoi(hour);
+    system_clock.minutes = atoi(minute);
+    system_clock.seconds = 0;
+
+    if (rtc_set_datetime(&system_clock) != 0)
+    {
+        message("Error Updating RTC\0", BTCLOSE, 0);
+        return;
+    }
+
+    mguiClockReadRtc(1);
+    if (mguiClockDirty)
+        mguiClockDraw();
+
 }
 
 //-----------------------------------------------------------------------------
@@ -5490,6 +5743,17 @@ void configMgui (void)
     static MGUI_DIALOG_ITEM items[18];
     unsigned char ret;
     unsigned char ix;
+    unsigned char oldFg;
+    unsigned char oldBg;
+    unsigned char oldFontUse;
+    unsigned char newFg;
+    unsigned char newBg;
+
+    memset(items, 0, sizeof(items));
+
+    oldFg = vcorwf;
+    oldBg = vcorwb;
+    oldFontUse = mguiFontUseAll;
 
     msprintf(colorFg, "%u", vcorwf);
     msprintf(colorBg, "%u", vcorwb);
@@ -5530,7 +5794,7 @@ void configMgui (void)
     items[0].var = 0;
 
     items[1].type = MGUI_DLG_LABEL;
-    items[1].id = 0;
+    items[1].id = 1;
     items[1].x = 8;
     items[1].y = 30;
     items[1].w = 0;
@@ -5540,7 +5804,7 @@ void configMgui (void)
     items[1].var = 0;
 
     items[2].type = MGUI_DLG_COMBOBOX;
-    items[2].id = 1;
+    items[2].id = 2;
     items[2].x = 82;
     items[2].y = 27;
     items[2].w = 68;
@@ -5550,7 +5814,7 @@ void configMgui (void)
     items[2].var = colorFg;
 
     items[3].type = MGUI_DLG_LABEL;
-    items[3].id = 0;
+    items[3].id =30;
     items[3].x = 8;
     items[3].y = 45;
     items[3].w = 0;
@@ -5560,7 +5824,7 @@ void configMgui (void)
     items[3].var = 0;
 
     items[4].type = MGUI_DLG_COMBOBOX;
-    items[4].id = 2;
+    items[4].id = 4;
     items[4].x = 82;
     items[4].y = 42;
     items[4].w = 68;
@@ -5570,7 +5834,7 @@ void configMgui (void)
     items[4].var = colorBg;
 
     items[5].type = MGUI_DLG_LABEL;
-    items[5].id = 0;
+    items[5].id = 5;
     items[5].x = 8;
     items[5].y = 64;
     items[5].w = 0;
@@ -5580,7 +5844,7 @@ void configMgui (void)
     items[5].var = 0;
 
     items[6].type = MGUI_DLG_COMBOBOX;
-    items[6].id = 3;
+    items[6].id = 6;
     items[6].x = 82;
     items[6].y = 61;
     items[6].w = 68;
@@ -5590,17 +5854,17 @@ void configMgui (void)
     items[6].var = fontSel;
 
     items[7].type = MGUI_DLG_LABEL;
-    items[7].id = 0;
+    items[7].id = 7;
     items[7].x = 8;
     items[7].y = 88;
     items[7].w = 0;
     items[7].h = 0;
-    items[7].text = "[EXEC]";
+    items[7].text = "Ext x Prog";
     items[7].opt = 0;
     items[7].var = 0;
 
     items[8].type = MGUI_DLG_BROWSER;
-    items[8].id = 4;
+    items[8].id = 8;
     items[8].x = 8;
     items[8].y = 100;
     items[8].w = 116;
@@ -5610,17 +5874,17 @@ void configMgui (void)
     items[8].var = execData;
 
     items[9].type = MGUI_DLG_LABEL;
-    items[9].id = 0;
+    items[9].id = 9;
     items[9].x = 132;
     items[9].y = 88;
     items[9].w = 0;
     items[9].h = 0;
-    items[9].text = "[ICONTYPE]";
+    items[9].text = "Ext x Icon";
     items[9].opt = 0;
     items[9].var = 0;
 
     items[10].type = MGUI_DLG_BROWSER;
-    items[10].id = 5;
+    items[10].id = 10;
     items[10].x = 132;
     items[10].y = 100;
     items[10].w = 116;
@@ -5630,17 +5894,17 @@ void configMgui (void)
     items[10].var = iconTypeData;
 
     items[11].type = MGUI_DLG_LABEL;
-    items[11].id = 0;
+    items[11].id = 11;
     items[11].x = 164;
     items[11].y = 16;
     items[11].w = 0;
     items[11].h = 0;
-    items[11].text = "[ICONFILE]";
+    items[11].text = "Icon Prog";
     items[11].opt = 0;
     items[11].var = 0;
 
     items[12].type = MGUI_DLG_BROWSER;
-    items[12].id = 6;
+    items[12].id = 12;
     items[12].x = 164;
     items[12].y = 28;
     items[12].w = 84;
@@ -5650,7 +5914,8 @@ void configMgui (void)
     items[12].var = iconFileData;
 
     items[13].type = MGUI_DLG_BUTTON;
-    items[13].id = 20;
+    items[13].id = 13;
+    items[13].ret = BTOK;
     items[13].x = 74;
     items[13].y = 164;
     items[13].w = 44;
@@ -5660,7 +5925,8 @@ void configMgui (void)
     items[13].var = 0;
 
     items[14].type = MGUI_DLG_BUTTON;
-    items[14].id = 21;
+    items[14].id = 14;
+    items[14].ret = BTCANCEL;
     items[14].x = 126;
     items[14].y = 164;
     items[14].w = 44;
@@ -5670,7 +5936,7 @@ void configMgui (void)
     items[14].var = 0;
 
     items[15].type = MGUI_DLG_END;
-    items[15].id = 0;
+    items[15].id = 15;
     items[15].x = 0;
     items[15].y = 0;
     items[15].w = 0;
@@ -5681,11 +5947,13 @@ void configMgui (void)
 
     ret = mguiDialog("Config", 0, 0, 255, 181, items);
 
-    if (ret != 20)
+    if (ret != BTOK)
         return;
 
-    vcorwf = (unsigned char)atoi(colorFg);
-    vcorwb = (unsigned char)atoi(colorBg);
+    newFg = (unsigned char)atoi(colorFg);
+    newBg = (unsigned char)atoi(colorBg);
+    vcorwf = newFg;
+    vcorwb = newBg;
 
     if (!strcmp(fontSel, "DEFAULT"))
     {
@@ -5706,7 +5974,13 @@ void configMgui (void)
     }
 
     if (!mguiCfgSaveStart(colorFg, colorBg, fontSel))
+    {
         message("Error saving MGUI.CFG\0", BTCLOSE, 0);
+        return;
+    }
+
+    if (oldFg != vcorwf || oldBg != vcorwb || oldFontUse != mguiFontUseAll)
+        redrawScreen();
 }
 
 //-----------------------------------------------------------------------------
@@ -5771,6 +6045,7 @@ void runBin(void)
     vnamein[0] = '\0';
     vfilename[0] = '\0';
     vfullpath[0] = '\0';
+    memset(dlgItems, 0, sizeof(dlgItems));
 
     dlgItems[0].type = MGUI_DLG_LABEL;
     dlgItems[0].id = 0;
@@ -5794,6 +6069,7 @@ void runBin(void)
 
     dlgItems[2].type = MGUI_DLG_BUTTON;
     dlgItems[2].id = BTOK;
+    dlgItems[2].ret = BTOK;
     dlgItems[2].x = 8;
     dlgItems[2].y = 38;
     dlgItems[2].w = 44;
@@ -5804,6 +6080,7 @@ void runBin(void)
 
     dlgItems[3].type = MGUI_DLG_BUTTON;
     dlgItems[3].id = BTCANCEL;
+    dlgItems[3].ret = BTCANCEL;
     dlgItems[3].x = 56;
     dlgItems[3].y = 38;
     dlgItems[3].w = 44;
