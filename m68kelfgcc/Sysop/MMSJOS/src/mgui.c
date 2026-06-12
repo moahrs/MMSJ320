@@ -173,6 +173,7 @@ static unsigned char deskSelected = 0xFF;      /* selected slot 0..24, 0xFF=none
 #define MGUI_WT_COMBO    5
 #define MGUI_WT_SPIN     6
 #define MGUI_WT_BROWSER  7
+#define MGUI_BROWSE_DATA_MAX 768
 
 typedef struct
 {
@@ -2140,7 +2141,7 @@ static void browseAppendStr(unsigned char *dst, unsigned short *pos, unsigned sh
     }
 }
 
-static void browseParseOptions(unsigned char *vopt, unsigned char *cols, unsigned char *widths, unsigned char *header, unsigned short headerMax)
+static void browseParseOptions(unsigned char *vopt, unsigned char *cols, unsigned char *widths, unsigned char titles[12][16], unsigned char *header, unsigned short headerMax)
 {
     unsigned char i;
     unsigned short n;
@@ -2163,6 +2164,7 @@ static void browseParseOptions(unsigned char *vopt, unsigned char *cols, unsigne
     for (i = 0; i < *cols; i++)
     {
         browseCopyToken(title, &vopt, sizeof(title));
+        strcpy(titles[i], title);
         n = browseReadNum(&vopt);
         if (n > 0 && n < 40)
             widths[i] = (unsigned char)n;
@@ -2171,6 +2173,174 @@ static void browseParseOptions(unsigned char *vopt, unsigned char *cols, unsigne
             browseAppendChar(header, &hpos, headerMax, ',');
         browseAppendStr(header, &hpos, headerMax, title);
     }
+}
+
+static void browseDeleteLine(unsigned char *data, unsigned short lineNo)
+{
+    unsigned short cur;
+    unsigned char *start;
+    unsigned char *end;
+
+    if (!data || !data[0])
+        return;
+
+    cur = 0;
+    start = data;
+    while (*start && cur < lineNo)
+    {
+        if (*start == '\n')
+            cur++;
+        start++;
+    }
+
+    if (!*start)
+        return;
+
+    end = start;
+    while (*end && *end != '\n')
+        end++;
+    if (*end == '\n')
+        end++;
+
+    while (*end)
+        *start++ = *end++;
+    *start = 0;
+}
+
+static unsigned char browseAppendLine(unsigned char *data, unsigned char *line, unsigned short max)
+{
+    unsigned short len;
+    unsigned short need;
+
+    len = (unsigned short)strlen(data);
+    need = (unsigned short)strlen(line);
+
+    if ((unsigned short)(len + need + 3) >= max)
+        return 0;
+
+    if (len && data[len - 1] != '\n')
+    {
+        data[len++] = '\r';
+        data[len++] = '\n';
+        data[len] = 0;
+    }
+
+    strcat(data, line);
+    strcat(data, "\r\n");
+
+    return 1;
+}
+
+static unsigned char browseInsertDialog(unsigned char cols, unsigned char titles[12][16], unsigned char *data)
+{
+    static unsigned char values[12][32];
+    static unsigned char line[256];
+    static MGUI_DIALOG_ITEM items[32];
+    MGUI_WIDGET_FOCUS saveFocus[24];
+    unsigned char saveUsed[24];
+    unsigned char saveCount;
+    unsigned char saveOn;
+    unsigned char saveLeave;
+    unsigned char saveLatch;
+    unsigned char saveInit;
+    unsigned char ix;
+    unsigned char item;
+    unsigned char ret;
+    unsigned short pos;
+    unsigned short wy;
+
+    if (cols > 12)
+        cols = 12;
+
+    memset(values, 0, sizeof(values));
+    memset(items, 0, sizeof(items));
+    line[0] = 0;
+
+    item = 0;
+    wy = 16;
+    for (ix = 0; ix < cols; ix++)
+    {
+        items[item].type = MGUI_DLG_LABEL;
+        items[item].id = item;
+        items[item].x = 8;
+        items[item].y = wy;
+        items[item].text = titles[ix];
+        item++;
+
+        items[item].type = MGUI_DLG_FILLIN;
+        items[item].id = (unsigned char)(ix + 1);
+        items[item].x = 64;
+        items[item].y = wy;
+        items[item].w = 130;
+        items[item].var = values[ix];
+        item++;
+
+        wy = (unsigned short)(wy + 16);
+    }
+
+    items[item].type = MGUI_DLG_BUTTON;
+    items[item].id = (unsigned char)(cols + 1);
+    items[item].ret = BTOK;
+    items[item].x = 50;
+    items[item].y = (unsigned short)(wy + 8);
+    items[item].w = 44;
+    items[item].h = 10;
+    items[item].text = "OK";
+    item++;
+
+    items[item].type = MGUI_DLG_BUTTON;
+    items[item].id = (unsigned char)(cols + 2);
+    items[item].ret = BTCANCEL;
+    items[item].x = 104;
+    items[item].y = (unsigned short)(wy + 8);
+    items[item].w = 54;
+    items[item].h = 10;
+    items[item].text = "CANCEL";
+    item++;
+
+    items[item].type = MGUI_DLG_END;
+
+    memcpy(saveFocus, mguiWidgetFocus, sizeof(saveFocus));
+    memcpy(saveUsed, mguiWidgetUsed, sizeof(saveUsed));
+    saveCount = mguiWidgetCount;
+    saveOn = mguiWidgetOnFocusIdx;
+    saveLeave = mguiWidgetLeaveFocusIdx;
+    saveLatch = mguiWidgetTabLatch;
+    saveInit = mguiWidgetFocusInit;
+
+    ret = mguiDialog("Insert", 18, 38, 220, (unsigned short)(wy + 34), items);
+
+    memcpy(mguiWidgetFocus, saveFocus, sizeof(saveFocus));
+    memcpy(mguiWidgetUsed, saveUsed, sizeof(saveUsed));
+    mguiWidgetCount = saveCount;
+    mguiWidgetOnFocusIdx = saveOn;
+    mguiWidgetLeaveFocusIdx = saveLeave;
+    mguiWidgetTabLatch = saveLatch;
+    mguiWidgetFocusInit = saveInit;
+
+    if (ret != BTOK)
+        return 0;
+
+    pos = 0;
+    for (ix = 0; ix < cols; ix++)
+    {
+        unsigned char *p;
+
+        if (ix)
+            browseAppendChar(line, &pos, sizeof(line), ',');
+
+        p = values[ix];
+        while (*p)
+        {
+            if (*p == ',')
+                browseAppendChar(line, &pos, sizeof(line), ' ');
+            else
+                browseAppendChar(line, &pos, sizeof(line), *p);
+            p++;
+        }
+    }
+
+    return browseAppendLine(data, line, MGUI_BROWSE_DATA_MAX);
 }
 
 static unsigned short browseCountLines(unsigned char *data)
@@ -2291,6 +2461,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
     unsigned char borderColor;
     unsigned char cols;
     unsigned char widths[12];
+    unsigned char titles[12][16];
     unsigned char headerBuf[160];
     unsigned char lineBuf[160];
     unsigned char showBuf[80];
@@ -2331,7 +2502,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
     borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
     vdisp = 0;
 
-    browseParseOptions(vopt, &cols, widths, headerBuf, sizeof(headerBuf));
+    browseParseOptions(vopt, &cols, widths, titles, headerBuf, sizeof(headerBuf));
 
     if (vtipo == WINFULL)
     {
@@ -2426,6 +2597,34 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
             if (selected >= visibleRows)
                 vScroll = (unsigned short)(selected - visibleRows + 1);
             vdisp = 1;
+        }
+        else if (inp.key == KEY_DELETE && totalRows > 0)
+        {
+            browseDeleteLine(vdata, selected);
+            totalLines = browseCountLines(vdata);
+            totalRows = totalLines;
+            if (selected >= totalRows && totalRows > 0)
+                selected = (unsigned short)(totalRows - 1);
+            if (totalRows == 0)
+                selected = 0;
+            if (vScroll >= totalRows && totalRows > 0)
+                vScroll = (unsigned short)(totalRows - 1);
+            if (totalRows == 0)
+                vScroll = 0;
+            vdisp = 1;
+        }
+        else if (inp.key == KEY_INSERT)
+        {
+            if (browseInsertDialog(cols, titles, vdata))
+            {
+                totalLines = browseCountLines(vdata);
+                totalRows = totalLines;
+                if (totalRows > 0)
+                    selected = (unsigned short)(totalRows - 1);
+                if (selected >= visibleRows)
+                    vScroll = (unsigned short)(selected - visibleRows + 1);
+                vdisp = 1;
+            }
         }
 
         if (inp.clicked)
