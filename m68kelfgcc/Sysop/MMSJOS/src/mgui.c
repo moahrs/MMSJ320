@@ -2368,6 +2368,12 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
         FillRect(x, y, pwidth, (unsigned char)pheight, vcorwb);
         DrawRect(x, y, pwidth, pheight, borderColor);
 
+        if (totalLines == 0)
+        {
+            writesxy((unsigned short)(x + 2), (unsigned short)(y + 2), 1, "(no data)", vcorwf, vcorwb);
+            return;
+        }
+
         line = browseGetLine(vdata, 0, &lineLen);
         browseComposeLine(line, lineLen, cols, widths, lineBuf, sizeof(lineBuf));
 
@@ -2377,9 +2383,15 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
             showBuf[copyIx++] = lineBuf[srcIx++];
         showBuf[copyIx] = 0;
 
-        FillRect((unsigned char)(x + 1), (unsigned char)(y + 1), (unsigned short)(textWidth - 2), 9, vcorwb2);
-        writesxy((unsigned short)(x + 2), (unsigned short)(y + 2), 1, showBuf, vcorwf, vcorwb2);
+        FillRect((unsigned char)(x + 1), (unsigned char)(y + 1), (unsigned short)(textWidth - 2), 9, vcorwb);
+        writesxy((unsigned short)(x + 2), (unsigned short)(y + 2), 1, showBuf, vcorwf, vcorwb);
         FillRect(x, (unsigned char)(y + 11), textWidth, 1, borderColor);
+
+        if (totalRows == 0)
+        {
+            writesxy((unsigned short)(x + 2), (unsigned short)(y + 13), 1, "(empty)", vcorwf, vcorwb);
+            return;
+        }
 
         row = 0;
         while (row < visibleRows && vScroll + row < totalRows)
@@ -2393,7 +2405,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
                 showBuf[copyIx++] = lineBuf[srcIx++];
             showBuf[copyIx] = 0;
 
-            if (vScroll + row == selected)
+            if (isFocused && vScroll + row == selected)
             {
                 FillRect((unsigned char)(x + 1), (unsigned char)(y + 12 + (row * 10)), (unsigned short)(textWidth - 2), 9, vcorwf);
                 writesxy((unsigned short)(x + 2), (unsigned short)(y + 13 + (row * 10)), 1, showBuf, vcorwb, vcorwf);
@@ -4446,7 +4458,7 @@ static void mguiClockDraw(void)
     vy = LINMENU;
 
     FillRect(vx, vy, 2, 16, vcorwf);
-    vx += 4;
+    vx += 6;
     writesxy(vx, vy, 5, vDateAtuAux, vcorwf, vcorwb2);
     writesxy(vx, vy + 8, 5, vTimeAtuAux, vcorwf, vcorwb2);
     FillRect(vx + 54, vy, 10, 16, vcorwf);
@@ -4543,8 +4555,8 @@ void desenhaMenu(void)
     mguiClockDraw();
 
     // Nome e Versao
-    writesxy(150 , vy, 5, "MMC-320   MGUI", vcorwf, vcorwb2);
-    writesxy(170 , vy + 8, 5, versionMgui, vcorwf, vcorwb2);
+    writesxy(152 , vy, 5, "MMC-320   MGUI", vcorwf, vcorwb2);
+    writesxy(172 , vy + 8, 5, versionMgui, vcorwf, vcorwb2);
 
     // Icone de Sair
     FillRect(226,vy,10,16,vcorwf);
@@ -5638,7 +5650,7 @@ void configMgui (void)
     items[12].var = iconFileData;
 
     items[13].type = MGUI_DLG_BUTTON;
-    items[13].id = BTOK;
+    items[13].id = 20;
     items[13].x = 74;
     items[13].y = 164;
     items[13].w = 44;
@@ -5648,7 +5660,7 @@ void configMgui (void)
     items[13].var = 0;
 
     items[14].type = MGUI_DLG_BUTTON;
-    items[14].id = BTCANCEL;
+    items[14].id = 21;
     items[14].x = 126;
     items[14].y = 164;
     items[14].w = 44;
@@ -5669,7 +5681,7 @@ void configMgui (void)
 
     ret = mguiDialog("Config", 0, 0, 255, 181, items);
 
-    if (ret != BTOK)
+    if (ret != 20)
         return;
 
     vcorwf = (unsigned char)atoi(colorFg);
