@@ -2100,14 +2100,57 @@ static unsigned short browseReadNum(unsigned char **p)
     return v;
 }
 
-static void browseParseOptions(unsigned char *vopt, unsigned char *cols, unsigned char *widths)
+static void browseCopyToken(unsigned char *dst, unsigned char **p, unsigned char max)
+{
+    unsigned char ix;
+
+    ix = 0;
+    while (**p == ' ' || **p == '\t')
+        (*p)++;
+
+    while (**p && **p != ',' && ix < (unsigned char)(max - 1))
+    {
+        dst[ix++] = **p;
+        (*p)++;
+    }
+    dst[ix] = 0;
+
+    while (**p && **p != ',')
+        (*p)++;
+    if (**p == ',')
+        (*p)++;
+}
+
+static void browseAppendChar(unsigned char *dst, unsigned short *pos, unsigned short max, unsigned char c)
+{
+    if (*pos < (unsigned short)(max - 1))
+    {
+        dst[*pos] = c;
+        (*pos)++;
+        dst[*pos] = 0;
+    }
+}
+
+static void browseAppendStr(unsigned char *dst, unsigned short *pos, unsigned short max, unsigned char *s)
+{
+    while (*s)
+    {
+        browseAppendChar(dst, pos, max, *s);
+        s++;
+    }
+}
+
+static void browseParseOptions(unsigned char *vopt, unsigned char *cols, unsigned char *widths, unsigned char *header, unsigned short headerMax)
 {
     unsigned char i;
     unsigned short n;
+    unsigned char title[24];
+    unsigned short hpos;
 
     *cols = 1;
     for (i = 0; i < 12; i++)
         widths[i] = 10;
+    header[0] = 0;
 
     if (!vopt || !vopt[0])
         return;
@@ -2116,11 +2159,17 @@ static void browseParseOptions(unsigned char *vopt, unsigned char *cols, unsigne
     if (n > 0 && n <= 12)
         *cols = (unsigned char)n;
 
+    hpos = 0;
     for (i = 0; i < *cols; i++)
     {
+        browseCopyToken(title, &vopt, sizeof(title));
         n = browseReadNum(&vopt);
         if (n > 0 && n < 40)
             widths[i] = (unsigned char)n;
+
+        if (i)
+            browseAppendChar(header, &hpos, headerMax, ',');
+        browseAppendStr(header, &hpos, headerMax, title);
     }
 }
 
@@ -2242,6 +2291,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
     unsigned char borderColor;
     unsigned char cols;
     unsigned char widths[12];
+    unsigned char headerBuf[160];
     unsigned char lineBuf[160];
     unsigned char showBuf[80];
     unsigned char vdisp;
@@ -2271,7 +2321,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
         return;
 
     if (vtipo == WINFULL)
-        thisIdx = mguiWidgetRegister(id, MGUI_WT_BUTTON);
+        thisIdx = mguiWidgetRegister(id, MGUI_WT_BROWSER);
     else
         thisIdx = id;
 
@@ -2281,7 +2331,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
     borderColor = isFocused ? VDP_DARK_BLUE : vcorwf;
     vdisp = 0;
 
-    browseParseOptions(vopt, &cols, widths);
+    browseParseOptions(vopt, &cols, widths, headerBuf, sizeof(headerBuf));
 
     if (vtipo == WINFULL)
     {
@@ -2304,9 +2354,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
         visibleChars = 1;
 
     totalLines = browseCountLines(vdata);
-    totalRows = 0;
-    if (totalLines > 1)
-        totalRows = (unsigned short)(totalLines - 1);
+    totalRows = totalLines;
 
     visibleRows = 0;
     if (textHeight > 12)
@@ -2423,7 +2471,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
 
     if (vsel && totalRows > 0)
     {
-        line = browseGetLine(vdata, (unsigned short)(selected + 1), &lineLen);
+        line = browseGetLine(vdata, selected, &lineLen);
         browseCopyFirstCol(line, lineLen, vsel);
     }
 
@@ -2447,8 +2495,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
             return;
         }
 
-        line = browseGetLine(vdata, 0, &lineLen);
-        browseComposeLine(line, lineLen, cols, widths, lineBuf, sizeof(lineBuf));
+        browseComposeLine(headerBuf, (unsigned short)strlen(headerBuf), cols, widths, lineBuf, sizeof(lineBuf));
 
         copyIx = 0;
         srcIx = hScroll;
@@ -2469,7 +2516,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
         row = 0;
         while (row < visibleRows && vScroll + row < totalRows)
         {
-            line = browseGetLine(vdata, (unsigned short)(vScroll + row + 1), &lineLen);
+            line = browseGetLine(vdata, (unsigned short)(vScroll + row), &lineLen);
             browseComposeLine(line, lineLen, cols, widths, lineBuf, sizeof(lineBuf));
 
             copyIx = 0;
@@ -5527,7 +5574,6 @@ static void mguiCfgSectionToBrowse(char *section, unsigned char *out, unsigned s
 
     pos = 0;
     out[0] = 0;
-    mguiCfgAppendStr(out, &pos, max, (unsigned char *)"Ext,Prog\r\n");
 
     p = memPosConfig;
     inSection = 0;
@@ -5870,7 +5916,7 @@ void configMgui (void)
     items[8].w = 116;
     items[8].h = 54;
     items[8].text = execSel;
-    items[8].opt = "2,8,28";
+    items[8].opt = "2,Ext,8,Prog,28";
     items[8].var = execData;
 
     items[9].type = MGUI_DLG_LABEL;
@@ -5890,7 +5936,7 @@ void configMgui (void)
     items[10].w = 116;
     items[10].h = 54;
     items[10].text = iconTypeSel;
-    items[10].opt = "2,8,24";
+    items[10].opt = "2,Ext,8,Icon,24";
     items[10].var = iconTypeData;
 
     items[11].type = MGUI_DLG_LABEL;
@@ -5910,7 +5956,7 @@ void configMgui (void)
     items[12].w = 84;
     items[12].h = 58;
     items[12].text = iconFileSel;
-    items[12].opt = "2,8,20";
+    items[12].opt = "2,Prog,8,Icon,20";
     items[12].var = iconFileData;
 
     items[13].type = MGUI_DLG_BUTTON;
