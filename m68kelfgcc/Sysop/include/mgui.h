@@ -95,7 +95,7 @@ extern unsigned char *memVideoFonts; // Fontes para Video, formato igual ao do V
 #define WINFULL     0x02
 
 #define LINHAMENU      22
-#define COLMENU       4
+#define COLMENU       8
 #define LINMENU       1
 
 #define ICONSPERLINE   8  // Quantidade de Icones por linha
