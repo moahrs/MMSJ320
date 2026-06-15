@@ -63,6 +63,7 @@ void netCommInstallHook(int hookNum, void (*func)(void))
 void netCommFlush(void)
 {
     volatile unsigned char dummy;
+    unsigned short limit;
 
     serRxHead = 0;
     serRxTail = 0;
@@ -70,9 +71,45 @@ void netCommFlush(void)
     netApiHookCount = 0;
     netApiLastByte = 0;
 
-    while (*(vmfp + Reg_RSR) & 0x80)
+    limit = 1024;
+    while ((*(vmfp + Reg_RSR) & 0x80) && limit)
     {
         dummy = *(vmfp + Reg_UDR);
+        limit--;
+    }
+}
+
+void netCommResetInput(void)
+{
+    volatile unsigned char dummy;
+    unsigned short hwLimit;
+    unsigned long quiet;
+
+    serRxTail = serRxHead;
+    serRxLost = 0;
+
+    hwLimit = 1024;
+    while ((*(vmfp + Reg_RSR) & 0x80) && hwLimit)
+    {
+        dummy = *(vmfp + Reg_UDR);
+        hwLimit--;
+    }
+
+    quiet = 20000L;
+    while (quiet)
+    {
+        if (serRxHead != serRxTail)
+        {
+            serRxTail = serRxHead;
+            quiet = 20000L;
+        }
+        else if (*(vmfp + Reg_RSR) & 0x80)
+        {
+            dummy = *(vmfp + Reg_UDR);
+            quiet = 20000L;
+        }
+        else
+            quiet--;
     }
 }
 
@@ -129,6 +166,13 @@ int netCommWait(unsigned char *c, unsigned long timeoutSpin)
 void netCommEnable(void)
 {
     void *hookMem;
+
+    if (netApiMagic == NETAPI_MAGIC_VALUE && netApiEnabled && netApiHookMem != 0)
+    {
+        serRxTail = serRxHead;
+        serRxLost = 0;
+        return;
+    }
 
     hookMem = netCommEnsureResidentHook();
     if (!hookMem)

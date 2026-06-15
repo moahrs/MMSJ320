@@ -83,6 +83,8 @@ unsigned char vTimeAtuAux[7] = {'0','5',':','0','1',0x00};
 volatile unsigned char mguiClockTicks = 0;
 volatile unsigned char mguiClockDirty = 1;
 static int mguiClockLastMinute = -1;
+static unsigned char mguiClockHookReady = 0;
+static unsigned char mguiClockHookActive = 0;
 
 #define versionMgui "1.1a01"
 #define __EM_OBRAS__ 1
@@ -134,6 +136,9 @@ unsigned char bufOut[128];
 unsigned int timeToDoubleClick = 0xFFFF;
 
 static unsigned char mguiToUpper(unsigned char c);
+static void mguiClockHookEnable(void);
+static void mguiClockHookDisable(void);
+static int mguiLoadMbinAndRun(char *filename, char porig);
 static void mguiClockPut2(unsigned char *dst, int val);
 static void mguiClockDraw(void);
 static void mguiClockReadRtc(unsigned char force);
@@ -2343,6 +2348,64 @@ static unsigned char browseInsertDialog(unsigned char cols, unsigned char titles
     return browseAppendLine(data, line, MGUI_BROWSE_DATA_MAX);
 }
 
+static unsigned char browseContextMenu(unsigned short mx, unsigned short my, unsigned char showDel)
+{
+    MGUI_SAVESCR save;
+    MGUI_MOUSE md;
+    unsigned char ret;
+    unsigned char mh;
+
+    ret = 0xFF;
+    mh = showDel ? 24 : 14;
+
+    if (mx + 54 > 255)
+        mx = (unsigned short)(255 - 54);
+    if (my + mh > 191)
+        my = (unsigned short)(191 - mh);
+
+    SaveScreenNew(&save, mx, my, 54, mh);
+    FillRect((unsigned char)mx, (unsigned char)my, 54, mh, vcorwb);
+    DrawRect(mx, my, 54, mh, vcorwf);
+    writesxy((unsigned short)(mx + 4), (unsigned short)(my + 2), 1, "Add", vcorwf, vcorwb);
+    if (showDel)
+        writesxy((unsigned short)(mx + 4), (unsigned short)(my + 12), 1, "Delete", vcorwf, vcorwb);
+
+    do
+    {
+        getMouseData(0, &md);
+    } while (md.mouseButton == 0x02);
+
+    while (1)
+    {
+        getMouseData(0, &md);
+
+        if (md.mouseButton == 0x01)
+        {
+            if (md.vpostx >= mx && md.vpostx <= (mx + 53))
+            {
+                if (md.vposty >= my + 2 && md.vposty <= my + 10)
+                {
+                    ret = 0;
+                    break;
+                }
+                if (showDel && md.vposty >= my + 12 && md.vposty <= my + 21)
+                {
+                    ret = 1;
+                    break;
+                }
+            }
+            break;
+        }
+        else if (md.mouseButton == 0x02)
+        {
+            break;
+        }
+    }
+
+    RestoreScreen(&save);
+    return ret;
+}
+
 static unsigned short browseCountLines(unsigned char *data)
 {
     unsigned short count;
@@ -2485,6 +2548,7 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
     unsigned short thumbPos;
     unsigned char *line;
     unsigned char oldFocusIdx;
+    unsigned char menuOpt;
     MGUI_INPUT inp;
     MGUI_MOUSE m;
 
@@ -2623,6 +2687,50 @@ void browse(unsigned char id, unsigned char* vopt, unsigned char *vdata, unsigne
                     selected = (unsigned short)(totalRows - 1);
                 if (selected >= visibleRows)
                     vScroll = (unsigned short)(selected - visibleRows + 1);
+                vdisp = 1;
+            }
+        }
+
+        getMouseData(0, &m);
+        if (m.mouseButton == 0x02 &&
+            m.vpostx >= x && m.vpostx < x + textWidth &&
+            m.vposty >= y + 12 && m.vposty < y + textHeight)
+        {
+            row = (unsigned short)((m.vposty - y - 12) / 10);
+            if (vScroll + row < totalRows)
+                selected = (unsigned short)(vScroll + row);
+
+            menuOpt = browseContextMenu(m.vpostx, m.vposty, totalRows > 0 ? 1 : 0);
+            if (menuOpt == 0)
+            {
+                if (browseInsertDialog(cols, titles, vdata))
+                {
+                    totalLines = browseCountLines(vdata);
+                    totalRows = totalLines;
+                    if (totalRows > 0)
+                        selected = (unsigned short)(totalRows - 1);
+                    if (selected >= visibleRows)
+                        vScroll = (unsigned short)(selected - visibleRows + 1);
+                    vdisp = 1;
+                }
+            }
+            else if (menuOpt == 1 && totalRows > 0)
+            {
+                browseDeleteLine(vdata, selected);
+                totalLines = browseCountLines(vdata);
+                totalRows = totalLines;
+                if (selected >= totalRows && totalRows > 0)
+                    selected = (unsigned short)(totalRows - 1);
+                if (totalRows == 0)
+                    selected = 0;
+                if (vScroll >= totalRows && totalRows > 0)
+                    vScroll = (unsigned short)(totalRows - 1);
+                if (totalRows == 0)
+                    vScroll = 0;
+                vdisp = 1;
+            }
+            else
+            {
                 vdisp = 1;
             }
         }
@@ -3929,7 +4037,7 @@ static void deskOpenIcon(unsigned char slot)
                 if (vtmpparam[0])
                     strcpy(paramBasic,vtmpparam);
 
-                if (loadMbinAndRun(vnomefile, 2) != 0)
+                if (mguiLoadMbinAndRun(vnomefile, 2) != 0)
                 {
                     TrocaSpriteMouse(MOUSE_POINTER);
                     message("Error Executing File\0", BTCLOSE, 0);
@@ -3980,7 +4088,7 @@ static void deskOpenIcon(unsigned char slot)
         }
 
         #ifdef USE_RELOC_LOAD_PROGS
-            if (loadMbinAndRun(execProg, 2) != 0)
+            if (mguiLoadMbinAndRun(execProg, 2) != 0)
             {
                 TrocaSpriteMouse(MOUSE_POINTER);
                 message("Error Executing File\0", BTCLOSE, 0);
@@ -4474,19 +4582,7 @@ void startMGI(void) {
         mguiListWindows[6].zOrder = 0;
         mguiListWindows[6].active = 1;
 
-        // Inicializa o MFP e configura o pino SQW para 1Hz
-        if (rtc_init_with_sqw() == 0) 
-        {
-            *(vmfp + Reg_IMRB) &= (unsigned char)~MFP_GPIO2;
-            *(vmfp + Reg_IERB) &= (unsigned char)~MFP_GPIO2;
-
-            hookTable[HOOK_GPIO2].addr   = &mguiClockHook1Hz;
-            hookTable[HOOK_GPIO2].flags  = HOOKF_ACTIVE | HOOKF_SKIP_OS;
-            hookTable[HOOK_GPIO2].magic  = HOOK_MAGIC;
-
-            *(vmfp + Reg_IERB) |= MFP_GPIO2;
-            *(vmfp + Reg_IMRB) |= MFP_GPIO2;
-        }
+        mguiClockHookEnable();
 
         // Inicia Controles de Tela (Mouse e Teclado)
         while(1)
@@ -4497,12 +4593,7 @@ void startMGI(void) {
                 break;
         }
 
-        *(vmfp + Reg_IMRB) &= (unsigned char)~MFP_GPIO2;
-        *(vmfp + Reg_IERB) &= (unsigned char)~MFP_GPIO2;
-
-        hookTable[HOOK_GPIO2].magic  = 0x00;
-        hookTable[HOOK_GPIO2].addr   = 0x00;
-        hookTable[HOOK_GPIO2].flags  = 0x00;
+        mguiClockHookDisable();
 
         #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
             #ifdef USE_MALLOC
@@ -4780,6 +4871,64 @@ void redrawMain(void) {
     deskDrawAll();
 
     TrocaSpriteMouse(MOUSE_POINTER);
+}
+
+//-----------------------------------------------------------------------------
+static void mguiClockHookEnable(void)
+{
+    if (mguiClockHookActive)
+        return;
+
+    if (!mguiClockHookReady)
+    {
+        if (rtc_init_with_sqw() != 0)
+            return;
+
+        mguiClockHookReady = 1;
+    }
+
+    *(vmfp + Reg_IMRB) &= (unsigned char)~MFP_GPIO2;
+    *(vmfp + Reg_IERB) &= (unsigned char)~MFP_GPIO2;
+
+    hookTable[HOOK_GPIO2].addr   = &mguiClockHook1Hz;
+    hookTable[HOOK_GPIO2].flags  = HOOKF_ACTIVE | HOOKF_SKIP_OS;
+    hookTable[HOOK_GPIO2].magic  = HOOK_MAGIC;
+
+    mguiClockTicks = 0;
+    mguiClockHookActive = 1;
+
+    *(vmfp + Reg_IERB) |= MFP_GPIO2;
+    *(vmfp + Reg_IMRB) |= MFP_GPIO2;
+}
+
+//-----------------------------------------------------------------------------
+static void mguiClockHookDisable(void)
+{
+    if (!mguiClockHookReady && !mguiClockHookActive)
+        return;
+
+    *(vmfp + Reg_IMRB) &= (unsigned char)~MFP_GPIO2;
+    *(vmfp + Reg_IERB) &= (unsigned char)~MFP_GPIO2;
+
+    hookTable[HOOK_GPIO2].magic  = 0x00;
+    hookTable[HOOK_GPIO2].addr   = 0x00;
+    hookTable[HOOK_GPIO2].flags  = 0x00;
+
+    mguiClockHookActive = 0;
+    mguiClockTicks = 0;
+}
+
+//-----------------------------------------------------------------------------
+static int mguiLoadMbinAndRun(char *filename, char porig)
+{
+    int ret;
+
+    mguiClockHookDisable();
+    ret = loadMbinAndRun(filename, porig);
+    mguiClockDirty = 1;
+    mguiClockHookEnable();
+
+    return ret;
 }
 
 //-----------------------------------------------------------------------------
@@ -5553,7 +5702,7 @@ void menuFunc(void *pData)
                             TrocaSpriteMouse(MOUSE_HOURGLASS);
                             paramBasic[0] = '\0';
                             TrocaSpriteMouse(MOUSE_POINTER);
-                            if (loadMbinAndRun("/MGUI/PROGS/FILES.EXE", 2) != 0)
+                            if (mguiLoadMbinAndRun("/MGUI/PROGS/FILES.EXE", 2) != 0)
                                 message("Error Executing File\0", BTCLOSE, 0);
                         #else
                             vsizefilemalloc = fsInfoFile("/MGUI/PROGS/FILES.BIN", INFO_SIZE);
@@ -6441,7 +6590,7 @@ void runBin(void)
     {
         /* execProg is a full path to an EXE/BIN that should open this file */
         #ifdef USE_RELOC_LOAD_PROGS
-            if (loadMbinAndRun(vfullpath, 2) != 0)
+            if (mguiLoadMbinAndRun(vfullpath, 2) != 0)
             {
                 TrocaSpriteMouse(MOUSE_POINTER);
                 message("Error Executing File\0", BTCLOSE, 0);

@@ -1311,10 +1311,14 @@ static unsigned char serialReadByteTimeout(unsigned char *pByte, unsigned long p
 static void readResponseProc(unsigned char *s)
 {
     unsigned char c;
+    unsigned char line[128];
+    unsigned char pos;
     unsigned long idleTimeout;
     unsigned long charTimeout;
 
+    s[0] = 0;
     idleTimeout = 800000L;   /* espera primeira resposta */
+    pos = 0;
 
     while (1)
     {
@@ -1326,17 +1330,34 @@ static void readResponseProc(unsigned char *s)
 
     while (1)
     {
-        *s++ = c;
-        *s = 0x00;
+        if (c == '\r')
+        {
+        }
+        else if (c == '\n' || c == 0x04)
+        {
+            line[pos] = 0;
+            if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERROR", 5))
+            {
+                strcpy(s, line);
+                return;
+            }
+            pos = 0;
+        }
+        else
+        {
+            if (pos < sizeof(line) - 1)
+                line[pos++] = c;
+        }
 
         charTimeout = 120000L;   /* timeout entre chars */
 
         if (!serialReadByteTimeout(&c, charTimeout))
             break;
-        
-        if (c == 0x04)
-            break;
     }
+
+    line[pos] = 0;
+    if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERROR", 5))
+        strcpy(s, line);
 }
 
 static void readResponse(void)
@@ -1579,6 +1600,7 @@ int main(void)
         // Verifica se esta em modo Listen, se sim, tira
         while(vTimeOut--)
         {
+            netCommResetInput();
             writeLongSerial("ATLISTEN?");
             writeSerial('\r');
             
@@ -1589,6 +1611,7 @@ int main(void)
                 if (strncmp(cCmd,"OK;OFF",6))  // se nao bater, esta no Listen
                 {
                     // Desliga
+                    netCommResetInput();
                     writeLongSerial("ATLISTEN");
                     writeSerial('\r');                    
                     readResponseProc(&cCmd);

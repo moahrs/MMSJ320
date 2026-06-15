@@ -54,11 +54,14 @@ int main(void)
     unsigned char cCmd[128];
     char listenOn = 0;
 
+    printText("Enabling Comm...\r\n");
     netCommEnable();
 
     // Verifica se esta em modo Listen, se sim, tira
+    printText("Enabling Listen...\r\n");
     while(vTimeOut--)
     {
+        netCommResetInput();
         writeLongSerial("ATLISTEN?");
         writeSerial('\r');
         
@@ -69,6 +72,7 @@ int main(void)
             if (!strncmp(cCmd,"OK;OFF",6))  // se bater, nao esta no Listen
             {
                 // Liga
+                netCommResetInput();
                 writeLongSerial("ATLISTEN");
                 writeSerial('\r');                    
                 readResponseProc(&cCmd);
@@ -88,6 +92,8 @@ int main(void)
 
         return 1;
     }
+
+    printText("Ready\r\n");
 
     mftpConsoleInstall();
 
@@ -115,6 +121,12 @@ int main(void)
         }
         arg = mftpSkipSpaces(arg);
         mftpUpperText(cmd);
+
+        printText(">");
+        printText(cmd);
+        printText(" ");
+        printText(arg);
+        printText("\r\n");
 
         if (mftpStartsWithNoCase(cmd, "HELP"))
         {
@@ -173,6 +185,8 @@ int main(void)
     }
 
     mftpConsoleUninstall();
+
+    printText("Bye\r\n");
 
     return 0;
 }

@@ -1267,7 +1267,7 @@ writeLongSerial("\r\n\0");*/
     if (linhacomando[0] != 0)
     {
         // Se nao veio do ambiente MMSJOS, entra em modo texto
-        if (*startBasic != 1)
+        if (!activeConsole->magic && *startBasic != 1)
         {
             setModeVideoOS(VDP_MODE_TEXT);
             clearScr();
@@ -2060,7 +2060,7 @@ writeLongSerial("\r\n\0");*/
                 }*/
             }
 
-            if (*startBasic != 1 && strncmp(linhacomando,"BASIC",5))    // Se nao veio do ambiente mmsjos e nao foi comando Basic. mostra messagem
+            if (!activeConsole->magic && *startBasic != 1 && strncmp(linhacomando,"BASIC",5))    // Se nao veio do ambiente mmsjos e nao foi comando Basic. mostra messagem
             {
                 consoleWriteText("Press any key to continue...\r\n\0");
                 while(readChar() == 0);

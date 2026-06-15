@@ -22,6 +22,76 @@
 static unsigned char mftpAbortRequested = 0;
 static unsigned char wftpCancelRequested = 0;
 static unsigned char wftpMousePrev = 0;
+static unsigned char wftpFg;
+static unsigned char wftpBg;
+
+static void wftpClearLine(unsigned short y)
+{
+    FillRect((unsigned char)(WFTP_X + 8), (unsigned char)y, (unsigned short)(WFTP_W - 16), 8, wftpBg);
+}
+
+static void wftpDrawField(unsigned short y, unsigned char *label, unsigned char *value)
+{
+    unsigned char clipped[32];
+    unsigned short maxChars;
+    unsigned short ix;
+
+    wftpClearLine(y);
+    writesxy((unsigned short)(WFTP_X + 8), y, 1, label, wftpFg, wftpBg);
+
+    maxChars = (unsigned short)((WFTP_W - 60) / 6);
+    if (maxChars > sizeof(clipped) - 1)
+        maxChars = sizeof(clipped) - 1;
+
+    ix = 0;
+    while (value && value[ix] && ix < maxChars)
+    {
+        clipped[ix] = value[ix];
+        ix++;
+    }
+    clipped[ix] = 0;
+
+    writesxy((unsigned short)(WFTP_X + 58), y, 1, clipped, wftpFg, wftpBg);
+}
+
+static void wftpStatus(unsigned char *s)
+{
+    wftpDrawField((unsigned short)(WFTP_Y + 22), (unsigned char *)"Status:", s);
+}
+
+static void wftpCommandStatus(unsigned char *cmd, unsigned char *arg)
+{
+    unsigned char line[96];
+
+    strcpy(line, cmd);
+    if (arg && arg[0])
+    {
+        strcat(line, " ");
+        strncat(line, arg, sizeof(line) - strlen(line) - 1);
+        line[sizeof(line) - 1] = 0;
+    }
+
+    wftpDrawField((unsigned short)(WFTP_Y + 34), (unsigned char *)"Command:", line);
+}
+
+static void wftpXferStatus(unsigned char *s)
+{
+    wftpDrawField((unsigned short)(WFTP_Y + 46), (unsigned char *)"XMODEM:", s);
+}
+
+static void wftpBytesStatus(unsigned char *label, unsigned long bytes)
+{
+    unsigned char line[48];
+    unsigned char num[16];
+
+    ltoa(bytes, num, 10);
+    strcpy(line, label);
+    strcat(line, " ");
+    strcat(line, num);
+    strcat(line, " bytes");
+
+    wftpDrawField((unsigned short)(WFTP_Y + 58), (unsigned char *)"Bytes:", line);
+}
 
 static unsigned char mftpLocalAbort(void)
 {
@@ -82,10 +152,12 @@ unsigned char wftpAbortExtra(void)
     return 0;
 }
 
-#include "ftpdcomm.h"
+#define MFTP_STATUS(s) wftpStatus((unsigned char *)(s))
+#define MFTP_STATUS_CMD(c,a) wftpCommandStatus((unsigned char *)(c), (unsigned char *)(a))
+#define MFTP_STATUS_XFER(s) wftpXferStatus((unsigned char *)(s))
+#define MFTP_STATUS_BYTES(l,b) wftpBytesStatus((unsigned char *)(l), (unsigned long)(b))
 
-static unsigned char wftpFg;
-static unsigned char wftpBg;
+#include "ftpdcomm.h"
 
 static void wftpDrawButton(void)
 {
@@ -97,7 +169,10 @@ static void wftpDrawButton(void)
 static void wftpDrawWindow(void)
 {
     showWindow("WFTP\0", WFTP_X, WFTP_Y, WFTP_W, WFTP_H, BTCLOSE);
-    writesxy(WFTP_X + 31, WFTP_Y + 24, 1, (unsigned char *)"Running...", wftpFg, wftpBg);
+    wftpStatus((unsigned char *)"Running...");
+    wftpCommandStatus((unsigned char *)"-", (unsigned char *)"");
+    wftpXferStatus((unsigned char *)"-");
+    wftpBytesStatus((unsigned char *)"-", 0);
     wftpDrawButton();
 }
 
@@ -110,11 +185,14 @@ void procFtpd(void)
     unsigned char cCmd[128];
     char listenOn = 0;
 
+    wftpStatus((unsigned char *)"Enabling Comm's");
     netCommEnable();
+    wftpStatus((unsigned char *)"Checking listen");
 
     // Verifica se esta em modo Listen, se sim, tira
     while(vTimeOut--)
     {
+        netCommResetInput();
         writeLongSerial("ATLISTEN?");
         writeSerial('\r');
         
@@ -125,6 +203,8 @@ void procFtpd(void)
             if (!strncmp(cCmd,"OK;OFF",6))  // se bater, nao esta no Listen
             {
                 // Liga
+                wftpStatus((unsigned char *)"Starting listen");
+                netCommResetInput();
                 writeLongSerial("ATLISTEN");
                 writeSerial('\r');                    
                 readResponseProc(&cCmd);
@@ -139,12 +219,14 @@ void procFtpd(void)
 
     if (!listenOn)
     {
+        wftpStatus((unsigned char *)"Listen failed");
         if (*startBasic == 1)
             mprintf("Unable to set Listen");
 
         return 1;
     }
 
+    wftpStatus((unsigned char *)"Waiting command");
     mftpConsoleInstall();
 
     mftpPuts((unsigned char*)"MMSJ-MFTP READY\r\n");
@@ -153,10 +235,12 @@ void procFtpd(void)
     while (1)
     {
         mftpPuts((unsigned char*)"MFTP> ");
+        wftpStatus((unsigned char *)"Waiting command");
 
         readLen = mftpReadLine(cmd, sizeof(cmd));
         if (readLen < 0)
         {
+            wftpStatus((unsigned char *)"Cancelled");
             mftpPuts((unsigned char*)"\r\nBYE\r\n");
             break;
         }
@@ -171,9 +255,11 @@ void procFtpd(void)
         }
         arg = mftpSkipSpaces(arg);
         mftpUpperText(cmd);
+        wftpCommandStatus((unsigned char *)cmd, (unsigned char *)arg);
 
         if (mftpStartsWithNoCase(cmd, "HELP"))
         {
+            wftpStatus((unsigned char *)"HELP");
             mftpPuts((unsigned char*)"Commands:\r\n");
             mftpPuts((unsigned char*)"  VER\r\n");
             mftpPuts((unsigned char*)"  DIR\r\n");
@@ -186,18 +272,22 @@ void procFtpd(void)
         }
         else if (mftpStartsWithNoCase(cmd, "DIR"))
         {
+            wftpStatus((unsigned char *)"DIR");
             fsOsCommand((unsigned char*)"LS");
         }
         else if (mftpStartsWithNoCase(cmd, "VER"))
         {
+            wftpStatus((unsigned char *)"VER");
             fsOsCommand((unsigned char*)"VER");
         }
         else if (mftpStartsWithNoCase(cmd, "PWD"))
         {
+            wftpStatus((unsigned char *)"PWD");
             fsOsCommand((unsigned char*)"PWD");
         }
         else if (mftpStartsWithNoCase(cmd, "CD"))
         {
+            wftpStatus((unsigned char *)"CD");
             if (*arg == 0)
                 mftpPuts((unsigned char*)"Use: CD <dir>\r\n");
             else
@@ -211,19 +301,23 @@ void procFtpd(void)
         }
         else if (mftpStartsWithNoCase(cmd, "PUT"))
         {
+            wftpStatus((unsigned char *)"PUT");
             mftpRecvFile(arg);
         }
         else if (mftpStartsWithNoCase(cmd, "GET"))
         {
+            wftpStatus((unsigned char *)"GET");
             mftpSendFile(arg);
         }
         else if (mftpStartsWithNoCase(cmd, "QUIT"))
         {
+            wftpStatus((unsigned char *)"QUIT");
             mftpPuts((unsigned char*)"BYE\r\n");
             break;
         }
         else
         {
+            wftpStatus((unsigned char *)"Unknown command");
             mftpPuts((unsigned char*)"ERR Unknown command\r\n");
         }
     }

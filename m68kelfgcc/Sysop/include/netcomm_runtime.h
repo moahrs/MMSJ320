@@ -39,6 +39,7 @@ void netCommInstallHook(int hookNum, void (*func)(void));
 void netCommEnable(void);
 void netCommDisable(void);
 void netCommFlush(void);
+void netCommResetInput(void);
 int  netCommGet(unsigned char *c);
 int  netCommWait(unsigned char *c, unsigned long timeoutSpin);
 void netCommRxHook(void);

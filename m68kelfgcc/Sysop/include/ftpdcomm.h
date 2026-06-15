@@ -23,6 +23,13 @@
 
 #define MFTP_FILENAME_MAX    96
 
+#ifndef MFTP_STATUS
+#define MFTP_STATUS(s)
+#define MFTP_STATUS_CMD(c,a)
+#define MFTP_STATUS_XFER(s)
+#define MFTP_STATUS_BYTES(l,b)
+#endif
+
 static MMSJ_CONSOLE mftpOldConsole;
 static unsigned char mftpConsoleInstalled = 0;
 static unsigned char mftpXBlock[1024];
@@ -354,6 +361,7 @@ static int mftpRecvFile(char *fileName)
     mftpCopyCleanFileName(saveName, fileName);
     if (saveName[0] == 0)
     {
+        MFTP_STATUS("PUT without file");
         mprintf("Use: PUT <arquivo>\r\n");
         return 0;
     }
@@ -361,6 +369,7 @@ static int mftpRecvFile(char *fileName)
     fileBuf = (unsigned char *)msmalloc(MFTP_XFER_MAX);
     if (!fileBuf)
     {
+        MFTP_STATUS("No memory");
         mprintf("Sem memoria para receber arquivo.\r\n");
         return 0;
     }
@@ -371,8 +380,12 @@ static int mftpRecvFile(char *fileName)
     started = 0;
 
     mprintf("MFTP-XFER PUT %s MAX %lu\r\n", saveName, MFTP_XFER_MAX);
-    mftpDrainInput(180000L);
+    MFTP_STATUS_BYTES("Received", 0);
+    MFTP_STATUS_XFER("Draining input");
+    mftpDrainInput(20000L);
+    MFTP_STATUS_XFER("Sending CRC");
     mftpXSendStartBurst();
+    MFTP_STATUS_XFER("Waiting first block");
 
     while (1)
     {
@@ -380,12 +393,16 @@ static int mftpRecvFile(char *fileName)
         {
             writeSerial(X_CAN);
             msfree(fileBuf);
+            MFTP_STATUS_XFER("Cancelled");
             mprintf("\r\nCancelado por CTRL+ALT+X.\r\n");
             return 0;
         }
 
         if (!started)
+        {
+            MFTP_STATUS_XFER("Waiting first block");
             writeSerial(X_CRC);
+        }
 
         if (!mftpXWait(&c, X_TIMEOUT_POLL))
         {
@@ -393,6 +410,7 @@ static int mftpRecvFile(char *fileName)
             {
                 writeSerial(X_CAN);
                 msfree(fileBuf);
+                MFTP_STATUS_XFER("Cancelled");
                 mprintf("\r\nCancelado por CTRL+ALT+X.\r\n");
                 return 0;
             }
@@ -402,6 +420,7 @@ static int mftpRecvFile(char *fileName)
             {
                 writeSerial(X_CAN);
                 msfree(fileBuf);
+                MFTP_STATUS_XFER("Timeout");
                 mprintf("\r\nTimeout XMODEM.\r\n");
                 return 0;
             }
@@ -418,16 +437,21 @@ static int mftpRecvFile(char *fileName)
         {
             writeSerial(X_ACK);
 
+            MFTP_STATUS_XFER("Saving");
+            MFTP_STATUS_BYTES("Received", fileSize);
             mprintf("\r\nSalvando %lu bytes em %s...\r\n", fileSize, saveName);
             ret = mftpSaveFile(saveName, fileBuf, fileSize);
             if (ret != RETURN_OK)
             {
                 msfree(fileBuf);
+                MFTP_STATUS_XFER("Save error");
                 mprintf("Erro salvando arquivo. ret=%u\r\n", ret);
                 return 0;
             }
 
             msfree(fileBuf);
+            MFTP_STATUS_XFER("Receive done");
+            MFTP_STATUS_BYTES("Received", fileSize);
             mprintf("OK recebido %lu bytes.\r\n", fileSize);
             return 1;
         }
@@ -435,6 +459,8 @@ static int mftpRecvFile(char *fileName)
         if (c == X_CAN || c == X_ESC)
         {
             msfree(fileBuf);
+            MFTP_STATUS_XFER("Remote cancel");
+            MFTP_STATUS_BYTES("Received", fileSize);
             mprintf("\r\nCancelado pelo remoto. Recebidos %lu bytes.\r\n", fileSize);
             return 0;
         }
@@ -484,12 +510,15 @@ static int mftpRecvFile(char *fileName)
             {
                 writeSerial(X_CAN);
                 msfree(fileBuf);
+                MFTP_STATUS_XFER("Too large");
                 mprintf("\r\nArquivo maior que MFTP_XFER_MAX.\r\n");
                 return 0;
             }
 
             memcpy(fileBuf + fileSize, mftpXBlock, blockLen);
             fileSize += blockLen;
+            MFTP_STATUS_XFER("Receiving");
+            MFTP_STATUS_BYTES("Received", fileSize);
             expected++;
             writeSerial(X_ACK);
         }
@@ -501,6 +530,7 @@ static int mftpRecvFile(char *fileName)
         {
             writeSerial(X_CAN);
             msfree(fileBuf);
+            MFTP_STATUS_XFER("Block error");
             mprintf("\r\nBloco fora de ordem. Esperado=%u recebido=%u\r\n", expected, blkNo);
             return 0;
         }
@@ -524,6 +554,7 @@ static int mftpSendFile(char *fileName)
     mftpCopyCleanFileName(sendName, fileName);
     if (sendName[0] == 0)
     {
+        MFTP_STATUS("GET without file");
         mprintf("Use: GET <arquivo>\r\n");
         return 0;
     }
@@ -531,6 +562,7 @@ static int mftpSendFile(char *fileName)
     fileBuf = (unsigned char *)msmalloc(MFTP_XFER_MAX);
     if (!fileBuf)
     {
+        MFTP_STATUS("No memory");
         mprintf("Sem memoria para carregar arquivo.\r\n");
         return 0;
     }
@@ -539,6 +571,7 @@ static int mftpSendFile(char *fileName)
     if (fileSize <= 0)
     {
         msfree(fileBuf);
+        MFTP_STATUS_XFER("Load error");
         mprintf("Erro carregando arquivo: %s\r\n", sendName);
         return 0;
     }
@@ -546,11 +579,14 @@ static int mftpSendFile(char *fileName)
     if ((unsigned long)fileSize > MFTP_XFER_MAX)
     {
         msfree(fileBuf);
+        MFTP_STATUS_XFER("Too large");
         mprintf("Arquivo maior que MFTP_XFER_MAX.\r\n");
         return 0;
     }
 
     mprintf("MFTP-XFER GET %s SIZE %ld\r\n", sendName, fileSize);
+    MFTP_STATUS_XFER("Waiting receiver");
+    MFTP_STATUS_BYTES("Sent", 0);
 
     retry = 0;
     while (1)
@@ -559,6 +595,7 @@ static int mftpSendFile(char *fileName)
         {
             writeSerial(X_CAN);
             msfree(fileBuf);
+            MFTP_STATUS_XFER("Cancelled");
             mprintf("\r\nCancelado por CTRL+ALT+X.\r\n");
             return 0;
         }
@@ -570,6 +607,7 @@ static int mftpSendFile(char *fileName)
             if (c == X_CAN || c == X_ESC)
             {
                 msfree(fileBuf);
+                MFTP_STATUS_XFER("Remote cancel");
                 mprintf("\r\nCancelado pelo remoto.\r\n");
                 return 0;
             }
@@ -579,6 +617,7 @@ static int mftpSendFile(char *fileName)
         if (retry >= X_RETRY_MAX)
         {
             msfree(fileBuf);
+            MFTP_STATUS_XFER("Timeout receiver");
             mprintf("Timeout esperando receptor.\r\n");
             return 0;
         }
@@ -616,6 +655,7 @@ static int mftpSendFile(char *fileName)
             {
                 writeSerial(X_CAN);
                 msfree(fileBuf);
+                MFTP_STATUS_XFER("Cancelled");
                 mprintf("\r\nCancelado por CTRL+ALT+X.\r\n");
                 return 0;
             }
@@ -640,10 +680,12 @@ static int mftpSendFile(char *fileName)
                 retry++;
                 if (retry >= X_RETRY_MAX)
                 {
-                    writeSerial(X_CAN);
-                    msfree(fileBuf);
-                    mprintf("\r\nTimeout ACK. Enviados %lu bytes.\r\n", pos);
-                    return 0;
+                writeSerial(X_CAN);
+                msfree(fileBuf);
+                MFTP_STATUS_XFER("Timeout ACK");
+                MFTP_STATUS_BYTES("Sent", pos);
+                mprintf("\r\nTimeout ACK. Enviados %lu bytes.\r\n", pos);
+                return 0;
                 }
                 continue;
             }
@@ -654,6 +696,8 @@ static int mftpSendFile(char *fileName)
             if (c == X_CAN || c == X_ESC)
             {
                 msfree(fileBuf);
+                MFTP_STATUS_XFER("Remote cancel");
+                MFTP_STATUS_BYTES("Sent", pos);
                 mprintf("\r\nCancelado pelo remoto. Enviados %lu bytes.\r\n", pos);
                 return 0;
             }
@@ -663,11 +707,14 @@ static int mftpSendFile(char *fileName)
             {
                 writeSerial(X_CAN);
                 msfree(fileBuf);
+                MFTP_STATUS_XFER("Too many retries");
                 mprintf("\r\nMuitas tentativas.\r\n");
                 return 0;
             }
         }
 
+        MFTP_STATUS_XFER("Sending");
+        MFTP_STATUS_BYTES("Sent", pos);
         blkNo++;
     }
 
@@ -678,6 +725,7 @@ static int mftpSendFile(char *fileName)
         {
             writeSerial(X_CAN);
             msfree(fileBuf);
+            MFTP_STATUS_XFER("Cancelled");
             mprintf("\r\nCancelado por CTRL+ALT+X.\r\n");
             return 0;
         }
@@ -691,12 +739,15 @@ static int mftpSendFile(char *fileName)
         if (retry >= X_RETRY_MAX)
         {
             msfree(fileBuf);
+            MFTP_STATUS_XFER("Timeout EOT");
             mprintf("\r\nTimeout EOT.\r\n");
             return 0;
         }
     }
 
     msfree(fileBuf);
+    MFTP_STATUS_XFER("Send done");
+    MFTP_STATUS_BYTES("Sent", fileSize);
     mprintf("\r\nOK enviado %ld bytes.\r\n", fileSize);
     return 1;
 }
@@ -704,10 +755,14 @@ static int mftpSendFile(char *fileName)
 static void readResponseProc(unsigned char *s)
 {
     unsigned char c;
+    unsigned char line[128];
+    unsigned char pos;
     unsigned long idleTimeout;
     unsigned long charTimeout;
 
+    s[0] = 0;
     idleTimeout = 800000L;   /* espera primeira resposta */
+    pos = 0;
 
     while (1)
     {
@@ -720,15 +775,32 @@ static void readResponseProc(unsigned char *s)
 
     while (1)
     {
-        *s++ = c;
-        *s = 0x00;
+        if (c == '\r')
+        {
+        }
+        else if (c == '\n' || c == 0x04)
+        {
+            line[pos] = 0;
+            if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERROR", 5))
+            {
+                strcpy(s, line);
+                return;
+            }
+            pos = 0;
+        }
+        else
+        {
+            if (pos < sizeof(line) - 1)
+                line[pos++] = c;
+        }
 
         charTimeout = 120000L;   /* timeout entre chars */
 
         if (!mftpReadByteTimeout(&c, charTimeout))
             break;
-        
-        if (c == 0x04)
-            break;
     }
+
+    line[pos] = 0;
+    if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERROR", 5))
+        strcpy(s, line);
 }

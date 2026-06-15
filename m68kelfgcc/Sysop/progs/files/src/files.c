@@ -161,10 +161,10 @@ void main(void)
                             my = my - 52;
 
                         // Abre menu : Delete, Rename, Close
-                        SaveScreenNew(&vsavescr,30,my,52,46);
+                        SaveScreenNew(&vsavescr,30,my,52,56);
 
-                        FillRect(30,my,50,44,vcorbg);
-                        DrawRect(30,my,50,44,vcorfg);
+                        FillRect(30,my,50,54,vcorbg);
+                        DrawRect(30,my,50,54,vcorfg);
 
                         if (corOpcFile == vcorfg)
                         {
@@ -190,7 +190,8 @@ void main(void)
                         }
 
                         DrawLine(30,my+34,80,my+34,vcorfg);
-                        writesxy(33,my+36,8,"Close",vcorfg,vcorbg);
+                        writesxy(33,my+35,8," ",vcorfg,vcorbg);
+                        writesxy(33,my+44,8,"Close",vcorfg,vcorbg);
 
                         vopc = 99;
 
@@ -200,7 +201,7 @@ void main(void)
 
                             if (mouseData.mouseButton == 0x01)  // Esquerdo
                             {
-                                if (mouseData.vpostx >= 31 && mouseData.vpostx <= 138)
+                                if (mouseData.vpostx >= 31 && mouseData.vpostx <= 79)
                                 {
                                     if (mouseData.vposty >= my+2 && mouseData.vposty <= my+8 && corOpcFile == vcorfg)
                                     {
@@ -243,7 +244,11 @@ void main(void)
                                         break;
                                     }
                                 }
+                                else
+                                    break;
                             }
+                            else if (mouseData.mouseButton == 0x02)
+                                break;
                         }
 
                         RestoreScreen(&vsavescr);
@@ -716,6 +721,8 @@ void carregaDir(void)
     dFileCursor = 0;
     dsize = sizeof(FILES_DIR);
     vPosDir = 0;
+    vpos = 0;
+    vposold = 0xFF;
 
     TrocaSpriteMouse(MOUSE_HOURGLASS);
 
@@ -724,11 +731,15 @@ void carregaDir(void)
     {
         while (1)
         {
+            memset(&vdirfiles, 0x00, sizeof(FAT32_DIR));
             fsGetDirAtuData(&vdirfiles);
 
 			if (vdirfiles.Attr != ATTR_VOLUME && (vdirfiles.Name[0] != '.' || (vdirfiles.Name[0] == '.' && vdirfiles.Name[1] == '.' )))
             {
+                memset(&ddir, 0x00, sizeof(FILES_DIR));
+
                 // Nome
+                memset(ddir.Name, 0x00, sizeof(ddir.Name));
                 errorName = 0;
                 for (cc = 0; cc <= 7; cc++)
                 {
@@ -742,6 +753,7 @@ void carregaDir(void)
                 ddir.Name[8] = '\0';
 
                 // Extensao
+                memset(ddir.Ext, 0x00, sizeof(ddir.Ext));
                 for (cc = 0; cc <= 2; cc++)
                 {
                     ddir.Ext[cc] = 0x00;
@@ -922,7 +934,8 @@ void carregaDir(void)
 void listaDir(void)
 {
     unsigned short pposy, vretfs, dd, ww;
-    unsigned char ee, cc,ix, cstring[10];
+    unsigned char ee, cc,ix, cstring[12];
+    char vTemSpace;
 
     linhastatus(1, "\0");
 
@@ -930,6 +943,8 @@ void listaDir(void)
 
     for (dd = 0; dd <= 13; dd++)
         clinha[dd] = 0x00;
+
+    FillRect(5,34,249,140,vcorbg);
 
     pposy = 34;
     dd = vpos;
@@ -939,7 +954,6 @@ void listaDir(void)
 
     if (dFileCursor == 0)
     {
-        FillRect(5,34,249,140,vcorbg);
         TrocaSpriteMouse(MOUSE_POINTER);
         linhastatus(0, "\0");
         return;
@@ -953,9 +967,17 @@ void listaDir(void)
 
     while(1)
     {
+//        FillRect(5,pposy,249,10,vcorbg);
+
+        memset(cstring,0x00,sizeof(cstring));
+        vTemSpace = 0;
+
         for (ix = 0; ix < 8; ix++)
         {
-            if (dir[dd].Name[ix] == 0x00)
+            if (dir[dd].Name[ix] == 0x00 || dir[dd].Name[ix] == 0x20)
+                vTemSpace = 1;
+
+            if (dir[dd].Name[ix] == 0x00 || vTemSpace)
                 cstring[ix] = 0x20;
             else
                 cstring[ix] = dir[dd].Name[ix];
@@ -965,9 +987,15 @@ void listaDir(void)
         // Nome
         writesxy(16,pposy,6,cstring,vcorfg,vcorbg);
 
+        memset(cstring,0x00,sizeof(cstring));
+        vTemSpace = 0;
+
         for (ix = 0; ix < 3; ix++)
         {
-            if (dir[dd].Ext[ix] == 0x00)
+            if (dir[dd].Ext[ix] == 0x00 || dir[dd].Ext[ix] == 0x20)
+                vTemSpace = 1;
+
+            if (dir[dd].Ext[ix] == 0x00 || vTemSpace)
                 cstring[ix] = 0x20;
             else
                 cstring[ix] = dir[dd].Ext[ix];
