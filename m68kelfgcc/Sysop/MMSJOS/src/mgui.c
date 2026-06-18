@@ -163,6 +163,7 @@ typedef struct {
     char ext[4];        /* extension 3 chars + null                         */
     char path[20];      /* directory path, e.g. "/" or "/DOCS"              */
     char askParam;      /* 0 = open direct, 1 = ask parameters before open   */
+    char param[128];     /* optional fixed parameter from MGUIDESK.CFG       */
     char active;        /* 1 = occupied                                     */
 } DESK_ICON;
 
@@ -3693,14 +3694,15 @@ static void deskSlotXY(unsigned char slot, unsigned short *px, unsigned char *py
 
 //-----------------------------------------------------------------------------
 // Parse MGUIDESK.CFG (stored in memDeskCfg) into deskIcons[].
-// Entry format in [ICONS]: NN=FILENAME.EXT,/PATH,ASKPARAM
+// Entry format in [ICONS]: NN=FILENAME.EXT,/PATH,ASKPARAM[,PARAM]
 //   e.g.  00=NOTES.TXT,/,0
 //         01=HELLO.BAS,/BASIC,1
+//         02=TERM.EXE,/NETWRK,0,bbs.example.com:23
 //-----------------------------------------------------------------------------
 static void deskLoadConfig(void)
 {
     unsigned char slot;
-    char key[3], val[48], *comma, *comma2, *dot, *p;
+    char key[3], val[160], *comma, *comma2, *comma3, *dot, *p;
     unsigned char i;
 
     memset(deskIcons, 0, sizeof(deskIcons));
@@ -3718,7 +3720,7 @@ static void deskLoadConfig(void)
         if (!mguiCfgGetBuf(memDeskCfg, "ICONS", key, val, sizeof(val)))
             continue;
 
-        /* val = "FILENAME.EXT,/PATH,ASKPARAM" */
+        /* val = "FILENAME.EXT,/PATH,ASKPARAM[,PARAM]" */
         comma = strchr(val, ',');
         if (!comma)
             continue;
@@ -3756,8 +3758,24 @@ static void deskLoadConfig(void)
         }
 
         deskIcons[slot].askParam = 0;
-        if (comma2 && comma2[1] == '1')
-            deskIcons[slot].askParam = 1;
+        deskIcons[slot].param[0] = '\0';
+        if (comma2)
+        {
+            comma3 = strchr(comma2 + 1, ',');
+            if (comma3)
+                *comma3 = '\0';
+
+            if (comma2[1] == '1')
+                deskIcons[slot].askParam = 1;
+
+            if (comma3)
+            {
+                p = comma3 + 1;
+                for (i = 0; i < 127 && p[i]; i++)
+                    deskIcons[slot].param[i] = p[i];
+                deskIcons[slot].param[i] = '\0';
+            }
+        }
 
         deskIcons[slot].active = 1;
     }
@@ -3769,7 +3787,7 @@ static void deskLoadConfig(void)
 static void deskSaveConfig(void)
 {
     unsigned char slot, i, offset;
-    unsigned char linebuf[64];
+    unsigned char linebuf[192];
     char *p;
     unsigned char vErro;
 
@@ -3797,7 +3815,7 @@ static void deskSaveConfig(void)
         {
             if (!deskIcons[slot].active)
                 continue;
-            /* Format: NN=FILENAME.EXT,/PATH,ASKPARAM\r\n */
+            /* Format: NN=FILENAME.EXT,/PATH,ASKPARAM[,PARAM]\r\n */
             offset = 0;
             linebuf[offset++] = (unsigned char)('0' + slot / 10);
             linebuf[offset++] = (unsigned char)('0' + slot % 10);
@@ -3815,6 +3833,12 @@ static void deskSaveConfig(void)
                 linebuf[offset++] = deskIcons[slot].path[i];
             linebuf[offset++] = ',';
             linebuf[offset++] = deskIcons[slot].askParam ? '1' : '0';
+            if (deskIcons[slot].param[0])
+            {
+                linebuf[offset++] = ',';
+                for (i = 0; deskIcons[slot].param[i] && offset < 188; i++)
+                    linebuf[offset++] = deskIcons[slot].param[i];
+            }
             linebuf[offset++] = '\r';
             linebuf[offset++] = '\n';
 
@@ -4019,7 +4043,11 @@ static void deskOpenIcon(unsigned char slot)
     if (d->ext[0])
         mguiCfgGetBuf(memPosConfig, "EXEC", d->ext, execProg, sizeof(execProg));
 
-    if (d->askParam)
+    if (d->param[0])
+    {
+        strcpy(vtmpparam, d->param);
+    }
+    else if (d->askParam)
     {
         askParamToExec(&vtmpparam);
         mguiClockDirty = 1;
@@ -4070,21 +4098,31 @@ static void deskOpenIcon(unsigned char slot)
         /* Run BASIC with file as argument */
         char bascmd[48];
         strcpy(bascmd, "BASIC ");
-        strcat(bascmd, vnomefile);
+        if (vtmpparam[0])
+            strcat(bascmd, vtmpparam);
+        else
+            strcat(bascmd, vnomefile);
         fsOsCommand((unsigned char*)bascmd);
         restoreMGUI(); // in case BASIC redraw mgui (basic exit in text mode)
     }
     else
     {
         /* execProg is a full path to an EXE/BIN that should open this file */
-        strcpy(paramBasic, d->path);
-        if (d->path[0] != '\0' && !(d->path[0] == '/' && d->path[1] == '\0'))
-            strcat(paramBasic, "/");
-        strcat(paramBasic, d->filename);
-        if (d->ext[0])
+        if (vtmpparam[0])
         {
-            strcat(paramBasic, ".");
-            strcat(paramBasic, d->ext);
+            strcpy(paramBasic, vtmpparam);
+        }
+        else
+        {
+            strcpy(paramBasic, d->path);
+            if (d->path[0] != '\0' && !(d->path[0] == '/' && d->path[1] == '\0'))
+                strcat(paramBasic, "/");
+            strcat(paramBasic, d->filename);
+            if (d->ext[0])
+            {
+                strcat(paramBasic, ".");
+                strcat(paramBasic, d->ext);
+            }
         }
 
         #ifdef USE_RELOC_LOAD_PROGS
@@ -4212,6 +4250,7 @@ static void deskAddIconDialog(void)
     strncpy(deskIcons[slot].path, vpath, 19);
     deskIcons[slot].path[19] = '\0';
     deskIcons[slot].askParam = 0;
+    deskIcons[slot].param[0] = '\0';
     deskIcons[slot].active = 1;
 
     deskSaveConfig();
@@ -4583,6 +4622,8 @@ void startMGI(void) {
         mguiListWindows[6].active = 1;
 
         mguiClockHookEnable();
+        mguiClockReadRtc(1);
+        mguiClockDraw();
 
         // Inicia Controles de Tela (Mouse e Teclado)
         while(1)
