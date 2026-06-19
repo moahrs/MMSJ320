@@ -194,7 +194,7 @@ static void telDrawDynamic(void)
 static void telLogFlush(void)
 {
     unsigned char ret;
-    
+    unsigned char cRetAux[32];
     if (!telLogDirty)
         return;
 
@@ -206,7 +206,8 @@ static void telLogFlush(void)
     }
     else
     {
-        telCopy(tel.status, (unsigned char *)"Log save error", TELRBT_FIELD_MAX);
+        msprintf(cRetAux,"[%i]Log save error",ret);
+        telCopy(tel.status, (unsigned char *)cRetAux, TELRBT_FIELD_MAX);
     }
 }
 

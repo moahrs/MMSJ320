@@ -3416,7 +3416,10 @@ unsigned char fsFindDirPath(char * vpath, char vtype)
             {
                 if (fsFindInDir(vretpath.Name, TYPE_FILE) >= ERRO_D_START)
                 {
-                    vret = FIND_PATH_RET_ERROR;
+                    if (vtype == FIND_PATH_LAST_CREATE && vpath[ix] == 0x00)
+                        vret = FIND_PATH_RET_FILE;
+                    else
+                        vret = FIND_PATH_RET_ERROR;
 //                    vretpath.ClusterDir = ERRO_D_START;
                     vretpath.ClusterDir = vclusterdir;
                 }
@@ -4888,7 +4891,7 @@ unsigned char saveFile(unsigned char *parquivo, void* xaddress, unsigned long xs
     vclusterdiratuaux = vclusterdir;
 
     // Resolve caminho (aceita pasta + nome), e usa somente o nome final para criar/gravar.
-    if (fsFindDirPath(parquivo, FIND_PATH_LAST) == FIND_PATH_RET_ERROR)
+    if (fsFindDirPath(parquivo, FIND_PATH_LAST_CREATE) == FIND_PATH_RET_ERROR)
         return ERRO_B_NOT_FOUND;
 
     if (!isValidFilename(vretpath.Name))
