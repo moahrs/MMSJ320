@@ -33,10 +33,20 @@ static unsigned short telLogRow;
 static const unsigned char *telLogHeaders[TELRBT_LOG_COLS] =
 {
     (unsigned char *)"Tick",
+    (unsigned char *)"Seq",
     (unsigned char *)"Event",
     (unsigned char *)"State",
+    (unsigned char *)"Host",
+    (unsigned char *)"Port",
+    (unsigned char *)"LocalPort",
+    (unsigned char *)"Positions",
+    (unsigned char *)"VLevels",
     (unsigned char *)"Heading",
     (unsigned char *)"Turn",
+    (unsigned char *)"Target",
+    (unsigned char *)"TargetTurn",
+    (unsigned char *)"MotorTarget",
+    (unsigned char *)"Accum",
     (unsigned char *)"Clear",
     (unsigned char *)"Score",
     (unsigned char *)"Req",
@@ -47,17 +57,29 @@ static const unsigned char *telLogHeaders[TELRBT_LOG_COLS] =
     (unsigned char *)"Speed",
     (unsigned char *)"Dist",
     (unsigned char *)"Caution",
+    (unsigned char *)"MaxRunUs",
+    (unsigned char *)"DurationUs",
     (unsigned char *)"WheelL",
     (unsigned char *)"WheelR",
     (unsigned char *)"Reason",
     (unsigned char *)"Fails",
-    (unsigned char *)"Penalty"
+    (unsigned char *)"Penalty",
+    (unsigned char *)"Direction",
+    (unsigned char *)"Mode",
+    (unsigned char *)"Operation",
+    (unsigned char *)"Count",
+    (unsigned char *)"Faults",
+    (unsigned char *)"Value",
+    (unsigned char *)"MoveResult",
+    (unsigned char *)"FinishType"
 };
 
 static unsigned char telLogWidths[TELRBT_LOG_COLS] =
 {
-    12, 18, 10, 8, 8, 8, 8, 6, 10, 8,
-    10, 8, 8, 8, 8, 8, 8, 14, 6, 8
+    12, 8, 20, 10, 16, 8, 10, 10, 8, 8,
+    8, 10, 12, 12, 10, 8, 8, 8, 10, 8,
+    10, 8, 8, 8, 8, 12, 12, 8, 8, 14,
+    6, 8, 10, 8, 12, 8, 8, 8, 10, 10
 };
 
 static void telCopy(unsigned char *dst, const unsigned char *src, unsigned short max)
@@ -117,11 +139,20 @@ static void telInitState(void)
     memset(&tel, 0, sizeof(tel));
     telCopy(tel.status, (unsigned char *)"Starting", TELRBT_FIELD_MAX);
     telCopy(tel.udp, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.seq, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.event, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.state, (unsigned char *)"WAIT", TELRBT_FIELD_MAX);
     telCopy(tel.tick, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.host, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.port, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.localPort, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.positions, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.verticalLevels, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.heading, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.turn, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.target, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.targetTurn, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.accumulated, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.clearance, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.score, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.required, (unsigned char *)"-", TELRBT_FIELD_MAX);
@@ -133,11 +164,21 @@ static void telInitState(void)
     telCopy(tel.speed, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.distance, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.caution, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.maxRunUs, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.durationUs, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.wheelL, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.wheelR, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.reason, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.fails, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.penalty, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.direction, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.mode, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.operation, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.count, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.faults, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.value, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.moveResult, (unsigned char *)"-", TELRBT_FIELD_MAX);
+    telCopy(tel.finishType, (unsigned char *)"-", TELRBT_FIELD_MAX);
     telCopy(tel.last, (unsigned char *)"-", TELRBT_LAST_MAX);
 }
 
@@ -185,30 +226,36 @@ static void telDrawDynamic(void)
     telField(14, 166, (unsigned char *)"Event: ", tel.event, 170);
     telField(14, 176, (unsigned char *)"Raw: ", tel.last, 170);
 
+    telField(196, 154, (unsigned char *)"Seq: ", tel.seq, 50);
     ltoa((long)tel.packets, (char *)tmp, 10);
-    telField(196, 154, (unsigned char *)"Pkt: ", tmp, 50);
-    ltoa((long)tel.badPackets, (char *)tmp, 10);
-    telField(196, 164, (unsigned char *)"Bad: ", tmp, 50);
+    telField(196, 164, (unsigned char *)"Pkt: ", tmp, 50);
 }
 
 static void telLogFlush(void)
 {
     unsigned char ret;
     unsigned char cRetAux[32];
+
     if (!telLogDirty)
         return;
+
+    telCopy(tel.status, (unsigned char *)"Saving log", TELRBT_FIELD_MAX);
+    telField(14, 30, (unsigned char *)"Status: ", tel.status, 110);
 
     ret = saveFile((unsigned char *)TELRBT_LOG_FILE, telLogBuf, telLogSize);
     if (ret == RETURN_OK)
     {
         telLogDirty = 0;
         telLogSinceFlush = 0;
+        telCopy(tel.status, (unsigned char *)"Log saved", TELRBT_FIELD_MAX);
     }
     else
     {
         msprintf(cRetAux,"[%i]Log save error",ret);
         telCopy(tel.status, (unsigned char *)cRetAux, TELRBT_FIELD_MAX);
     }
+
+    telField(14, 30, (unsigned char *)"Status: ", tel.status, 110);
 }
 
 static void telLogPutChar(unsigned char c)
@@ -308,32 +355,52 @@ static void telLogReset(void)
 
 static void telLogAppend(void)
 {
-    if (telLogSize >= TELRBT_LOG_MAX - 512)
+    if (telLogSize >= TELRBT_LOG_MAX - 1400)
     {
         telCopy(tel.status, (unsigned char *)"Log full", TELRBT_FIELD_MAX);
         return;
     }
 
     telLogCell(telLogRow, 1, tel.tick);
-    telLogCell(telLogRow, 2, tel.event);
-    telLogCell(telLogRow, 3, tel.state);
-    telLogCell(telLogRow, 4, tel.heading);
-    telLogCell(telLogRow, 5, tel.turn);
-    telLogCell(telLogRow, 6, tel.clearance);
-    telLogCell(telLogRow, 7, tel.score);
-    telLogCell(telLogRow, 8, tel.required);
-    telLogCell(telLogRow, 9, tel.leftDir);
-    telLogCell(telLogRow, 10, tel.leftSpeed);
-    telLogCell(telLogRow, 11, tel.rightDir);
-    telLogCell(telLogRow, 12, tel.rightSpeed);
-    telLogCell(telLogRow, 13, tel.speed);
-    telLogCell(telLogRow, 14, tel.distance);
-    telLogCell(telLogRow, 15, tel.caution);
-    telLogCell(telLogRow, 16, tel.wheelL);
-    telLogCell(telLogRow, 17, tel.wheelR);
-    telLogCell(telLogRow, 18, tel.reason);
-    telLogCell(telLogRow, 19, tel.fails);
-    telLogCell(telLogRow, 20, tel.penalty);
+    telLogCell(telLogRow, 2, tel.seq);
+    telLogCell(telLogRow, 3, tel.event);
+    telLogCell(telLogRow, 4, tel.state);
+    telLogCell(telLogRow, 5, tel.host);
+    telLogCell(telLogRow, 6, tel.port);
+    telLogCell(telLogRow, 7, tel.localPort);
+    telLogCell(telLogRow, 8, tel.positions);
+    telLogCell(telLogRow, 9, tel.verticalLevels);
+    telLogCell(telLogRow, 10, tel.heading);
+    telLogCell(telLogRow, 11, tel.turn);
+    telLogCell(telLogRow, 12, tel.target);
+    telLogCell(telLogRow, 13, tel.targetTurn);
+    telLogCell(telLogRow, 14, tel.motorTarget);
+    telLogCell(telLogRow, 15, tel.accumulated);
+    telLogCell(telLogRow, 16, tel.clearance);
+    telLogCell(telLogRow, 17, tel.score);
+    telLogCell(telLogRow, 18, tel.required);
+    telLogCell(telLogRow, 19, tel.leftDir);
+    telLogCell(telLogRow, 20, tel.leftSpeed);
+    telLogCell(telLogRow, 21, tel.rightDir);
+    telLogCell(telLogRow, 22, tel.rightSpeed);
+    telLogCell(telLogRow, 23, tel.speed);
+    telLogCell(telLogRow, 24, tel.distance);
+    telLogCell(telLogRow, 25, tel.caution);
+    telLogCell(telLogRow, 26, tel.maxRunUs);
+    telLogCell(telLogRow, 27, tel.durationUs);
+    telLogCell(telLogRow, 28, tel.wheelL);
+    telLogCell(telLogRow, 29, tel.wheelR);
+    telLogCell(telLogRow, 30, tel.reason);
+    telLogCell(telLogRow, 31, tel.fails);
+    telLogCell(telLogRow, 32, tel.penalty);
+    telLogCell(telLogRow, 33, tel.direction);
+    telLogCell(telLogRow, 34, tel.mode);
+    telLogCell(telLogRow, 35, tel.operation);
+    telLogCell(telLogRow, 36, tel.count);
+    telLogCell(telLogRow, 37, tel.faults);
+    telLogCell(telLogRow, 38, tel.value);
+    telLogCell(telLogRow, 39, tel.moveResult);
+    telLogCell(telLogRow, 40, tel.finishType);
 
     telLogRow++;
 
@@ -422,10 +489,19 @@ static void telCopyValue(unsigned char *dst, unsigned short max, unsigned char *
 
 static void telSetStateFromEvent(void)
 {
-    if (strcmp((char *)tel.event, "ai_cycle_start") == 0)
+    if (strcmp((char *)tel.event, "telemetry_ready") == 0)
+        telCopy(tel.state, (unsigned char *)"ONLINE", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "scan_start") == 0 ||
+             strcmp((char *)tel.event, "scan_position") == 0 ||
+             strcmp((char *)tel.event, "ai_cycle_start") == 0)
         telCopy(tel.state, (unsigned char *)"SCAN", TELRBT_FIELD_MAX);
-    else if (strcmp((char *)tel.event, "ai_best") == 0)
+    else if (strcmp((char *)tel.event, "scan_complete") == 0 ||
+             strcmp((char *)tel.event, "ai_best") == 0)
         telCopy(tel.state, (unsigned char *)"DECIDE", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "ai_scan_only") == 0)
+        telCopy(tel.state, (unsigned char *)"SCAN ONLY", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "no_safe_path") == 0)
+        telCopy(tel.state, (unsigned char *)"NO PATH", TELRBT_FIELD_MAX);
     else if (strcmp((char *)tel.event, "turn_start") == 0 || strcmp((char *)tel.event, "turn_motors") == 0)
         telCopy(tel.state, (unsigned char *)"TURN", TELRBT_FIELD_MAX);
     else if (strcmp((char *)tel.event, "turn_complete") == 0)
@@ -436,12 +512,39 @@ static void telSetStateFromEvent(void)
         telCopy(tel.state, (unsigned char *)"FORWARD", TELRBT_FIELD_MAX);
     else if (strcmp((char *)tel.event, "forward_obstacle") == 0)
         telCopy(tel.state, (unsigned char *)"OBSTACLE", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "forward_stuck") == 0)
+        telCopy(tel.state, (unsigned char *)"STUCK", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "forward_max_run") == 0)
+        telCopy(tel.state, (unsigned char *)"RESCAN", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "wheel_status") == 0)
+    {
+        if (strcmp((char *)tel.reason, "forward_start") == 0)
+            telCopy(tel.state, (unsigned char *)"FORWARD", TELRBT_FIELD_MAX);
+        else if (strcmp((char *)tel.reason, "obstacle") == 0)
+            telCopy(tel.state, (unsigned char *)"OBSTACLE", TELRBT_FIELD_MAX);
+        else if (strcmp((char *)tel.reason, "interrupted") == 0)
+            telCopy(tel.state, (unsigned char *)"INTERRUPT", TELRBT_FIELD_MAX);
+        else if (strcmp((char *)tel.reason, "max_run") == 0)
+            telCopy(tel.state, (unsigned char *)"RESCAN", TELRBT_FIELD_MAX);
+    }
     else if (strcmp((char *)tel.event, "backoff") == 0 || strcmp((char *)tel.event, "backward_start") == 0)
         telCopy(tel.state, (unsigned char *)"BACKOFF", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "backward_stop") == 0 || strcmp((char *)tel.event, "motor_stop") == 0)
+        telCopy(tel.state, (unsigned char *)"STOPPED", TELRBT_FIELD_MAX);
     else if (strcmp((char *)tel.event, "escape") == 0)
         telCopy(tel.state, (unsigned char *)"ESCAPE", TELRBT_FIELD_MAX);
     else if (strcmp((char *)tel.event, "manual_move") == 0)
         telCopy(tel.state, (unsigned char *)"MANUAL", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "control_mode") == 0)
+        telCopy(tel.state, tel.mode, TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "ai_interrupted") == 0)
+        telCopy(tel.state, (unsigned char *)"INTERRUPT", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "laser_read_timeout") == 0)
+        telCopy(tel.state, (unsigned char *)"LASER ERR", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "laser_read_recovered") == 0)
+        telCopy(tel.state, (unsigned char *)"LASER OK", TELRBT_FIELD_MAX);
+    else if (strcmp((char *)tel.event, "ai_cycle_complete") == 0)
+        telCopy(tel.state, (unsigned char *)"CYCLE DONE", TELRBT_FIELD_MAX);
     else if (strcmp((char *)tel.event, "finish") == 0)
         telCopy(tel.state, (unsigned char *)"STOP", TELRBT_FIELD_MAX);
 }
@@ -465,10 +568,20 @@ static void telParsePacket(unsigned char *line)
     telCopy(tel.last, pkt, TELRBT_LAST_MAX);
 
     telCopyValue(tel.tick, TELRBT_FIELD_MAX, pkt, (unsigned char *)"tick");
+    telCopyValue(tel.seq, TELRBT_FIELD_MAX, pkt, (unsigned char *)"seq");
     telCopyValue(tel.event, TELRBT_FIELD_MAX, pkt, (unsigned char *)"event");
+
+    telCopyValue(tel.host, TELRBT_FIELD_MAX, pkt, (unsigned char *)"host");
+    telCopyValue(tel.port, TELRBT_FIELD_MAX, pkt, (unsigned char *)"port");
+    telCopyValue(tel.localPort, TELRBT_FIELD_MAX, pkt, (unsigned char *)"localPort");
+    telCopyValue(tel.positions, TELRBT_FIELD_MAX, pkt, (unsigned char *)"positions");
+    telCopyValue(tel.verticalLevels, TELRBT_FIELD_MAX, pkt, (unsigned char *)"verticalLevels");
 
     telCopyValue(tel.heading, TELRBT_FIELD_MAX, pkt, (unsigned char *)"heading");
     telCopyValue(tel.turn, TELRBT_FIELD_MAX, pkt, (unsigned char *)"turn");
+    telCopyValue(tel.target, TELRBT_FIELD_MAX, pkt, (unsigned char *)"target");
+    telCopyValue(tel.targetTurn, TELRBT_FIELD_MAX, pkt, (unsigned char *)"targetTurn");
+    telCopyValue(tel.accumulated, TELRBT_FIELD_MAX, pkt, (unsigned char *)"accumulated");
     telCopyValue(tel.clearance, TELRBT_FIELD_MAX, pkt, (unsigned char *)"clearance");
     telCopyValue(tel.score, TELRBT_FIELD_MAX, pkt, (unsigned char *)"score");
     telCopyValue(tel.required, TELRBT_FIELD_MAX, pkt, (unsigned char *)"requiredClearance");
@@ -485,12 +598,28 @@ static void telParsePacket(unsigned char *line)
 
     telCopyValue(tel.distance, TELRBT_FIELD_MAX, pkt, (unsigned char *)"distance");
     telCopyValue(tel.caution, TELRBT_FIELD_MAX, pkt, (unsigned char *)"caution");
+    telCopyValue(tel.maxRunUs, TELRBT_FIELD_MAX, pkt, (unsigned char *)"maxRunUs");
+    telCopyValue(tel.durationUs, TELRBT_FIELD_MAX, pkt, (unsigned char *)"durationUs");
     telCopyValue(tel.wheelL, TELRBT_FIELD_MAX, pkt, (unsigned char *)"wheelL");
     telCopyValue(tel.wheelR, TELRBT_FIELD_MAX, pkt, (unsigned char *)"wheelR");
 
     telCopyValue(tel.reason, TELRBT_FIELD_MAX, pkt, (unsigned char *)"reason");
     telCopyValue(tel.fails, TELRBT_FIELD_MAX, pkt, (unsigned char *)"fails");
     telCopyValue(tel.penalty, TELRBT_FIELD_MAX, pkt, (unsigned char *)"penalty");
+    telCopyValue(tel.direction, TELRBT_FIELD_MAX, pkt, (unsigned char *)"direction");
+    telCopyValue(tel.mode, TELRBT_FIELD_MAX, pkt, (unsigned char *)"mode");
+    telCopyValue(tel.operation, TELRBT_FIELD_MAX, pkt, (unsigned char *)"operation");
+    telCopyValue(tel.count, TELRBT_FIELD_MAX, pkt, (unsigned char *)"count");
+    telCopyValue(tel.faults, TELRBT_FIELD_MAX, pkt, (unsigned char *)"faults");
+    telCopyValue(tel.value, TELRBT_FIELD_MAX, pkt, (unsigned char *)"value");
+    telCopyValue(tel.moveResult, TELRBT_FIELD_MAX, pkt, (unsigned char *)"moveResult");
+    telCopyValue(tel.finishType, TELRBT_FIELD_MAX, pkt, (unsigned char *)"type");
+
+    if (strcmp((char *)tel.event, "wheel_status") == 0)
+    {
+        telCopy(tel.wheelL, tel.leftDir, TELRBT_FIELD_MAX);
+        telCopy(tel.wheelR, tel.rightDir, TELRBT_FIELD_MAX);
+    }
 
     telSetStateFromEvent();
     telLogAppend();
@@ -614,39 +743,56 @@ static void telSetupUdp(void)
     unsigned char port[8];
     unsigned char cmd[56];
     unsigned char resp[64];
+    unsigned char tryNo;
+    unsigned char tryText[24];
 
     telDefaultParam(host, port);
     strcpy((char *)tel.udp, (char *)host);
     strcat((char *)tel.udp, ":");
     strcat((char *)tel.udp, (char *)port);
     tel.udp[19] = 0;
-    telCopy(tel.status, (unsigned char *)"Config UDP", TELRBT_FIELD_MAX);
-    telDrawDynamic();
-
     netCommEnable();
-    netCommResetInput();
 
     strcpy((char *)cmd, "ATUDP=");
     strcat((char *)cmd, (char *)host);
     strcat((char *)cmd, ":");
     strcat((char *)cmd, (char *)port);
 
-    writeLongSerial((char *)cmd);
-    writeSerial('\r');
+    telConfigured = 0;
+    resp[0] = 0;
 
-    telReadResponse(resp);
-    if (strncmp((char *)resp, "OK", 2) == 0)
+    for (tryNo = 1; tryNo <= 5; tryNo++)
     {
-        telConfigured = 1;
+        msprintf((char *)tryText, "UDP try %d/5", tryNo);
+        telCopy(tel.status, tryText, TELRBT_FIELD_MAX);
+        telField(14, 30, (unsigned char *)"Status: ", tel.status, 110);
+
+        netCommResetInput();
+        writeLongSerial((char *)cmd);
+        writeSerial('\r');
+
+        telReadResponse(resp);
+        if (strncmp((char *)resp, "OK", 2) == 0)
+        {
+            telConfigured = 1;
+            break;
+        }
+
+        delayms(50);
+    }
+
+    if (telConfigured)
+    {
         telCopy(tel.status, (unsigned char *)"UDP ready", TELRBT_FIELD_MAX);
     }
     else
     {
-        telConfigured = 0;
         telCopy(tel.status, (unsigned char *)"UDP setup failed", TELRBT_FIELD_MAX);
         if (resp[0])
             telCopy(tel.last, resp, TELRBT_LAST_MAX);
     }
+
+    telDrawDynamic();
 }
 
 static unsigned char telHandleMouse(void)
@@ -711,11 +857,11 @@ void main(void)
     telMousePrev = 0;
     telConfigured = 0;
     telInitState();
-    telLogReset();
 
     SaveScreenNew(&save, TELRBT_X, TELRBT_Y, TELRBT_W, TELRBT_H);
     telDrawStatic();
     telDrawDynamic();
+    telLogReset();
     telSetupUdp();
     telDrawDynamic();
 
