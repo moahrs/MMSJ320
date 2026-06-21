@@ -236,17 +236,8 @@ static void termRenderLine(unsigned char y)
 
 static void termFastClear(unsigned char color)
 {
-    unsigned int ix;
-
-    color &= 0x0F;
-
-    setWriteAddress(termPatternTable);
-    for (ix = 0; ix < 6144; ix++)
-        TERM_VDP_DATA = 0;
-
-    setWriteAddress(termColorTable);
-    for (ix = 0; ix < 6144; ix++)
-        TERM_VDP_DATA = color;
+    /* Clear the complete 256x192 G2 screen using the tested MGUI routine. */
+    clearScrW((unsigned char)(color & 0x0F));
 }
 
 static void termWriteG2CharAt(unsigned char col, unsigned char row, unsigned char chr, unsigned char color)
