@@ -4408,6 +4408,18 @@ void startMGI(void) {
     *startBasic = 2;    // Inicia Basic vindo do MGUI sem mensagens e textos
     *mguiRunTask = 0x00;
 
+    /* MMSJOS startup does not guarantee that this module BSS starts at zero. */
+    *(vmfp + Reg_IMRB) &= (unsigned char)~MFP_GPIO2;
+    *(vmfp + Reg_IERB) &= (unsigned char)~MFP_GPIO2;
+    hookTable[HOOK_GPIO2].magic = 0x00;
+    hookTable[HOOK_GPIO2].flags = 0x00;
+    hookTable[HOOK_GPIO2].addr = 0x00;
+    mguiClockHookReady = 0;
+    mguiClockHookActive = 0;
+    mguiClockTicks = 0;
+    mguiClockDirty = 1;
+    mguiClockLastMinute = -1;
+
     // Limpar slots de SaveScreen
     for (iy = 0; iy < SS_MAX_BLOCKS; iy++)
         ssSlots[iy].used = 0;
@@ -4917,25 +4929,43 @@ void redrawMain(void) {
 //-----------------------------------------------------------------------------
 static void mguiClockHookEnable(void)
 {
+    unsigned char retry;
+
     if (mguiClockHookActive)
         return;
 
     if (!mguiClockHookReady)
     {
-        if (rtc_init_with_sqw() != 0)
-            return;
+        for (retry = 0; retry < 8; retry++)
+        {
+            if (rtc_init_with_sqw() == 0)
+            {
+                mguiClockHookReady = 1;
+                break;
+            }
 
-        mguiClockHookReady = 1;
+            delayms(10);
+        }
+
+        if (!mguiClockHookReady)
+            return;
     }
 
     *(vmfp + Reg_IMRB) &= (unsigned char)~MFP_GPIO2;
     *(vmfp + Reg_IERB) &= (unsigned char)~MFP_GPIO2;
 
+    /* DS1307 SQW is connected to GPIO2 and generates a falling edge at 1 Hz. */
+    *(vmfp + Reg_DDR)  &= (unsigned char)~MFP_GPIO2;
+    *(vmfp + Reg_AER)  &= (unsigned char)~MFP_GPIO2;
+    *(vmfp + Reg_IPRB) &= (unsigned char)~MFP_GPIO2;
+    *(vmfp + Reg_ISRB) &= (unsigned char)~MFP_GPIO2;
+
     hookTable[HOOK_GPIO2].addr   = &mguiClockHook1Hz;
     hookTable[HOOK_GPIO2].flags  = HOOKF_ACTIVE | HOOKF_SKIP_OS;
     hookTable[HOOK_GPIO2].magic  = HOOK_MAGIC;
 
-    mguiClockTicks = 0;
+    /* Force the first RTC check on the next 1 Hz pulse. */
+    mguiClockTicks = 59;
     mguiClockHookActive = 1;
 
     *(vmfp + Reg_IERB) |= MFP_GPIO2;
