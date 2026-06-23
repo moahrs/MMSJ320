@@ -18,6 +18,7 @@ SRC_C = \
 	src/libc_stub.c \
 	src/mmsj320mfp.c \
 	src/mmsjos.c \
+	src/telnet.c \
 	src/mgui.c
 
 SRC_A68 = \
@@ -53,6 +54,7 @@ LINK_OBJ = \
 	src/gcc_builtins_shim.o \
 	src/mmsj320mfp.o \
 	src/mmsjos.o \
+	src/telnet.o \
 	src/mgui.o \
 	src/mmsjos_ram.o \
 	src/mgui_sprite.o \

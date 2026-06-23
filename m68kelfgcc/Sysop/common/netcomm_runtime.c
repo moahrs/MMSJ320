@@ -48,6 +48,7 @@ static void *netCommEnsureResidentHook(void)
     netApiHookSize = size;
     netApiHookCount = 0;
     netApiLastByte = 0;
+    netApiHookOwned = 1;
     netApiEnabled = 0;
 
     return mem;
@@ -201,12 +202,14 @@ void netCommDisable(void)
 
     netCommFlush();
 
-    if (netApiMagic == NETAPI_MAGIC_VALUE && netApiHookMem != 0)
+    if (netApiMagic == NETAPI_MAGIC_VALUE && netApiHookMem != 0 && netApiHookOwned)
     {
         netMsFree((void *)netApiHookMem);
-        netApiHookMem = 0;
-        netApiHookSize = 0;
     }
+
+    netApiHookMem = 0;
+    netApiHookSize = 0;
+    netApiHookOwned = 0;
 
     netApiEnabled = 0;
     netApiMagic = 0;

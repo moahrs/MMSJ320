@@ -41,6 +41,7 @@
 #include "mguiapi.h"
 #include "monitor.h"
 #include "monitorapi.h"
+#include "telnet.h"
 
 unsigned long runOSMemory;
 
@@ -150,6 +151,7 @@ int loadMbinAndRun(char *filename, char porig)
     unsigned char *vEnderExec;
     unsigned char tmp[20];
     unsigned long dbgRet;
+    unsigned char telnetWasEnabled;
 
     /* Passo 1: lê só o header para obter os tamanhos */
     loadFileSize(filename, &h, sizeof(MBIN_HEADER));
@@ -215,6 +217,8 @@ int loadMbinAndRun(char *filename, char porig)
         return -10;
     }
 
+    telnetWasEnabled = telnetSuspend();
+
     if (porig == 1)
     {
         runFromOsCmd((unsigned long)vEnderExec);
@@ -229,6 +233,8 @@ int loadMbinAndRun(char *filename, char porig)
 
         runFromMGUI((unsigned long)vEnderExec, (unsigned long)fileBuf);
     }
+
+    telnetResume(telnetWasEnabled);
 
     consoleWriteText("\r\n\0");
 
@@ -776,6 +782,8 @@ void main(void)
     mmsjosLoadConfig();
     mprintf("Done.\r\n");
 
+    telnetInit();
+
     if (startEnv)
         mguiFunc(0);
 
@@ -814,6 +822,7 @@ int mmsjKeyPost(MMSJ_KEYEVENT *k)
 //-----------------------------------------------------------------------------
 int mmsjKeyGet(MMSJ_KEYEVENT *k)
 {
+    telnetPoll();
     keyboardFunc(0);
 
     if (keyHead == keyTail)
@@ -1292,6 +1301,27 @@ writeLongSerial("\r\n\0");*/
         {
             fsVer();
             consoleWriteText("\r\n\0");
+        }
+        else if (!strcmp(linhacomando,"TELNET") && iy == 6)
+        {
+            if (linhaarg[0] == 0)
+            {
+                consoleWriteText(telnetIsEnabled() ? "Telnet is ON\r\n" : "Telnet is OFF\r\n");
+            }
+            else if (!strcmp((char *)linhaarg, "ON"))
+            {
+                telnetSetEnabled(1);
+                consoleWriteText("Telnet is ON\r\n");
+            }
+            else if (!strcmp((char *)linhaarg, "OFF"))
+            {
+                telnetSetEnabled(0);
+                consoleWriteText("Telnet is OFF\r\n");
+            }
+            else
+            {
+                consoleWriteText("Use: TELNET [ON|OFF]\r\n");
+            }
         }
         else if (!strcmp(linhacomando,"LS") && iy == 2)
         {

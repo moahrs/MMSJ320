@@ -16,6 +16,7 @@
 #define NETAPI_ENABLED_ADDR      0x0060F972UL
 #define NETAPI_HOOK_COUNT_ADDR   0x0060F974UL
 #define NETAPI_LAST_BYTE_ADDR    0x0060F978UL
+#define NETAPI_HOOK_OWNED_ADDR   0x0060F979UL
 #define NETAPI_RX_BUF_ADDR       0x0060F980UL
 
 #define NETAPI_RX_SIZE           4096
@@ -26,6 +27,7 @@
 #define netApiEnabled            (*(volatile unsigned char *)NETAPI_ENABLED_ADDR)
 #define netApiHookCount          (*(volatile unsigned long *)NETAPI_HOOK_COUNT_ADDR)
 #define netApiLastByte           (*(volatile unsigned char *)NETAPI_LAST_BYTE_ADDR)
+#define netApiHookOwned          (*(volatile unsigned char *)NETAPI_HOOK_OWNED_ADDR)
 
 #define serRxHead                (*(volatile unsigned short *)NETAPI_RX_HEAD_ADDR)
 #define serRxTail                (*(volatile unsigned short *)NETAPI_RX_TAIL_ADDR)

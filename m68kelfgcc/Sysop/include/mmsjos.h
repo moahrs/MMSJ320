@@ -408,6 +408,8 @@ typedef struct
     int  (*kbhit)(void);
 } MMSJ_CONSOLE;
 
+extern MMSJ_CONSOLE *activeConsole;
+
 typedef struct
 {
     unsigned char name[12]; // Font Name

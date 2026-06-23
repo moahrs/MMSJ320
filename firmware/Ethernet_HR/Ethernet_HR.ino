@@ -386,7 +386,8 @@ void tcpListenPoll()
     digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     ledActivity();
 
-//    Serial2.print("EVT;CONNECT;INBOUND;23");
+    Serial2.print("EVT;CONNECT;INBOUND;23");
+    endResponse();
   }
 }
 
