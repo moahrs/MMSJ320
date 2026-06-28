@@ -15,6 +15,7 @@
 #define TELNET_POLL_DIVIDER      100
 #define TELNET_LINE_SIZE         128
 #define TELNET_CONTROL_SIZE      80
+#define TELNET_KEY_QUEUE_SIZE    64
 
 #define TELNET_IAC               255
 #define TELNET_DONT              254
@@ -30,6 +31,7 @@
 
 static volatile unsigned char telnetPollDue;
 static volatile unsigned char telnetTimerCount;
+static unsigned char telnetInitialized;
 static unsigned char telnetEnabled;
 static unsigned char telnetSuspended;
 static unsigned char telnetConnected;
@@ -39,10 +41,61 @@ static unsigned char telnetControl[TELNET_CONTROL_SIZE];
 static unsigned char telnetControlPos;
 static unsigned char telnetIacState;
 static unsigned char telnetEscState;
+static unsigned short telnetEscParam;
 static unsigned char telnetLastOut;
 static unsigned long telnetDirCluster;
 static unsigned char telnetDirPath[128];
 static unsigned short telnetDirIndex;
+static MMSJ_KEYEVENT telnetKeyQueue[TELNET_KEY_QUEUE_SIZE];
+static volatile unsigned char telnetKeyHead;
+static volatile unsigned char telnetKeyTail;
+static unsigned char telnetProgramMode;
+
+static void telnetQueueKey(unsigned char code, unsigned char ascii,
+                           unsigned char flags)
+{
+    unsigned char next;
+
+    next = telnetKeyHead + 1;
+    if (next >= TELNET_KEY_QUEUE_SIZE)
+        next = 0;
+    if (next == telnetKeyTail)
+        return;
+
+    telnetKeyQueue[telnetKeyHead].code = code;
+    telnetKeyQueue[telnetKeyHead].ascii = ascii;
+    telnetKeyQueue[telnetKeyHead].flags = flags;
+    telnetKeyQueue[telnetKeyHead].raw = 0;
+    telnetKeyHead = next;
+}
+
+static void telnetTimerEnable(void)
+{
+    telnetTimerCount = 0;
+    telnetPollDue = 0;
+    hookTable[HOOK_TIMER_A].addr = (unsigned long (*)(void))telnetTimerHook;
+    hookTable[HOOK_TIMER_A].flags = HOOKF_ACTIVE;
+    hookTable[HOOK_TIMER_A].magic = HOOK_MAGIC;
+
+    /* Timer A pertence ao monitor. Apenas garantimos que sua interrupcao
+       continue habilitada; periodo e registradores do timer nao sao alterados. */
+    *(vmfp + Reg_IERA) |= TELNET_TIMER_A_BIT;
+    *(vmfp + Reg_IMRA) |= TELNET_TIMER_A_BIT;
+}
+
+static void telnetTimerDisable(void)
+{
+    if (hookTable[HOOK_TIMER_A].addr == (unsigned long (*)(void))telnetTimerHook)
+    {
+        hookTable[HOOK_TIMER_A].magic = 0;
+        hookTable[HOOK_TIMER_A].flags = 0;
+        hookTable[HOOK_TIMER_A].addr = 0;
+    }
+
+    /* Nao desabilitar IERA/IMRA: o monitor usa Timer A para SysClockms. */
+    telnetTimerCount = 0;
+    telnetPollDue = 0;
+}
 
 static unsigned char telnetContains(const unsigned char *text, const char *find)
 {
@@ -185,6 +238,7 @@ static void telnetSessionOpen(void)
     telnetLinePos = 0;
     telnetIacState = 0;
     telnetEscState = 0;
+    telnetEscParam = 0;
     telnetLastOut = 0;
     telnetDirCluster = vclusterdir;
     strcpy((char *)telnetDirPath, (char *)vdiratu);
@@ -207,6 +261,7 @@ static void telnetSessionClosed(void)
     telnetControlPos = 0;
     telnetIacState = 0;
     telnetEscState = 0;
+    telnetEscParam = 0;
 }
 
 static unsigned char telnetCommandIs(const unsigned char *cmd, const char *name)
@@ -238,14 +293,15 @@ static unsigned char telnetCommandAllowed(const unsigned char *cmd)
            telnetCommandIs(cmd, "RM") ||
            telnetCommandIs(cmd, "REN") ||
            telnetCommandIs(cmd, "MD") ||
-           telnetCommandIs(cmd, "RD");
+           telnetCommandIs(cmd, "RD") ||
+           telnetCommandIs(cmd, "EDIT");
 }
 
 static void telnetHelp(void)
 {
     telnetPuts((unsigned char *)
         "Commands: VER, LS, DIR, PWD, CD, CAT, DATE, TIME\r\n"
-        "          CP, RM, REN, MD, RD, CLS, CLEAR, EXIT, QUIT\r\n"
+        "          CP, RM, REN, MD, RD, EDIT, CLS, CLEAR, EXIT, QUIT\r\n"
         "External and graphic programs are disabled in Telnet.\r\n");
 }
 
@@ -323,7 +379,11 @@ static void telnetRunCommand(unsigned char *cmd)
     remoteConsole.kbhit = 0;
     *activeConsole = remoteConsole;
 
+    telnetProgramMode = 1;
+    telnetKeyHead = 0;
+    telnetKeyTail = 0;
     commandResult = fsOsCommand(cmd);
+    telnetProgramMode = 0;
     if (commandResult != 0 && commandResult != 99)
         mprintf("Command failed: %lu\r\n", commandResult);
 
@@ -396,9 +456,29 @@ static void telnetProcessConnectedByte(unsigned char c)
     if (telnetEscState)
     {
         if (telnetEscState == 1 && c == '[')
+        {
             telnetEscState = 2;
+            telnetEscParam = 0;
+        }
+        else if (telnetEscState == 2 && c >= '0' && c <= '9')
+            telnetEscParam = (unsigned short)(telnetEscParam * 10 + (c - '0'));
         else if (telnetEscState == 2 && c >= 0x40 && c <= 0x7E)
+        {
+            if (telnetProgramMode)
+            {
+                if (c == 'A') telnetQueueKey(KEY_UP, 0, KEY_NONE);
+                else if (c == 'B') telnetQueueKey(KEY_DOWN, 0, KEY_NONE);
+                else if (c == 'C') telnetQueueKey(KEY_RIGHT, 0, KEY_NONE);
+                else if (c == 'D') telnetQueueKey(KEY_LEFT, 0, KEY_NONE);
+                else if (c == 'H') telnetQueueKey(KEY_HOME, 0, KEY_NONE);
+                else if (c == 'F') telnetQueueKey(KEY_END, 0, KEY_NONE);
+                else if (c == '~' && telnetEscParam == 2) telnetQueueKey(KEY_INSERT, 0, KEY_NONE);
+                else if (c == '~' && telnetEscParam == 3) telnetQueueKey(KEY_DELETE, 0, KEY_NONE);
+                else if (c == '~' && telnetEscParam == 5) telnetQueueKey(KEY_PAGEUP, 0, KEY_NONE);
+                else if (c == '~' && telnetEscParam == 6) telnetQueueKey(KEY_PAGEDOWN, 0, KEY_NONE);
+            }
             telnetEscState = 0;
+        }
         else if (telnetEscState == 1)
             telnetEscState = 0;
         return;
@@ -412,6 +492,17 @@ static void telnetProcessConnectedByte(unsigned char c)
 
     if (c == 0x04)
         return;
+
+    if (telnetProgramMode)
+    {
+        if (c == '\n')
+            return;
+        if (c >= 1 && c <= 26 && c != '\r' && c != '\t' && c != 0x08)
+            telnetQueueKey((unsigned char)('A' + c - 1), c, KEY_CTRL);
+        else
+            telnetQueueKey(c, c, KEY_NONE);
+        return;
+    }
 
     if (c == '\r' || c == '\n')
     {
@@ -539,10 +630,11 @@ void telnetTimerHook(void)
     }
 }
 
-void telnetInit(void)
+void telnetInitVars(void)
 {
     telnetPollDue = 0;
     telnetTimerCount = 0;
+    telnetInitialized = 0;
     telnetEnabled = 0;
     telnetSuspended = 0;
     telnetConnected = 0;
@@ -550,19 +642,24 @@ void telnetInit(void)
     telnetControlPos = 0;
     telnetIacState = 0;
     telnetEscState = 0;
+    telnetEscParam = 0;
     telnetLastOut = 0;
     telnetDirCluster = vclusterdir;
     strcpy((char *)telnetDirPath, (char *)vdiratu);
     telnetDirIndex = vdiratuidx;
+    telnetKeyHead = 0;
+    telnetKeyTail = 0;
+    telnetProgramMode = 0;
+}
+
+void telnetInit(void)
+{
+    if (telnetInitialized)
+        return;
 
     telnetNetEnable();
-    telnetStopListen();
-
-    hookTable[HOOK_TIMER_A].addr = (unsigned long (*)(void))telnetTimerHook;
-    hookTable[HOOK_TIMER_A].flags = HOOKF_ACTIVE;
-    hookTable[HOOK_TIMER_A].magic = HOOK_MAGIC;
-    *(vmfp + Reg_IERA) |= TELNET_TIMER_A_BIT;
-    *(vmfp + Reg_IMRA) |= TELNET_TIMER_A_BIT;
+    telnetTimerDisable();
+    telnetInitialized = 1;
 }
 
 void telnetPoll(void)
@@ -604,10 +701,12 @@ unsigned char telnetSetEnabled(unsigned char enabled)
         if (telnetEnabled && !telnetSuspended)
             return 1;
 
+        telnetInit();
         telnetEnabled = 1;
         telnetSuspended = 0;
         telnetNetEnable();
         telnetStartListen();
+        telnetTimerEnable();
         return 1;
     }
 
@@ -617,6 +716,7 @@ unsigned char telnetSetEnabled(unsigned char enabled)
     telnetEnabled = 0;
     telnetSuspended = 0;
     telnetSessionClosed();
+    telnetTimerDisable();
     return 1;
 }
 
@@ -626,6 +726,7 @@ unsigned char telnetSuspend(void)
         return 0;
 
     telnetStopListen();
+    telnetTimerDisable();
     telnetSuspended = 1;
     return 1;
 }
@@ -638,4 +739,17 @@ void telnetResume(unsigned char wasEnabled)
     telnetSuspended = 0;
     telnetNetEnable();
     telnetStartListen();
+    telnetTimerEnable();
+}
+
+unsigned char telnetGetKey(MMSJ_KEYEVENT *keyEvent)
+{
+    if (!telnetProgramMode || telnetKeyHead == telnetKeyTail)
+        return 0;
+
+    *keyEvent = telnetKeyQueue[telnetKeyTail];
+    telnetKeyTail++;
+    if (telnetKeyTail >= TELNET_KEY_QUEUE_SIZE)
+        telnetKeyTail = 0;
+    return 1;
 }

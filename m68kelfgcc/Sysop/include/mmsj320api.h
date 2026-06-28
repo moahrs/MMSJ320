@@ -48,6 +48,10 @@ MMSJ320API_VAR(unsigned long *, startBasic3, 0x0060F6B0);
 MMSJ320API_VAR(unsigned long *, startBasic4, 0x0060F6B4);
 MMSJ320API_VAR(unsigned long *, startBasic5, 0x0060F6B8);
 MMSJ320API_VAR(unsigned char *, paramBasic, 0x0060F6BC); // 255 bytes para passagem de parametros do monitor/mmsjos para o basic
+MMSJ320API_VAR(unsigned long *, errorBusRecoverPC, 0x0060F954); // 4 bytes = 0 no recover, <address> - bus error recovery PC
+MMSJ320API_VAR(unsigned long *, errorBusOccurred, 0x0060F958); // 4 bytes = 0 no error, <address> - bus error
+MMSJ320API_VAR(unsigned short *, memoryTotalK, 0x0060F95C); // Total memory in KBytes
+MMSJ320API_VAR(unsigned short *, memoryFreeK, 0x0060F95E); // Free memory in KBytes
 
 #define HOOK_MAGIC      0x4D4A
 

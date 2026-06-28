@@ -239,7 +239,8 @@ void serviceBusRead(void)
   PORTC |= 0x03; // PC0/PC1 INT high
 
   b = queueData[queueHead];
-
+Serial.print(b,HEX);
+Serial.print('.');
   /* INT deve permanecer ativo ate o dado sair e o CS subir; senao o MFP/CPU perdem o enquadramento. */
   __asm__("nop");
   __asm__("nop");
@@ -549,6 +550,8 @@ void loop()
   if (keyboard.available())
   {
     c = keyboard.read();
+    Serial.print(c,HEX);
+    Serial.print(';');
     key = ps2ToAsciiABNT2(c);
 
     if (key != 0x00)

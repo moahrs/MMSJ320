@@ -3,6 +3,7 @@
 
 #define TELNET_CONSOLE_MAGIC 0x54454C4EUL /* TELN */
 
+void telnetInitVars(void);
 void telnetInit(void);
 void telnetPoll(void);
 void telnetTimerHook(void);
@@ -11,5 +12,6 @@ unsigned char telnetIsEnabled(void);
 unsigned char telnetSetEnabled(unsigned char enabled);
 unsigned char telnetSuspend(void);
 void telnetResume(unsigned char wasEnabled);
+unsigned char telnetGetKey(MMSJ_KEYEVENT *keyEvent);
 
 #endif

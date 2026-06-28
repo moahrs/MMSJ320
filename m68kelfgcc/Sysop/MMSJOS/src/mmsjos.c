@@ -19,6 +19,7 @@
 * 25/05/2026  1.0a07  Moacir Jr.   Piscar Cursor, Ajustes Gerais
 * 01/06/2026  1.0a08  Moacir Jr.   Abstracao de saida e entrada de dados
 * 10/06/2026  1.0a09  Moacir Jr.   Inclusao de data e hora
+* 27/06/2026  1.0a10  Moacir Jr.   Inclusao de telnet e ajuste em mostrar memoria
 ********************************************************************************/
 #include <ctype.h>
 #include <string.h>
@@ -217,7 +218,10 @@ int loadMbinAndRun(char *filename, char porig)
         return -10;
     }
 
-    telnetWasEnabled = telnetSuspend();
+    if (telnetConsoleActive())
+        telnetWasEnabled = 0;
+    else
+        telnetWasEnabled = telnetSuspend();
 
     if (porig == 1)
     {
@@ -359,7 +363,7 @@ char memInit(void);
 
 HEADER *_allocp;
 
-#define versionMMSJOS "1.0a09"
+#define versionMMSJOS "1.0a10"
 #define STOF_RX_BUFFER_SIZE (512UL * 1024UL)
 #define FS_SECTOR_RETRY_COUNT 3
 #define FS_ENABLE_WRITE_VERIFY 1
@@ -747,6 +751,9 @@ void main(void)
     unsigned char vRetInput;
     int vRetProcCmd;
     unsigned long ixxx;
+    char memStatus;
+    unsigned long fsStatus;
+    int i2cStatus;
 
     *startBasic = 1;    // Inicia Basic vindo do MMSJOS com mensagens e textos
     startEnv = 0;
@@ -762,36 +769,49 @@ void main(void)
 
     clearScr();
 
-    mprintf("OS> MMSJ-OS v%s\r\n",versionMMSJOS);
-    mprintf("OS> Utility (c) 2014-2026\r\n\0");
-    mprintf("OS> CPU 68HC000 AT 10MHz\r\n");
-    mprintf("OS> TMS9118 Video Display Processor\r\n");
-    mprintf("      Graphic %dx%d\r\n", 256, 192);
-    mprintf("      Text %dx%d\r\n", 40, 24);
-    mprintf("OS> MC68901 Multifunction Peripheral\r\n");
-    mprintf("      Timers Controller...\r\n");
-    mprintf("      RS-232C at 9600bps...\r\n");
-    mprintf("      KeyBoard/Mouse Controller...\r\n");
-    mprintf("OS> Total Memory %dKB. Free %dKB\r\n", 1256, 1024);
-    mprintf("OS> Starting Management Memory... %s.\r\n", !memInit() ? "Done" : "Error");
-    mprintf("OS> Mounting Disk... %s.\r\n", !fsInit() ? "Done" : "Error");
-    mprintf("OS> Starting i2c... %s.\r\n", !i2c_init() ? "Done" : "Error");
+    mprintf("MMSJ-OS/68K %s\r\n", versionMMSJOS);
+    mprintf("Copyright (c) 2014-2026\r\n\r\n");
+    mprintf("CPU      68HC000 at 10MHz\r\n");
+    mprintf("RAM      %d KB total, %d KB free\r\n", *memoryTotalK, *memoryFreeK);
+    mprintf("VIDEO    TMS9128 text 40x24, G2 256x192\r\n");
+    mprintf("MFP      MC68901 serial 9600 bps\r\n");
+    mprintf("DISK     FAT32\r\n");
+    mprintf("RTC      DS1307\r\n\r\n");
+
+    mprintf("Starting services:\r\n");
+
+    memStatus = memInit();
+    mprintf("  memory manager      [%s]\r\n", !memStatus ? "ready" : "fail");
+
+    fsStatus = fsInit();
+    mprintf("  filesystem          [%s]\r\n", !fsStatus ? "ready" : "fail");
+
+    i2cStatus = i2c_init();
+    mprintf("  i2c bus             [%s]\r\n", !i2cStatus ? "ready" : "fail");
+
     fsChangeDir("/");
     
-    mprintf("OS> Loading MMSJOS Config File... ");
     mmsjosLoadConfig();
-    mprintf("Done.\r\n");
+    mprintf("  config file         [ready]\r\n");
 
-    telnetInit();
+    telnetInitVars();
+    mprintf("  telnet server       [off]\r\n");
 
     if (startEnv)
+    {
+        mprintf("  graphical shell     [ready]\r\n");
         mguiFunc(0);
+    }
+    else
+    {
+        mprintf("  command shell       [ready]\r\n");
+    }
 
     vbuf[0] = '\0';
     memset(mmsjosCmdHistory, 0, sizeof(mmsjosCmdHistory));
     mmsjosCmdHistoryCount = 0;
 
-    consoleWriteText("\r\n\0");
+    consoleWriteText("\r\nReady.\r\n\0");
     putPrompt(0);
     showCursor();
 
@@ -823,6 +843,10 @@ int mmsjKeyPost(MMSJ_KEYEVENT *k)
 int mmsjKeyGet(MMSJ_KEYEVENT *k)
 {
     telnetPoll();
+
+    if (telnetConsoleActive() && telnetGetKey(k))
+        return 1;
+
     keyboardFunc(0);
 
     if (keyHead == keyTail)
@@ -4801,7 +4825,7 @@ void funcDate(unsigned char *sdate)
     }
     else
     {
-        mprintf("Error Reading RTC");
+        mprintf("Error Reading RTC\r\n");
     }
 }
 
@@ -4844,7 +4868,7 @@ void funcTime(unsigned char *stime)
     }
     else
     {
-        mprintf("Error Reading RTC");
+        mprintf("Error Reading RTC\r\n");
     }
 }
 

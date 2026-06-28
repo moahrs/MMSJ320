@@ -36,6 +36,7 @@
 * 02/05/2026  1.4a05  Moacir Jr.   Ajuste endereco loadbas
 * 09/05/2026  1.4a06  Moacir Jr.   Ajuste Tela vermelha da morte - stack error
 * 15/05/2026  1.4a07  Moacir Jr.   Ajuste teclado PS/2 para o MMSJ320_PS2ADVv2
+* 27/06/2026  1.4a08  Moacir Jr.   Novo tratamento para erroBus (BERR PIN)
 *--------------------------------------------------------------------------------
 *
 * Mapa de Memoria
@@ -119,7 +120,7 @@
 #include "mmsj320mfp.h"
 #include "monitor.h"
 
-#define versionBios "1.4a07"
+#define versionBios "1.4a08"
 
 HEADER *_allocp;
 unsigned char *inKbdMse = 0x00400060; // Nano kbd/mouse ler final A0 = 1 = UDS (D8 a D15)
@@ -188,6 +189,7 @@ void runCmd(void);
 void runBas(void);
 void runBasAp2(void);
 void runOSCmd(void);
+unsigned char probeDiskDrive(void);
 
 void runSO(void);
 unsigned int carregaSO(void);
@@ -244,6 +246,8 @@ void main(void)
 
     // Inicia com Basic
     debugMessages = 0;
+    *errorBusRecoverPC = 0;
+    *errorBusOccurred = 0;
 
     // Tempo para Inicializar a Memoria DRAM (se tiver), Perifericos e etc...
     for(ix = 0; ix <= 12000; ix++);
@@ -399,6 +403,8 @@ void main(void)
     }
 
     vtotmem = xcounter;
+    *memoryTotalK = (unsigned short)xcounter;
+    *memoryFreeK = (unsigned short)(xcounter - 256);
     *startBasic = 0;
     *hasMmsjosLoaded = 0;
     *paramBasic = 0;
@@ -417,8 +423,7 @@ void main(void)
     printText(sqtdtam);
     printText("K Bytes Free.\r\n\0");
 
-    printText("OK\r\n\0");
-    printText(">");
+    printText("\r\nPress <ESC> to skip the disk search...\r\n\r\n\0");
 
     showCursor();
 
@@ -511,6 +516,24 @@ void main(void)
         }
     #endif
 
+    for (ix = 0; ix < 20000; ix++)
+        delayus(100);
+
+    vbytepic = readChar();
+
+    if (vbytepic != 0x1B)
+    {
+        printText("Looking for Disk...\r\n\0");
+        if (probeDiskDrive())
+        {
+            printText("\r\nAuto boot OS...\r\n\0");
+            carregaOSDisk();
+            runSystemOper();
+        }
+    }
+
+    printText("OK\r\n\0");
+    printText(">");
     inputTask();
 }
 

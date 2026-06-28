@@ -32,6 +32,19 @@ _runOSCmd:
        movem.l   (A7)+,D0-D7/A0-A6
        rts
 
+_probeDiskDrive:
+       clr.l     ($0060F958)
+       move.l    #PROBE_DISK_BERR,($0060F954)
+       move.b    ($00200001),D0
+       clr.l     ($0060F954)
+       moveq     #1,D0
+       rts
+
+PROBE_DISK_BERR:
+       clr.l     ($0060F954)
+       moveq     #0,D0
+       rts
+
 * Executar Funcoes Traps
 *
 _trapFunc00:
@@ -294,7 +307,16 @@ ERR_A7          EQU ERR_BASE+$54
 ERR_RAW_FRAME   EQU ERR_BASE+$58
 
 _erroBus:
+       move.l  10(A7),($0060F958)
+       tst.l   ($0060F954)
+       beq     ERROR_BUS_FATAL
+       move.l  ($0060F954),A0
+       lea     14(A7),A7
+       jmp     (A0)
+
+ERROR_BUS_FATAL:
        move.w  #2,ERR_TYPE
+       clr.l   ($0060F954)
        bra     _errorProc
 
 _erroAddress:

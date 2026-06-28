@@ -26,7 +26,66 @@
 #include "mguiapi.h"
 #include "monitorapi.h"
 #include "mmsjosapi.h"
+#include "telnet.h"
 #include "edit.h"
+
+/* O editor usa diretamente as primitivas de tela do monitor. Em uma sessao
+   Telnet, converte essas operacoes para ANSI; no console local, preserva as
+   chamadas originais sem alterar o comportamento existente. */
+static unsigned char edIsTelnet(void)
+{
+    return (activeConsole->magic == TELNET_CONSOLE_MAGIC);
+}
+
+static void edOutputClear(void)
+{
+    if (edIsTelnet())
+        mprintf("\033[2J\033[H");
+    else
+        ((clearScrType *)(unsigned long)MONITOR_FUNC_TABLE)[1]();
+}
+
+static void edOutputSetCursor(unsigned char col, unsigned char row)
+{
+    if (edIsTelnet())
+        mprintf("\033[%d;%dH", (int)row + 1, (int)col + 1);
+    else
+        ((vdp_set_cursorType *)(unsigned long)MONITOR_FUNC_TABLE)[17](col, row);
+}
+
+static void edOutputText(unsigned char *text)
+{
+    if (edIsTelnet())
+        mprintf("%s", text);
+    else
+        ((printTextType *)(unsigned long)MONITOR_FUNC_TABLE)[2](text);
+}
+
+static void edOutputChar(unsigned char c, unsigned char move)
+{
+    if (!edIsTelnet())
+    {
+        ((printCharType *)(unsigned long)MONITOR_FUNC_TABLE)[3](c, move);
+        return;
+    }
+
+    if (c == CURSOR_CHAR)
+        mprintf("\033[7m \033[0m");
+    else
+        mprintf("%c", c);
+
+    if (!move)
+        mprintf("\033[1D");
+}
+
+#undef clearScr
+#undef vdp_set_cursor
+#undef printText
+#undef printChar
+#define clearScr()              edOutputClear()
+#define vdp_set_cursor(c,r)     edOutputSetCursor((unsigned char)(c), (unsigned char)(r))
+#define printText(s)            edOutputText((unsigned char *)(s))
+#define printChar(c,m)          edOutputChar((unsigned char)(c), (unsigned char)(m))
 
 //-------------------------------------------------------------------
 static unsigned long noteAlign4(unsigned long value)
