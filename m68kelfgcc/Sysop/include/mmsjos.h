@@ -334,6 +334,7 @@ extern unsigned char fsWriteFile(char * vfilename, unsigned long voffset, unsign
 extern unsigned char fsDelFile(char * vfilename);
 extern unsigned char fsRenameFile(char * vfilename, char * vnewname);
 extern void runFromOsCmd(unsigned long vEnderExec);
+extern int probeReadByte(unsigned char *addr);
 extern unsigned long loadFile(unsigned char *parquivo, void* xaddress);
 extern unsigned long loadFileSize(unsigned char *parquivo, void* xaddress, unsigned long xsize);
 extern void catFile(unsigned char *parquivo);

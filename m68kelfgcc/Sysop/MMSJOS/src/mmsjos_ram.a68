@@ -1,10 +1,33 @@
 FILES_RELOC_TBL_OFFSET  equ $00000022   ; FICTICIO: offset do cabecalho de relocacao (qtd de funcoes)
 
             xdef _runFromOsCmd
+            xdef _probeReadByte
 
 _runFromOsCmd:
        movem.l   D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5/A6,-(A7)
        move.l    64(A7),A0
        jsr       (A0)       ; Jump to position ram memory
        movem.l   (A7)+,D0/D1/D2/D3/D4/D5/D6/D7/A0/A1/A2/A3/A4/A5/A6
+       rts
+
+;-----------------------------------------------------------------------------
+; int probeReadByte(unsigned char *addr)
+; Retorna 0..255 se o byte foi lido, ou -1 se o endereco gerar Bus Error.
+; Usa o mecanismo do monitor:
+;   0060F954 = PC de recuperacao
+;   0060F958 = endereco que gerou bus error
+;-----------------------------------------------------------------------------
+_probeReadByte:
+       move.l    4(A7),A0
+       clr.l     ($0060F958)
+       move.l    #PROBE_READ_BYTE_BERR,($0060F954)
+       clr.l     D0
+       move.b    (A0),D0
+       and.l     #$000000FF,D0
+       clr.l     ($0060F954)
+       rts
+
+PROBE_READ_BYTE_BERR:
+       clr.l     ($0060F954)
+       moveq     #-1,D0
        rts

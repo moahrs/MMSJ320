@@ -1,0 +1,491 @@
+       xdef      _runSO
+       xdef      _runCmd
+       xdef      _runBas
+       xdef      _runBasAp2
+       xdef      _runOSCmd
+       xdef      _probeDiskDrive
+       xdef      _trapFunc00
+       xdef      _trapFunc01
+       xdef      _trapFunc02
+       xdef      _trapFunc03
+       xdef      _trapFunc04
+       xdef      _trapFunc05
+       xdef      _trapFunc06
+       xdef      _trapFunc07
+       xdef      _trapFunc08
+       xdef      _trapFunc09
+       xdef      _trapFunc10
+       xdef      _trapFunc11
+       xdef      _trapFunc12
+       xdef      _trapFunc13
+       xdef      _trapFunc14
+       xdef      _trapFunc15
+       xdef      _intSpuriousInt
+       xdef      _intPIC
+       xdef      _intUsbSerial
+       xdef      _intVideo
+       xdef      _intMouse
+       xdef      _intKeyboard
+       xdef      _intMfpGpi0
+       xdef      _intMfpGpi1
+       xdef      _intMfpGpi2
+       xdef      _intMfpGpi3
+       xdef      _intMfpTmrD
+       xdef      _intMfpTmrC
+       xdef      _intMfpGpi4
+       xdef      _intMfpGpi5
+       xdef      _intMfpTmrB
+       xdef      _intMfpXmitErr
+       xdef      _intMfpXmitBufEmpty
+       xdef      _intMfpRecErr
+       xdef      _intMfpRecBufFull
+       xdef      _intMfpTmrA
+       xdef      _intMfpGpi6
+       xdef      _intMfpGpi7
+       xdef      _erroBus
+       xdef      _erroAddress
+       xdef      _erroIllegal
+       xdef      _erroZeroDivide
+       xdef      _erroChk
+       xdef      _erroTrapv
+       xdef      _erroPrivilege
+       xdef      _erroLineA
+       xdef      _erroLineF
+       xdef      _traceDebug
+
+* Executar SO pre-carregado no endere�o de memoria 0x00800000
+*
+_runSO:
+       movem.l   D0-D7/A0-A6,-(A7)
+       jsr       $00800000       ; Jump to position ram memory
+       movem.l   (A7)+,D0-D7/A0-A6
+       rts
+
+_runCmd:
+       xref _runMemory
+       movem.l   D0-D7/A0-A6,-(A7)
+       move.l    _runMemory,A0
+       jsr       (A0)       ; Jump to position ram memory
+       movem.l   (A7)+,D0-D7/A0-A6
+       rts
+
+_runBas:
+       movem.l   D0-D7/A0-A6,-(A7)
+       jsr       $00020000       ; Jump to position Basic ram memory
+       movem.l   (A7)+,D0-D7/A0-A6
+       rts
+
+_runBasAp2:
+       movem.l   D0-D7/A0-A6,-(A7)
+       jsr       $00008000       ; Jump to position Basic Apple 2 ram memory
+       movem.l   (A7)+,D0-D7/A0-A6
+       rts
+
+_runOSCmd:
+       movem.l   D0-D7/A0-A6,-(A7)
+       jsr       $00800170                          ; lembrar de ajustar esse endere�o se ele mudar
+       movem.l   (A7)+,D0-D7/A0-A6
+       rts
+
+_probeDiskDrive:
+       clr.l     ($0060F958)
+       move.l    #PROBE_DISK_BERR,($0060F954)
+       move.b    ($00200001),D0
+       clr.l     ($0060F954)
+       moveq     #1,D0
+       rts
+
+PROBE_DISK_BERR:
+       clr.l     ($0060F954)
+       moveq     #0,D0
+       rts
+
+* Executar Funcoes Traps
+*
+_trapFunc00:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc00Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc01:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc01Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc02:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc02Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc03:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc03Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc04:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc04Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc05:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc05Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc06:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc06Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc07:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc07Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc08:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc08Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc09:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc09Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc10:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc10Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc11:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc11Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc12:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc12Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc13:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc13Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc14:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _trapFunc14Handler
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_trapFunc15:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _basicFuncBios
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+* Interrupcoes
+*
+_intSpuriousInt:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcSpuriousInt
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_intPIC:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntPIC
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_intUsbSerial:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntUsbSerial
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_intVideo:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntVideo
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_intMouse:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMouse
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+_intKeyboard:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntKeyboard
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+;_intMultiTask:
+;       move.l    _intpos,A1
+;       move.l    (A1),A0
+;       move.l    (A1),D0               ; compara se (_intpos) = 0
+;       cmp.l     $0,D0
+;       beq.s     _intMultiTask_1       ; se for = 0, pula para o RTE
+;       jmp       (A0)                  ; se nao, chama subrotina de multitask no OS
+;_intMultiTask_1:
+;       rte
+
+_intMfpGpi0:
+       movem.l   D0-D7/A0-A6,-(A7)      ; movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpGpi0
+       movem.l   (A7)+,D0-D7/A0-A6      ; movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpGpi1:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpGpi1
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpGpi2:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpGpi2
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpGpi3:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpGpi3
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpTmrD:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpTmrD
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpTmrC:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpTmrC
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpGpi4:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpGpi4
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpGpi5:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpGpi5
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpTmrB:
+       jmp ($00800022)           ; Without Push or Pop Registers. uC/OS-II RTOS will do this.
+       rte
+_intMfpXmitErr:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpXmitErr
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpXmitBufEmpty:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpXmitBufEmpty
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpRecErr:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpRecErr
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpRecBufFull:
+       movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpRecBufFull
+       movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpTmrA:
+       movem.l   D0-D7/A0-A6,-(A7)      ; movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpTmrA
+       movem.l   (A7)+,D0-D7/A0-A6      ; movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpGpi6:
+       movem.l   D0-D7/A0-A6,-(A7)      ; movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpGpi6
+       movem.l   (A7)+,D0-D7/A0-A6      ; movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+_intMfpGpi7:
+       movem.l   D0-D7/A0-A6,-(A7)      ; movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       jsr       _funcIntMfpGpi7
+       movem.l   (A7)+,D0-D7/A0-A6      ; movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+
+; ==========================================================
+; Error debug structure
+; ==========================================================
+
+ERR_BASE        EQU $0060E200
+
+ERR_MAGIC       EQU ERR_BASE+$00
+ERR_VERSION     EQU ERR_BASE+$04
+ERR_TYPE        EQU ERR_BASE+$06
+ERR_FRAME_WORDS EQU ERR_BASE+$08
+ERR_SR          EQU ERR_BASE+$0A
+ERR_PC          EQU ERR_BASE+$0C
+ERR_IR          EQU ERR_BASE+$10
+ERR_SSW         EQU ERR_BASE+$12
+ERR_FAULT_ADDR  EQU ERR_BASE+$14
+
+ERR_D0          EQU ERR_BASE+$18
+ERR_D1          EQU ERR_BASE+$1C
+ERR_D2          EQU ERR_BASE+$20
+ERR_D3          EQU ERR_BASE+$24
+ERR_D4          EQU ERR_BASE+$28
+ERR_D5          EQU ERR_BASE+$2C
+ERR_D6          EQU ERR_BASE+$30
+ERR_D7          EQU ERR_BASE+$34
+
+ERR_A0          EQU ERR_BASE+$38
+ERR_A1          EQU ERR_BASE+$3C
+ERR_A2          EQU ERR_BASE+$40
+ERR_A3          EQU ERR_BASE+$44
+ERR_A4          EQU ERR_BASE+$48
+ERR_A5          EQU ERR_BASE+$4C
+ERR_A6          EQU ERR_BASE+$50
+ERR_A7          EQU ERR_BASE+$54
+
+ERR_RAW_FRAME   EQU ERR_BASE+$58
+
+_erroBus:
+       move.l  10(A7),($0060F958)
+       tst.l   ($0060F954)
+       beq     ERROR_BUS_FATAL
+       move.l  ($0060F954),A0
+       lea     14(A7),A7
+       jmp     (A0)
+
+ERROR_BUS_FATAL:
+       move.w  #2,ERR_TYPE
+       clr.l   ($0060F954)
+       bra     _errorProc
+
+_erroAddress:
+       move.w  #3,ERR_TYPE
+       bra     _errorProc
+
+_erroIllegal:
+       move.w  #4,ERR_TYPE
+       bra     _errorProc
+
+_erroZeroDivide:
+       move.w  #5,ERR_TYPE
+       bra     _errorProc
+
+_erroChk:
+       move.w  #6,ERR_TYPE
+       bra     _errorProc
+
+_erroTrapv:
+       move.w  #7,ERR_TYPE
+       bra     _errorProc
+
+_erroPrivilege:
+       move.w  #8,ERR_TYPE
+       bra     _errorProc
+
+_erroTrace:
+       move.w  #9,ERR_TYPE
+       bra     _errorProc
+
+_erroLineA:
+       move.w  #10,ERR_TYPE
+       bra     _errorProc
+
+_erroLineF:
+       move.w  #11,ERR_TYPE
+       bra     _errorProc
+       nop
+       nop
+
+_errorProc:
+    move.w  #$2700,SR
+
+    move.l  #$45525230,ERR_MAGIC     ; "ERR0"
+    move.w  #$0001,ERR_VERSION
+
+    move.l  D0,ERR_D0
+    move.l  D1,ERR_D1
+    move.l  D2,ERR_D2
+    move.l  D3,ERR_D3
+    move.l  D4,ERR_D4
+    move.l  D5,ERR_D5
+    move.l  D6,ERR_D6
+    move.l  D7,ERR_D7
+
+    move.l  A0,ERR_A0
+    move.l  A1,ERR_A1
+    move.l  A2,ERR_A2
+    move.l  A3,ERR_A3
+    move.l  A4,ERR_A4
+    move.l  A5,ERR_A5
+    move.l  A6,ERR_A6
+    move.l  A7,ERR_A7
+
+    move.w  (A7),ERR_SR
+    move.l  2(A7),ERR_PC
+
+    move.w  ERR_TYPE,D0
+
+    cmp.w   #2,D0             ; bus error
+    beq     ERROR_LONG_FRAME
+
+    cmp.w   #3,D0             ; address error
+    beq     ERROR_LONG_FRAME
+
+ERROR_SHORT_FRAME:
+    move.w  #3,ERR_FRAME_WORDS
+    clr.w   ERR_IR
+    clr.w   ERR_SSW
+    clr.l   ERR_FAULT_ADDR
+    bra     ERROR_COPY_FRAME
+
+ERROR_LONG_FRAME:
+    move.w  #7,ERR_FRAME_WORDS
+
+    move.w  6(A7),ERR_IR
+    move.w  8(A7),ERR_SSW
+    move.l  10(A7),ERR_FAULT_ADDR
+
+ERROR_COPY_FRAME:
+    move.l  A7,A0
+    move.l  #ERR_RAW_FRAME,A1
+    move.w  ERR_FRAME_WORDS,D0
+    subq.w  #1,D0
+
+ERROR_COPY_LOOP:
+    move.w  (A0)+,(A1)+
+    dbra    D0,ERROR_COPY_LOOP
+
+    move.l  #_fontesMatrix,D1
+    move.l  D1,($00611816)
+
+    jmp     _funcErrorBusAddr
+
+_traceDebug:
+       MOVE.l A7,($0060E692)      ; SP to A7 temp buffer
+       movem.l   D0-D7/A0-A6,-(A7)      ; movem.l   D0-D7/A0-A6,-(A7)       ; save registers
+       MOVE.l ($0060E692),A1      ; trace A7 temp buffer
+       MOVE.l ($0060E68C),A0      ; trace buffer (*traceData)
+       MOVE #7,D0                 ; 8 words
+TRACELOOP:
+       move.w (A1)+,(A0)+
+       DBRA D0,TRACELOOP          ; until all bytes copied to buffer trace (A0)
+       MOVE.l A0,($0060E68C)      ; trace buffer (*traceData)
+       movem.l   (A7)+,D0-D7/A0-A6      ; movem.l   (A7)+,D0-D7/A0-A6       ; restore registers
+       rte
+       

@@ -88,21 +88,21 @@
 *--------------------------------------------------------------------------------
 *
 * Enderecos de Slots de Expansao
-*
+* 
 * 00200000h a 00200FFFh - Expansion Slot 0 (Reserved Disk)
 * 00201000h a 00201FFFh - Expansion Slot 1
 * 00202000h a 00202FFFh - Expansion Slot 2
 * 00203000h a 00203FFFh - Expansion Slot 3
-*
+* 
 * Enderecos de Perifericos
-*
+* 
 * 00200001h e 00200003h - DISK Arduino UNO
 *                         - A1 = 0: r/w 4 bits LSB
 *                         - A1 = 1: r/w 4 bits MSB
 * 00400021h a 0040003Fh - MFP MC68901p - Cristal de 2.4576MHz
 *                         - SERIAL 9600, 8, 1, n
 *                         - Controle de Interrupcoes
-*                         - Timers
+*                         - Timers 
 * 00400041h a 00400043h - VIDEO TMS9118 (16KB VRAM):
 *             00400041h - Data Mode
 *             00400043h - Register / Adress Mode
@@ -542,7 +542,7 @@ void main(void)
     printText("OK\r\n\0");
     printText(">");
     showCursor();
-
+    
     inputTask();
 }
 

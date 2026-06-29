@@ -38,6 +38,7 @@
 ; * 09/05/2026  1.4a06  Moacir Jr.   Ajuste Tela vermelha da morte - stack error
 ; * 15/05/2026  1.4a07  Moacir Jr.   Ajuste teclado PS/2 para o MMSJ320_PS2ADVv2
 ; * 27/06/2026  1.4a08  Moacir Jr.   Novo tratamento para erroBus (BERR PIN)
+; * 28/06/2026  1.5a01  Moacir Jr.   Procurar Disk ESC vai pro monitor
 ; *--------------------------------------------------------------------------------
 ; *
 ; * Mapa de Memoria
@@ -88,21 +89,21 @@
 ; *--------------------------------------------------------------------------------
 ; *
 ; * Enderecos de Slots de Expansao
-; * 
+; *
 ; * 00200000h a 00200FFFh - Expansion Slot 0 (Reserved Disk)
 ; * 00201000h a 00201FFFh - Expansion Slot 1
 ; * 00202000h a 00202FFFh - Expansion Slot 2
 ; * 00203000h a 00203FFFh - Expansion Slot 3
-; * 
+; *
 ; * Enderecos de Perifericos
-; * 
+; *
 ; * 00200001h e 00200003h - DISK Arduino UNO
 ; *                         - A1 = 0: r/w 4 bits LSB
 ; *                         - A1 = 1: r/w 4 bits MSB
 ; * 00400021h a 0040003Fh - MFP MC68901p - Cristal de 2.4576MHz
 ; *                         - SERIAL 9600, 8, 1, n
 ; *                         - Controle de Interrupcoes
-; *                         - Timers 
+; *                         - Timers
 ; * 00400041h a 00400043h - VIDEO TMS9118 (16KB VRAM):
 ; *             00400041h - Data Mode
 ; *             00400043h - Register / Adress Mode
@@ -119,7 +120,7 @@
 ; #include "mmsj320vdp.h"
 ; #include "mmsj320mfp.h"
 ; #include "monitor.h"
-; #define versionBios "1.4a08"
+; #define versionBios "1.5a01"
 ; HEADER *_allocp;
 ; unsigned char *inKbdMse = 0x00400060; // Nano kbd/mouse ler final A0 = 1 = UDS (D8 a D15)
 ; #define ERR_MAGIC       (*(volatile unsigned long  *)0x0060E200)
@@ -154,6 +155,7 @@
 ; unsigned char vtotmem;
 ; unsigned long SysClockms;
 ; unsigned char debugMessages;
+; unsigned char bootSkipAuto;
 ; void delayms(int pTimeMS);
 ; void delayus(int pTimeUS);
 ; unsigned char readChar(void);
@@ -244,6 +246,8 @@ _main:
 ; // Inicia com Basic
 ; debugMessages = 0;
        clr.b     _debugMessages.L
+; bootSkipAuto = 0;
+       clr.b     _bootSkipAuto.L
 ; *errorBusRecoverPC = 0;
        move.l    _errorBusRecoverPC.L,A0
        clr.l     (A0)
@@ -703,8 +707,6 @@ main_18:
        pea       @monitor_6.L
        jsr       (A3)
        addq.w    #4,A7
-; showCursor();
-       jsr       _showCursor
 ; vBufReceived = 0x00;
        clr.b     _vBufReceived.L
 ; vbuf[0] = '\0';
@@ -802,6 +804,19 @@ main_18:
 main_45:
        cmp.l     #20000,D3
        bhs.s     main_47
+; {
+; if (!bootSkipAuto)
+       tst.b     _bootSkipAuto.L
+       bne.s     main_50
+; {
+; if (readChar() == 0x1B)
+       jsr       _readChar
+       cmp.b     #27,D0
+       bne.s     main_50
+; bootSkipAuto = 1;
+       move.b    #1,_bootSkipAuto.L
+main_50:
+; }
 ; delayus(100);
        pea       100
        jsr       _delayus
@@ -809,14 +824,10 @@ main_45:
        addq.l    #1,D3
        bra       main_45
 main_47:
-; vbytepic = readChar();
-       jsr       _readChar
-       and.w     #255,D0
-       move.w    D0,-12(A6)
-; if (vbytepic != 0x1B)
-       move.w    -12(A6),D0
-       cmp.w     #27,D0
-       beq.s     main_50
+; }
+; if (!bootSkipAuto)
+       tst.b     _bootSkipAuto.L
+       bne.s     main_54
 ; {
 ; printText("Looking for Disk...\r\n\0");
        pea       @monitor_7.L
@@ -825,7 +836,7 @@ main_47:
 ; if (probeDiskDrive())
        jsr       _probeDiskDrive
        tst.b     D0
-       beq.s     main_50
+       beq.s     main_54
 ; {
 ; printText("\r\nAuto boot OS...\r\n\0");
        pea       @monitor_8.L
@@ -835,7 +846,7 @@ main_47:
        jsr       _carregaOSDisk
 ; runSystemOper();
        jsr       _runSystemOper
-main_50:
+main_54:
 ; }
 ; }
 ; printText("OK\r\n\0");
@@ -846,6 +857,8 @@ main_50:
        pea       @monitor_10.L
        jsr       (A3)
        addq.w    #4,A7
+; showCursor();
+       jsr       _showCursor
 ; inputTask();
        jsr       _inputTask
        movem.l   (A7)+,D2/D3/D4/D5/D6/D7/A2/A3/A4/A5
@@ -9215,7 +9228,7 @@ funcErrorBusAddr_50:
        section   const
 @monitor_1:
        dc.b      77,77,83,74,45,51,50,48,32,66,73,79,83,32,118
-       dc.b      49,46,52,97,48,56,0
+       dc.b      49,46,53,97,48,49,0
 @monitor_2:
        dc.b      13,10,0
 @monitor_3:
@@ -9696,6 +9709,9 @@ _SysClockms:
        ds.b      4
        xdef      _debugMessages
 _debugMessages:
+       ds.b      1
+       xdef      _bootSkipAuto
+_bootSkipAuto:
        ds.b      1
        xref      _Reg_TACR
        xref      _videoScroll
