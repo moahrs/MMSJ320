@@ -53,6 +53,7 @@
 
 #include <SD.h>
 #include <SPI.h>
+#include <string.h>
 
 Sd2Card card;
 File myFile;
@@ -90,8 +91,16 @@ File myFile;
 #define ERRO_B_CREATE_DIR     0xEF
 #define ERRO_B_NOT_FOUND      0xFF
 
+//#define __USE_TIMEOUT__ 1
 //#define __DEBUG_CMD__ 1
+//#define __DEBUG_CMD2__ 1
 //#define __DEBUG_DATA__ 1
+
+#define CS_RELEASE_TIMEOUT_US 50000UL
+#define CS_ARM_STABLE_US      1000UL
+#define SD_READ_RETRY_COUNT   5
+#define SD_READ_RETRY_DELAY_MS 10
+#define CS_MASK               0b00000100
 
 int pinoSS = 10; // Pin 53 para Mega / Pin 10 para UNO
 /*** SDO - pin 11 **
@@ -113,7 +122,7 @@ void setup()
     pinMode(IN_A1,INPUT);   // 0 = Comando / 1 = Data
     pinMode(IN_A2,INPUT);   // Quando A1 = 0:: 0 = Comando / 1 = Param do Comando
     pinMode(IN_RW,INPUT);   // 1 = Leitura / 0 = Escrita
-    pinMode(IN_CS,INPUT);   // 0 = Enable Comm / 1 = Disable Comm
+    pinMode(IN_CS,INPUT_PULLUP);   // 0 = Enable Comm / 1 = Disable Comm
 
     pinMode(OUT_DTACK,INPUT);
     digitalWrite(OUT_DTACK,HIGH);
@@ -149,15 +158,142 @@ void setup()
         #endif
     }
     
-    n = 0;
-    nd = 0;
-
     delay(1000);
+
+    waitInitialCsHigh();
+    resetTransferState(false);
 }
 
 /*---------------------------------------------------------------------------*/
 void loop() {
     processComm();
+}
+
+/*---------------------------------------------------------------------------*/
+void resetTransferState(bool closeFile)
+{
+    if (closeFile && myFile)
+        myFile.close();
+
+    memset(dataCmd, 0xFF, sizeof(dataCmd));
+    memset(databuffer, 0, sizeof(databuffer));
+
+    cmd = ' ';
+    n = 0;
+    nd = 0;
+    countDump = 0;
+    qtdDump = 512;
+    offset = 0;
+    qtdf = 0;
+    cluster = 0;
+}
+
+/*---------------------------------------------------------------------------*/
+bool isCsHigh()
+{
+    return (PIND & CS_MASK) != 0;
+}
+
+/*---------------------------------------------------------------------------*/
+void waitInitialCsHigh()
+{
+    unsigned long csHighStart = 0;
+    bool csHighTiming = false;
+
+    while (1)
+    {
+        if (!isCsHigh())
+        {
+            csHighTiming = false;
+            continue;
+        }
+
+        if (!csHighTiming)
+        {
+            csHighTiming = true;
+            csHighStart = micros();
+            continue;
+        }
+
+        if ((micros() - csHighStart) >= CS_ARM_STABLE_US)
+            return;
+    }
+}
+
+/*---------------------------------------------------------------------------*/
+bool waitCsRelease()
+{
+    unsigned long start = micros();
+
+    while (!isCsHigh())
+    {
+        if ((micros() - start) >= CS_RELEASE_TIMEOUT_US)
+        {
+            resetTransferState(true);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*---------------------------------------------------------------------------*/
+bool waitCsAssert()
+{
+    unsigned long start = micros();
+
+    while (isCsHigh())
+    {
+        #if defined(__USE_TIMEOUT__)
+            if ((micros() - start) >= CS_RELEASE_TIMEOUT_US)
+            {
+                resetTransferState(true);
+                return false;
+            }
+        #endif        
+    }
+
+    return true;
+}
+
+/*---------------------------------------------------------------------------*/
+void releaseBus()
+{
+    DDRC &= 0b11110000; // PC0 - PC3 como Entrada
+    DDRD &= 0b00001111; // PD4 - PD7 como Entrada
+
+    __asm__("nop");
+    __asm__("nop");
+
+    PORTC |= 0b00100000;   // Desabilita Sinal DTACK = 1
+}
+
+/*---------------------------------------------------------------------------*/
+int openOsFileAndReadFirstBlock()
+{
+    int bytesRead = 0;
+
+    for (uint8_t attempt = 0; attempt < SD_READ_RETRY_COUNT; attempt++)
+    {
+        if (myFile)
+            myFile.close();
+
+        myFile = SD.open("mmsjos.sys");
+
+        if (myFile)
+        {
+            bytesRead = myFile.read(databuffer, 512);
+
+            if (bytesRead > 0)
+                return bytesRead;
+
+            myFile.close();
+        }
+
+        delay(SD_READ_RETRY_DELAY_MS);
+    }
+
+    return 0;
 }
  
 /*---------------------------------------------------------------------------
@@ -176,7 +312,7 @@ void processComm()
 
     cmd = ' ';
 
-    if (!(PIND & 0b00000100)) // CPU coloca 0 no CS
+    if (!(PIND & CS_MASK)) // CPU coloca 0 no CS
     {
         __asm__("nop");
 
@@ -225,9 +361,14 @@ void processComm()
         if (n > 0 && cmd != ' ')
         {       
             #if defined(__DEBUG_CMD__)
-                Serial.print("**");
-                Serial.print(cmd);
-                Serial.println("**");
+                if (cmd != 't')
+                {
+                    Serial.print("**");
+                    Serial.print(cmd);
+                    Serial.print("**");
+                    Serial.print(cmd,HEX);
+                    Serial.println("**");
+                }
             #endif
 
             n = 0;
@@ -238,9 +379,7 @@ void processComm()
                 case 'a':   // Abort all
                     sendByteFull(ALL_OK);
 
-                    nd = 0;
-                    countDump = 0;
-                    qtdDump = 512;
+                    resetTransferState(true);
 
                     break;
                 case 'r':   // Read Cluster
@@ -257,7 +396,7 @@ void processComm()
                     qtdf     = (((int)dataCmd[6] << 8) & 0xFF00);
                     qtdf    |= ((int)dataCmd[7] & 0x00FF);
 
-                    #if defined(__DEBUG_CMD__)
+                    #if defined(__DEBUG_CMD2__)
                         Serial.print("##");
                         Serial.print(cluster);
                         Serial.print(':');
@@ -271,13 +410,13 @@ void processComm()
         
                     if (vResp) 
                     {
-                        #if defined(__DEBUG_CMD__)
+                        #if defined(__DEBUG_CMD2__)
                             Serial.println("##OK_0##");
                         #endif
 
                         sendByteFull(ALL_OK);
 
-                        #if defined(__DEBUG_CMD__)
+                        #if defined(__DEBUG_CMD2__)
                             Serial.println("##OK_1##");
                         #endif
 
@@ -304,50 +443,55 @@ void processComm()
                         sendByteFull(ERRO_B_WRITE_DISK);
 
                     break;     
-            case 's':   // Send SO File to host
-                sendByteFull(ALL_OK);
-
-                myFile = SD.open("mmsjos.sys");
-    
-                if (myFile) 
-                {
+                case 's':   // Send SO File to host
                     sendByteFull(ALL_OK);
 
                     countDump = 0;
-                    qtdDump = myFile.read(databuffer, 512);
-                    nd = 0;
-                    dataCmd[0] = ((qtdDump >> 8) & 0xFF);
-                    dataCmd[1] = (qtdDump & 0xFF);
-                }       
-                else
-                    sendByteFull(ERRO_B_FILE_NOT_FOUND);
+                    qtdDump = openOsFileAndReadFirstBlock();
 
-                break;                    
-            case 't':   // Continue Reading SO File
-                sendByteFull(ALL_OK);
+                    if (qtdDump > 0) 
+                    {
+                        sendByteFull(ALL_OK);
 
-                if (myFile.available())
-                {
+                        #if defined(__DEBUG_CMD__)
+                            Serial.print("##");
+                            Serial.print("Size: ");
+                            Serial.print(qtdDump);
+                            Serial.println("##");
+                        #endif
+                        nd = 0;
+                        dataCmd[0] = ((qtdDump >> 8) & 0xFF);
+                        dataCmd[1] = (qtdDump & 0xFF);
+                    }       
+                    else
+                        sendByteFull(ERRO_B_FILE_NOT_FOUND);
+
+                    break;                    
+                case 't':   // Continue Reading SO File
                     sendByteFull(ALL_OK);
 
-                    countDump = 0;
-                    qtdDump = myFile.read(databuffer, 512);
-                    nd = 0;
-                    dataCmd[0] = ((qtdDump >> 8) & 0xFF);
-                    dataCmd[1] = (qtdDump & 0xFF);        
-                
-                    if (qtdDump < 512)
+                    if (myFile && myFile.available())
+                    {
+                        sendByteFull(ALL_OK);
+
+                        countDump = 0;
+                        qtdDump = myFile.read(databuffer, 512);
+                        nd = 0;
+                        dataCmd[0] = ((qtdDump >> 8) & 0xFF);
+                        dataCmd[1] = (qtdDump & 0xFF);        
+                    
+                        if (qtdDump < 512)
+                            myFile.close(); // Fecha o Arquivo após ler                
+                    }
+                    else
+                    {
+                        nd = 0;
+                        dataCmd[0] = 0;
+                        dataCmd[1] = 0;
                         myFile.close(); // Fecha o Arquivo após ler                
-                }
-                else
-                {
-                    nd = 0;
-                    dataCmd[0] = 0;
-                    dataCmd[1] = 0;
-                    myFile.close(); // Fecha o Arquivo após ler                
-                }
+                    }
 
-                break;
+                    break;
             }
         }
     }
@@ -371,6 +515,15 @@ void sendByte(unsigned char vByte)
 
     PORTC &= 0b11011111;  // Libera CPU pra ler DTACK = 0
 
+    if (!waitCsRelease())
+    {
+        #if defined(__DEBUG_CMD__)
+            Serial.println("Send timeout");
+        #endif
+        releaseBus();
+        return;
+    }
+
     while (!(PIND & 0b00000100)); // Aguarda CPU colocar 1 no CS indicando que já leu
 
     DDRC &= 0b11110000; // PC0 - PC3 como Entrada
@@ -389,7 +542,14 @@ void sendByte(unsigned char vByte)
 void sendByteFull(unsigned char vByte)
 {
     //Serial.println("Send---");
-    while (PIND & 0b00000100); // Aguarda CPU colocar 0 no CS Para vir ler
+    if (!waitCsAssert()) // Aguarda CPU colocar 0 no CS Para vir ler
+    {
+        #if defined(__DEBUG_CMD__)
+            Serial.println("SendFull assert timeout");
+        #endif
+        releaseBus();
+        return;
+    }
 
     __asm__("nop");
     __asm__("nop");
@@ -407,6 +567,15 @@ void sendByteFull(unsigned char vByte)
     }
 
     PORTC &= 0b11011111;  // Libera CPU pra ler DTACK = 0
+
+    if (!waitCsRelease())
+    {
+        #if defined(__DEBUG_CMD__)
+            Serial.println("SendFull timeout");
+        #endif
+        releaseBus();
+        return;
+    }
 
     while (!(PIND & 0b00000100)); // Aguarda CPU colocar 1 no CS indicando que já leu
 
@@ -427,8 +596,8 @@ int recByte()
 {
     unsigned char vByte;
 
-    #if defined(__DEBUG_DATA__)
-        Serial.println("Rec---");
+    #if defined(__DEBUG_CMD__)
+        Serial.println("RecI---");
     #endif
 
     __asm__("nop");
@@ -440,6 +609,15 @@ int recByte()
     vByte |= PIND & 0xF0; // Recebe MSB
 
     PORTC &= 0b11011111;  // Libera CPU pra ler DTACK = 0
+
+    if (!waitCsRelease())
+    {
+        #if defined(__DEBUG_CMD__)
+            Serial.println("Rec timeout");
+        #endif
+        releaseBus();
+        return vByte;
+    }
 
     while (!(PIND & 0b00000100)); // Aguarda CPU colocar 1 no CS indicando que já leu
 
@@ -456,7 +634,6 @@ int recByte()
     __asm__("nop");
 
     #if defined(__DEBUG_DATA__)
-        Serial.println(i);
         Serial.println(vByte);
     #endif
 
