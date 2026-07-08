@@ -71,6 +71,7 @@ File myFile;
 #define IN_A1         A4  // PC4
 #define OUT_DTACK     A5  // PC5
 #define IN_A2         8   // PB0
+#define IN_BUSY       9   // 
 
 #define ALL_OK                0x00
 #define ERRO_B_START          0xE0
@@ -123,6 +124,8 @@ void setup()
     pinMode(IN_A2,INPUT);   // Quando A1 = 0:: 0 = Comando / 1 = Param do Comando
     pinMode(IN_RW,INPUT);   // 1 = Leitura / 0 = Escrita
     pinMode(IN_CS,INPUT_PULLUP);   // 0 = Enable Comm / 1 = Disable Comm
+    pinMode(IN_BUSY,INPUT); // Solto = watchdog ativo / 0 = watchdog suspenso
+    digitalWrite(IN_BUSY, LOW);
 
     pinMode(OUT_DTACK,INPUT);
     digitalWrite(OUT_DTACK,HIGH);
@@ -192,6 +195,18 @@ void resetTransferState(bool closeFile)
 bool isCsHigh()
 {
     return (PIND & CS_MASK) != 0;
+}
+
+/*---------------------------------------------------------------------------*/
+void setBusy()
+{
+    pinMode(IN_BUSY, OUTPUT);
+}
+
+/*---------------------------------------------------------------------------*/
+void clearBusy()
+{
+    pinMode(IN_BUSY, INPUT);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -315,6 +330,8 @@ void processComm()
     if (!(PIND & CS_MASK)) // CPU coloca 0 no CS
     {
         __asm__("nop");
+
+        setBusy();
 
         if (!(PIND & 0b00001000))  // Escrita
         {
@@ -494,6 +511,8 @@ void processComm()
                     break;
             }
         }
+
+        clearBusy();
     }
 }
 
