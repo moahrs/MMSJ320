@@ -773,7 +773,7 @@ void main(void)
     mprintf("Copyright (c) 2014-2026\r\n\r\n");
     mprintf("CPU      68HC000 at 10MHz\r\n");
     mprintf("RAM      %d KB total, %d KB free\r\n", *memoryTotalK, *memoryFreeK);
-    mprintf("VIDEO    TMS9128 text 40x24, G2 256x192\r\n");
+    mprintf("VIDEO    TMS9118 text 40x24, G2 256x192\r\n");
     mprintf("MFP      MC68901 serial 9600 bps\r\n");
     mprintf("DISK     FAT32\r\n");
     mprintf("RTC      DS1307\r\n\r\n");
