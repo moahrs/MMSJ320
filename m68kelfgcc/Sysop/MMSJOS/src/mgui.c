@@ -13,6 +13,7 @@
 * 10/05/2026  0.7a04  Moacir Jr.   Remover uC/OS-II - RTOS
 * 16/05/2026  1.0a02  Moacir Jr.   Versao publicacao
 * 11/06/2026  1.1a01  Moacir Jr.   Inclusao de Novos elementos, ajustes criar janela
+* 12/07/2026  1.1a02  Moacir Jr.   Carregas Apps Icones na Memoria
 *--------------------------------------------------------------------------------
 *
 *--------------------------------------------------------------------------------
@@ -86,7 +87,7 @@ static int mguiClockLastMinute = -1;
 static unsigned char mguiClockHookReady = 0;
 static unsigned char mguiClockHookActive = 0;
 
-#define versionMgui "1.1a01"
+#define versionMgui "1.1a02"
 #define __EM_OBRAS__ 1
 
 unsigned char *vvdgd = 0x00400041; // VDP TMS9118 Data Mode
@@ -153,6 +154,7 @@ static void mguiClockReadRtc(unsigned char force);
 #define DESK_ICON_H      40      /* pixel height of each icon cell           */
 #define DESK_ICON_IMG_W  16      /* icon image width in pixels               */
 #define DESK_ICON_IMG_H  16      /* icon image height in pixels              */
+#define DESK_ICON_DATA_SZ 32     /* 16x16 PBM P4 payload: 2 bytes x 16 rows  */
 #define DESK_START_Y     25      /* desktop area starts below menu bar       */
 #define DESK_CFG_FILE    "/MGUI/MGUIDESK.CFG"
 #define DESK_ICON_BUF_SZ 512    /* temp PBM buffer; avoid header/comment overrun */
@@ -170,7 +172,12 @@ typedef struct {
 static DESK_ICON  deskIcons[DESK_ICON_MAX];
 static unsigned char *memDeskCfg = 0;          /* MGUIDESK.CFG text buffer   */
 static unsigned char deskIconBuf[DESK_ICON_BUF_SZ]; /* temp per-icon image   */
+static unsigned char deskIconCache[DESK_ICON_MAX][DESK_ICON_DATA_SZ];
+static unsigned char deskIconLoaded[DESK_ICON_MAX];
 static unsigned char deskSelected = 0xFF;      /* selected slot 0..24, 0xFF=none */
+
+static unsigned char deskLoadIconCache(unsigned char slot);
+static void deskLoadIconCacheAll(void);
 
 #define MGUI_WT_FILLIN   1
 #define MGUI_WT_BUTTON   2
@@ -3779,6 +3786,8 @@ static void deskLoadConfig(void)
 
         deskIcons[slot].active = 1;
     }
+
+    deskLoadIconCacheAll();
 }
 
 //-----------------------------------------------------------------------------
@@ -3879,6 +3888,116 @@ static void deskGetIconName(char *name, char *ext, char *outName)
 }
 
 //-----------------------------------------------------------------------------
+// Skip whitespace and PBM comments.
+//-----------------------------------------------------------------------------
+static void deskPbmSkipSpace(unsigned char **pp)
+{
+    unsigned char *p = *pp;
+
+    while (1)
+    {
+        while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n')
+            p++;
+
+        if (*p != '#')
+            break;
+
+        while (*p && *p != '\n')
+            p++;
+    }
+
+    *pp = p;
+}
+
+//-----------------------------------------------------------------------------
+// Read a decimal number from PBM header.
+//-----------------------------------------------------------------------------
+static int deskPbmReadNumber(unsigned char **pp)
+{
+    int value = 0;
+    unsigned char *p = *pp;
+
+    deskPbmSkipSpace(&p);
+
+    while (*p >= '0' && *p <= '9')
+    {
+        value = (value * 10) + (*p - '0');
+        p++;
+    }
+
+    *pp = p;
+    return value;
+}
+
+//-----------------------------------------------------------------------------
+// Load and cache one 16x16 PBM P4 desktop icon payload (32 bytes).
+//-----------------------------------------------------------------------------
+static unsigned char deskLoadIconCache(unsigned char slot)
+{
+    DESK_ICON *d = &deskIcons[slot];
+    char iconname[9];
+    char iconpath[32];
+    unsigned char *p;
+    unsigned long fileSize;
+    int width, height;
+
+    deskIconLoaded[slot] = 0;
+    memset(deskIconCache[slot], 0, DESK_ICON_DATA_SZ);
+
+    if (!d->active)
+        return 0;
+
+    deskGetIconName(d->filename, d->ext, iconname);
+    strcpy(iconpath, "/MGUI/ICONS/");
+    strcat(iconpath, iconname);
+    strcat(iconpath, ".PBM");
+
+    fileSize = loadFile((unsigned char*)iconpath, (unsigned short*)deskIconBuf);
+    if (fileSize == 0)
+        return 0;
+
+    p = deskIconBuf;
+    if (p[0] != 'P' || p[1] != '4')
+        return 0;
+
+    p += 2;
+    width = deskPbmReadNumber(&p);
+    height = deskPbmReadNumber(&p);
+
+    if (*p == '\r')
+        p++;
+    if (*p == '\n')
+        p++;
+    else if (*p == ' ' || *p == '\t')
+        p++;
+
+    if (width != DESK_ICON_IMG_W || height != DESK_ICON_IMG_H)
+        return 0;
+
+    if ((unsigned long)(p - deskIconBuf) + DESK_ICON_DATA_SZ > fileSize)
+        return 0;
+
+    memcpy(deskIconCache[slot], p, DESK_ICON_DATA_SZ);
+    deskIconLoaded[slot] = 1;
+    return 1;
+}
+
+//-----------------------------------------------------------------------------
+// Load cached PBM payloads for all active desktop icons.
+//-----------------------------------------------------------------------------
+static void deskLoadIconCacheAll(void)
+{
+    unsigned char slot;
+
+    memset(deskIconLoaded, 0, sizeof(deskIconLoaded));
+    memset(deskIconCache, 0, sizeof(deskIconCache));
+
+    for (slot = 0; slot < DESK_ICON_MAX; slot++)
+        if (deskIcons[slot].active)
+            deskLoadIconCache(slot);
+}
+
+//-----------------------------------------------------------------------------
 // Draw a single icon at its grid slot. Clears cell first.
 //-----------------------------------------------------------------------------
 static void deskDrawIcon(unsigned char slot)
@@ -3886,12 +4005,11 @@ static void deskDrawIcon(unsigned char slot)
     DESK_ICON *d = &deskIcons[slot];
     unsigned short ix;
     unsigned char  iy;
-    char iconname[9];
-    char iconpath[32];
     unsigned char namebuf[9];
-    unsigned char i, nlen;
+    unsigned char i, nlen, y;
     unsigned char hlColor;
     unsigned char centerX;
+    unsigned short imgX;
 
     deskSlotXY(slot, &ix, &iy);
 
@@ -3906,14 +4024,18 @@ static void deskDrawIcon(unsigned char slot)
     if (!d->active)
         return;
 
-    /* Load icon image from /MGUI/ICONS/<NAME>.PBM */
-    deskGetIconName(d->filename, d->ext, iconname);
-    strcpy(iconpath, "/MGUI/ICONS/");
-    strcat(iconpath, iconname);
-    strcat(iconpath, ".PBM");
+    if (!deskIconLoaded[slot])
+        deskLoadIconCache(slot);
 
-    if (loadFile((unsigned char*)iconpath, (unsigned short*)deskIconBuf) > 0)
-        putImagePbmP4((unsigned long*)deskIconBuf, ix + (DESK_ICON_W - DESK_ICON_IMG_W) / 2, iy);
+    if (deskIconLoaded[slot])
+    {
+        imgX = ix + (DESK_ICON_W - DESK_ICON_IMG_W) / 2;
+        for (y = 0; y < DESK_ICON_IMG_H; y++)
+        {
+            SetByte(imgX, iy + y, deskIconCache[slot][y * 2], vcorwf, vcorwb2);
+            SetByte(imgX + 8, iy + y, deskIconCache[slot][(y * 2) + 1], vcorwf, vcorwb2);
+        }
+    }
 
     /* Name (up to 8 chars) centred in 48px cell */
     nlen = 0;
@@ -4253,6 +4375,7 @@ static void deskAddIconDialog(void)
     deskIcons[slot].param[0] = '\0';
     deskIcons[slot].active = 1;
 
+    deskLoadIconCache(slot);
     deskSaveConfig();
     deskDrawIcon(slot);
 }
@@ -4280,6 +4403,8 @@ static void deskDeleteIcon(unsigned char slot)
     if (mpos != BTYES) return;
 
     memset(&deskIcons[slot], 0, sizeof(DESK_ICON));
+    memset(deskIconCache[slot], 0, DESK_ICON_DATA_SZ);
+    deskIconLoaded[slot] = 0;
     if (deskSelected == slot) deskSelected = 0xFF;
 
     deskSaveConfig();
@@ -4500,6 +4625,8 @@ void startMGI(void) {
     }
 
     /* Load MGUIDESK.CFG (desktop icon layout) */
+    writesxy(70,170,1,"Loading Apps Icons",vcorwf,vcorwb);
+
     #if defined(USE_MALLOC) || defined(USE_MSMALLOC)
         #ifdef USE_MALLOC
             memDeskCfg = malloc(DESK_CFG_SIZE + 1);
