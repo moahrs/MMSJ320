@@ -1,4 +1,4 @@
-/********************************************************************************
+﻿/********************************************************************************
 *    Programa    : mgui.c
 *    Objetivo    : MMSJ300 Graphical User Interface
 *    Criado em   : 25/07/2023
@@ -159,12 +159,16 @@ static void mguiClockReadRtc(unsigned char force);
 #define DESK_CFG_FILE    "/MGUI/MGUIDESK.CFG"
 #define DESK_ICON_BUF_SZ 512    /* temp PBM buffer; avoid header/comment overrun */
 #define DESK_CFG_SIZE    1024   /* max MGUIDESK.CFG size                     */
+#define GROUP_ICON_MAX   9
+#define GROUP_ICON_COLS  3
+#define GROUP_ICON_ROWS  3
+#define GROUP_CFG_SIZE   768
 
 typedef struct {
     char filename[9];   /* up to 8 chars of name, zero-terminated           */
     char ext[4];        /* extension 3 chars + null                         */
     char path[20];      /* directory path, e.g. "/" or "/DOCS"              */
-    char askParam;      /* 0 = open direct, 1 = ask parameters before open   */
+    char askParam;      /* 0 = direct, 1 = ask params, 2 = group/window      */
     char param[128];     /* optional fixed parameter from MGUIDESK.CFG       */
     char active;        /* 1 = occupied                                     */
 } DESK_ICON;
@@ -174,10 +178,15 @@ static unsigned char *memDeskCfg = 0;          /* MGUIDESK.CFG text buffer   */
 static unsigned char deskIconBuf[DESK_ICON_BUF_SZ]; /* temp per-icon image   */
 static unsigned char deskIconCache[DESK_ICON_MAX][DESK_ICON_DATA_SZ];
 static unsigned char deskIconLoaded[DESK_ICON_MAX];
+static DESK_ICON  groupIcons[GROUP_ICON_MAX];
+static unsigned char groupIconCache[GROUP_ICON_MAX][DESK_ICON_DATA_SZ];
+static unsigned char groupIconLoaded[GROUP_ICON_MAX];
+static unsigned char groupCfgBuf[GROUP_CFG_SIZE + 1];
 static unsigned char deskSelected = 0xFF;      /* selected slot 0..24, 0xFF=none */
 
 static unsigned char deskLoadIconCache(unsigned char slot);
 static void deskLoadIconCacheAll(void);
+static void deskOpenGroupIcon(DESK_ICON *d);
 
 #define MGUI_WT_FILLIN   1
 #define MGUI_WT_BUTTON   2
@@ -3700,6 +3709,152 @@ static void deskSlotXY(unsigned char slot, unsigned short *px, unsigned char *py
 }
 
 //-----------------------------------------------------------------------------
+// Parse [ICONS] entries from a config buffer into an icon array.
+// Entry format: NN=FILENAME.EXT,/PATH,ASKPARAM[,PARAM]
+//-----------------------------------------------------------------------------
+static void iconLoadConfigFromBuf(unsigned char *cfg, DESK_ICON *icons, unsigned char maxIcons)
+{
+    unsigned char slot;
+    char key[3], val[160], *comma, *comma2, *comma3, *dot, *p;
+    unsigned char i;
+
+    memset(icons, 0, sizeof(DESK_ICON) * maxIcons);
+
+    if (!cfg || !cfg[0])
+        return;
+
+    for (slot = 0; slot < maxIcons; slot++)
+    {
+        key[0] = (char)('0' + slot / 10);
+        key[1] = (char)('0' + slot % 10);
+        key[2] = '\0';
+        val[0] = '\0';
+
+        if (!mguiCfgGetBuf(cfg, "ICONS", key, val, sizeof(val)))
+            continue;
+
+        comma = strchr(val, ',');
+        if (!comma)
+            continue;
+        *comma = '\0';
+
+        dot = strchr(val, '.');
+        if (dot)
+        {
+            *dot = '\0';
+            for (i = 0; i < 3 && dot[1 + i]; i++)
+                icons[slot].ext[i] = dot[1 + i];
+            icons[slot].ext[i] = '\0';
+        }
+
+        for (i = 0; i < 8 && val[i]; i++)
+            icons[slot].filename[i] = val[i];
+        icons[slot].filename[i] = '\0';
+
+        p = comma + 1;
+        comma2 = strchr(p, ',');
+        if (comma2)
+            *comma2 = '\0';
+
+        for (i = 0; i < 19 && p[i]; i++)
+            icons[slot].path[i] = p[i];
+        icons[slot].path[i] = '\0';
+        if (!icons[slot].path[0])
+        {
+            icons[slot].path[0] = '/';
+            icons[slot].path[1] = '\0';
+        }
+
+        icons[slot].askParam = 0;
+        icons[slot].param[0] = '\0';
+        if (comma2)
+        {
+            comma3 = strchr(comma2 + 1, ',');
+            if (comma3)
+                *comma3 = '\0';
+
+            if (comma2[1] >= '0' && comma2[1] <= '2')
+                icons[slot].askParam = comma2[1] - '0';
+
+            if (comma3)
+            {
+                p = comma3 + 1;
+                for (i = 0; i < 127 && p[i]; i++)
+                    icons[slot].param[i] = p[i];
+                icons[slot].param[i] = '\0';
+            }
+        }
+
+        icons[slot].active = 1;
+    }
+}
+
+//-----------------------------------------------------------------------------
+// Save icon array to a config file using the [ICONS] format.
+//-----------------------------------------------------------------------------
+static void iconSaveConfig(char *cfgFile, DESK_ICON *icons, unsigned char maxIcons)
+{
+    unsigned char slot, i, offset;
+    unsigned char linebuf[192];
+    unsigned char vErro;
+    unsigned long fileOffset;
+
+    fsFindInDir((unsigned char*)cfgFile, 1 /*TYPE_FILE*/);
+    fsDelFile((unsigned char*)cfgFile);
+
+    vErro = fsCreateFile((unsigned char*)cfgFile);
+    if (vErro != 0 /*RETURN_OK*/)
+        return;
+
+    vErro = fsOpenFile((unsigned char*)cfgFile);
+    if (vErro != 0)
+        return;
+
+    {
+        unsigned char hdr[] = "[ICONS]\r\n";
+        fsWriteFile((unsigned char*)cfgFile, 0, hdr, (unsigned char)(sizeof(hdr) - 1));
+    }
+
+    fileOffset = 9;
+    for (slot = 0; slot < maxIcons; slot++)
+    {
+        if (!icons[slot].active)
+            continue;
+
+        offset = 0;
+        linebuf[offset++] = (unsigned char)('0' + slot / 10);
+        linebuf[offset++] = (unsigned char)('0' + slot % 10);
+        linebuf[offset++] = '=';
+        for (i = 0; icons[slot].filename[i] && offset < 40; i++)
+            linebuf[offset++] = icons[slot].filename[i];
+        if (icons[slot].ext[0])
+        {
+            linebuf[offset++] = '.';
+            for (i = 0; icons[slot].ext[i] && offset < 44; i++)
+                linebuf[offset++] = icons[slot].ext[i];
+        }
+        linebuf[offset++] = ',';
+        for (i = 0; icons[slot].path[i] && offset < 46; i++)
+            linebuf[offset++] = icons[slot].path[i];
+        linebuf[offset++] = ',';
+        linebuf[offset++] = (unsigned char)('0' + icons[slot].askParam);
+        if (icons[slot].param[0])
+        {
+            linebuf[offset++] = ',';
+            for (i = 0; icons[slot].param[i] && offset < 188; i++)
+                linebuf[offset++] = icons[slot].param[i];
+        }
+        linebuf[offset++] = '\r';
+        linebuf[offset++] = '\n';
+
+        fsWriteFile((unsigned char*)cfgFile, fileOffset, linebuf, offset);
+        fileOffset += offset;
+    }
+
+    fsCloseFile((unsigned char*)cfgFile, 1 /*updated*/);
+}
+
+//-----------------------------------------------------------------------------
 // Parse MGUIDESK.CFG (stored in memDeskCfg) into deskIcons[].
 // Entry format in [ICONS]: NN=FILENAME.EXT,/PATH,ASKPARAM[,PARAM]
 //   e.g.  00=NOTES.TXT,/,0
@@ -3708,85 +3863,7 @@ static void deskSlotXY(unsigned char slot, unsigned short *px, unsigned char *py
 //-----------------------------------------------------------------------------
 static void deskLoadConfig(void)
 {
-    unsigned char slot;
-    char key[3], val[160], *comma, *comma2, *comma3, *dot, *p;
-    unsigned char i;
-
-    memset(deskIcons, 0, sizeof(deskIcons));
-
-    if (!memDeskCfg || !memDeskCfg[0])
-        return;
-
-    for (slot = 0; slot < DESK_ICON_MAX; slot++)
-    {
-        key[0] = (char)('0' + slot / 10);
-        key[1] = (char)('0' + slot % 10);
-        key[2] = '\0';
-        val[0] = '\0';
-
-        if (!mguiCfgGetBuf(memDeskCfg, "ICONS", key, val, sizeof(val)))
-            continue;
-
-        /* val = "FILENAME.EXT,/PATH,ASKPARAM[,PARAM]" */
-        comma = strchr(val, ',');
-        if (!comma)
-            continue;
-        *comma = '\0';
-
-        /* Find extension dot */
-        dot = strchr(val, '.');
-        if (dot)
-        {
-            *dot = '\0';
-            /* copy extension (up to 3 chars) */
-            for (i = 0; i < 3 && dot[1 + i]; i++)
-                deskIcons[slot].ext[i] = dot[1 + i];
-            deskIcons[slot].ext[i] = '\0';
-        }
-
-        /* copy filename (up to 8 chars) */
-        for (i = 0; i < 8 && val[i]; i++)
-            deskIcons[slot].filename[i] = val[i];
-        deskIcons[slot].filename[i] = '\0';
-
-        /* copy path (up to 19 chars) */
-        p = comma + 1;
-        comma2 = strchr(p, ',');
-        if (comma2)
-            *comma2 = '\0';
-
-        for (i = 0; i < 19 && p[i]; i++)
-            deskIcons[slot].path[i] = p[i];
-        deskIcons[slot].path[i] = '\0';
-        if (!deskIcons[slot].path[0])
-        {
-            deskIcons[slot].path[0] = '/';
-            deskIcons[slot].path[1] = '\0';
-        }
-
-        deskIcons[slot].askParam = 0;
-        deskIcons[slot].param[0] = '\0';
-        if (comma2)
-        {
-            comma3 = strchr(comma2 + 1, ',');
-            if (comma3)
-                *comma3 = '\0';
-
-            if (comma2[1] == '1')
-                deskIcons[slot].askParam = 1;
-
-            if (comma3)
-            {
-                p = comma3 + 1;
-                for (i = 0; i < 127 && p[i]; i++)
-                    deskIcons[slot].param[i] = p[i];
-                deskIcons[slot].param[i] = '\0';
-            }
-        }
-
-        deskIcons[slot].active = 1;
-    }
-
+    iconLoadConfigFromBuf(memDeskCfg, deskIcons, DESK_ICON_MAX);
     deskLoadIconCacheAll();
 }
 
@@ -3795,68 +3872,7 @@ static void deskLoadConfig(void)
 //-----------------------------------------------------------------------------
 static void deskSaveConfig(void)
 {
-    unsigned char slot, i, offset;
-    unsigned char linebuf[192];
-    char *p;
-    unsigned char vErro;
-
-    /* Delete and recreate file */
-    fsFindInDir(DESK_CFG_FILE, 1 /*TYPE_FILE*/);
-    fsDelFile(DESK_CFG_FILE);
-
-    vErro = fsCreateFile(DESK_CFG_FILE);
-    if (vErro != 0 /*RETURN_OK*/)
-        return;
-
-    vErro = fsOpenFile(DESK_CFG_FILE);
-    if (vErro != 0)
-        return;
-
-    /* Write [ICONS] header */
-    {
-        unsigned char hdr[] = "[ICONS]\r\n";
-        fsWriteFile(DESK_CFG_FILE, 0, hdr, (unsigned char)(sizeof(hdr) - 1));
-    }
-
-    {
-        unsigned long fileOffset = 9; /* after header */
-        for (slot = 0; slot < DESK_ICON_MAX; slot++)
-        {
-            if (!deskIcons[slot].active)
-                continue;
-            /* Format: NN=FILENAME.EXT,/PATH,ASKPARAM[,PARAM]\r\n */
-            offset = 0;
-            linebuf[offset++] = (unsigned char)('0' + slot / 10);
-            linebuf[offset++] = (unsigned char)('0' + slot % 10);
-            linebuf[offset++] = '=';
-            for (i = 0; deskIcons[slot].filename[i] && offset < 40; i++)
-                linebuf[offset++] = deskIcons[slot].filename[i];
-            if (deskIcons[slot].ext[0])
-            {
-                linebuf[offset++] = '.';
-                for (i = 0; deskIcons[slot].ext[i] && offset < 44; i++)
-                    linebuf[offset++] = deskIcons[slot].ext[i];
-            }
-            linebuf[offset++] = ',';
-            for (i = 0; deskIcons[slot].path[i] && offset < 46; i++)
-                linebuf[offset++] = deskIcons[slot].path[i];
-            linebuf[offset++] = ',';
-            linebuf[offset++] = deskIcons[slot].askParam ? '1' : '0';
-            if (deskIcons[slot].param[0])
-            {
-                linebuf[offset++] = ',';
-                for (i = 0; deskIcons[slot].param[i] && offset < 188; i++)
-                    linebuf[offset++] = deskIcons[slot].param[i];
-            }
-            linebuf[offset++] = '\r';
-            linebuf[offset++] = '\n';
-
-            fsWriteFile(DESK_CFG_FILE, fileOffset, linebuf, offset);
-            fileOffset += offset;
-        }
-    }
-
-    fsCloseFile(DESK_CFG_FILE, 1 /*updated*/);
+    iconSaveConfig(DESK_CFG_FILE, deskIcons, DESK_ICON_MAX);
 
     /* Refresh memory buffer */
     if (memDeskCfg)
@@ -3930,19 +3946,19 @@ static int deskPbmReadNumber(unsigned char **pp)
 }
 
 //-----------------------------------------------------------------------------
-// Load and cache one 16x16 PBM P4 desktop icon payload (32 bytes).
+// Load and cache one 16x16 PBM P4 icon payload (32 bytes).
 //-----------------------------------------------------------------------------
-static unsigned char deskLoadIconCache(unsigned char slot)
+static unsigned char iconLoadCache(DESK_ICON *icons, unsigned char cache[][DESK_ICON_DATA_SZ], unsigned char *loaded, unsigned char slot)
 {
-    DESK_ICON *d = &deskIcons[slot];
+    DESK_ICON *d = &icons[slot];
     char iconname[9];
     char iconpath[32];
     unsigned char *p;
     unsigned long fileSize;
     int width, height;
 
-    deskIconLoaded[slot] = 0;
-    memset(deskIconCache[slot], 0, DESK_ICON_DATA_SZ);
+    loaded[slot] = 0;
+    memset(cache[slot], 0, DESK_ICON_DATA_SZ);
 
     if (!d->active)
         return 0;
@@ -3953,8 +3969,9 @@ static unsigned char deskLoadIconCache(unsigned char slot)
     strcat(iconpath, ".PBM");
 
     fileSize = loadFile((unsigned char*)iconpath, (unsigned short*)deskIconBuf);
-    if (fileSize == 0)
+    if (verro || fileSize == 0 || fileSize >= DESK_ICON_BUF_SZ)
         return 0;
+    deskIconBuf[fileSize] = '\0';
 
     p = deskIconBuf;
     if (p[0] != 'P' || p[1] != '4')
@@ -3977,9 +3994,17 @@ static unsigned char deskLoadIconCache(unsigned char slot)
     if ((unsigned long)(p - deskIconBuf) + DESK_ICON_DATA_SZ > fileSize)
         return 0;
 
-    memcpy(deskIconCache[slot], p, DESK_ICON_DATA_SZ);
-    deskIconLoaded[slot] = 1;
+    memcpy(cache[slot], p, DESK_ICON_DATA_SZ);
+    loaded[slot] = 1;
     return 1;
+}
+
+//-----------------------------------------------------------------------------
+// Load and cache one 16x16 PBM P4 desktop icon payload (32 bytes).
+//-----------------------------------------------------------------------------
+static unsigned char deskLoadIconCache(unsigned char slot)
+{
+    return iconLoadCache(deskIcons, deskIconCache, deskIconLoaded, slot);
 }
 
 //-----------------------------------------------------------------------------
@@ -3998,28 +4023,54 @@ static void deskLoadIconCacheAll(void)
 }
 
 //-----------------------------------------------------------------------------
+// Draw one cached icon cell.
+//-----------------------------------------------------------------------------
+static void iconDrawAt(DESK_ICON *d, unsigned char *cache, unsigned char loaded, unsigned short ix, unsigned char iy, unsigned char hlColor)
+{
+    unsigned char namebuf[9];
+    unsigned char i, nlen, y;
+    unsigned char centerX;
+    unsigned short imgX;
+
+    if (!d->active)
+        return;
+
+    if (loaded)
+    {
+        imgX = ix + (DESK_ICON_W - DESK_ICON_IMG_W) / 2;
+        imgX = (unsigned short)((imgX + 2) & 0xFFFC);
+        for (y = 0; y < DESK_ICON_IMG_H; y++)
+        {
+            SetByte(imgX, iy + y, cache[y * 2], vcorwf, vcorwb2);
+            SetByte(imgX + 8, iy + y, cache[(y * 2) + 1], vcorwf, vcorwb2);
+        }
+    }
+
+    nlen = 0;
+    for (i = 0; d->filename[i] && nlen < 8; i++)
+        namebuf[nlen++] = d->filename[i];
+
+    namebuf[nlen] = '\0';
+
+    centerX = (((8 * addrSetFontUseG2.w) - (strlen(namebuf) * addrSetFontUseG2.w)) / 2);
+    writesxy(ix + centerX + 4, iy + DESK_ICON_IMG_H + 1, 1, (unsigned char*)namebuf, vcorwf, hlColor);
+
+    if (d->ext[0] && strcmp(d->ext,"EXE"))
+        writesxy(ix + 16, iy + DESK_ICON_IMG_H + 9, 1, (unsigned char*)d->ext, vcorwf, hlColor);
+}
+
+//-----------------------------------------------------------------------------
 // Draw a single icon at its grid slot. Clears cell first.
 //-----------------------------------------------------------------------------
 static void deskDrawIcon(unsigned char slot)
 {
     DESK_ICON *d = &deskIcons[slot];
     unsigned short ix;
-    unsigned char  iy;
-    unsigned char namebuf[9];
-    unsigned char i, nlen, y;
+    unsigned char iy;
     unsigned char hlColor;
-    unsigned char centerX;
-    unsigned short imgX;
 
     deskSlotXY(slot, &ix, &iy);
-
-    /* Use a dark highlight; white was polluting the text bands visually. */
     hlColor = (deskSelected == slot) ? VDP_DARK_BLUE : bgcolorMgui;
-
-    /*if (d->active)
-        FillRect((unsigned char)ix, iy, DESK_ICON_W, DESK_ICON_H, hlColor);
-    else
-        return;*/
 
     if (!d->active)
         return;
@@ -4027,32 +4078,8 @@ static void deskDrawIcon(unsigned char slot)
     if (!deskIconLoaded[slot])
         deskLoadIconCache(slot);
 
-    if (deskIconLoaded[slot])
-    {
-        imgX = ix + (DESK_ICON_W - DESK_ICON_IMG_W) / 2;
-        for (y = 0; y < DESK_ICON_IMG_H; y++)
-        {
-            SetByte(imgX, iy + y, deskIconCache[slot][y * 2], vcorwf, vcorwb2);
-            SetByte(imgX + 8, iy + y, deskIconCache[slot][(y * 2) + 1], vcorwf, vcorwb2);
-        }
-    }
-
-    /* Name (up to 8 chars) centred in 48px cell */
-    nlen = 0;
-    for (i = 0; d->filename[i] && nlen < 8; i++)
-        namebuf[nlen++] = d->filename[i];
-
-    namebuf[nlen] = '\0';
-
-    /* 5px/char: row of 8 chars = 40px; left pad = (48-40)/2 = 4px */
-    centerX = (((8 * addrSetFontUseG2.w) - (strlen(namebuf) * addrSetFontUseG2.w)) / 2);
-    writesxy(ix + centerX + 4, iy + DESK_ICON_IMG_H + 1, 1, (unsigned char*)namebuf, vcorwf, hlColor);
-
-    /* Extension (up to 3 chars) – centred: 3*5=15px, pad=(48-15)/2=16px*/
-    if (d->ext[0] && strcmp(d->ext,"EXE"))  // qdo EXE nao imprime
-        writesxy(ix + 16, iy + DESK_ICON_IMG_H + 9, 1, (unsigned char*)d->ext, vcorwf, hlColor);
+    iconDrawAt(d, deskIconCache[slot], deskIconLoaded[slot], ix, iy, hlColor);
 }
-
 //-----------------------------------------------------------------------------
 // Redraw all desktop icons.
 //-----------------------------------------------------------------------------
@@ -4133,9 +4160,8 @@ static unsigned char deskHitTest(unsigned char hx, unsigned char hy)
 // Open the file represented by deskIcons[slot] using the same EXEC rules as
 // files.c: look up [EXEC] in MGUI.CFG, set paramBasic, then run the program.
 //-----------------------------------------------------------------------------
-static void deskOpenIcon(unsigned char slot)
+static void deskOpenIconData(DESK_ICON *d, unsigned char redrawDesk)
 {
-    DESK_ICON *d = &deskIcons[slot];
     char execProg[64];
     char vnomefile[48];
     char vtmpparam[128];
@@ -4144,6 +4170,12 @@ static void deskOpenIcon(unsigned char slot)
     MGUI_SAVESCR vsavescr;
 
     if (!d->active) return;
+
+    if (d->askParam == 2)
+    {
+        deskOpenGroupIcon(d);
+        return;
+    }
 
     vtmpparam[0] = '\0';
     execProg[0] = '\0';
@@ -4169,7 +4201,7 @@ static void deskOpenIcon(unsigned char slot)
     {
         strcpy(vtmpparam, d->param);
     }
-    else if (d->askParam)
+    else if (d->askParam == 1)
     {
         askParamToExec(&vtmpparam);
         mguiClockDirty = 1;
@@ -4268,7 +4300,14 @@ static void deskOpenIcon(unsigned char slot)
 
     TrocaSpriteMouse(MOUSE_POINTER);
     deskSelected = 0xFF;
-    deskDrawAll();
+    if (redrawDesk)
+        deskDrawAll();
+}
+
+//-----------------------------------------------------------------------------
+static void deskOpenIcon(unsigned char slot)
+{
+    deskOpenIconData(&deskIcons[slot], 1);
 }
 
 //-----------------------------------------------------------------------------
@@ -4462,6 +4501,358 @@ static void deskContextMenu(unsigned char slot)
         deskAddIconDialog();
     else if (vopc == 1)
         deskDeleteIcon(slot);
+}
+
+//-----------------------------------------------------------------------------
+static void groupBuildCfgPath(DESK_ICON *d, char *cfgPath)
+{
+    strcpy(cfgPath, d->path);
+    if (d->path[0] != '\0' && !(d->path[0] == '/' && d->path[1] == '\0'))
+        strcat(cfgPath, "/");
+    strcat(cfgPath, d->filename);
+    strcat(cfgPath, ".CFG");
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char groupLoadIconCache(unsigned char slot)
+{
+    return iconLoadCache(groupIcons, groupIconCache, groupIconLoaded, slot);
+}
+
+//-----------------------------------------------------------------------------
+static void groupLoadIconCacheAll(void)
+{
+    unsigned char slot;
+
+    memset(groupIconLoaded, 0, sizeof(groupIconLoaded));
+    memset(groupIconCache, 0, sizeof(groupIconCache));
+
+    for (slot = 0; slot < GROUP_ICON_MAX; slot++)
+        if (groupIcons[slot].active)
+            groupLoadIconCache(slot);
+}
+
+//-----------------------------------------------------------------------------
+static void groupLoadConfig(char *cfgPath)
+{
+    unsigned long sz;
+
+    memset(groupCfgBuf, 0, sizeof(groupCfgBuf));
+    memset(groupIcons, 0, sizeof(groupIcons));
+
+    sz = loadFile((unsigned char*)cfgPath, (unsigned short*)groupCfgBuf);
+    if (verro)
+        sz = 0;
+    if (sz > GROUP_CFG_SIZE)
+        sz = GROUP_CFG_SIZE;
+    groupCfgBuf[sz] = '\0';
+
+    iconLoadConfigFromBuf(groupCfgBuf, groupIcons, GROUP_ICON_MAX);
+    groupLoadIconCacheAll();
+}
+
+//-----------------------------------------------------------------------------
+static void groupSaveConfig(char *cfgPath)
+{
+    unsigned long sz;
+
+    iconSaveConfig(cfgPath, groupIcons, GROUP_ICON_MAX);
+
+    sz = loadFile((unsigned char*)cfgPath, (unsigned short*)groupCfgBuf);
+    if (verro)
+        sz = 0;
+    if (sz > GROUP_CFG_SIZE)
+        sz = GROUP_CFG_SIZE;
+    groupCfgBuf[sz] = '\0';
+}
+
+//-----------------------------------------------------------------------------
+static void groupSlotXY(unsigned char slot, unsigned short winX, unsigned char winY, unsigned short *px, unsigned char *py)
+{
+    *px = winX + 4 + (unsigned short)(slot / GROUP_ICON_ROWS) * DESK_ICON_W;
+    *py = winY + 16 + (unsigned char)(slot % GROUP_ICON_ROWS) * DESK_ICON_H;
+}
+
+//-----------------------------------------------------------------------------
+static void groupDrawIcon(unsigned char slot, unsigned short winX, unsigned char winY)
+{
+    unsigned short ix;
+    unsigned char iy;
+
+    groupSlotXY(slot, winX, winY, &ix, &iy);
+    FillRect((unsigned char)ix, iy, DESK_ICON_W, DESK_ICON_H, vcorwb);
+
+    if (!groupIcons[slot].active)
+        return;
+
+    if (!groupIconLoaded[slot])
+        groupLoadIconCache(slot);
+
+    iconDrawAt(&groupIcons[slot], groupIconCache[slot], groupIconLoaded[slot], ix, iy, vcorwb);
+}
+
+//-----------------------------------------------------------------------------
+static void groupDrawAll(unsigned short winX, unsigned char winY)
+{
+    unsigned char slot;
+
+    for (slot = 0; slot < GROUP_ICON_MAX; slot++)
+        groupDrawIcon(slot, winX, winY);
+}
+
+//-----------------------------------------------------------------------------
+static unsigned char groupHitTest(unsigned char hx, unsigned char hy, unsigned short winX, unsigned char winY)
+{
+    unsigned char col, row;
+    unsigned short relx;
+    unsigned char rely;
+
+    if (hx < winX + 4 || hy < winY + 16)
+        return 0xFF;
+
+    relx = hx - (winX + 4);
+    rely = hy - (winY + 16);
+
+    col = relx / DESK_ICON_W;
+    row = rely / DESK_ICON_H;
+
+    if (col >= GROUP_ICON_COLS || row >= GROUP_ICON_ROWS)
+        return 0xFF;
+
+    return (unsigned char)(col * GROUP_ICON_ROWS + row);
+}
+
+//-----------------------------------------------------------------------------
+static void groupAddIconDialog(char *cfgPath, unsigned short winX, unsigned char winY)
+{
+    MGUI_SAVESCR vsavescr;
+    unsigned char vstring[40];
+    unsigned char wmode = WINFULL;
+    unsigned char vwb = BTCANCEL;
+    unsigned char slot, i;
+    char *dot, *slash;
+    char vpath[20], vname[9], vext[4];
+    unsigned char namelen;
+
+    slot = 0xFF;
+    for (i = 0; i < GROUP_ICON_MAX; i++)
+        if (!groupIcons[i].active) { slot = i; break; }
+
+    if (slot == 0xFF)
+    {
+        message("Group is full (9 icons max).\0", BTCLOSE, 0);
+        return;
+    }
+
+    SaveScreenNew(&vsavescr, 10, 40, 236, 60);
+    showWindow((unsigned char*)"Add Group Icon", 10, 40, 236, 60, BTNONE);
+    writesxy(12, 57, 1, (unsigned char*)"File (full path):", vcorwf, vcorwb);
+
+    vstring[0] = '\0';
+    while (1)
+    {
+        fillin(0, vstring, 120, 57, 120, wmode);
+
+        if (button(1, (unsigned char*)"OK",     18, 78, 44, 10, wmode)) { vwb = BTOK;     break; }
+        if (button(2, (unsigned char*)"CANCEL",  66, 78, 44, 10, wmode)) { vwb = BTCANCEL; break; }
+
+        wmode = WINOPER;
+    }
+
+    RestoreScreen(&vsavescr);
+
+    if (vwb != BTOK || !vstring[0])
+        return;
+
+    for (i = 0; vstring[i]; i++)
+        vstring[i] = (unsigned char)toupper(vstring[i]);
+
+    slash = strrchr((char*)vstring, '/');
+    if (slash)
+    {
+        i = (unsigned char)(slash - (char*)vstring);
+        if (i == 0) { vpath[0] = '/'; vpath[1] = '\0'; }
+        else
+        {
+            if (i > 19) i = 19;
+            strncpy(vpath, (char*)vstring, i);
+            vpath[i] = '\0';
+        }
+        slash++;
+    }
+    else
+    {
+        vpath[0] = '/'; vpath[1] = '\0';
+        slash = (char*)vstring;
+    }
+
+    dot = strrchr(slash, '.');
+    if (dot)
+    {
+        for (i = 0; i < 3 && dot[1 + i]; i++)
+            vext[i] = dot[1 + i];
+        vext[i] = '\0';
+        namelen = (unsigned char)(dot - slash);
+    }
+    else
+    {
+        vext[0] = '\0';
+        namelen = (unsigned char)strlen(slash);
+    }
+
+    if (namelen > 8) namelen = 8;
+    strncpy(vname, slash, namelen);
+    vname[namelen] = '\0';
+
+    strncpy(groupIcons[slot].filename, vname, 8);
+    groupIcons[slot].filename[8] = '\0';
+    strncpy(groupIcons[slot].ext, vext, 3);
+    groupIcons[slot].ext[3] = '\0';
+    strncpy(groupIcons[slot].path, vpath, 19);
+    groupIcons[slot].path[19] = '\0';
+    groupIcons[slot].askParam = 0;
+    groupIcons[slot].param[0] = '\0';
+    groupIcons[slot].active = 1;
+
+    groupLoadIconCache(slot);
+    groupSaveConfig(cfgPath);
+    groupDrawIcon(slot, winX, winY);
+}
+
+//-----------------------------------------------------------------------------
+static void groupDeleteIcon(unsigned char slot, char *cfgPath, unsigned short winX, unsigned char winY)
+{
+    unsigned char mpos;
+    char mbuf[40];
+
+    if (!groupIcons[slot].active) return;
+
+    strcpy(mbuf, "Remove icon\n");
+    strcat(mbuf, groupIcons[slot].filename);
+    if (groupIcons[slot].ext[0])
+    {
+        strcat(mbuf, ".");
+        strcat(mbuf, groupIcons[slot].ext);
+    }
+    strcat(mbuf, " ?");
+
+    mpos = message((char*)mbuf, BTYES | BTNO, 0);
+    if (mpos != BTYES) return;
+
+    memset(&groupIcons[slot], 0, sizeof(DESK_ICON));
+    memset(groupIconCache[slot], 0, DESK_ICON_DATA_SZ);
+    groupIconLoaded[slot] = 0;
+
+    groupSaveConfig(cfgPath);
+    groupDrawIcon(slot, winX, winY);
+}
+
+//-----------------------------------------------------------------------------
+static void groupContextMenu(unsigned char slot, char *cfgPath, unsigned short winX, unsigned char winY)
+{
+    MGUI_SAVESCR vsavescr;
+    unsigned short mx_m, my_m;
+    unsigned char vopc = 0xFF;
+    unsigned char showDel;
+
+    mx_m = (vpostx + 60 > 256) ? (unsigned short)(vpostx - 60) : vpostx;
+    my_m = (vposty + 30 > 189) ? (unsigned char)(vposty - 30) : vposty;
+    showDel = (slot < GROUP_ICON_MAX && groupIcons[slot].active) ? 1 : 0;
+
+    SaveScreenNew(&vsavescr, mx_m, my_m, 60, showDel ? 26 : 14);
+    FillRect((unsigned char)mx_m, (unsigned char)my_m, 60, showDel ? 24 : 12, vcorwb);
+    DrawRect(mx_m, my_m, 60, showDel ? 24 : 12, vcorwf);
+
+    writesxy(mx_m + 4, my_m + 2, 1, (unsigned char*)"Add Icon", vcorwf, vcorwb);
+    if (showDel)
+        writesxy(mx_m + 4, my_m + 12, 1, (unsigned char*)"Delete Icon", vcorwf, vcorwb);
+
+    while (1)
+    {
+        MGUI_MOUSE md;
+        getMouseData(0, &md);
+
+        if (md.mouseButton == 0x01)
+        {
+            if (md.vpostx >= mx_m && md.vpostx <= mx_m + 59)
+            {
+                if (md.vposty >= my_m + 2 && md.vposty <= my_m + 10)
+                    { vopc = 0; break; }
+                if (showDel && md.vposty >= my_m + 12 && md.vposty <= my_m + 21)
+                    { vopc = 1; break; }
+            }
+            break;
+        }
+    }
+
+    RestoreScreen(&vsavescr);
+
+    if (vopc == 0)
+        groupAddIconDialog(cfgPath, winX, winY);
+    else if (vopc == 1)
+        groupDeleteIcon(slot, cfgPath, winX, winY);
+}
+
+//-----------------------------------------------------------------------------
+static void deskOpenGroupIcon(DESK_ICON *d)
+{
+    MGUI_SAVESCR vsavescr;
+    char cfgPath[48];
+    unsigned short winX = 50;
+    unsigned char winY = 34;
+    unsigned short winW = 150;
+    unsigned char winH = 140;
+    unsigned char hit;
+    unsigned char done = 0;
+
+    groupBuildCfgPath(d, cfgPath);
+    SaveScreenNew(&vsavescr, winX, winY, winW + 2, winH + 2);
+    showWindow((unsigned char*)d->filename, (unsigned char)winX, winY, winW, winH, BTNONE);
+    writesxy(winX + winW - 10, winY + 3, 1, (unsigned char*)"X", vcorwf, vcorwb);
+
+    groupLoadConfig(cfgPath);
+    groupDrawAll(winX, winY);
+
+    while (!done)
+    {
+        MGUI_MOUSE md;
+        getMouseData(0, &md);
+        getMouseData(1, &md);
+
+        if ((mguiListWindows[*mguiIdRequest].keyTec & 0xFF) == 0x1B)
+        {
+            mguiListWindows[*mguiIdRequest].keyTec = KEY_NONE;
+            done = 1;
+            continue;
+        }
+
+        if (md.mouseButton == 0x01)
+        {
+            if (md.vpostx >= winX + winW - 14 && md.vpostx <= winX + winW - 2 &&
+                md.vposty >= winY + 1 && md.vposty <= winY + 11)
+            {
+                done = 1;
+            }
+            else
+            {
+                hit = groupHitTest(md.vpostx, md.vposty, winX, winY);
+                if (mouseBtnPresDouble && hit < GROUP_ICON_MAX && groupIcons[hit].active)
+                {
+                    deskOpenIconData(&groupIcons[hit], 0);
+                    showWindow((unsigned char*)d->filename, (unsigned char)winX, winY, winW, winH, BTNONE);
+                    writesxy(winX + winW - 10, winY + 3, 1, (unsigned char*)"X", vcorwf, vcorwb);
+                    groupDrawAll(winX, winY);
+                }
+            }
+        }
+        else if (md.mouseButton == 0x02)
+        {
+            hit = groupHitTest(md.vpostx, md.vposty, winX, winY);
+            groupContextMenu(hit, cfgPath, winX, winY);
+        }
+    }
+
+    RestoreScreen(&vsavescr);
 }
 
 //-----------------------------------------------------------------------------
