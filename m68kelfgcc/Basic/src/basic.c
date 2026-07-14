@@ -72,6 +72,7 @@
 #define SIMPLE_VAR_CACHE_SLOTS 8
 #define PARSER_STACK_SIZE 32
 #define PARSER_LEVELS 4
+#define BASIC_STRING_EXPR_MAX 200
 #define PAINT_STACK_SIZE 4096
 #define MAX_WHILE_STACK   16
 #define BASIC_VDP_RAM_SIZE 0x4000
@@ -147,16 +148,40 @@ static unsigned int spriteHandleCache[256];
 static unsigned char spriteSizeSelBas;
 unsigned char verro;
 
-static unsigned char parseValStack[PARSER_LEVELS][PARSER_STACK_SIZE][50];
+static unsigned char parseValStack[PARSER_LEVELS][PARSER_STACK_SIZE][BASIC_STRING_EXPR_MAX];
 static unsigned char parseOpStack[PARSER_LEVELS][PARSER_STACK_SIZE];
 static unsigned char parseOpPrecStack[PARSER_LEVELS][PARSER_STACK_SIZE];
 static char parseValTypeStack[PARSER_LEVELS][PARSER_STACK_SIZE];
-static unsigned char parseTemp[PARSER_LEVELS][50];
+static unsigned char parseTemp[PARSER_LEVELS][BASIC_STRING_EXPR_MAX];
 static unsigned char parseTokenVarAtu[PARSER_LEVELS][4];
 static unsigned char parseTokenVarAtuLen[PARSER_LEVELS];
 static int parseOpTop[PARSER_LEVELS];
 static int parseValTop[PARSER_LEVELS];
 static char nivelParse = -1;
+
+static int basStrCopyLimit(unsigned char *dst, const unsigned char *src, unsigned int maxLen)
+{
+    if (strlen((char *)src) >= maxLen)
+    {
+        *vErroProc = 5;
+        return -1;
+    }
+
+    strcpy((char *)dst, (char *)src);
+    return 0;
+}
+
+static int basStrCatLimit(unsigned char *dst, const unsigned char *src, unsigned int maxLen)
+{
+    if ((strlen((char *)dst) + strlen((char *)src)) >= maxLen)
+    {
+        *vErroProc = 5;
+        return -1;
+    }
+
+    strcat((char *)dst, (char *)src);
+    return 0;
+}
 
 static void invalidateFindVariableCache(void)
 {
@@ -3099,7 +3124,7 @@ void parseExpr(unsigned char *result) {
     int currentPrec, topPrec;
     unsigned char sqtdtam[20];
     unsigned char nivelAtual;
-    unsigned char (*valStack)[50];
+    unsigned char (*valStack)[BASIC_STRING_EXPR_MAX];
     unsigned char varName[4], iz;
     unsigned char *opStack;
     unsigned char *opPrecStack;
@@ -3234,7 +3259,10 @@ writeLongSerial("]\r\n\0");
                         valueType = tokenVarAtu[2];
 
                     if (valueType == '$')
-                        strcpy((char*)temp, (char*)vRet);
+                    {
+                        if (basStrCopyLimit(temp, vRet, BASIC_STRING_EXPR_MAX) == -1)
+                            PARSE_RETURN;
+                    }
                     else
                     {
                         temp[0] = vRet[0];
@@ -3266,7 +3294,8 @@ writeLongSerial("]\r\n\0");
                 }
                 else if (tokenType == QUOTE) {
                     valueType = '$';
-                    strcpy((char*)temp, (char*)token);
+                    if (basStrCopyLimit(temp, token, BASIC_STRING_EXPR_MAX) == -1)
+                        PARSE_RETURN;
                     nextToken();
                     if (*vErroProc) PARSE_RETURN;
                 }
@@ -3411,7 +3440,10 @@ writeLongSerial("]\r\n\0");
                     valueType = *value_type;
 
                     if (valueType == '$')
-                        strcpy((char*)temp, (char*)token);
+                    {
+                        if (basStrCopyLimit(temp, token, BASIC_STRING_EXPR_MAX) == -1)
+                            PARSE_RETURN;
+                    }
                     else
                     {
                         temp[0] = token[0];
@@ -3471,7 +3503,10 @@ writeLongSerial("Aqui 888.666.96\r\n\0");
 #endif
 
                 if (valueType == '$')
-                    strcpy((char*)valStack[valTop], (char*)temp);
+                {
+                    if (basStrCopyLimit(valStack[valTop], temp, BASIC_STRING_EXPR_MAX) == -1)
+                        PARSE_RETURN;
+                }
                 else
                 {
 #ifdef BASIC_DEBUG_ON
@@ -3673,7 +3708,10 @@ writeLongSerial("]\r\n\0");
                     else if (typeA == '$')
                     {
                         if (op == '+')
-                            strcat(a,b);
+                        {
+                            if (basStrCatLimit(a, b, BASIC_STRING_EXPR_MAX) == -1)
+                                PARSE_RETURN;
+                        }
                         else  {
                             *vErroProc = 27;
                             PARSE_RETURN;
@@ -3803,7 +3841,10 @@ writeLongSerial("]\r\n\0");
                     else if (typeA == '$')
                     {
                         if (op == '+')
-                            strcat(a,b);
+                        {
+                            if (basStrCatLimit(a, b, BASIC_STRING_EXPR_MAX) == -1)
+                                PARSE_RETURN;
+                        }
                         else  {
                             *vErroProc = 27;
                             PARSE_RETURN;
@@ -3911,7 +3952,10 @@ writeLongSerial("]\r\n\0");
             else if (typeA == '$')
             {
                 if (op == '+')
-                    strcat(a,b);
+                {
+                    if (basStrCatLimit(a, b, BASIC_STRING_EXPR_MAX) == -1)
+                        PARSE_RETURN;
+                }
                 else  {
                     *vErroProc = 27;
                     PARSE_RETURN;
@@ -3945,7 +3989,10 @@ writeLongSerial("Aqui 888.666.79\r\n\0");
     *value_type = valTypeStack[valTop];
 
     if (*value_type == '$')
-        strcpy((char*)result, (char*)valStack[valTop]);
+    {
+        if (basStrCopyLimit(result, valStack[valTop], BASIC_STRING_EXPR_MAX) == -1)
+            PARSE_RETURN;
+    }
     else
         *(unsigned int*)result = *(unsigned int*)valStack[valTop];
 
@@ -3962,7 +4009,7 @@ writeLongSerial("Aqui 888.666.79\r\n\0");
 void level2(unsigned char *result)
 {
     char  op;
-    unsigned char hold[50];
+    unsigned char hold[BASIC_STRING_EXPR_MAX];
     unsigned char valueTypeAnt;
     unsigned int *lresult = result;
     unsigned int *lhold = hold;
@@ -3993,7 +4040,10 @@ void level2(unsigned char *result)
 
         // Se forem diferentes os 2, se for um deles string, da erro, se nao, passa o inteiro para real
         if (*value_type == '$' && valueTypeAnt == '$' && op == '+')
-            strcat(result,&hold);
+        {
+            if (basStrCatLimit(result, hold, BASIC_STRING_EXPR_MAX) == -1)
+                return;
+        }
         else if ((*value_type == '$' || valueTypeAnt == '$') && op == '-')
         {
             *vErroProc = 16;
@@ -4049,7 +4099,7 @@ void level2(unsigned char *result)
 void level3(unsigned char *result)
 {
     char  op;
-    unsigned char hold[50];
+    unsigned char hold[BASIC_STRING_EXPR_MAX];
     unsigned int *lresult = result;
     unsigned int *lhold = hold;
     char value_type_ant=0;
@@ -4175,7 +4225,7 @@ void level30(unsigned char *result)
 void level31(unsigned char *result)
 {
     unsigned char  op;
-    unsigned char hold[50];
+    unsigned char hold[BASIC_STRING_EXPR_MAX];
     char value_type_ant=0;
     int *rVal = result;
     int *hVal = hold;
@@ -4226,7 +4276,7 @@ writeLongSerial("]\r\n");*/
 void level32(unsigned char *result)
 {
     unsigned char  op;
-    unsigned char hold[50];
+    unsigned char hold[BASIC_STRING_EXPR_MAX];
     unsigned char value_type_ant=0;
     unsigned int *lresult = result;
     unsigned int *lhold = hold;
@@ -4284,7 +4334,7 @@ void level32(unsigned char *result)
 //--------------------------------------------------------------------------------------
 void level4(unsigned char *result)
 {
-    unsigned char hold[50];
+    unsigned char hold[BASIC_STRING_EXPR_MAX];
     unsigned int *lresult = result;
     unsigned int *lhold = hold;
     char value_type_ant=0;
@@ -4430,7 +4480,10 @@ void primitive(unsigned char *result)
             vRet = find_var(token);
             if (*vErroProc) return;
             if (*value_type == '$')  // Tipo da variavel
-                strcpy(result,vRet);
+            {
+                if (basStrCopyLimit(result, vRet, BASIC_STRING_EXPR_MAX) == -1)
+                    return;
+            }
             else
             {
                 for (ix = 0;ix < 5;ix++)
@@ -4441,7 +4494,8 @@ void primitive(unsigned char *result)
             return;
         case QUOTE:
             *value_type='$';
-            strcpy(result,token);
+            if (basStrCopyLimit(result, token, BASIC_STRING_EXPR_MAX) == -1)
+                return;
             nextToken();
             if (*vErroProc) return;
             return;
@@ -4476,7 +4530,10 @@ void primitive(unsigned char *result)
             if (*vErroProc) return;
 
             if (*value_type == '$')  // Tipo do retorno
-                strcpy(result,token);
+            {
+                if (basStrCopyLimit(result, token, BASIC_STRING_EXPR_MAX) == -1)
+                    return;
+            }
             else
             {
                 for (ix = 0; ix < 4; ix++)
@@ -6243,6 +6300,17 @@ int loadBasFile(unsigned char* pArquivo)
 /* FUNCOES BASIC                                                             */
 /*****************************************************************************/
 
+static void basPrintNewLine(void)
+{
+    if (vdpModeBas == VDP_MODE_G2)
+    {
+        vdp_set_cursor(0, videoCursorPosRowY + 8);
+        return;
+    }
+
+    printText("\r\n");
+}
+
 //-----------------------------------------------------------------------------
 // Joga pra tela Texto.
 // Syntaxe:
@@ -6257,7 +6325,7 @@ int basPrint(void)
     long *lVal = answer;
     int  *iVal = answer;
     int len=0, spaces;
-    char last_delim, last_token_type = 0;
+    char last_delim = 0, last_token_type = 0;
     unsigned char sqtdtam[10];
 
     do {
@@ -6327,7 +6395,7 @@ int basPrint(void)
 
     if (*tok == EOL || *tok == FINISHED || *token==':') {
         if (last_delim != ';' && last_delim!=',')
-            printText("\r\n");
+            basPrintNewLine();
     }
 
     return 0;
