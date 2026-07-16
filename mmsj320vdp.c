@@ -510,7 +510,7 @@ void vdp_set_cursor_pos(unsigned char direction)
     unsigned char pMoveId = 1;
 
     if (vdp_mode != VDP_MODE_TEXT)
-        pMoveId = 8;
+        pMoveId = 6;    // Era 8, esperando proxima gravacao na bios
 
     switch (direction)
     {

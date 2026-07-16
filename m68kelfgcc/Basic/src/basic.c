@@ -66,13 +66,13 @@
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
-#define RUN_ON_FLASH 0
+//#define RUN_ON_FLASH 0
 #define USE_ITERATIVE_PARSER // Comente para usar o parser antigo
 
 #define SIMPLE_VAR_CACHE_SLOTS 8
 #define PARSER_STACK_SIZE 32
 #define PARSER_LEVELS 4
-#define BASIC_STRING_EXPR_MAX 200
+#define BASIC_STRING_EXPR_MAX 256
 #define PAINT_STACK_SIZE 4096
 #define MAX_WHILE_STACK   16
 #define BASIC_VDP_RAM_SIZE 0x4000
@@ -126,12 +126,21 @@ static int vdpEditReadLogicalLineAt(int x, int y, char *dest, int maxLen, int *p
 static void basReadNumericArg(int *pValue);
 static void basReadRealArg(unsigned long *pFpp);
 static void basDrawLineSegment(unsigned char x0, unsigned char y0, unsigned char x1, unsigned char y1, unsigned char color);
+static unsigned long nextAddrForProgramPointer(unsigned char *addr);
 
 static unsigned int textPatternTable = 0x0000;
 static unsigned int textNameTable = 0x0800;
 //--------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------
+
+static unsigned char basToUpper(unsigned char c)
+{
+    if (c >= 'a' && c <= 'z')
+        return c - 0x20;
+
+    return c;
+}
 
 static unsigned char lastVarCacheName0[SIMPLE_VAR_CACHE_SLOTS];
 static unsigned char lastVarCacheName1[SIMPLE_VAR_CACHE_SLOTS];
@@ -1180,7 +1189,7 @@ void processLine(void)
             *pTypeLine = 0x00;
 
             for (iz = 0; iz < iy; iz++)
-                linhacomando[iz] = toupper(linhacomando[iz]);
+                linhacomando[iz] = basToUpper(linhacomando[iz]);
 
             // Comando Direto
             if (!strcmp(linhacomando,"CLS") && iy == 3)
@@ -1467,7 +1476,7 @@ writeLongSerial("]\r\n");*/
                 {
                     // Transforma em Caps pra comparar com os tokens
                     for (kt = 0; kt < ix; kt++)
-                        vLidoCaps[kt] = toupper(vLido[kt]);
+                        vLidoCaps[kt] = basToUpper(vLido[kt]);
 
                     vLidoCaps[ix] = 0x00;
 
@@ -1509,7 +1518,7 @@ writeLongSerial("]\r\n");*/
 
                     //if (*blin == 0x3A)  // :
                     if (*blin && *blin != 0x20 && vToken < 0xF0 && !vTemRem)
-                        vLinhaArg[iy++] = toupper(*blin);
+                        vLinhaArg[iy++] = basToUpper(*blin);
                 }
                 else
                 {
@@ -1517,13 +1526,13 @@ writeLongSerial("]\r\n");*/
                         vLinhaArg[iy++] = vLido[kt];
 
                     if (*blin && *blin != 0x20)
-                        vLinhaArg[iy++] = toupper(*blin);
+                        vLinhaArg[iy++] = basToUpper(*blin);
                 }
             }
             else
             {
                 if (*blin && *blin != 0x20)
-                    vLinhaArg[iy++] = toupper(*blin);
+                    vLinhaArg[iy++] = basToUpper(*blin);
             }
 
             if (!*blin)
@@ -1534,8 +1543,8 @@ writeLongSerial("]\r\n");*/
         }
         else
         {
-            if (!vAspas && !vTemRem)
-                vLido[ix++] = toupper(*blin);
+            if (!vAspas)
+                vLido[ix++] = basToUpper(*blin);
             else
                 vLido[ix++] = *blin;
         }
@@ -2238,8 +2247,14 @@ writeLongSerial("\r\n");
 
                     if (*vPointerChangedPointer == 0x3A)
                     {
+                        *nextAddr = nextAddrForProgramPointer(vPointerChangedPointer);
                         *pointerRunProg = *changedPointer;
                         *changedPointer = 0;
+                    }
+                    else
+                    {
+                        *doisPontos = 0;
+                        break;
                     }
                 }
 
@@ -2536,7 +2551,10 @@ int executeToken(unsigned char pToken)
             if (vdpModeBas == VDP_MODE_TEXT)
                 clearScr();
             else if (vdpModeBas == VDP_MODE_G2)
+            {
                 fillRect(0, 0, 255, 191, bgcolorBas);
+                vdp_set_cursor(0,0);
+            }
             break;
         case 0x97:  // CLEAR - Clear all variables
             clearRuntimeData(pForStack);
@@ -2858,7 +2876,7 @@ int nextToken(void)
     if (isalphas(*vTempPointer)) { // var or command
         while(!isdelim(*vTempPointer) && (*vTempPointer < 0x80 || *vTempPointer >= 0xF0))
         {
-            *temp++ = *vTempPointer;
+            *temp++ = basToUpper(*vTempPointer);
             *pointerRunProg = *pointerRunProg + 1;
             vTempPointer = *pointerRunProg;
         }
@@ -2966,8 +2984,10 @@ static int basVarNameChar2(unsigned char c)
 
 static void basVarNameSetChar2(unsigned char *varName, const unsigned char *name, unsigned char nameLen)
 {
+    varName[0] = basToUpper(varName[0]);
+
     if (nameLen == 2 && basVarNameChar2(name[1]))
-        varName[1] = name[1];
+        varName[1] = basToUpper(name[1]);
     else
         varName[1] = 0x00;
 }
@@ -4849,8 +4869,8 @@ unsigned char* find_var(char *s)
     }
     else
     {
-        vTemp[0] = *s++;
-        vTemp[1] = *s++;
+        vTemp[0] = basToUpper(*s++);
+        vTemp[1] = basToUpper(*s++);
         vTemp[2] = *s;
     }
 
@@ -4936,6 +4956,46 @@ unsigned long gosubPop(void)
     i=*(gosubStack + *gtos);
 
     return i;
+}
+
+static unsigned long gosubReturnAddr(void)
+{
+    unsigned char *retAddr;
+
+    retAddr = *pointerRunProg;
+    while (*retAddr == ' ' || *retAddr == '\t')
+        retAddr++;
+
+    if (*retAddr == ':')
+        return (unsigned long)retAddr;
+
+    return *nextAddr;
+}
+
+static unsigned long nextAddrForProgramPointer(unsigned char *addr)
+{
+    unsigned char *lineAddr;
+    unsigned char *bodyAddr;
+    unsigned long lineNext;
+
+    lineAddr = pStartProg;
+    while (lineAddr && *lineAddr)
+    {
+        lineNext  = ((unsigned long)*(lineAddr) << 16);
+        lineNext |= ((unsigned long)*(lineAddr + 1) << 8);
+        lineNext |= *(lineAddr + 2);
+        bodyAddr = lineAddr + 5;
+
+        if (addr >= bodyAddr && (!lineNext || addr < (unsigned char *)lineNext))
+            return lineNext;
+
+        if (!lineNext)
+            break;
+
+        lineAddr = (unsigned char *)lineNext;
+    }
+
+    return *nextAddr;
 }
 
 //-----------------------------------------------------------------------------
@@ -5230,7 +5290,7 @@ long fppComp(unsigned long pFppD7, unsigned long pFppD6)
 int procParam(unsigned char tipoRetorno, unsigned char temParenteses, unsigned char tipoSeparador, unsigned char qtdParam, unsigned char *tipoParams,  unsigned char *retParams)
 {
     int ix, iy, iz;
-    unsigned char answer[200], varTipo, vTipoParam;
+    unsigned char answer[BASIC_STRING_EXPR_MAX], varTipo, vTipoParam;
     char last_delim, last_token_type = 0;
     unsigned char sqtdtam[10];
     long *vConvVal;
@@ -5932,24 +5992,29 @@ char updateVariable(unsigned long* pVariable, unsigned char* pValor, char pType,
     else // String
     {
         iz = strlen(pValor);    // Tamanho da strings
+        if (iz > 255)
+        {
+            *vErroProc = 5;
+            return -1;
+        }
 
-        // Se for o mesmo tamanho ou menor, usa a mesma posicao
-        if (*vNextSimpVar <= iz && pOper)
+        vNextString = *nextAddrString;
+        pNewStr = 1;
+
+        // Se a string nova couber no bloco antigo, usa a mesma posicao.
+        if (pOper)
         {
             vOffSet  = (((unsigned long)*(vNextSimpVar + 1) << 24) & 0xFF000000);
             vOffSet |= (((unsigned long)*(vNextSimpVar + 2) << 16) & 0x00FF0000);
             vOffSet |= (((unsigned long)*(vNextSimpVar + 3) << 8) & 0x0000FF00);
             vOffSet |= ((unsigned long)*(vNextSimpVar + 4) & 0x000000FF);
-            vNextString = vOffSet;
 
-            if (pOper == 2 && vNextString == 0)
+            if (*vNextSimpVar >= iz && vOffSet != 0)
             {
-                vNextString = *nextAddrString;
-                pNewStr = 1;
+                vNextString = vOffSet;
+                pNewStr = 0;
             }
         }
-        else
-            vNextString = *nextAddrString;
 
         vNumVal = vNextString;
 
@@ -5958,7 +6023,7 @@ char updateVariable(unsigned long* pVariable, unsigned char* pValor, char pType,
             *vNextString++ = pValor[ix];
         }
 
-        if (*vNextSimpVar > iz || !pOper || pNewStr)
+        if (pNewStr)
             *nextAddrString = vNextString;
 
         *vNextSimpVar++ = iz;
@@ -6132,7 +6197,7 @@ int saveBasFile(unsigned char* pArquivo)
     ix = 0;
     while (pArquivo[ix] && ix < (sizeof(fileName) - 1))
     {
-        fileName[ix] = toupper(pArquivo[ix]);
+        fileName[ix] = basToUpper(pArquivo[ix]);
         ix++;
     }
     fileName[ix] = 0x00;
@@ -6223,7 +6288,7 @@ int loadBasFile(unsigned char* pArquivo)
     ix = 0;
     while (pArquivo[ix] && ix < (sizeof(fileName) - 1))
     {
-        fileName[ix] = toupper(pArquivo[ix]);
+        fileName[ix] = basToUpper(pArquivo[ix]);
         ix++;
     }
     fileName[ix] = 0x00;
@@ -6304,7 +6369,10 @@ static void basPrintNewLine(void)
 {
     if (vdpModeBas == VDP_MODE_G2)
     {
-        vdp_set_cursor(0, videoCursorPosRowY + 8);
+        VDP_COORD cursor;
+
+        cursor = vdp_get_cursor_safe();
+        vdp_set_cursor(0, cursor.y + 8);
         return;
     }
 
@@ -6321,7 +6389,7 @@ int basPrint(void)
     unsigned char vAspas = 0, vVirgula = 0, vTemp[250];
     char sNumLin [sizeof(short)*8+1];
     int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
-    unsigned char answer[200];
+    unsigned char answer[BASIC_STRING_EXPR_MAX];
     long *lVal = answer;
     int  *iVal = answer;
     int len=0, spaces;
@@ -6679,10 +6747,16 @@ static int basBaseString(unsigned char pBase, unsigned char pSuffix)
     getExp(&answer);
     if (*vErroProc) return 0;
 
-    if (*value_type != '%')
+    if (*value_type == '$')
     {
         *vErroProc = 16;
         return 0;
+    }
+
+    if (*value_type == '#')
+    {
+        *iVal = fppInt(*iVal);
+        *value_type = '%';
     }
 
     nextToken();
@@ -6729,7 +6803,7 @@ int basLen(void)
     unsigned char vAspas = 0, vVirgula = 0, vTemp[250];
     char sNumLin [sizeof(short)*8+1];
     int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
-    unsigned char answer[200];
+    unsigned char answer[BASIC_STRING_EXPR_MAX];
     int iVal = 0;
     int vValue = 0;
     int len=0, spaces;
@@ -6832,6 +6906,18 @@ int basFre(void)
 
         getExp(&answer);
         if (*vErroProc) return 0;
+
+        if (*value_type == '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
+        }
 
         if (*iVal!=0)
         {
@@ -7041,7 +7127,7 @@ int basAsc(void)
 int basLeftRightMid(char pTipo)
 {
     int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
-    unsigned char answer[200], vTemp[200];
+    unsigned char answer[BASIC_STRING_EXPR_MAX], vTemp[BASIC_STRING_EXPR_MAX];
     int vqtd = 0, vstart = 0;
     unsigned char sqtdtam[10];
 
@@ -7059,7 +7145,8 @@ int basLeftRightMid(char pTipo)
     if (*vErroProc) return 0;
 
     if (*token_type == QUOTE) { /* is string, error */
-        strcpy(vTemp, token);
+        if (basStrCopyLimit(vTemp, token, BASIC_STRING_EXPR_MAX) == -1)
+            return 0;
     }
     else { /* is expression */
         putback();
@@ -7073,7 +7160,8 @@ int basLeftRightMid(char pTipo)
             return 0;
         }
 
-        strcpy(vTemp, answer);
+        if (basStrCopyLimit(vTemp, answer, BASIC_STRING_EXPR_MAX) == -1)
+            return 0;
     }
 
     nextToken();
@@ -7099,17 +7187,38 @@ int basLeftRightMid(char pTipo)
         if (pTipo=='M')
         {
             getExp(&vstart);
+            if (*vErroProc) return 0;
+
+            if (*value_type == '$')
+            {
+                *vErroProc = 16;
+                return 0;
+            }
+
+            if (*value_type == '#')
+            {
+                vstart = fppInt(vstart);
+                *value_type = '%';
+            }
+
             vqtd=strlen(vTemp);
         }
         else
-            getExp(&vqtd);
-
-        if (*vErroProc) return 0;
-
-        if (*value_type == '$')
         {
-            *vErroProc = 16;
-            return 0;
+            getExp(&vqtd);
+            if (*vErroProc) return 0;
+
+            if (*value_type == '$')
+            {
+                *vErroProc = 16;
+                return 0;
+            }
+
+            if (*value_type == '#')
+            {
+                vqtd = fppInt(vqtd);
+                *value_type = '%';
+            }
         }
     }
 
@@ -7137,6 +7246,12 @@ int basLeftRightMid(char pTipo)
                     *vErroProc = 16;
                     return 0;
                 }
+
+                if (*value_type == '#')
+                {
+                    vqtd = fppInt(vqtd);
+                    *value_type = '%';
+                }
             }
         }
     }
@@ -7151,7 +7266,15 @@ int basLeftRightMid(char pTipo)
         return 0;
     }
 
-    if (vqtd > strlen(vTemp))
+    if (vqtd < 0 || (pTipo == 'M' && vstart < 1))
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    if (pTipo == 'M' && vstart > strlen(vTemp))
+        vqtd = 0;
+    else if (vqtd > strlen(vTemp))
     {
         if (pTipo=='M')
             vqtd = (strlen(vTemp) - vstart) + 1;
@@ -7584,9 +7707,15 @@ int basIf(void)
 
     getExp(&vCond); // get target value
 
-    if (*value_type == '$' || *value_type == '#') {
+    if (*value_type == '$') {
         *vErroProc = 16;
         return 0;
+    }
+
+    if (*value_type == '#')
+    {
+        vCond = (fppComp(vCond, fppReal(0)) != 0);
+        *value_type = '%';
     }
 
     nextToken();
@@ -7691,9 +7820,15 @@ int basWhile(void)
 
     getExp(&vCond); // get target value
 
-    if (*value_type == '$' || *value_type == '#') {
+    if (*value_type == '$') {
         *vErroProc = 16;
         return 0;
+    }
+
+    if (*value_type == '#')
+    {
+        vCond = (fppComp(vCond, fppReal(0)) != 0);
+        *value_type = '%';
     }
 
     nextToken();
@@ -7768,7 +7903,7 @@ int basLet(void)
 {
     long vRetFV, iz;
     unsigned char varTipo;
-    unsigned char value[200];
+    unsigned char value[BASIC_STRING_EXPR_MAX];
     unsigned long *lValue = &value;
     unsigned char sqtdtam[10];
     unsigned char vArray = 0;
@@ -7876,7 +8011,7 @@ int basInputGet(unsigned char pSize)
     unsigned char vAspas = 0, vVirgula = 0, vTemp[250];
     char sNumLin [sizeof(short)*8+1];
     int ix = 0, iy = 0, iz = 0, iw = 0, vToken;
-    unsigned char answer[200], vtec;
+    unsigned char answer[BASIC_STRING_EXPR_MAX], vtec;
     long *lVal = answer;
     int  *iVal = answer;
     char vTemTexto = 0;
@@ -8386,10 +8521,16 @@ int basOnVar(void)
         getExp(&iSalto);
         if (*vErroProc) return 0;
 
-        if (*value_type != '%')
+        if (*value_type == '$')
         {
             *vErroProc = 16;
             return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            iSalto = fppInt(iSalto);
+            *value_type = '%';
         }
 
         if (iSalto == 0 || iSalto > 255)
@@ -8484,7 +8625,7 @@ int basOnVar(void)
         {
             if ((unsigned int)(((unsigned int)*(vNextAddrGoto + 3) << 8) | *(vNextAddrGoto + 4)) == vNumLin)
             {
-                gosubPush(*nextAddr);
+                gosubPush(gosubReturnAddr());
                 *changedPointer = vNextAddrGoto;
                 return 0;
             }
@@ -8649,7 +8790,7 @@ int basGosub(void)
     {
         if ((unsigned int)(((unsigned int)*(vNextAddrGoto + 3) << 8) | *(vNextAddrGoto + 4)) == vNumLin)
         {
-            gosubPush(*nextAddr);
+            gosubPush(gosubReturnAddr());
             *changedPointer = vNextAddrGoto;
             return 0;
         }
@@ -9088,7 +9229,7 @@ int basStop(void)
 //--------------------------------------------------------------------------------------
 // Retorna 'n' Espaços
 // Syntaxe:
-//          SPC <numero>
+//          SPC(<numero>)
 //--------------------------------------------------------------------------------------
 int basSpc(void)
 {
@@ -9145,7 +9286,13 @@ int basSpc(void)
         return 0;
     }
 
-    vSpc=(char)*iVal;
+    if (*iVal < 0 || *iVal > 255)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    vSpc=*iVal;
 
     for (ix = 0; ix < vSpc; ix++)
         *(token + ix) = ' ';
@@ -9215,7 +9362,13 @@ int basTab(void)
         return 0;
     }
 
-    vTab=(char)*iVal;
+    if (*iVal < 0 || *iVal > vdpMaxCols)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    vTab=*iVal;
 
     vColumn = videoCursorPosColX;
 
@@ -11146,10 +11299,16 @@ int basPoint(void)
         getExp(&answer);
         if (*vErroProc) return 0;
 
-        if (*value_type != '%')
+        if (*value_type == '$')
         {
             *vErroProc = 16;
             return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
         }
     }
 
@@ -11177,10 +11336,16 @@ int basPoint(void)
         getExp(&answer);
         if (*vErroProc) return 0;
 
-        if (*value_type != '%')
+        if (*value_type == '$')
         {
             *vErroProc = 16;
             return 0;
+        }
+
+        if (*value_type == '#')
+        {
+            *iVal = fppInt(*iVal);
+            *value_type = '%';
         }
     }
 
@@ -11529,7 +11694,7 @@ int basDraw(void)
         if (!cmd[pos])
             break;
 
-        c = toupper(cmd[pos]);
+        c = basToUpper(cmd[pos]);
 
         if (c == 'B')
         {
