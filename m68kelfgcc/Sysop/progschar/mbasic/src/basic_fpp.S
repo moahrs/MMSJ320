@@ -24,10 +24,9 @@
             .extern FFPSUB
             .extern FFPTAN
             .extern FFPTANH
-
-            .equ FLOAT_NUM_D7,   0x008FEE9E
-            .equ FLOAT_NUM_D6,   0x008FEE96
-            .equ FLOAT_BUFFER,   0x008FEFA6
+            .extern floatBufferStr
+            .extern floatNumD7
+            .extern floatNumD6
 
             .macro SAVE_ALL
             movem.l %d0-%d7/%a0-%a5,-(%sp)
@@ -37,14 +36,34 @@
             movem.l (%sp)+,%d0-%d7/%a0-%a5
             .endm
 
+            .macro LOAD_D7
+            move.l  floatNumD7,%a0
+            move.l  (%a0),%d7
+            .endm
+
+            .macro LOAD_D6
+            move.l  floatNumD6,%a0
+            move.l  (%a0),%d6
+            .endm
+
+            .macro STORE_D7
+            move.l  floatNumD7,%a0
+            move.l  %d7,(%a0)
+            .endm
+
+            .macro LOAD_BUFFER_A0
+            move.l  floatBufferStr,%a0
+            move.l  (%a0),%a0
+            .endm
+
             .global FP_TO_STR
 FP_TO_STR:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             move.w  #0,-(%sp)
             jsr     FFPFPA
             moveq   #7,%d0
-            move.l  FLOAT_BUFFER,%a0
+            LOAD_BUFFER_A0
 1:
             move.w  (%sp)+,(%a0)+
             dbra    %d0,1b
@@ -54,196 +73,196 @@ FP_TO_STR:
             .global STR_TO_FP
 STR_TO_FP:
             SAVE_ALL
-            move.l  FLOAT_BUFFER,%a0
+            LOAD_BUFFER_A0
             jsr     FFPAFP
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_SUM
 FPP_SUM:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
-            move.l  FLOAT_NUM_D6,%d6
+            LOAD_D7
+            LOAD_D6
             jsr     FFPADD
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_SUB
 FPP_SUB:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
-            move.l  FLOAT_NUM_D6,%d6
+            LOAD_D7
+            LOAD_D6
             jsr     FFPSUB
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_MUL
 FPP_MUL:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
-            move.l  FLOAT_NUM_D6,%d6
+            LOAD_D7
+            LOAD_D6
             jsr     FFPMUL2
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_DIV
 FPP_DIV:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
-            move.l  FLOAT_NUM_D6,%d6
+            LOAD_D7
+            LOAD_D6
             jsr     FFPDIV
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_PWR
 FPP_PWR:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
-            move.l  FLOAT_NUM_D6,%d6
+            LOAD_D7
+            LOAD_D6
             jsr     FFPPWR
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_CMP
 FPP_CMP:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
-            move.l  FLOAT_NUM_D6,%d6
+            LOAD_D7
+            LOAD_D6
             jsr     FFPCMP
             move    %sr,%d7
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_INT
 FPP_INT:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPFPI
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_FPP
 FPP_FPP:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPIFP
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_SIN
 FPP_SIN:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPSIN
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_COS
 FPP_COS:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPCOS
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_TAN
 FPP_TAN:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPTAN
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_ATN
 FPP_ATN:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPATAN
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_SINH
 FPP_SINH:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPSINH
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_COSH
 FPP_COSH:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPCOSH
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_TANH
 FPP_TANH:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPTANH
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_SQRT
 FPP_SQRT:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPSQRT
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_LN
 FPP_LN:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPLOG
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_EXP
 FPP_EXP:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPEXP
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_ABS
 FPP_ABS:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPABS
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
             .global FPP_NEG
 FPP_NEG:
             SAVE_ALL
-            move.l  FLOAT_NUM_D7,%d7
+            LOAD_D7
             jsr     FFPNEG
-            move.l  %d7,FLOAT_NUM_D7
+            STORE_D7
             RESTORE_ALL
             rts
 
@@ -339,8 +358,8 @@ fppBasNE:
 fppBasCMP:
         SAVE_ALL
 
-        move.l  FLOAT_NUM_D7,%d7
-        move.l  FLOAT_NUM_D6,%d6
+        LOAD_D7
+        LOAD_D6
 
         tst.b   %d6
         bpl.s   fppBasCMP_pos
@@ -366,20 +385,20 @@ fppBasCMP_result:
 fppBasCMP_lt:
         moveq   #-1,%d7
         move.l  %d7,%d0
-        move.l  %d7,FLOAT_NUM_D7
+        STORE_D7
         RESTORE_ALL
         rts
 
 fppBasCMP_eq:
         moveq   #0,%d7
         move.l  %d7,%d0
-        move.l  %d7,FLOAT_NUM_D7
+        STORE_D7
         RESTORE_ALL
         rts
 
 fppBasCMP_gt:
         moveq   #1,%d7
         move.l  %d7,%d0
-        move.l  %d7,FLOAT_NUM_D7
+        STORE_D7
         RESTORE_ALL
         rts

@@ -498,6 +498,63 @@ static void setVariables(void)
     memset(lastVarCacheAddr, 0, sizeof(lastVarCacheAddr));  
 }
 
+#define MBASIC_STACK_OLD_BASE 0x008FE000UL
+#define MBASIC_STACK_ADDR(type, addr) ((type)((unsigned long)pStartStack + ((unsigned long)(addr) - MBASIC_STACK_OLD_BASE)))
+
+static void mbasicRelocateRuntimePointers(void)
+{
+    pProcess            = MBASIC_STACK_ADDR(unsigned char *, 0x008FFFFEUL);
+    pTypeLine           = MBASIC_STACK_ADDR(unsigned char *, 0x008FFFFCUL);
+    nextAddrLine        = MBASIC_STACK_ADDR(unsigned long *, 0x008FFFF8UL);
+    firstLineNumber     = MBASIC_STACK_ADDR(unsigned short *, 0x008FFFF6UL);
+    addrFirstLineNumber = MBASIC_STACK_ADDR(unsigned long *, 0x008FFFF2UL);
+    addrLastLineNumber  = MBASIC_STACK_ADDR(unsigned long *, 0x008FFFEEUL);
+    nextAddr            = MBASIC_STACK_ADDR(unsigned long *, 0x008FFFEAUL);
+    nextAddrSimpVar     = MBASIC_STACK_ADDR(unsigned long *, 0x008FFFE6UL);
+    nextAddrArrayVar    = MBASIC_STACK_ADDR(unsigned long *, 0x008FFFE2UL);
+    nextAddrString      = MBASIC_STACK_ADDR(unsigned long *, 0x008FFFDEUL);
+
+    comandLineTokenized = MBASIC_STACK_ADDR(unsigned char *, 0x008FFEDFUL);
+    vParenteses         = MBASIC_STACK_ADDR(unsigned char *, 0x008FFEDDUL);
+    vInicioSentenca     = MBASIC_STACK_ADDR(unsigned char *, 0x008FFEDBUL);
+    vMaisTokens         = MBASIC_STACK_ADDR(unsigned char *, 0x008FFED9UL);
+    vTemIf              = MBASIC_STACK_ADDR(unsigned char *, 0x008FFED7UL);
+    doisPontos          = MBASIC_STACK_ADDR(unsigned char *, 0x008FFED3UL);
+    vTemAndOr           = MBASIC_STACK_ADDR(unsigned char *, 0x008FFED1UL);
+    vTemThen            = MBASIC_STACK_ADDR(unsigned char *, 0x008FFECFUL);
+    vTemElse            = MBASIC_STACK_ADDR(unsigned char *, 0x008FFECDUL);
+    vTemIfAndOr         = MBASIC_STACK_ADDR(unsigned char *, 0x008FFECAUL);
+    vErroProc           = MBASIC_STACK_ADDR(unsigned short *, 0x008FFEC6UL);
+    ftos                = MBASIC_STACK_ADDR(int *, 0x008FFEC2UL);
+    gtos                = MBASIC_STACK_ADDR(int *, 0x008FFEBEUL);
+
+    floatBufferStr      = MBASIC_STACK_ADDR(unsigned long *, 0x008FEFA6UL);
+    floatNumD7          = MBASIC_STACK_ADDR(unsigned long *, 0x008FEE9EUL);
+    floatNumD6          = MBASIC_STACK_ADDR(unsigned long *, 0x008FEE96UL);
+    floatNumA0          = MBASIC_STACK_ADDR(unsigned long *, 0x008FEE8EUL);
+    randSeed            = MBASIC_STACK_ADDR(unsigned long *, 0x008FEE86UL);
+    lastHgrX            = MBASIC_STACK_ADDR(unsigned char *, 0x008FEE84UL);
+    lastHgrY            = MBASIC_STACK_ADDR(unsigned char *, 0x008FEE82UL);
+    vDataBkpPointerProg = MBASIC_STACK_ADDR(unsigned long *, 0x008FEE70UL);
+    vDataPointer        = MBASIC_STACK_ADDR(unsigned long *, 0x008FEE5AUL);
+    pointerRunProg      = MBASIC_STACK_ADDR(unsigned long *, 0x008FEE56UL);
+    tok                 = MBASIC_STACK_ADDR(unsigned char *, 0x008FEE54UL);
+    token_type          = MBASIC_STACK_ADDR(unsigned char *, 0x008FEE52UL);
+    value_type          = MBASIC_STACK_ADDR(unsigned char *, 0x008FEE50UL);
+    onErrGoto           = MBASIC_STACK_ADDR(unsigned long *, 0x008FEE4AUL);
+    changedPointer      = MBASIC_STACK_ADDR(unsigned long *, 0x008FEE42UL);
+    token               = MBASIC_STACK_ADDR(unsigned char *, 0x008FED6EUL);
+    varName             = MBASIC_STACK_ADDR(unsigned char *, 0x008FEC6EUL);
+    traceOn             = MBASIC_STACK_ADDR(unsigned char *, 0x008FEC66UL);
+    debugOn             = MBASIC_STACK_ADDR(unsigned char *, 0x008FEC64UL);
+    debug2on            = MBASIC_STACK_ADDR(unsigned char *, 0x008FEC65UL);
+    gosubStack          = MBASIC_STACK_ADDR(unsigned long *, 0x008FE966UL);
+    vDataFirst          = MBASIC_STACK_ADDR(unsigned long *, 0x008FE962UL);
+    vDataLineAtu        = MBASIC_STACK_ADDR(unsigned long *, 0x008FE95EUL);
+    forStack            = MBASIC_STACK_ADDR(for_stack *, 0x008FF6BEUL);
+    atuVarAddr          = MBASIC_STACK_ADDR(unsigned long *, 0x008FF6B0UL);
+}
+
 typedef struct
 {
     char name[17];
@@ -505,12 +562,22 @@ typedef struct
     unsigned short srcLine;
 } MBasicSymbol;
 
+typedef struct
+{
+    unsigned short ifSrcLine;
+    unsigned short elseSrcLine;
+    unsigned short endifSrcLine;
+} MBasicIfBlock;
+
 #define MBASIC_MAX_SYMBOLS 128
+#define MBASIC_MAX_IF_BLOCKS 64
 #define MBASIC_MAIN_START  40000
 
 static MBasicSymbol mbasicSymbols[MBASIC_MAX_SYMBOLS];
 static int mbasicSymbolCount;
 static unsigned short mbasicProcMainLine;
+static MBasicIfBlock mbasicIfBlocks[MBASIC_MAX_IF_BLOCKS];
+static int mbasicIfBlockCount;
 
 static char mbasicIsSpace(char c)
 {
@@ -595,6 +662,32 @@ static int mbasicFindSymbol(const char *name)
     }
 
     return -1;
+}
+
+static int mbasicLeadingLabel(char *line, char *name, int maxLen, char **rest)
+{
+    char *p;
+    int ix;
+
+    p = mbasicTrimLeft(line);
+    if (!mbasicIsAlpha(*p))
+        return 0;
+
+    ix = 0;
+    while (mbasicIsNameChar(*p))
+    {
+        if (ix < maxLen - 1)
+            name[ix++] = basToUpper((unsigned char)*p);
+        p++;
+    }
+    name[ix] = 0;
+
+    if (*p != ':')
+        return 0;
+
+    p++;
+    *rest = mbasicTrimLeft(p);
+    return 1;
 }
 
 static int mbasicAddSymbol(const char *name, unsigned short line, unsigned short srcLine)
@@ -683,6 +776,33 @@ static int mbasicReadSourceLine(char **pp, char *line, int maxLen)
     return 1;
 }
 
+static int mbasicHasProcMain(char *src)
+{
+    char line[256];
+    char name[17];
+    char *p;
+    char *t;
+
+    p = src;
+    while (mbasicReadSourceLine(&p, line, sizeof(line)))
+    {
+        t = mbasicTrimLeft(line);
+        mbasicTrimRight(t);
+
+        if (mbasicWordEq(t, "PROC"))
+        {
+            t += 4;
+            mbasicReadName(&t, name, sizeof(name));
+            if (!strcmp(name, "MAIN"))
+                return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int mbasicIsBlockIf(char *line, char *cond, int condMax);
+
 static int mbasicLooksNumbered(char *src)
 {
     char line[256];
@@ -702,19 +822,112 @@ static int mbasicLooksNumbered(char *src)
     return 0;
 }
 
-static int mbasicCollectSymbols(char *src)
+static int mbasicCollectIfBlocks(char *src)
+{
+    char line[256];
+    char cond[180];
+    char *p;
+    char *t;
+    int stack[MBASIC_MAX_IF_BLOCKS];
+    int sp;
+    int srcLine;
+    int ix;
+    char num[12];
+
+    mbasicIfBlockCount = 0;
+    sp = 0;
+    p = src;
+    srcLine = 1;
+
+    while (mbasicReadSourceLine(&p, line, sizeof(line)))
+    {
+        t = mbasicTrimLeft(line);
+        mbasicTrimRight(t);
+
+        if (mbasicIsBlockIf(t, cond, sizeof(cond)))
+        {
+            if (mbasicIfBlockCount >= MBASIC_MAX_IF_BLOCKS || sp >= MBASIC_MAX_IF_BLOCKS)
+            {
+                printText("Too many nested MBASIC IF blocks\r\n");
+                return 0;
+            }
+
+            ix = mbasicIfBlockCount++;
+            mbasicIfBlocks[ix].ifSrcLine = (unsigned short)srcLine;
+            mbasicIfBlocks[ix].elseSrcLine = 0;
+            mbasicIfBlocks[ix].endifSrcLine = 0;
+            stack[sp++] = ix;
+        }
+        else if (mbasicWordEq(t, "ELSE"))
+        {
+            if (sp <= 0)
+            {
+                printText("ELSE without IF at source line ");
+                itoa(srcLine, num, 10);
+                printText(num);
+                printText("\r\n");
+                return 0;
+            }
+
+            ix = stack[sp - 1];
+            if (mbasicIfBlocks[ix].elseSrcLine)
+            {
+                printText("Duplicated ELSE at source line ");
+                itoa(srcLine, num, 10);
+                printText(num);
+                printText("\r\n");
+                return 0;
+            }
+
+            mbasicIfBlocks[ix].elseSrcLine = (unsigned short)srcLine;
+        }
+        else if (mbasicWordEq(t, "ENDIF"))
+        {
+            if (sp <= 0)
+            {
+                printText("ENDIF without IF at source line ");
+                itoa(srcLine, num, 10);
+                printText(num);
+                printText("\r\n");
+                return 0;
+            }
+
+            ix = stack[--sp];
+            mbasicIfBlocks[ix].endifSrcLine = (unsigned short)srcLine;
+        }
+
+        srcLine++;
+    }
+
+    if (sp > 0)
+    {
+        ix = stack[sp - 1];
+        printText("IF without ENDIF at source line ");
+        itoa(mbasicIfBlocks[ix].ifSrcLine, num, 10);
+        printText(num);
+        printText("\r\n");
+        return 0;
+    }
+
+    return 1;
+}
+
+static int mbasicCollectSymbols(char *src, int hasMain)
 {
     char line[256];
     char name[17];
     char *p;
     char *t;
+    char *rest;
     int srcLine;
-    int len;
+    int inProc;
+    unsigned short targetLine;
 
     mbasicSymbolCount = 0;
     mbasicProcMainLine = 0;
     p = src;
     srcLine = 1;
+    inProc = 0;
 
     while (mbasicReadSourceLine(&p, line, sizeof(line)))
     {
@@ -725,21 +938,27 @@ static int mbasicCollectSymbols(char *src)
         {
             t += 4;
             mbasicReadName(&t, name, sizeof(name));
+            inProc = 1;
             if (!mbasicAddSymbol(name, (unsigned short)(srcLine * 10), (unsigned short)srcLine))
                 return 0;
 
             if (!strcmp(name, "MAIN"))
                 mbasicProcMainLine = (unsigned short)(srcLine * 10);
         }
+        else if (mbasicWordEq(t, "ENDPROC"))
+        {
+            inProc = 0;
+        }
         else
         {
-            len = strlen(t);
-            if (len > 1 && t[len - 1] == ':')
+            if (mbasicLeadingLabel(t, name, sizeof(name), &rest))
             {
-                t[len - 1] = 0;
-                mbasicTrimRight(t);
-                mbasicReadName(&t, name, sizeof(name));
-                if (!mbasicAddSymbol(name, (unsigned short)(srcLine * 10), (unsigned short)srcLine))
+                if (hasMain || inProc)
+                    targetLine = (unsigned short)(srcLine * 10);
+                else
+                    targetLine = (unsigned short)(MBASIC_MAIN_START + (srcLine * 10));
+
+                if (!mbasicAddSymbol(name, targetLine, (unsigned short)srcLine))
                     return 0;
             }
         }
@@ -787,11 +1006,337 @@ static int mbasicRewriteJump(char *dst, char *src, const char *cmd, unsigned sho
     return 1;
 }
 
-static int mbasicConvertLine(char *dst, char *src, unsigned short srcLine)
+static int mbasicWordAt(const char *p, const char *word)
+{
+    while (*word)
+    {
+        if (basToUpper((unsigned char)*p) != *word)
+            return 0;
+
+        p++;
+        word++;
+    }
+
+    return !mbasicIsNameChar(*p);
+}
+
+static char *mbasicFindWordOutsideQuotes(char *s, const char *word)
+{
+    char *p;
+    int inQuote;
+    int atWordStart;
+
+    p = s;
+    inQuote = 0;
+
+    while (*p)
+    {
+        if (*p == '"')
+            inQuote = !inQuote;
+
+        atWordStart = (p == s || !mbasicIsNameChar(*(p - 1)));
+        if (!inQuote && atWordStart && mbasicWordAt(p, word))
+            return p;
+
+        p++;
+    }
+
+    return 0;
+}
+
+static int mbasicIsBlockIf(char *line, char *cond, int condMax)
+{
+    char *t;
+    char *thenPos;
+    char *afterThen;
+    int len;
+
+    t = mbasicTrimLeft(line);
+    if (!mbasicWordEq(t, "IF"))
+        return 0;
+
+    thenPos = mbasicFindWordOutsideQuotes(t, "THEN");
+    if (!thenPos)
+        return 0;
+
+    afterThen = thenPos + 4;
+    afterThen = mbasicTrimLeft(afterThen);
+    if (*afterThen != 0)
+        return 0;
+
+    t += 2;
+    t = mbasicTrimLeft(t);
+    len = thenPos - t;
+    while (len > 0 && mbasicIsSpace(t[len - 1]))
+        len--;
+
+    if (len <= 0 || len >= condMax)
+        return 0;
+
+    memcpy(cond, t, len);
+    cond[len] = 0;
+    return 1;
+}
+
+static int mbasicFindIfBlockByIf(unsigned short srcLine)
+{
+    int ix;
+
+    for (ix = 0; ix < mbasicIfBlockCount; ix++)
+    {
+        if (mbasicIfBlocks[ix].ifSrcLine == srcLine)
+            return ix;
+    }
+
+    return -1;
+}
+
+static int mbasicFindIfBlockByElse(unsigned short srcLine)
+{
+    int ix;
+
+    for (ix = 0; ix < mbasicIfBlockCount; ix++)
+    {
+        if (mbasicIfBlocks[ix].elseSrcLine == srcLine)
+            return ix;
+    }
+
+    return -1;
+}
+
+static int mbasicFindIfBlockByEndif(unsigned short srcLine)
+{
+    int ix;
+
+    for (ix = 0; ix < mbasicIfBlockCount; ix++)
+    {
+        if (mbasicIfBlocks[ix].endifSrcLine == srcLine)
+            return ix;
+    }
+
+    return -1;
+}
+
+static int mbasicAppendCharLine(char *dst, int *out, int max, char c)
+{
+    if (*out >= max - 1)
+    {
+        printText("MBASIC line too long\r\n");
+        return 0;
+    }
+
+    dst[*out] = c;
+    *out = *out + 1;
+    dst[*out] = 0;
+    return 1;
+}
+
+static int mbasicAppendTextLine(char *dst, int *out, int max, const char *s)
+{
+    while (*s)
+    {
+        if (!mbasicAppendCharLine(dst, out, max, *s++))
+            return 0;
+    }
+
+    return 1;
+}
+
+static int mbasicAppendNumberLine(char *dst, int *out, int max, unsigned short lineNo)
+{
+    char num[12];
+
+    itoa(lineNo, num, 10);
+    return mbasicAppendTextLine(dst, out, max, num);
+}
+
+static int mbasicAppendJumpTarget(char *dst, int *out, int max, char **pp, unsigned short srcLine)
+{
+    char *p;
+    char name[17];
+    char num[12];
+    int ix;
+
+    p = mbasicTrimLeft(*pp);
+
+    if (mbasicIsDigit(*p))
+    {
+        while (*p && !mbasicIsSpace(*p) && *p != ':' && *p != ',')
+        {
+            if (!mbasicAppendCharLine(dst, out, max, *p++))
+                return 0;
+        }
+
+        *pp = p;
+        return 1;
+    }
+
+    mbasicReadName(&p, name, sizeof(name));
+    ix = mbasicFindSymbol(name);
+    if (ix < 0)
+    {
+        printText("Undefined symbol at source line ");
+        itoa(srcLine, num, 10);
+        printText(num);
+        printText(": ");
+        printText((unsigned char *)name);
+        printText("\r\n");
+        return 0;
+    }
+
+    if (!mbasicAppendNumberLine(dst, out, max, mbasicSymbols[ix].line))
+        return 0;
+
+    *pp = p;
+    return 1;
+}
+
+static int mbasicRewriteInlineCommands(char *dst, char *src, unsigned short srcLine)
+{
+    char *p;
+    char name[17];
+    char num[12];
+    int out;
+    int ix;
+    int inQuote;
+    int atWordStart;
+
+    p = src;
+    out = 0;
+    inQuote = 0;
+    dst[0] = 0;
+
+    while (*p)
+    {
+        if (*p == '"')
+        {
+            inQuote = !inQuote;
+            if (!mbasicAppendCharLine(dst, &out, 255, *p++))
+                return 0;
+            continue;
+        }
+
+        atWordStart = (p == src || !mbasicIsNameChar(*(p - 1)));
+
+        if (!inQuote && *p == '\'')
+        {
+            if (out > 0)
+            {
+                if (!mbasicAppendTextLine(dst, &out, 255, ": REM "))
+                    return 0;
+            }
+            else
+            {
+                if (!mbasicAppendTextLine(dst, &out, 255, "REM "))
+                    return 0;
+            }
+
+            p++;
+            if (!mbasicAppendTextLine(dst, &out, 255, p))
+                return 0;
+            return 1;
+        }
+
+        if (!inQuote && atWordStart && mbasicWordAt(p, "REM"))
+        {
+            if (!mbasicAppendTextLine(dst, &out, 255, p))
+                return 0;
+            return 1;
+        }
+
+        if (!inQuote && atWordStart && mbasicWordAt(p, "CALL"))
+        {
+            p += 4;
+            p = mbasicTrimLeft(p);
+            mbasicReadName(&p, name, sizeof(name));
+            ix = mbasicFindSymbol(name);
+            if (ix < 0)
+            {
+                printText("Undefined PROC at source line ");
+                itoa(srcLine, num, 10);
+                printText(num);
+                printText(": ");
+                printText((unsigned char *)name);
+                printText("\r\n");
+                return 0;
+            }
+
+            if (!mbasicAppendTextLine(dst, &out, 255, "GOSUB "))
+                return 0;
+            if (!mbasicAppendNumberLine(dst, &out, 255, mbasicSymbols[ix].line))
+                return 0;
+            continue;
+        }
+
+        if (!inQuote && atWordStart && (mbasicWordAt(p, "GOTO") || mbasicWordAt(p, "GOSUB")))
+        {
+            if (mbasicWordAt(p, "GOTO"))
+            {
+                if (!mbasicAppendTextLine(dst, &out, 255, "GOTO "))
+                    return 0;
+                p += 4;
+            }
+            else
+            {
+                if (!mbasicAppendTextLine(dst, &out, 255, "GOSUB "))
+                    return 0;
+                p += 5;
+            }
+
+            if (!mbasicAppendJumpTarget(dst, &out, 255, &p, srcLine))
+                return 0;
+
+            while (1)
+            {
+                while (mbasicIsSpace(*p))
+                {
+                    if (!mbasicAppendCharLine(dst, &out, 255, *p++))
+                        return 0;
+                }
+
+                if (*p != ',')
+                    break;
+
+                if (!mbasicAppendCharLine(dst, &out, 255, *p++))
+                    return 0;
+
+                while (mbasicIsSpace(*p))
+                {
+                    if (!mbasicAppendCharLine(dst, &out, 255, *p++))
+                        return 0;
+                }
+
+                if (!mbasicAppendJumpTarget(dst, &out, 255, &p, srcLine))
+                    return 0;
+            }
+
+            continue;
+        }
+
+        if (!mbasicAppendCharLine(dst, &out, 255, *p++))
+            return 0;
+    }
+
+    return 1;
+}
+
+static unsigned short mbasicSourceLineNumber(unsigned short srcLine, int structuredArea)
+{
+    if (structuredArea)
+        return (unsigned short)(srcLine * 10);
+
+    return (unsigned short)(MBASIC_MAIN_START + (srcLine * 10));
+}
+
+static int mbasicConvertLine(char *dst, char *src, unsigned short srcLine, unsigned short currentLineNo, int structuredArea)
 {
     char *t;
     char name[17];
     char num[12];
+    char *rest;
+    char cond[180];
+    int blockIx;
+    unsigned short targetLine;
     int ix;
     int len;
 
@@ -801,6 +1346,62 @@ static int mbasicConvertLine(char *dst, char *src, unsigned short srcLine)
     if (*t == 0)
     {
         dst[0] = 0;
+        return 1;
+    }
+
+    if (mbasicIsBlockIf(t, cond, sizeof(cond)))
+    {
+        blockIx = mbasicFindIfBlockByIf(srcLine);
+        if (blockIx < 0 || !mbasicIfBlocks[blockIx].endifSrcLine)
+        {
+            printText("Internal MBASIC IF error\r\n");
+            return 0;
+        }
+
+        targetLine = mbasicIfBlocks[blockIx].elseSrcLine;
+        if (!targetLine)
+            targetLine = mbasicIfBlocks[blockIx].endifSrcLine;
+
+        strcpy(dst, "IF ");
+        strcat(dst, cond);
+        strcat(dst, " THEN GOTO ");
+        itoa((unsigned short)(currentLineNo + 1), num, 10);
+        strcat(dst, num);
+        strcat(dst, " ELSE GOTO ");
+        itoa(mbasicSourceLineNumber(targetLine, structuredArea), num, 10);
+        strcat(dst, num);
+        return 1;
+    }
+
+    if (mbasicWordEq(t, "ELSE"))
+    {
+        blockIx = mbasicFindIfBlockByElse(srcLine);
+        if (blockIx < 0 || !mbasicIfBlocks[blockIx].endifSrcLine)
+        {
+            printText("ELSE without IF at source line ");
+            itoa(srcLine, num, 10);
+            printText(num);
+            printText("\r\n");
+            return 0;
+        }
+
+        strcpy(dst, "REM ELSE");
+        return 1;
+    }
+
+    if (mbasicWordEq(t, "ENDIF"))
+    {
+        blockIx = mbasicFindIfBlockByEndif(srcLine);
+        if (blockIx < 0)
+        {
+            printText("ENDIF without IF at source line ");
+            itoa(srcLine, num, 10);
+            printText(num);
+            printText("\r\n");
+            return 0;
+        }
+
+        strcpy(dst, "REM ENDIF");
         return 1;
     }
 
@@ -814,6 +1415,12 @@ static int mbasicConvertLine(char *dst, char *src, unsigned short srcLine)
     }
 
     if (mbasicWordEq(t, "ENDPROC"))
+    {
+        strcpy(dst, "RETURN");
+        return 1;
+    }
+
+    if (mbasicWordEq(t, "EXITPROC"))
     {
         strcpy(dst, "RETURN");
         return 1;
@@ -848,18 +1455,19 @@ static int mbasicConvertLine(char *dst, char *src, unsigned short srcLine)
     if (mbasicWordEq(t, "GOSUB"))
         return mbasicRewriteJump(dst, t, "GOSUB", srcLine);
 
-    len = strlen(t);
-    if (len > 1 && t[len - 1] == ':')
+    if (mbasicLeadingLabel(t, name, sizeof(name), &rest))
     {
-        t[len - 1] = 0;
-        mbasicTrimRight(t);
-        strcpy(dst, "REM LABEL ");
-        strcat(dst, t);
-        return 1;
+        if (*rest == 0)
+        {
+            strcpy(dst, "REM LABEL ");
+            strcat(dst, name);
+            return 1;
+        }
+
+        return mbasicRewriteInlineCommands(dst, rest, srcLine);
     }
 
-    strcpy(dst, t);
-    return 1;
+    return mbasicRewriteInlineCommands(dst, t, srcLine);
 }
 
 static int mbasicConvertStructuredSource(char *src, char *out, unsigned long outMax)
@@ -873,11 +1481,20 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
     unsigned short lineNo;
     unsigned short firstTopLine;
     int inProc;
+    int hasMain;
+    int structuredArea;
+    int blockIx;
+    char jumpLine[64];
 
     if (mbasicLooksNumbered(src))
         return 1;
 
-    if (!mbasicCollectSymbols(src))
+    hasMain = mbasicHasProcMain(src);
+
+    if (!mbasicCollectIfBlocks(src))
+        return 0;
+
+    if (!mbasicCollectSymbols(src, hasMain))
         return 0;
 
     outLen = 0;
@@ -893,7 +1510,7 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
     }
     else
     {
-        firstTopLine = MBASIC_MAIN_START + 1;
+        firstTopLine = mbasicSourceLineNumber(1, 0);
         strcpy(converted, "GOTO ");
         itoa(firstTopLine, line, 10);
         strcat(converted, line);
@@ -909,19 +1526,35 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
     {
         t = mbasicTrimLeft(line);
         mbasicTrimRight(t);
+        structuredArea = (hasMain || inProc);
+        lineNo = mbasicSourceLineNumber(srcLine, structuredArea);
 
-        if (!mbasicConvertLine(converted, line, srcLine))
+        if (mbasicWordEq(t, "ELSE"))
+        {
+            blockIx = mbasicFindIfBlockByElse(srcLine);
+            if (blockIx >= 0)
+            {
+                strcpy(jumpLine, "GOTO ");
+                itoa(mbasicSourceLineNumber(mbasicIfBlocks[blockIx].endifSrcLine, structuredArea), line, 10);
+                strcat(jumpLine, line);
+                if (!mbasicAppendLine(out, &outLen, outMax, (unsigned short)(lineNo - 1), jumpLine))
+                    return 0;
+            }
+        }
+
+        if (!mbasicConvertLine(converted, line, srcLine, lineNo, structuredArea))
             return 0;
 
         if (converted[0] != 0)
         {
-            if (mbasicProcMainLine || inProc || mbasicWordEq(converted, "REM PROC") || mbasicWordEq(converted, "RETURN"))
-                lineNo = (unsigned short)(srcLine * 10);
-            else
-                lineNo = (unsigned short)(MBASIC_MAIN_START + srcLine);
-
             if (!mbasicAppendLine(out, &outLen, outMax, lineNo, converted))
                 return 0;
+
+            if (mbasicIsBlockIf(t, line, sizeof(line)))
+            {
+                if (!mbasicAppendLine(out, &outLen, outMax, (unsigned short)(lineNo + 1), "REM THEN"))
+                    return 0;
+            }
         }
 
         if (mbasicWordEq(t, "PROC"))
@@ -938,6 +1571,99 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
     return 1;
 }
 
+static void mbasicPrintConvertedSource(unsigned char *src)
+{
+    unsigned char *p;
+    unsigned char c;
+    unsigned char line[128];
+    unsigned char ix;
+
+    printText("----- MBASIC converted source -----\r\n");
+    p = src;
+    ix = 0;
+    while (*p && *p != 0x1A)
+    {
+        c = *p++;
+        if (c == '\n')
+            continue;
+
+        if (c == '\r')
+        {
+            line[ix] = 0x00;
+            printText(line);
+            printText("\r\n");
+            ix = 0;
+        }
+        else
+        {
+            if (ix < sizeof(line) - 1)
+                line[ix++] = c;
+        }
+    }
+
+    if (ix)
+    {
+        line[ix] = 0x00;
+        printText(line);
+        printText("\r\n");
+    }
+
+    printText("\r\n----- end -----\r\n");
+}
+
+static void mbasicSaveDebugSource(unsigned char *src)
+{
+    unsigned long oldCluster;
+    unsigned long offset;
+    unsigned short len;
+    unsigned short chunk;
+    unsigned char *p;
+    char fileName[16];
+
+    strcpy(fileName, "MBASICDBG.BAS");
+    oldCluster = fsGetClusterDir();
+    fsChangeDir("/");
+
+    if (fsOpenFile(fileName) == RETURN_OK)
+        fsDelFile(fileName);
+
+    if (fsCreateFile(fileName) != RETURN_OK)
+    {
+        fsSetClusterDir(oldCluster);
+        printText("Error creating MBASICDBG.BAS\r\n");
+        return;
+    }
+
+    p = src;
+    len = 0;
+    while (p[len] && p[len] != 0x1A)
+        len++;
+
+    offset = 0;
+    while (len)
+    {
+        chunk = len;
+        if (chunk > 128)
+            chunk = 128;
+
+        if (fsWriteFile(fileName, offset, p, (unsigned char)chunk) != RETURN_OK)
+        {
+            fsCloseFile(fileName, 0);
+            fsSetClusterDir(oldCluster);
+            printText("Error writing MBASICDBG.BAS\r\n");
+            return;
+        }
+
+        offset += chunk;
+        p += chunk;
+        len -= chunk;
+    }
+
+    fsCloseFile(fileName, 1);
+    fsSetClusterDir(oldCluster);
+    printText("Saved /MBASICDBG.BAS\r\n");
+}
+
 //-----------------------------------------------------------------------------
 // Principal
 //-----------------------------------------------------------------------------
@@ -950,6 +1676,24 @@ void main(void)
     unsigned char *vBufptr = &vbufInput;
     unsigned char sqtdtam[20];
     unsigned char *vConvBuf;
+    unsigned char vParamName[128];
+    unsigned char *vParamFlag;
+    unsigned char vDebugConverted;
+    unsigned char vOwnStartBasic0;
+    unsigned long vLoadSize;
+
+    vOwnStartBasic0 = 0;
+
+    if (*startBasic)
+    {
+        *startBasic0 = msmalloc(278528);
+        if (!*startBasic0)
+        {
+            printText("No memory to run MBASIC...\r\n\0");
+            return;
+        }
+        vOwnStartBasic0 = 1;
+    }
 
     // Timer para o Random
     *(vmfp + Reg_TADR) = 0xF5;  // 245
@@ -1011,6 +1755,7 @@ void main(void)
         #endif
     }
 
+    mbasicRelocateRuntimePointers();
     setVariables();
 
     if (!*startBasic || *startBasic == 1)
@@ -1050,12 +1795,36 @@ void main(void)
     vdpMaxCols = 39;
     vdpMaxRows = 23;
 
-    if (*paramBasic == 0x00)
+    vDebugConverted = 0;
+    memset(vParamName, 0x00, sizeof(vParamName));
+    if (*paramBasic != 0x00)
+    {
+        strcpy((char *)vParamName, (char *)paramBasic);
+        vParamFlag = (unsigned char *)strchr((char *)vParamName, ',');
+        if (vParamFlag)
+        {
+            *vParamFlag++ = 0x00;
+            while (*vParamFlag == ' ' || *vParamFlag == '\t')
+                vParamFlag++;
+
+            if (basToUpper(*vParamFlag) == 'D')
+                vDebugConverted = 1;
+        }
+    }
+
+    if (vDebugConverted)
+    {
+        printText("MBASIC param: [");
+        printText(vParamName);
+        printText("]\r\n");
+    }
+
+    if (vParamName[0] == 0x00)
     {
         if (*startBasic == 1)
         {
             printText("Usage: MBASIC <file>\r\n\0");
-            return;
+            goto mbasic_main_cleanup;
         }
 
         #ifdef INPUT_BASIC_TELA
@@ -1137,14 +1906,39 @@ void main(void)
         if (*startBasic != 2)
         {
             printText("Loading...\r\n");
+            if (vDebugConverted)
+            {
+                printText("Loading file: [");
+                printText(vParamName);
+                printText("]\r\n");
+            }
         }
 
         // Limpando memoria
         memset(pStartXBasLoad,0x1A,vMemTotalXBasLoad);
         // Carrega do disco
         verro = 0x00;
-        loadFile(paramBasic, (unsigned long*)pStartXBasLoad);
-        if (!verro)
+        vLoadSize = loadFile(vParamName, (unsigned long*)pStartXBasLoad);
+        if (vDebugConverted)
+        {
+            unsigned char dbgIx;
+
+            printText("Loaded bytes: ");
+            ltoa(vLoadSize, sqtdtam, 10);
+            printText(sqtdtam);
+            printText("\r\n");
+
+            printText("First bytes:");
+            for (dbgIx = 0; dbgIx < 16 && dbgIx < vLoadSize; dbgIx++)
+            {
+                printText(" ");
+                itoa(*(pStartXBasLoad + dbgIx), sqtdtam, 16);
+                printText(sqtdtam);
+            }
+            printText("\r\n");
+        }
+
+        if (!verro && vLoadSize > 0)
         {
             if (!mbasicLooksNumbered((char *)pStartXBasLoad))
             {
@@ -1155,17 +1949,24 @@ void main(void)
                 if (!vConvBuf)
                 {
                     printText("No memory for MBASIC conversion\r\n");
-                    return;
+                    goto mbasic_main_cleanup;
                 }
 
                 if (!mbasicConvertStructuredSource((char *)pStartXBasLoad, (char *)vConvBuf, vMemTotalXBasLoad))
                 {
                     free(vConvBuf);
-                    return;
+                    goto mbasic_main_cleanup;
                 }
 
                 memcpy((void *)pStartXBasLoad, vConvBuf, vMemTotalXBasLoad);
                 free(vConvBuf);
+            }
+
+            if (vDebugConverted)
+            {
+                mbasicPrintConvertedSource((unsigned char *)pStartXBasLoad);
+                mbasicSaveDebugSource((unsigned char *)pStartXBasLoad);
+                goto mbasic_main_cleanup;
             }
 
             // Processar
@@ -1230,6 +2031,13 @@ void main(void)
     {
         printText("Press any key to continue...\r\n\0");
         while(readChar() == 0);
+    }
+
+mbasic_main_cleanup:
+    if (vOwnStartBasic0)
+    {
+        msfree(*startBasic0);
+        *startBasic0 = 0;
     }
 }
 
