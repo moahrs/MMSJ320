@@ -62,7 +62,7 @@
 #include "mmsjosapi.h"
 #include "basic.h"
 
-#define versionBasic "2.0a08"
+#define versionBasic "2.0a08-mbasic"
 //#define __TESTE_TOKENIZE__ 1
 //#define __DEBUG_ARRAYS__ 1
 
@@ -498,6 +498,446 @@ static void setVariables(void)
     memset(lastVarCacheAddr, 0, sizeof(lastVarCacheAddr));  
 }
 
+typedef struct
+{
+    char name[17];
+    unsigned short line;
+    unsigned short srcLine;
+} MBasicSymbol;
+
+#define MBASIC_MAX_SYMBOLS 128
+#define MBASIC_MAIN_START  40000
+
+static MBasicSymbol mbasicSymbols[MBASIC_MAX_SYMBOLS];
+static int mbasicSymbolCount;
+static unsigned short mbasicProcMainLine;
+
+static char mbasicIsSpace(char c)
+{
+    return c == ' ' || c == '\t';
+}
+
+static char mbasicIsAlpha(char c)
+{
+    c = basToUpper((unsigned char)c);
+    return c >= 'A' && c <= 'Z';
+}
+
+static char mbasicIsDigit(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+static char mbasicIsNameChar(char c)
+{
+    return mbasicIsAlpha(c) || mbasicIsDigit(c) || c == '_';
+}
+
+static char *mbasicTrimLeft(char *s)
+{
+    while (mbasicIsSpace(*s))
+        s++;
+
+    return s;
+}
+
+static void mbasicTrimRight(char *s)
+{
+    int len;
+
+    len = strlen(s);
+    while (len > 0 && mbasicIsSpace(s[len - 1]))
+        s[--len] = 0;
+}
+
+static int mbasicWordEq(const char *s, const char *word)
+{
+    while (*word)
+    {
+        if (basToUpper((unsigned char)*s) != *word)
+            return 0;
+
+        s++;
+        word++;
+    }
+
+    return *s == 0 || mbasicIsSpace(*s);
+}
+
+static void mbasicReadName(char **pp, char *name, int maxLen)
+{
+    int ix;
+    char *p;
+
+    p = mbasicTrimLeft(*pp);
+    ix = 0;
+
+    while (mbasicIsNameChar(*p))
+    {
+        if (ix < maxLen - 1)
+            name[ix++] = basToUpper((unsigned char)*p);
+
+        p++;
+    }
+
+    name[ix] = 0;
+    *pp = p;
+}
+
+static int mbasicFindSymbol(const char *name)
+{
+    int ix;
+
+    for (ix = 0; ix < mbasicSymbolCount; ix++)
+    {
+        if (!strcmp(mbasicSymbols[ix].name, name))
+            return ix;
+    }
+
+    return -1;
+}
+
+static int mbasicAddSymbol(const char *name, unsigned short line, unsigned short srcLine)
+{
+    int ix;
+
+    if (name[0] == 0)
+        return 0;
+
+    ix = mbasicFindSymbol(name);
+    if (ix >= 0)
+    {
+        printText("Duplicate symbol: ");
+        printText((unsigned char *)name);
+        printText("\r\n");
+        return 0;
+    }
+
+    if (mbasicSymbolCount >= MBASIC_MAX_SYMBOLS)
+    {
+        printText("Too many MBASIC symbols\r\n");
+        return 0;
+    }
+
+    strcpy(mbasicSymbols[mbasicSymbolCount].name, name);
+    mbasicSymbols[mbasicSymbolCount].line = line;
+    mbasicSymbols[mbasicSymbolCount].srcLine = srcLine;
+    mbasicSymbolCount++;
+    return 1;
+}
+
+static int mbasicAppend(char *out, unsigned long *outLen, unsigned long outMax, const char *s)
+{
+    unsigned long len;
+
+    len = strlen(s);
+    if (*outLen + len >= outMax)
+    {
+        printText("MBASIC generated program too large\r\n");
+        return 0;
+    }
+
+    memcpy(out + *outLen, s, len);
+    *outLen += len;
+    out[*outLen] = 0;
+    return 1;
+}
+
+static int mbasicAppendLine(char *out, unsigned long *outLen, unsigned long outMax, unsigned short lineNo, const char *body)
+{
+    char num[12];
+
+    itoa(lineNo, num, 10);
+    if (!mbasicAppend(out, outLen, outMax, num)) return 0;
+    if (!mbasicAppend(out, outLen, outMax, " ")) return 0;
+    if (!mbasicAppend(out, outLen, outMax, body)) return 0;
+    return mbasicAppend(out, outLen, outMax, "\r\n");
+}
+
+static int mbasicReadSourceLine(char **pp, char *line, int maxLen)
+{
+    int ix;
+    char *p;
+
+    p = *pp;
+    if (*p == 0 || *p == 0x1A)
+        return 0;
+
+    ix = 0;
+    while (*p && *p != 0x1A && *p != '\r' && *p != '\n')
+    {
+        if (ix < maxLen - 1)
+            line[ix++] = *p;
+
+        p++;
+    }
+
+    line[ix] = 0;
+
+    if (*p == '\r')
+        p++;
+    if (*p == '\n')
+        p++;
+
+    *pp = p;
+    return 1;
+}
+
+static int mbasicLooksNumbered(char *src)
+{
+    char line[256];
+    char *p;
+    char *t;
+
+    p = src;
+    while (mbasicReadSourceLine(&p, line, sizeof(line)))
+    {
+        t = mbasicTrimLeft(line);
+        if (*t == 0)
+            continue;
+
+        return mbasicIsDigit(*t);
+    }
+
+    return 0;
+}
+
+static int mbasicCollectSymbols(char *src)
+{
+    char line[256];
+    char name[17];
+    char *p;
+    char *t;
+    int srcLine;
+    int len;
+
+    mbasicSymbolCount = 0;
+    mbasicProcMainLine = 0;
+    p = src;
+    srcLine = 1;
+
+    while (mbasicReadSourceLine(&p, line, sizeof(line)))
+    {
+        t = mbasicTrimLeft(line);
+        mbasicTrimRight(t);
+
+        if (mbasicWordEq(t, "PROC"))
+        {
+            t += 4;
+            mbasicReadName(&t, name, sizeof(name));
+            if (!mbasicAddSymbol(name, (unsigned short)(srcLine * 10), (unsigned short)srcLine))
+                return 0;
+
+            if (!strcmp(name, "MAIN"))
+                mbasicProcMainLine = (unsigned short)(srcLine * 10);
+        }
+        else
+        {
+            len = strlen(t);
+            if (len > 1 && t[len - 1] == ':')
+            {
+                t[len - 1] = 0;
+                mbasicTrimRight(t);
+                mbasicReadName(&t, name, sizeof(name));
+                if (!mbasicAddSymbol(name, (unsigned short)(srcLine * 10), (unsigned short)srcLine))
+                    return 0;
+            }
+        }
+
+        srcLine++;
+    }
+
+    return 1;
+}
+
+static int mbasicRewriteJump(char *dst, char *src, const char *cmd, unsigned short srcLine)
+{
+    char *p;
+    char name[17];
+    char num[12];
+    int ix;
+
+    p = src + strlen(cmd);
+    p = mbasicTrimLeft(p);
+
+    if (mbasicIsDigit(*p))
+    {
+        strcpy(dst, src);
+        return 1;
+    }
+
+    mbasicReadName(&p, name, sizeof(name));
+    ix = mbasicFindSymbol(name);
+    if (ix < 0)
+    {
+        printText("Undefined symbol at source line ");
+        itoa(srcLine, num, 10);
+        printText(num);
+        printText(": ");
+        printText((unsigned char *)name);
+        printText("\r\n");
+        return 0;
+    }
+
+    strcpy(dst, cmd);
+    strcat(dst, " ");
+    itoa(mbasicSymbols[ix].line, num, 10);
+    strcat(dst, num);
+    strcat(dst, p);
+    return 1;
+}
+
+static int mbasicConvertLine(char *dst, char *src, unsigned short srcLine)
+{
+    char *t;
+    char name[17];
+    char num[12];
+    int ix;
+    int len;
+
+    t = mbasicTrimLeft(src);
+    mbasicTrimRight(t);
+
+    if (*t == 0)
+    {
+        dst[0] = 0;
+        return 1;
+    }
+
+    if (mbasicWordEq(t, "PROC"))
+    {
+        t += 4;
+        mbasicReadName(&t, name, sizeof(name));
+        strcpy(dst, "REM PROC ");
+        strcat(dst, name);
+        return 1;
+    }
+
+    if (mbasicWordEq(t, "ENDPROC"))
+    {
+        strcpy(dst, "RETURN");
+        return 1;
+    }
+
+    if (mbasicWordEq(t, "CALL"))
+    {
+        t += 4;
+        mbasicReadName(&t, name, sizeof(name));
+        ix = mbasicFindSymbol(name);
+        if (ix < 0)
+        {
+            printText("Undefined PROC at source line ");
+            itoa(srcLine, num, 10);
+            printText(num);
+            printText(": ");
+            printText((unsigned char *)name);
+            printText("\r\n");
+            return 0;
+        }
+
+        strcpy(dst, "GOSUB ");
+        itoa(mbasicSymbols[ix].line, num, 10);
+        strcat(dst, num);
+        strcat(dst, t);
+        return 1;
+    }
+
+    if (mbasicWordEq(t, "GOTO"))
+        return mbasicRewriteJump(dst, t, "GOTO", srcLine);
+
+    if (mbasicWordEq(t, "GOSUB"))
+        return mbasicRewriteJump(dst, t, "GOSUB", srcLine);
+
+    len = strlen(t);
+    if (len > 1 && t[len - 1] == ':')
+    {
+        t[len - 1] = 0;
+        mbasicTrimRight(t);
+        strcpy(dst, "REM LABEL ");
+        strcat(dst, t);
+        return 1;
+    }
+
+    strcpy(dst, t);
+    return 1;
+}
+
+static int mbasicConvertStructuredSource(char *src, char *out, unsigned long outMax)
+{
+    char line[256];
+    char converted[256];
+    char *p;
+    char *t;
+    unsigned long outLen;
+    unsigned short srcLine;
+    unsigned short lineNo;
+    unsigned short firstTopLine;
+    int inProc;
+
+    if (mbasicLooksNumbered(src))
+        return 1;
+
+    if (!mbasicCollectSymbols(src))
+        return 0;
+
+    outLen = 0;
+    out[0] = 0;
+
+    if (mbasicProcMainLine)
+    {
+        strcpy(converted, "GOSUB ");
+        itoa(mbasicProcMainLine, line, 10);
+        strcat(converted, line);
+        if (!mbasicAppendLine(out, &outLen, outMax, 1, converted)) return 0;
+        if (!mbasicAppendLine(out, &outLen, outMax, 2, "END")) return 0;
+    }
+    else
+    {
+        firstTopLine = MBASIC_MAIN_START + 1;
+        strcpy(converted, "GOTO ");
+        itoa(firstTopLine, line, 10);
+        strcat(converted, line);
+        if (!mbasicAppendLine(out, &outLen, outMax, 1, converted)) return 0;
+    }
+
+    p = src;
+    srcLine = 1;
+    firstTopLine = 1;
+    inProc = 0;
+
+    while (mbasicReadSourceLine(&p, line, sizeof(line)))
+    {
+        t = mbasicTrimLeft(line);
+        mbasicTrimRight(t);
+
+        if (!mbasicConvertLine(converted, line, srcLine))
+            return 0;
+
+        if (converted[0] != 0)
+        {
+            if (mbasicProcMainLine || inProc || mbasicWordEq(converted, "REM PROC") || mbasicWordEq(converted, "RETURN"))
+                lineNo = (unsigned short)(srcLine * 10);
+            else
+                lineNo = (unsigned short)(MBASIC_MAIN_START + srcLine);
+
+            if (!mbasicAppendLine(out, &outLen, outMax, lineNo, converted))
+                return 0;
+        }
+
+        if (mbasicWordEq(t, "PROC"))
+            inProc = 1;
+        else if (mbasicWordEq(t, "ENDPROC"))
+            inProc = 0;
+
+        srcLine++;
+    }
+
+    if (!mbasicAppend(out, &outLen, outMax, "\x1A"))
+        return 0;
+
+    return 1;
+}
+
 //-----------------------------------------------------------------------------
 // Principal
 //-----------------------------------------------------------------------------
@@ -509,6 +949,7 @@ void main(void)
     unsigned char *vTemp;
     unsigned char *vBufptr = &vbufInput;
     unsigned char sqtdtam[20];
+    unsigned char *vConvBuf;
 
     // Timer para o Random
     *(vmfp + Reg_TADR) = 0xF5;  // 245
@@ -579,7 +1020,7 @@ void main(void)
         else
             printText("\r\n\0");
 
-        printText("MMSJ-BASIC v"versionBasic);
+        printText("MMSJ-MBASIC v"versionBasic);
         printText("\r\n\0");
 
         printText("Utility (c) 2022-2026\r\n\0");
@@ -611,6 +1052,12 @@ void main(void)
 
     if (*paramBasic == 0x00)
     {
+        if (*startBasic == 1)
+        {
+            printText("Usage: MBASIC <file>\r\n\0");
+            return;
+        }
+
         #ifdef INPUT_BASIC_TELA
             vdpEditLine[0] = 0x00;
             vdpEditLineLen = 0;
@@ -699,6 +1146,28 @@ void main(void)
         loadFile(paramBasic, (unsigned long*)pStartXBasLoad);
         if (!verro)
         {
+            if (!mbasicLooksNumbered((char *)pStartXBasLoad))
+            {
+                if (*startBasic != 2)
+                    printText("Converting...\r\n");
+
+                vConvBuf = (unsigned char *)malloc(vMemTotalXBasLoad);
+                if (!vConvBuf)
+                {
+                    printText("No memory for MBASIC conversion\r\n");
+                    return;
+                }
+
+                if (!mbasicConvertStructuredSource((char *)pStartXBasLoad, (char *)vConvBuf, vMemTotalXBasLoad))
+                {
+                    free(vConvBuf);
+                    return;
+                }
+
+                memcpy((void *)pStartXBasLoad, vConvBuf, vMemTotalXBasLoad);
+                free(vConvBuf);
+            }
+
             // Processar
             if (*startBasic != 2)
             {

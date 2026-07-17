@@ -42,6 +42,7 @@ unsigned char endhighmsb;
 unsigned char RetByte;       // Para armazenar o valor recebido da Porta Paralela.
 unsigned char RetInput[2], RetErro; 
 unsigned char showVerb = 0;
+unsigned char verifyOnly = 0;
 
 HANDLE hSerial = NULL;
 
@@ -60,38 +61,35 @@ int main(int argc, char *argv[])
   FILE *fp;
 	char xfilebin[100] = "d:\\projetos\\mmsj320\\";
 	int vnumFF = 0, verro, vnumerros, vsendlsb, vsendmsb, vsendhighmsb, vsenddados;
+	int byteRead;
 	unsigned char dados, dadosf;
 	unsigned char dadosrec;
-  string argum;
+  string argum = "000000";
   
-	if (argc < 5)
-	{
-        if (argc < 3) 
-        {
-            printf("Erro. Nao foi passado o programa a ser enviado.\n");
-            printf("Sintaxe: sendromword2 <nome do arquivo> <msb/lsb> [endinic]\n");
-            printf("         <nome do arquivo> - nome do arquivo a importar com .bin\n");
-            printf("         <lsb/msb/word> - lsb - grava dado LSB (grava no chip com 0xFE)\n");
-            printf("                          msb - grava dado MSB (grava no chip com 0xFF)\n");
-            printf("                          word - envia todos os dados na ordem que sao lidos (grava em ambos os chips)\n");
-            printf("         [endinic] - em hex no formato 999999. Default 000000\n");
-            printf("         [verb] -saida detalhado\n");
-            return 0;
-      	}
-  	    else if (argc < 4)
-        {
-      	    argum = "000000";
-        }
-        else 
-        {
-            argum = argv[3];
-        } 
-    }
-	else
-    {
-        if (strcmp(argv[4],"verb") == 0)
-            showVerb = 1;
-    }
+  if (argc < 3)
+  {
+      printf("Erro. Nao foi passado o programa a ser enviado.\n");
+      printf("Sintaxe: sendromword2 <nome do arquivo> <msb/lsb/word> [endinic] [verify] [verb]\n");
+      printf("         <nome do arquivo> - nome do arquivo a importar com .bin\n");
+      printf("         <lsb/msb/word> - lsb - grava/verifica dado LSB (chip 0xFE)\n");
+      printf("                          msb - grava/verifica dado MSB (chip 0xFF)\n");
+      printf("                          word - envia todos os dados na ordem que sao lidos\n");
+      printf("         [endinic] - em hex no formato 999999. Default 000000\n");
+      printf("         [verify] - somente le e compara a flash, nao grava\n");
+      printf("         [verb] - saida detalhada\n");
+      return 0;
+  }
+
+  if (argc >= 4)
+      argum = argv[3];
+
+  for (int i = 4; i < argc; i++)
+  {
+      if (strcmp(argv[i],"verb") == 0)
+          showVerb = 1;
+      else if (strcmp(argv[i],"verify") == 0)
+          verifyOnly = 1;
+  }
 
 	// Variaveis de Saida
 	clrscr();
@@ -114,6 +112,16 @@ int main(int argc, char *argv[])
 	
 	if (RetInput[0] != 0xDD || RetInput[1] != 0xDD)
 		vnumFF = 255;
+  else
+  {
+      EnviaCtrl(verifyOnly ? 0x56 : 0x57);
+      RecebeComando();
+      if (RetInput[0] != 0xEE || RetInput[1] != 0x69)
+      {
+          printf(">Modo nao confirmado pelo Arduino. Recebido %02X:%02X.\n", RetInput[0], RetInput[1]);
+          vnumFF = 255;
+      }
+  }
 
 	// Gravar Dados
 	if (vnumFF == 0) 
@@ -142,17 +150,14 @@ int main(int argc, char *argv[])
 	vsendhighmsb = 0;
     vsenddados = 0;
 
-    printf(">Enviando Dados.\n");
+    if (verifyOnly)
+      printf(">Verificando Dados.\n");
+    else
+      printf(">Enviando Dados.\n");
     
-  	while (!feof(fp) && vnumFF <= 20)
+  	while ((byteRead = getc(fp)) != EOF)
   	{
-  		dadosf = getc(fp);
-  		
-  		if (dados == 0xFF)
-  			vnumFF += 1;
-  
-  		if (dados != 0xFF)
-  			vnumFF = 0;
+  		dadosf = (unsigned char)byteRead;
 
       if (!vsendlsb || !vsendmsb || !vsendhighmsb || (strcmp(argv[2],"word") == 0) || (strcmp(argv[2],"lsb") == 0 && (endlsb & 0x01) == 0) || (strcmp(argv[2],"msb") == 0 && (endlsb & 0x01) == 1)) 
       {        
@@ -191,9 +196,10 @@ int main(int argc, char *argv[])
               printf(".");
     
       		  // Compara pra ver se Dado Enviado e Recebido est�o Iguais 
-      		  if (RetInput[1] != dados && showVerb) 
+      		  if (RetInput[0] != 0xDD || RetInput[1] != dados)
               {
-      		  	printf(" --> Erro Leitura. Leu %02X %02X\n", RetInput[1], RetByte);
+                if (showVerb)
+      		  	  printf(" --> Erro Leitura. Leu %02X %02X\n", RetInput[1], RetByte);
                 RetErro++;
                 if (RetErro >= 0x03) 
                 {
@@ -259,7 +265,10 @@ int main(int argc, char *argv[])
   	TerminaSerial();
   
   	printf(">Dados Enviados.\n");
-	printf(">Programacao Concluida. Bom Teste.\n");
+  if (verifyOnly)
+    printf(">Verificacao Concluida.\n");
+  else
+	  printf(">Programacao Concluida. Bom Teste.\n");
   }
   
 	return(0);
@@ -340,11 +349,16 @@ DWORD EnviaCtrl(unsigned char sbyte){
 
 // aguarda recebimento de 2 bytes
 DWORD RecebeComando(){ 
-	DWORD BytesLidos = 0; 
+	DWORD BytesLidos = 0;
+	DWORD TotalLidos = 0;
 
-	ReadFile( hSerial, RetInput, 2, &BytesLidos, NULL ); 
+	while (TotalLidos < 2)
+	{
+		ReadFile( hSerial, RetInput + TotalLidos, 2 - TotalLidos, &BytesLidos, NULL );
+		TotalLidos += BytesLidos;
+	}
 
-	return BytesLidos;
+	return TotalLidos;
 } 
 
 DWORD RecebeByte(){ 
