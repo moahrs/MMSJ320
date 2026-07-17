@@ -569,8 +569,15 @@ typedef struct
     unsigned short endifSrcLine;
 } MBasicIfBlock;
 
+typedef struct
+{
+    unsigned short internalLine;
+    unsigned short sourceLine;
+} MBasicLineMap;
+
 #define MBASIC_MAX_SYMBOLS 128
 #define MBASIC_MAX_IF_BLOCKS 64
+#define MBASIC_MAX_LINE_MAP 768
 #define MBASIC_MAIN_START  40000
 
 static MBasicSymbol mbasicSymbols[MBASIC_MAX_SYMBOLS];
@@ -578,6 +585,39 @@ static int mbasicSymbolCount;
 static unsigned short mbasicProcMainLine;
 static MBasicIfBlock mbasicIfBlocks[MBASIC_MAX_IF_BLOCKS];
 static int mbasicIfBlockCount;
+static MBasicLineMap mbasicLineMap[MBASIC_MAX_LINE_MAP];
+static int mbasicLineMapCount;
+
+static void mbasicLineMapReset(void)
+{
+    mbasicLineMapCount = 0;
+}
+
+static void mbasicLineMapAdd(unsigned short internalLine, unsigned short sourceLine)
+{
+    if (!internalLine || !sourceLine)
+        return;
+
+    if (mbasicLineMapCount >= MBASIC_MAX_LINE_MAP)
+        return;
+
+    mbasicLineMap[mbasicLineMapCount].internalLine = internalLine;
+    mbasicLineMap[mbasicLineMapCount].sourceLine = sourceLine;
+    mbasicLineMapCount++;
+}
+
+static unsigned short mbasicLineMapFind(unsigned short internalLine)
+{
+    int ix;
+
+    for (ix = 0; ix < mbasicLineMapCount; ix++)
+    {
+        if (mbasicLineMap[ix].internalLine == internalLine)
+            return mbasicLineMap[ix].sourceLine;
+    }
+
+    return internalLine;
+}
 
 static char mbasicIsSpace(char c)
 {
@@ -1486,6 +1526,8 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
     int blockIx;
     char jumpLine[64];
 
+    mbasicLineMapReset();
+
     if (mbasicLooksNumbered(src))
         return 1;
 
@@ -1506,7 +1548,9 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
         itoa(mbasicProcMainLine, line, 10);
         strcat(converted, line);
         if (!mbasicAppendLine(out, &outLen, outMax, 1, converted)) return 0;
+        mbasicLineMapAdd(1, 1);
         if (!mbasicAppendLine(out, &outLen, outMax, 2, "END")) return 0;
+        mbasicLineMapAdd(2, 1);
     }
     else
     {
@@ -1515,6 +1559,7 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
         itoa(firstTopLine, line, 10);
         strcat(converted, line);
         if (!mbasicAppendLine(out, &outLen, outMax, 1, converted)) return 0;
+        mbasicLineMapAdd(1, 1);
     }
 
     p = src;
@@ -1539,6 +1584,7 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
                 strcat(jumpLine, line);
                 if (!mbasicAppendLine(out, &outLen, outMax, (unsigned short)(lineNo - 1), jumpLine))
                     return 0;
+                mbasicLineMapAdd((unsigned short)(lineNo - 1), srcLine);
             }
         }
 
@@ -1549,11 +1595,13 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
         {
             if (!mbasicAppendLine(out, &outLen, outMax, lineNo, converted))
                 return 0;
+            mbasicLineMapAdd(lineNo, srcLine);
 
             if (mbasicIsBlockIf(t, line, sizeof(line)))
             {
                 if (!mbasicAppendLine(out, &outLen, outMax, (unsigned short)(lineNo + 1), "REM THEN"))
                     return 0;
+                mbasicLineMapAdd((unsigned short)(lineNo + 1), srcLine);
             }
         }
 
@@ -3593,16 +3641,26 @@ writeLongSerial("\r\n");
 void showErrorMessage(unsigned int pError, unsigned int pNumLine)
 {
     char sNumLin [sizeof(short)*8+1];
+    unsigned short vSrcLine;
 
     printText("\r\n");
     printText(listError[pError]);
 
     if (pNumLine > 0)
     {
-        itoa(pNumLine, sNumLin, 10);
+        vSrcLine = mbasicLineMapFind((unsigned short)pNumLine);
+        itoa(vSrcLine, sNumLin, 10);
 
         printText(" at ");
         printText(sNumLin);
+
+        if (vSrcLine != pNumLine)
+        {
+            itoa(pNumLine, sNumLin, 10);
+            printText(" [internal ");
+            printText(sNumLin);
+            printText("]");
+        }
     }
 
     printText(" !\r\n\0");
