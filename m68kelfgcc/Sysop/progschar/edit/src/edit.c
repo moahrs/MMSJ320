@@ -93,6 +93,90 @@ static unsigned long noteAlign4(unsigned long value)
     return (value + 3UL) & 0xFFFFFFFCUL;
 }
 
+static unsigned long edMbasicEntry = 0;
+static unsigned long edMbasicBuf = 0;
+
+static unsigned char edIsSpaceOrLineBreak(char c)
+{
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static unsigned char edBasLooksStructured(void)
+{
+    char *p;
+
+    p = edFileBuf;
+    while (*p && edIsSpaceOrLineBreak(*p))
+        p++;
+
+    if (*p >= '0' && *p <= '9')
+        return 0;
+
+    return 1;
+}
+
+static int edLoadResidentMbasic(void)
+{
+    static char *mbasicPaths[] =
+    {
+        "/MBASIC/MBASIC.EXE",
+        "/MGUI/PROGS/MBASIC.EXE",
+        "/MBASIC.EXE",
+        "MBASIC.EXE",
+        0
+    };
+    int ix;
+
+    if (edMbasicEntry && edMbasicBuf)
+        return 1;
+
+    for (ix = 0; mbasicPaths[ix]; ix++)
+    {
+        if (loadMbinResident(mbasicPaths[ix], &edMbasicEntry, &edMbasicBuf) == 0)
+            return 1;
+    }
+
+    edMbasicEntry = 0;
+    edMbasicBuf = 0;
+    return 0;
+}
+
+static void edFreeResidentMbasic(void)
+{
+    if (edMbasicBuf)
+    {
+        msfree((void *)edMbasicBuf);
+        edMbasicBuf = 0;
+        edMbasicEntry = 0;
+    }
+}
+
+static void edRunBasicFile(void)
+{
+    unsigned char oldParam[256];
+    char runCmd[128];
+
+    if (edBasLooksStructured() && edLoadResidentMbasic())
+    {
+        strcpy((char *)oldParam, (char *)paramBasic);
+        strcpy((char *)paramBasic, edFileName);
+
+        clearScr();
+        runMbinResident(edMbasicBuf);
+        clearScr();
+
+        strcpy((char *)paramBasic, (char *)oldParam);
+        return;
+    }
+
+    strcpy(runCmd, "BASIC ");
+    strcat(runCmd, edFileName);
+
+    clearScr();
+    fsOsCommand(runCmd);
+    clearScr();
+}
+
 //-------------------------------------------------------------------
 void main(void)
 {
@@ -176,6 +260,7 @@ void main(void)
 
     clearScr();
 
+    edFreeResidentMbasic();
     msfree(edFileBuf);
     edFileBuf = 0;
 
@@ -1406,12 +1491,7 @@ void edLoop(char *filename)
                         {
                             if (!edDirty || (edDirty && edSaveFile()))
                             {
-                                strcpy(cRunAux, "BASIC ");
-                                strcat(cRunAux, edFileName);
-
-                                clearScr();
-                                fsOsCommand(cRunAux);
-                                clearScr();
+                                edRunBasicFile();
                             }    
                         }
                     }

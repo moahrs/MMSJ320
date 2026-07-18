@@ -1525,6 +1525,8 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
     int structuredArea;
     int blockIx;
     char jumpLine[64];
+    char num[12];
+    char cond[180];
 
     mbasicLineMapReset();
 
@@ -1545,8 +1547,8 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
     if (mbasicProcMainLine)
     {
         strcpy(converted, "GOSUB ");
-        itoa(mbasicProcMainLine, line, 10);
-        strcat(converted, line);
+        itoa(mbasicProcMainLine, num, 10);
+        strcat(converted, num);
         if (!mbasicAppendLine(out, &outLen, outMax, 1, converted)) return 0;
         mbasicLineMapAdd(1, 1);
         if (!mbasicAppendLine(out, &outLen, outMax, 2, "END")) return 0;
@@ -1556,8 +1558,8 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
     {
         firstTopLine = mbasicSourceLineNumber(1, 0);
         strcpy(converted, "GOTO ");
-        itoa(firstTopLine, line, 10);
-        strcat(converted, line);
+        itoa(firstTopLine, num, 10);
+        strcat(converted, num);
         if (!mbasicAppendLine(out, &outLen, outMax, 1, converted)) return 0;
         mbasicLineMapAdd(1, 1);
     }
@@ -1580,8 +1582,8 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
             if (blockIx >= 0)
             {
                 strcpy(jumpLine, "GOTO ");
-                itoa(mbasicSourceLineNumber(mbasicIfBlocks[blockIx].endifSrcLine, structuredArea), line, 10);
-                strcat(jumpLine, line);
+                itoa(mbasicSourceLineNumber(mbasicIfBlocks[blockIx].endifSrcLine, structuredArea), num, 10);
+                strcat(jumpLine, num);
                 if (!mbasicAppendLine(out, &outLen, outMax, (unsigned short)(lineNo - 1), jumpLine))
                     return 0;
                 mbasicLineMapAdd((unsigned short)(lineNo - 1), srcLine);
@@ -1597,7 +1599,7 @@ static int mbasicConvertStructuredSource(char *src, char *out, unsigned long out
                 return 0;
             mbasicLineMapAdd(lineNo, srcLine);
 
-            if (mbasicIsBlockIf(t, line, sizeof(line)))
+            if (mbasicIsBlockIf(t, cond, sizeof(cond)))
             {
                 if (!mbasicAppendLine(out, &outLen, outMax, (unsigned short)(lineNo + 1), "REM THEN"))
                     return 0;
@@ -1661,55 +1663,23 @@ static void mbasicPrintConvertedSource(unsigned char *src)
 
 static void mbasicSaveDebugSource(unsigned char *src)
 {
-    unsigned long oldCluster;
-    unsigned long offset;
-    unsigned short len;
-    unsigned short chunk;
     unsigned char *p;
+    unsigned long len;
     char fileName[16];
 
-    strcpy(fileName, "MBASICDBG.BAS");
-    oldCluster = fsGetClusterDir();
-    fsChangeDir("/");
-
-    if (fsOpenFile(fileName) == RETURN_OK)
-        fsDelFile(fileName);
-
-    if (fsCreateFile(fileName) != RETURN_OK)
-    {
-        fsSetClusterDir(oldCluster);
-        printText("Error creating MBASICDBG.BAS\r\n");
-        return;
-    }
-
+    strcpy(fileName, "MBASICDB.BAS");
     p = src;
     len = 0;
     while (p[len] && p[len] != 0x1A)
         len++;
 
-    offset = 0;
-    while (len)
+    if (saveFile((unsigned char *)fileName, p, len) != RETURN_OK)
     {
-        chunk = len;
-        if (chunk > 128)
-            chunk = 128;
-
-        if (fsWriteFile(fileName, offset, p, (unsigned char)chunk) != RETURN_OK)
-        {
-            fsCloseFile(fileName, 0);
-            fsSetClusterDir(oldCluster);
-            printText("Error writing MBASICDBG.BAS\r\n");
-            return;
-        }
-
-        offset += chunk;
-        p += chunk;
-        len -= chunk;
+        printText("Error saving MBASICDB.BAS\r\n");
+        return;
     }
 
-    fsCloseFile(fileName, 1);
-    fsSetClusterDir(oldCluster);
-    printText("Saved /MBASICDBG.BAS\r\n");
+    printText("Saved MBASICDB.BAS\r\n");
 }
 
 //-----------------------------------------------------------------------------
@@ -3855,6 +3825,8 @@ int executeToken(unsigned char pToken)
             vReta = basReturn();
             break;
         case 0x8C:  // REM - Ignora todas a linha depois dele
+            while (*(unsigned char *)(*pointerRunProg))
+                *pointerRunProg = *pointerRunProg + 1;
             vReta = 0;
             break;
         case 0x8D:  // SPRITESET

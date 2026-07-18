@@ -39,6 +39,7 @@ typedef void *(*msmallocType)(unsigned long size);
 typedef void *(*msreallocType)(void *ptr, unsigned long newSize);
 typedef void (*msfreeType)(void *ptr);
 typedef int (*loadMbinAndRunType)(char *filename, char porig);
+typedef int (*loadMbinResidentType)(char *filename, unsigned long *entry, unsigned long *residentBuf);
 typedef int (*readFontStructType)(unsigned char *file, unsigned long fileSize, FON_INFO *info);
 typedef void (*fsListDirType)(FILES_DIR * dir, unsigned char *param);
 typedef unsigned char (*setFontUseG2Type)(unsigned char *nameFile);
@@ -49,6 +50,7 @@ typedef int (*getFontUseG2Type)(MGUI_SET_FONT *fonInfo);
 typedef void (*setModeVideoOSType)(unsigned char mode);
 typedef unsigned char (*getModeVideoOSType)(void);
 typedef void (*setColorVideoG2Type)(unsigned char fgcolor, unsigned char bgcolor);
+typedef int (*runMbinResidentType)(unsigned long residentBuf);
 
 // MGUI Struct for Functions
 typedef void (*writesxyType)(unsigned short x, unsigned short y, unsigned char sizef, unsigned char *msgs, unsigned short pcolor, unsigned short pbcolor);
@@ -129,6 +131,8 @@ typedef void (*comboboxType)(unsigned char id, unsigned char* vopt, unsigned cha
 #define setModeVideoOS ((setModeVideoOSType *)(unsigned long)MMSJOS_FUNC_TABLE)[38] // Índice da função
 #define getModeVideoOS ((getModeVideoOSType *)(unsigned long)MMSJOS_FUNC_TABLE)[39] // Índice da função
 #define setColorVideoG2 ((setColorVideoG2Type *)(unsigned long)MMSJOS_FUNC_TABLE)[40] // Índice da função
+#define loadMbinResident ((loadMbinResidentType *)(unsigned long)MMSJOS_FUNC_TABLE)[41] // Índice da função
+#define runMbinResident ((runMbinResidentType *)(unsigned long)MMSJOS_FUNC_TABLE)[42] // Índice da função
 
 // MGUI define functions
 #define writesxy ((writesxyType *)(unsigned long)MGUI_FUNC_TABLE)[0] // Índice da função

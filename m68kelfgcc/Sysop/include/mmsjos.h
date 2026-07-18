@@ -393,6 +393,8 @@ extern void mprintf(const char *fmt, ...);
 
 #ifdef USE_RELOC_LOAD_PROGS
 extern int loadMbinAndRun(char *filename, char porig);
+extern int loadMbinResident(char *filename, unsigned long *entry, unsigned long *residentBuf);
+extern int runMbinResident(unsigned long residentBuf);
 #endif
 
 #ifdef __SO_ST_MFP__

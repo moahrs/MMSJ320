@@ -138,6 +138,122 @@ typedef struct
 
 typedef void (*PROG_ENTRY)(void);
 
+int loadMbinResident(char *filename, unsigned long *entry, unsigned long *residentBuf)
+{
+    MBIN_HEADER h;
+    unsigned char *fileBuf;
+    unsigned char *codeBase;
+    unsigned char *relocPtr;
+    unsigned long fullBufSize;
+    unsigned long fullFileSize;
+    unsigned long i;
+    unsigned long relocOffset;
+    unsigned long *pFix;
+    unsigned char *vEnderExec;
+
+    if (entry)
+        *entry = 0;
+
+    if (residentBuf)
+        *residentBuf = 0;
+
+    if (!entry || !residentBuf)
+        return -20;
+
+    loadFileSize(filename, &h, sizeof(MBIN_HEADER));
+
+    if (h.magic[0] != 'E' ||
+        h.magic[1] != 'X' ||
+        h.magic[2] != 'E' ||
+        h.magic[3] != ' ')
+    {
+        return -1;
+    }
+
+    fullFileSize = sizeof(MBIN_HEADER) + h.textDataSize + h.relocCount * 4UL;
+    fullBufSize = sizeof(MBIN_HEADER) + h.textDataSize + h.bssSize;
+
+    if (fullFileSize > fullBufSize)
+        fullBufSize = fullFileSize;
+
+    fileBuf = msmalloc(fullBufSize);
+    if (!fileBuf)
+        return -2;
+
+    if (loadFileSize(filename, fileBuf, fullFileSize) != fullFileSize)
+    {
+        msfree(fileBuf);
+        return -3;
+    }
+
+    codeBase = fileBuf + sizeof(MBIN_HEADER);
+    relocPtr = codeBase + h.textDataSize;
+
+    for (i = 0; i < h.relocCount; i++)
+    {
+        relocOffset = *(unsigned long *)(relocPtr + i * 4UL);
+
+        if (relocOffset + 4 > h.textDataSize)
+        {
+            msfree(fileBuf);
+            return -11;
+        }
+
+        pFix = (unsigned long *)(codeBase + relocOffset);
+        *pFix = *pFix + (unsigned long)codeBase;
+    }
+
+    memset(codeBase + h.textDataSize, 0, h.bssSize);
+
+    vEnderExec = codeBase + h.entryOffset;
+    if (((unsigned long)vEnderExec & 1) != 0)
+    {
+        msfree(fileBuf);
+        return -10;
+    }
+
+    *entry = (unsigned long)vEnderExec;
+    *residentBuf = (unsigned long)fileBuf;
+    return 0;
+}
+
+int runMbinResident(unsigned long residentBuf)
+{
+    MBIN_HEADER *h;
+    unsigned char *codeBase;
+    unsigned char *vEnderExec;
+    unsigned char telnetWasEnabled;
+
+    if (!residentBuf)
+        return -1;
+
+    h = (MBIN_HEADER *)residentBuf;
+    if (h->magic[0] != 'E' ||
+        h->magic[1] != 'X' ||
+        h->magic[2] != 'E' ||
+        h->magic[3] != ' ')
+    {
+        return -2;
+    }
+
+    codeBase = ((unsigned char *)residentBuf) + sizeof(MBIN_HEADER);
+    memset(codeBase + h->textDataSize, 0, h->bssSize);
+
+    vEnderExec = codeBase + h->entryOffset;
+    if (((unsigned long)vEnderExec & 1) != 0)
+        return -10;
+
+    if (telnetConsoleActive())
+        telnetWasEnabled = 0;
+    else
+        telnetWasEnabled = telnetSuspend();
+
+    runFromOsCmd((unsigned long)vEnderExec);
+    telnetResume(telnetWasEnabled);
+
+    return 0;
+}
+
 int loadMbinAndRun(char *filename, char porig)
 {
     MBIN_HEADER h;
