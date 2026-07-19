@@ -2071,6 +2071,10 @@ writeLongSerial("\r\n\0");*/
                 else
                     vretfat = fsLoadSerialToRun(linhaarg);  // Carrega da Serial para o Arquivo
             }
+            else if (!strcmp(linhacomando,"RTCRESET") && iy == 8)
+            {
+                funcRtcReset();
+            }
             else if (!strcmp(linhacomando,"DATE") && iy == 4)
             {
                 funcDate(linhaarg);
@@ -4898,6 +4902,27 @@ int parse_time_arg(unsigned char *stime, int *hour, int *minute, int *second)
     *second = parsed_second;
 
     return 1;
+}
+
+
+//----------------------------------------------------------------------------=
+void funcRtcReset(void)
+{
+    DateTimeData system_clock;
+    int status;
+
+    system_clock.day         = 12; 
+    system_clock.month       = 12;
+    system_clock.year        = 2012; 
+    system_clock.hours       = 12;
+    system_clock.minutes     = 12;
+    system_clock.seconds     = 12;
+
+    if (rtc_set_datetime(&system_clock) != 0) 
+    {
+        mprintf("Error Updating Date\r\n");
+        return;
+    }
 }
 
 //-----------------------------------------------------------------------------
