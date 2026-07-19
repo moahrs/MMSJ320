@@ -11606,18 +11606,41 @@ static void basDrawLineSegment(unsigned char x0, unsigned char y0, unsigned char
     }
 }
 
+static void basDrawSkipSpaces(unsigned char *pCmd, int *pPos)
+{
+    while (pCmd[*pPos] == ' ')
+        (*pPos)++;
+}
+
+static int basDrawNumberHasSign(unsigned char *pCmd, int pos)
+{
+    while (pCmd[pos] == ' ')
+        pos++;
+
+    return (pCmd[pos] == '+' || pCmd[pos] == '-');
+}
+
 static int basDrawReadNumber(unsigned char *pCmd, int *pPos, int *pValue)
 {
     int pos;
     int val;
     int found;
+    int sign;
 
     pos = *pPos;
     val = 0;
     found = 0;
+    sign = 1;
 
-    while (pCmd[pos] == ' ')
+    basDrawSkipSpaces(pCmd, &pos);
+
+    if (pCmd[pos] == '+' || pCmd[pos] == '-')
+    {
+        if (pCmd[pos] == '-')
+            sign = -1;
+
         pos++;
+    }
 
     while (pCmd[pos] >= '0' && pCmd[pos] <= '9')
     {
@@ -11630,7 +11653,7 @@ static int basDrawReadNumber(unsigned char *pCmd, int *pPos, int *pValue)
         return 0;
 
     *pPos = pos;
-    *pValue = val;
+    *pValue = val * sign;
 
     return 1;
 }
@@ -11647,11 +11670,14 @@ int basDraw(void)
     unsigned char cmd[260];
     int pos = 0;
     int moveOnly = 0;
+    int returnAfter = 0;
     int step = 0;
     int nx = 0;
     int ny = 0;
     int px = 0;
     int py = 0;
+    int signedX = 0;
+    int signedY = 0;
     int hasNum;
     int c;
 
@@ -11703,6 +11729,13 @@ int basDraw(void)
             continue;
         }
 
+        if (c == 'N')
+        {
+            returnAfter = 1;
+            pos++;
+            continue;
+        }
+
         pos++;
 
         if (c == 'C')
@@ -11720,14 +11753,15 @@ int basDraw(void)
 
         if (c == 'M')
         {
+            signedX = basDrawNumberHasSign(cmd, pos);
+
             if (!basDrawReadNumber(cmd, &pos, &nx))
             {
                 *vErroProc = 18;
                 return 0;
             }
 
-            while (cmd[pos] == ' ')
-                pos++;
+            basDrawSkipSpaces(cmd, &pos);
 
             if (cmd[pos] != ',')
             {
@@ -11736,6 +11770,7 @@ int basDraw(void)
             }
 
             pos++;
+            signedY = basDrawNumberHasSign(cmd, pos);
 
             if (!basDrawReadNumber(cmd, &pos, &ny))
             {
@@ -11745,6 +11780,13 @@ int basDraw(void)
 
             px = *lastHgrX;
             py = *lastHgrY;
+
+            if (signedX)
+                nx += px;
+
+            if (signedY)
+                ny += py;
+
             *lastHgrX = basDrawClampX(nx);
             *lastHgrY = basDrawClampY(ny);
 
@@ -11752,6 +11794,12 @@ int basDraw(void)
                 basDrawLineSegment((unsigned char)px, (unsigned char)py, *lastHgrX, *lastHgrY, fgcolorBas);
 
             moveOnly = 0;
+            if (returnAfter)
+            {
+                *lastHgrX = (unsigned char)px;
+                *lastHgrY = (unsigned char)py;
+                returnAfter = 0;
+            }
             continue;
         }
 
@@ -11786,6 +11834,12 @@ int basDraw(void)
             basDrawLineSegment((unsigned char)px, (unsigned char)py, *lastHgrX, *lastHgrY, fgcolorBas);
 
         moveOnly = 0;
+        if (returnAfter)
+        {
+            *lastHgrX = (unsigned char)px;
+            *lastHgrY = (unsigned char)py;
+            returnAfter = 0;
+        }
     }
 
     *value_type = '%';
