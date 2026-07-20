@@ -15,7 +15,8 @@
 #define X_TIMEOUT_CHAR       350000L
 #define X_RETRY_MAX          10
 #define X_START_RETRY_MAX    25
-#define X_START_BURST        6
+#define X_START_BURST        1
+#define X_USE_1K             0
 
 #ifndef MFTP_XFER_MAX
 #define MFTP_XFER_MAX        262144UL
@@ -686,7 +687,7 @@ static int mftpSendFile(char *fileName)
             return 0;
         }
 
-        if (((unsigned long)fileSize - pos) > 128UL)
+        if (X_USE_1K && ((unsigned long)fileSize - pos) > 128UL)
             blockLen = 1024;
         else
             blockLen = 128;

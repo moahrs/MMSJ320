@@ -32,49 +32,16 @@
 
 #define X_BLOCK_128   128
 #define X_BLOCK_1K    1024
+#define X_USE_1K      0
 #define X_RETRY_MAX   10
 
 #define NET_TIMEOUT_SHORT_MS   100
 #define NET_CONNECT_TIMEOUT_MS 8000
 #define X_TIMEOUT_FIRST_MS     90000
 #define X_TIMEOUT_CHAR_MS      9000
-#define X_TIMEOUT_ACK_MS       90000
+#define X_TIMEOUT_ACK_MS       10000
 
 static SOCKET gSock = INVALID_SOCKET;
-
-static void tcpClose(void);
-
-static int isIpv4Literal(const char *host)
-{
-    const char *p;
-    int dots;
-
-    dots = 0;
-    for (p = host; *p; p++)
-    {
-        if (*p == '.')
-        {
-            dots++;
-            continue;
-        }
-
-        if (!isdigit((unsigned char)*p))
-            return 0;
-    }
-
-    return dots == 3 && inet_addr(host) != INADDR_NONE;
-}
-
-static void clearArpEntry(const char *host)
-{
-    char cmd[96];
-
-    if (!isIpv4Literal(host))
-        return;
-
-    sprintf(cmd, "arp -d %s >nul 2>nul", host);
-    system(cmd);
-}
 
 static int strieq(const char *a, const char *b)
 {
@@ -196,7 +163,6 @@ static int tcpConnect(const char *host, unsigned short port)
         if (!he)
         {
             printf("Host nao encontrado: %s\n", host);
-            tcpClose();
             return 0;
         }
         memcpy(&addr.sin_addr, he->h_addr, he->h_length);
@@ -216,7 +182,6 @@ static int tcpConnect(const char *host, unsigned short port)
         if (err != WSAEWOULDBLOCK)
         {
             printf("Erro conectando em %s:%u.\n", host, port);
-            tcpClose();
             return 0;
         }
 
@@ -232,7 +197,6 @@ static int tcpConnect(const char *host, unsigned short port)
         if (sel <= 0 || FD_ISSET(gSock, &exceptSet))
         {
             printf("Timeout conectando em %s:%u.\n", host, port);
-            tcpClose();
             return 0;
         }
 
@@ -242,7 +206,6 @@ static int tcpConnect(const char *host, unsigned short port)
         if (err != 0)
         {
             printf("Erro conectando em %s:%u.\n", host, port);
-            tcpClose();
             return 0;
         }
     }
@@ -285,6 +248,27 @@ static int netReadByteTimeout(unsigned char *c, DWORD timeoutMs)
 
     r = recv(gSock, (char *)c, 1, 0);
     return r == 1;
+}
+
+static int xmodemReadResponse(unsigned char *resp, DWORD timeoutMs)
+{
+    unsigned char c;
+    DWORD start;
+
+    start = GetTickCount();
+    while ((GetTickCount() - start) < timeoutMs)
+    {
+        if (!netReadByteTimeout(&c, NET_TIMEOUT_SHORT_MS))
+            continue;
+
+        if (c == X_ACK || c == X_NAK || c == X_CRC || c == X_CAN)
+        {
+            *resp = c;
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static int netWriteData(const unsigned char *buf, int len)
@@ -556,7 +540,10 @@ static int xmodemSendFile(const char *fileName)
         if (netReadByteTimeout(&c, X_TIMEOUT_FIRST_MS))
         {
             if (c == X_CRC || c == X_NAK)
+            {
+                drainNetwork(50);
                 break;
+            }
             if (c == X_CAN)
             {
                 fclose(fp);
@@ -583,7 +570,7 @@ static int xmodemSendFile(const char *fileName)
             return 0;
         }
 
-        if ((total - sent) > 128L)
+        if (X_USE_1K && (total - sent) > 128L)
             blockLen = X_BLOCK_1K;
         else
             blockLen = X_BLOCK_128;
@@ -610,7 +597,7 @@ static int xmodemSendFile(const char *fileName)
             netWriteByte((unsigned char)(crc >> 8));
             netWriteByte((unsigned char)(crc & 0xFF));
 
-            if (!netReadByteTimeout(&c, X_TIMEOUT_ACK_MS))
+            if (!xmodemReadResponse(&c, X_TIMEOUT_ACK_MS))
             {
                 retry++;
                 if (retry >= X_RETRY_MAX)
@@ -620,6 +607,7 @@ static int xmodemSendFile(const char *fileName)
                     printf("\nTimeout ACK.\n");
                     return 0;
                 }
+                printf("\nRetry bloco %u por timeout ACK (%d/%d)\n", blkNo, retry, X_RETRY_MAX);
                 continue;
             }
 
@@ -641,6 +629,7 @@ static int xmodemSendFile(const char *fileName)
                 printf("\nMuitas tentativas.\n");
                 return 0;
             }
+            printf("\nRetry bloco %u por %s (%d/%d)\n", blkNo, c == X_CRC ? "CRC" : "NAK", retry, X_RETRY_MAX);
         }
 
         sent += blockLen;
@@ -660,8 +649,18 @@ static int xmodemSendFile(const char *fileName)
         }
 
         netWriteByte(X_EOT);
-        if (netReadByteTimeout(&c, X_TIMEOUT_ACK_MS) && c == X_ACK)
-            break;
+        if (xmodemReadResponse(&c, X_TIMEOUT_ACK_MS))
+        {
+            if (c == X_ACK)
+                break;
+
+            if (c == X_CAN)
+            {
+                fclose(fp);
+                printf("\nCancelado pelo remoto.\n");
+                return 0;
+            }
+        }
 
         retry++;
         if (retry >= X_RETRY_MAX)
@@ -860,9 +859,6 @@ int main(int argc, char **argv)
         printf("Erro inicializando WinSock.\n");
         return 1;
     }
-
-    printf("Conectando em %s:%u...\n", argv[1], port);
-    clearArpEntry(argv[1]);
 
     if (!tcpConnect(argv[1], port))
     {

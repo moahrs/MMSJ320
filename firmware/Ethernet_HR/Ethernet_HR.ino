@@ -1,8 +1,14 @@
 #include <SPI.h>
 #include <EthernetENC.h>
 #include <EthernetUdp.h>
+#include <WiFi.h>
 #include <stdio.h>
 #include <string.h>
+
+#define NET_USE_WIFI 1
+
+#define WIFI_SSID "W_ZEUS2G"
+#define WIFI_PASS "Plei@des#2145$"
 
 #define PIN_ETH_CS 5
 #define PIN_SPI_SCK  18
@@ -26,9 +32,15 @@
 
 byte mac[] = { 0x02, 0x68, 0x00, 0x00, 0x00, 0x45 };
 
+#if NET_USE_WIFI
+WiFiUDP Udp;
+WiFiClient tcpClient;
+WiFiServer tcpServer(23);
+#else
 EthernetUDP Udp;
 EthernetClient tcpClient;
 EthernetServer tcpServer(23);
+#endif
 
 
 bool tcpMode = false;
@@ -149,7 +161,7 @@ void ledsPoll()
   {
     lanPollLast = now;
 
-    if (ethernetReady && Ethernet.linkStatus() != LinkOFF)
+    if (ethernetUsable())
       digitalWrite(PIN_LED_LAN, LED_ON_LEVEL);
     else
       digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
@@ -167,6 +179,42 @@ void endResponse()
   Serial2.flush();
 }
 
+IPAddress netLocalIP()
+{
+#if NET_USE_WIFI
+  return WiFi.localIP();
+#else
+  return Ethernet.localIP();
+#endif
+}
+
+IPAddress netGatewayIP()
+{
+#if NET_USE_WIFI
+  return WiFi.gatewayIP();
+#else
+  return Ethernet.gatewayIP();
+#endif
+}
+
+IPAddress netSubnetMask()
+{
+#if NET_USE_WIFI
+  return WiFi.subnetMask();
+#else
+  return Ethernet.subnetMask();
+#endif
+}
+
+IPAddress netDnsIP()
+{
+#if NET_USE_WIFI
+  return WiFi.dnsIP();
+#else
+  return Ethernet.dnsServerIP();
+#endif
+}
+
 bool ethernetUsable()
 {
   IPAddress ip;
@@ -174,10 +222,15 @@ bool ethernetUsable()
   if (!ethernetReady)
     return false;
 
+#if NET_USE_WIFI
+  if (WiFi.status() != WL_CONNECTED)
+    return false;
+#else
   if (Ethernet.linkStatus() == LinkOFF)
     return false;
+#endif
 
-  ip = Ethernet.localIP();
+  ip = netLocalIP();
   if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0)
     return false;
 
@@ -187,16 +240,16 @@ bool ethernetUsable()
 void printNetInfo()
 {
   Serial2.print("IP: ");
-  Serial2.println(Ethernet.localIP());
+  Serial2.println(netLocalIP());
 
   Serial2.print("Gateway: ");
-  Serial2.println(Ethernet.gatewayIP());
+  Serial2.println(netGatewayIP());
 
   Serial2.print("Subnet: ");
-  Serial2.println(Ethernet.subnetMask());
+  Serial2.println(netSubnetMask());
 
   Serial2.print("DNS: ");
-  Serial2.println(Ethernet.dnsServerIP());
+  Serial2.println(netDnsIP());
   endResponse();
 }
 
@@ -403,7 +456,11 @@ void tcpBridgePoll()
 
 void tcpListenPoll()
 {
+#if NET_USE_WIFI
+  WiFiClient newClient;
+#else
   EthernetClient newClient;
+#endif
 
   if (!tcpListenMode || tcpMode)
     return;
@@ -426,17 +483,55 @@ void tcpListenPoll()
 void cmdIpInfo()
 {
   Serial2.print("OK;");
-  Serial2.print(Ethernet.localIP());
+  Serial2.print(netLocalIP());
   Serial2.print(";");
-  Serial2.print(Ethernet.gatewayIP());
+  Serial2.print(netGatewayIP());
   Serial2.print(";");
-  Serial2.print(Ethernet.subnetMask());
+  Serial2.print(netSubnetMask());
   Serial2.print(";");
-  Serial2.print(Ethernet.dnsServerIP());
+  Serial2.print(netDnsIP());
 }
 
 void initEthernet()
 {
+#if NET_USE_WIFI
+  unsigned long startMs;
+
+  Serial.println("Initializing WiFi...");
+
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.disconnect(true);
+  delay(300);
+
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  startMs = millis();
+
+  while (WiFi.status() != WL_CONNECTED && (long)(millis() - startMs) < 20000)
+  {
+    delay(200);
+    Serial.print(".");
+  }
+
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED)
+  {
+    ethernetReady = true;
+    digitalWrite(PIN_LED_LAN, LED_ON_LEVEL);
+    ledActivity();
+    Serial.println("WIFI OK");
+    strcpy(vStatusAux, "WIFI OK");
+  }
+  else
+  {
+    ethernetReady = false;
+    digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
+    Serial.println("WIFI FAIL");
+    strcpy(vStatusAux, "WIFI FAIL");
+  }
+#else
   Serial.println("Initializing Ethernet...");
 
   Ethernet.init(PIN_ETH_CS);
@@ -469,6 +564,7 @@ void initEthernet()
     Serial.println("DHCP OK");
     strcpy(vStatusAux,"DHCP OK");
   }
+#endif
 
   //printNetInfo();
 
@@ -491,6 +587,26 @@ void ethernetPoll()
 
   ethMaintainLast = now;
 
+#if NET_USE_WIFI
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    if (ethernetReady)
+    {
+      ethernetReady = false;
+      strcpy(vStatusAux, "WIFI OFF");
+      tcpResetState(true);
+      digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
+    }
+    return;
+  }
+
+  if (!ethernetReady)
+  {
+    ethernetReady = true;
+    strcpy(vStatusAux, "WIFI OK");
+    digitalWrite(PIN_LED_LAN, LED_ON_LEVEL);
+  }
+#else
   if (ethernetReady)
     Ethernet.maintain();
 
@@ -508,6 +624,7 @@ void ethernetPoll()
 
   if (!ethernetReady && Ethernet.linkStatus() != LinkOFF)
     digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
+#endif
 }
 
 bool parseIpPort(char *s, IPAddress &ip, uint16_t &port)
@@ -590,7 +707,7 @@ Serial.println(cmd);
     Serial2.print(";");
     Serial2.print(ethernetUsable() ? "NETOK" : "NOETH");
     Serial2.print(";");
-    Serial2.print(Ethernet.localIP());
+    Serial2.print(netLocalIP());
     endResponse();
   }
   else if (strncmp(cmd, "ATUDP=", 6) == 0)
@@ -761,7 +878,9 @@ void setup()
 
   Serial.println("Serial2 is ready.");
 
+#if !NET_USE_WIFI
   SPI.begin(PIN_SPI_SCK, PIN_SPI_MISO, PIN_SPI_MOSI, PIN_ETH_CS);
+#endif
   initEthernet();
 
   Serial.println("READY");
