@@ -1,0 +1,26 @@
+PROC MAIN
+  OPEN "/TEMP/PESSOA.TXT" FOR OUTPUT AS @1
+  PRINT @1, "Maria Silva"
+  PRINT @1, 28
+  PRINT @1, "Joao Silva"
+  PRINT @1, 34
+  CLOSE @1
+
+  PRINT "Dados gravados com sucesso!"
+  PRINT
+
+  OPEN "/TEMP/PESSOA.TXT" FOR INPUT AS @1
+
+  NOME$=""
+  IDADE%=0
+
+  LBL100:
+  IF EOF(1) THEN GOTO FIM
+  INPUT @1, NOME$
+  INPUT @1, IDADE%
+  PRINT "Nome: "; NOME$; " - Idade: "; IDADE%
+  GOTO LBL100
+
+  FIM:
+  CLOSE @1
+ENDPROC

@@ -57,6 +57,19 @@ int main(void)
     printText("Enabling Comm...\r\n");
     netCommEnable();
 
+    printText("Resetting TCP...\r\n");
+    netCommResetInput();
+    writeLongSerial("+++");
+    writeSerial('\r');
+    readResponseProc(&cCmd);
+    delayms(50);
+
+    netCommResetInput();
+    writeLongSerial("ATRESETTCP");
+    writeSerial('\r');
+    readResponseProc(&cCmd);
+    delayms(50);
+
     // Verifica se esta em modo Listen, se sim, tira
     printText("Enabling Listen...\r\n");
     while(vTimeOut--)

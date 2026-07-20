@@ -187,9 +187,22 @@ void procFtpd(void)
 
     wftpStatus((unsigned char *)"Enabling Comm's");
     netCommEnable();
-    wftpStatus((unsigned char *)"Checking listen");
+
+    wftpStatus((unsigned char *)"Resetting TCP");
+    netCommResetInput();
+    writeLongSerial("+++");
+    writeSerial('\r');
+    readResponseProc(&cCmd);
+    delayms(50);
+
+    netCommResetInput();
+    writeLongSerial("ATRESETTCP");
+    writeSerial('\r');
+    readResponseProc(&cCmd);
+    delayms(50);
 
     // Verifica se esta em modo Listen, se sim, tira
+    wftpStatus((unsigned char *)"Checking listen");
     while(vTimeOut--)
     {
         netCommResetInput();

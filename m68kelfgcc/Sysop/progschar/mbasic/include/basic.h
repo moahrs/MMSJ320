@@ -143,7 +143,7 @@ unsigned long *vDataLineAtu         = 0x008FE95E; //
 for_stack *forStack                 = 0x008FF6BE; // stack for FOR/NEXT loop
 unsigned long *atuVarAddr           = 0x008FF6B0; // Endereco da variavel atualmente usada pelo basLet
 
-const keywords_count = 82; // Quantidade de palavras reservadas
+const keywords_count = 89; // Quantidade de palavras reservadas
 
 // -------------------------------------------------------------------------------
 // Mensagens de Erro
@@ -206,6 +206,7 @@ static const struct keyword_token keywords[] =
   {"SPRITESET", 0x8D},  // .. .. ok
   {"SPRITEPUT", 0x8E},  // .. .. ok
   {"DIM", 		0x8F},   // .. .. ok
+  {"OPEN",    0x90},   // .. .. ok
   {"ON",      0x91},   // .. .. ok
   {"INPUT", 	0x92},   // .. ok ok
   {"GET",     0x93},   // .. ok ok
@@ -217,6 +218,7 @@ static const struct keyword_token keywords[] =
   {"READ", 		0x99},   // .. .. ok
   {"RESTORE", 0x9A},   // .. .. ok
   {"BUFDRAW", 0x9B},   // .. .. ok
+  {"CLOSE",   0x9C},   // .. .. ok
   {"BUFCOPY", 0x9D},   // .. .. ok
   {"END",     0x9E},   // .. .. ok
   {"STOP",    0x9F},   // .. .. ok
@@ -235,6 +237,11 @@ static const struct keyword_token keywords[] =
   {"WHILE",   0xBC},   // .. .. ok
   {"WEND",    0xBD},   // .. .. ok
   {"VPOKE",   0xBE},   // .. .. ok  
+  {"AS",      0xBF},   // .. .. ok
+  {"EOF",     0xC0},   // .. .. ok
+  {"SEEK",    0xC1},   // .. .. ok
+  {"OUTPUT",  0xC2},   // .. .. ok
+  {"APPEND",  0xC3},   // .. .. ok
   {"ASC",     0xC4},   // .. .. ok
   {"HEX$",    0xC5},   // .. .. ok
   {"BIN$",    0xC6},   // .. .. ok
@@ -386,6 +393,10 @@ int basLeftRightMid(char pTipo);
 int basIf(void);
 int basLet(void);
 int basInputGet(unsigned char pSize);
+int basOpen(void);
+int basClose(void);
+int basEof(void);
+int basSearch(void);
 int basFor(void);
 int basNext(void);
 int basOnErr(void);

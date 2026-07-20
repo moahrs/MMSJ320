@@ -22,6 +22,8 @@
 #define LED_ACT_MS    80
 #define LAN_POLL_MS   1000
 #define PLUS_TIMEOUT_MS 1000
+#define ETH_MAINTAIN_MS 1000
+#define ETH_RETRY_MS    5000
 
 byte mac[] = { 0x02, 0x68, 0x00, 0x00, 0x00, 0x45 };
 
@@ -49,6 +51,8 @@ bool ledActOn = false;
 unsigned long ledActUntil = 0;
 unsigned long lanPollLast = 0;
 unsigned long plusLastMs = 0;
+unsigned long ethMaintainLast = 0;
+unsigned long ethRetryLast = 0;
 
 #define TCP_RXBUF_SIZE 4096
 
@@ -95,6 +99,20 @@ void tcpRxClear()
   tcpRxHead = 0;
   tcpRxTail = 0;
   tcpRxLost = 0;
+}
+
+void tcpResetState(bool keepListen)
+{
+  tcpClient.stop();
+
+  tcpRxClear();
+  linePos = 0;
+  tcpMode = false;
+  plusPos = 0;
+  digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
+
+  if (!keepListen)
+    tcpListenMode = false;
 }
 
 void ledsInit()
@@ -195,9 +213,7 @@ void cmdTcpListen(char *arg)
 {
   if (tcpListenMode && !tcpMode)
   {
-    tcpListenMode = false;
-    tcpRxClear();
-    linePos = 0;
+    tcpResetState(false);
 
     while (Serial2.available())
       Serial2.read();
@@ -207,15 +223,9 @@ void cmdTcpListen(char *arg)
     return;
   }
 
-  if (tcpClient.connected())
-    tcpClient.stop();
-
-  tcpRxClear();
-  linePos = 0;
+  tcpResetState(false);
   tcpListenPort = 23;
   tcpListenMode = true;
-  tcpMode = false;
-  plusPos = 0;
 
   tcpServer.begin();
 
@@ -235,8 +245,7 @@ void cmdTcpConnect(char *arg)
     return;
   }
 
-  if (tcpClient.connected())
-    tcpClient.stop();
+  tcpResetState(false);
 
   if (tcpClient.connect(host, port))
   {
@@ -266,13 +275,8 @@ void tcpBridgePoll()
 
   if (!tcpClient.connected())
   {
-    tcpClient.stop();
-    tcpMode = false;
+    tcpResetState(false);
     digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
-    plusPos = 0;
-    tcpRxClear();
-    Serial2.println("\r\nEVT;DISCONNECT");
-    endResponse();
     return;
   }
 
@@ -301,11 +305,7 @@ void tcpBridgePoll()
 
       if (plusPos >= 3)
       {
-        tcpClient.stop();
-        tcpMode = false;
-        digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
-        plusPos = 0;
-        tcpRxClear();
+        tcpResetState(false);
 
         while (Serial2.available())
           Serial2.read();
@@ -356,10 +356,15 @@ void tcpBridgePoll()
   /* buffer -> serial */
   count = 0;
 
-  while (count < 1 && tcpRxGet(&b))
+  while (count < 32)
   {
+      if (Serial2.availableForWrite() <= 0)
+          break;
+
+      if (!tcpRxGet(&b))
+          break;
+
       Serial2.write(b);
-      delayMicroseconds(1000);
       count++;
   }
 }
@@ -376,8 +381,7 @@ void tcpListenPoll()
 
   if (newClient)
   {
-    if (tcpClient.connected())
-      tcpClient.stop();
+    tcpResetState(true);
 
     tcpClient = newClient;
     tcpRxClear();
@@ -385,9 +389,6 @@ void tcpListenPoll()
     plusPos = 0;
     digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     ledActivity();
-
-    Serial2.print("EVT;CONNECT;INBOUND;23");
-    endResponse();
   }
 }
 
@@ -443,6 +444,45 @@ void initEthernet()
   Udp.begin(localPort);
   /*Serial.print("UDP LOCAL PORT: ");
   Serial.println(localPort);*/
+}
+
+void ethernetPoll()
+{
+  unsigned long now;
+
+  if (tcpMode)
+    return;
+
+  now = millis();
+
+  if ((long)(now - ethMaintainLast) < ETH_MAINTAIN_MS)
+    return;
+
+  ethMaintainLast = now;
+
+  if (ethernetReady)
+    Ethernet.maintain();
+
+  if (Ethernet.linkStatus() == LinkOFF)
+  {
+    if (ethernetReady)
+    {
+      ethernetReady = false;
+      strcpy(vStatusAux, "LINK OFF");
+      tcpResetState(true);
+      digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
+    }
+    return;
+  }
+
+  if (!ethernetReady && (long)(now - ethRetryLast) >= ETH_RETRY_MS)
+  {
+    ethRetryLast = now;
+    initEthernet();
+
+    if (ethernetReady && tcpListenMode)
+      tcpServer.begin();
+  }
 }
 
 bool parseIpPort(char *s, IPAddress &ip, uint16_t &port)
@@ -576,16 +616,22 @@ Serial.println(cmd);
   }
   else if (strcmp(cmd, "ATH") == 0)
   {
-    if (tcpClient.connected())
-      tcpClient.stop();
-
     udpOpen = false;
-    tcpListenMode = false;
-    tcpMode = false;
-    digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
+    tcpResetState(false);
     Serial2.println("OK;DISCONNECT");
     endResponse();
   }  
+  else if (strcmp(cmd, "ATRESETTCP") == 0)
+  {
+    udpOpen = false;
+    tcpResetState(false);
+
+    while (Serial2.available())
+      Serial2.read();
+
+    Serial2.println("OK;RESETTCP");
+    endResponse();
+  }
   else
   {
     Serial2.print("ERROR;CMD_UNKNOW");
@@ -668,6 +714,7 @@ void setup()
 
 void loop()
 {
+  ethernetPoll();
   ledsPoll();
 
   if (tcpMode)

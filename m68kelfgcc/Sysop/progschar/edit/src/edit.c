@@ -313,6 +313,65 @@ int edInsertChar(char c)
 }
 
 //-------------------------------------------------------------------
+int edInsertRawAt(int pos, const char *text, int len)
+{
+    int i;
+
+    if (len <= 0)
+        return 0;
+
+    if (edFileSize + len >= EDIT_MAX_FILE - 1)
+        return -1;
+
+    if (pos < 0)
+        pos = 0;
+
+    if (pos > edFileSize)
+        pos = edFileSize;
+
+    for (i = edFileSize; i >= pos; i--)
+        edFileBuf[i + len] = edFileBuf[i];
+
+    for (i = 0; i < len; i++)
+        edFileBuf[pos + i] = text[i];
+
+    edFileSize += len;
+    edDirty = 1;
+    edBuildLines();
+
+    return 0;
+}
+
+//-------------------------------------------------------------------
+int edLineIndentSpaces(int line)
+{
+    char *p;
+    char *end;
+    int spaces;
+
+    if (line < 0 || line >= edNumLines)
+        return 0;
+
+    p = edLinePtr[line];
+    end = edFileBuf + edFileSize;
+    spaces = 0;
+
+    while (p < end && *p != 0 && *p != 13 && *p != 10)
+    {
+        if (*p == ' ')
+            spaces++;
+        else if (*p == 9)
+            spaces += 2;
+        else
+            break;
+
+        p++;
+    }
+
+    return spaces;
+}
+
+//-------------------------------------------------------------------
 void edPrintSpaces(int qtd)
 {
     int i;
@@ -1248,7 +1307,7 @@ int edMoveTab(void)
 {
     int i;
 
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < 2; i++)
         edInsertChar(' ');
 
     return 0;
@@ -1305,18 +1364,30 @@ int edDelete(void)
 //-------------------------------------------------------------------
 int edInsertEnter(void)
 {
+    char indent[80];
     int pos;
+    int indentLen;
+    int i;
 
     pos = edGetCursorOffset();
+    indentLen = edLineIndentSpaces(edCurLine);
 
-    if (edInsertChar(13) != 0)   /* CR */
+    if (indentLen > (int)sizeof(indent))
+        indentLen = sizeof(indent);
+
+    if (edInsertRawAt(pos, "\r\n", 2) != 0)
         return -1;
 
-    /* opcional: LF também */
-    if (edInsertChar(10) != 0)
-        return -1;
+    for (i = 0; i < indentLen; i++)
+        indent[i] = ' ';
 
-    edSetCursorFromOffset((unsigned long)pos + 2UL);
+    if (indentLen > 0)
+    {
+        if (edInsertRawAt(pos + 2, indent, indentLen) != 0)
+            return -1;
+    }
+
+    edSetCursorFromOffset((unsigned long)pos + 2UL + (unsigned long)indentLen);
 
     return 0;
 }

@@ -80,6 +80,11 @@
 #define BASIC_VDP_BUF_COUNT 6
 #define BASIC_VDP_BUF_AREA_SIZE 0x3000
 #define BASIC_VDP_BUF_TOTAL_SIZE (BASIC_VDP_BUF_COUNT * BASIC_VDP_BUF_AREA_SIZE)
+#define BASIC_SPRITE_PATTERN_TABLE 0x1800
+#define BASIC_SPRITE_ATTRIBUTE_TABLE 0x3B00
+#define BASIC_FILE_MAX 4
+#define BASIC_FILE_BUFFER_SIZE 255
+#define MBASIC_INCLUDE_MAX_DEPTH 4
 
 //#define BASIC_DEBUG_ON 0
 
@@ -127,6 +132,8 @@ static void basReadNumericArg(int *pValue);
 static void basReadRealArg(unsigned long *pFpp);
 static void basDrawLineSegment(unsigned char x0, unsigned char y0, unsigned char x1, unsigned char y1, unsigned char color);
 static unsigned long nextAddrForProgramPointer(unsigned char *addr);
+static void basFileCloseAll(void);
+static int mbasicExpandIncludes(char *src, char *out, unsigned long outMax);
 
 static unsigned int textPatternTable = 0x0000;
 static unsigned int textNameTable = 0x0800;
@@ -154,7 +161,13 @@ static unsigned char basicVdpDrawArea;
 static unsigned char *while_ptr_stack[MAX_WHILE_STACK];
 static int while_sp;
 static unsigned int spriteHandleCache[256];
+static unsigned char spriteActiveCache[256];
+static unsigned char spritePatternCache[256][32];
+static unsigned char spritePatternLoadedCache[256];
+static unsigned char spriteXCache[256];
+static unsigned char spriteYCache[256];
 static unsigned char spriteSizeSelBas;
+static unsigned char spriteMagSelBas;
 unsigned char verro;
 
 static unsigned char parseValStack[PARSER_LEVELS][PARSER_STACK_SIZE][BASIC_STRING_EXPR_MAX];
@@ -167,6 +180,22 @@ static unsigned char parseTokenVarAtuLen[PARSER_LEVELS];
 static int parseOpTop[PARSER_LEVELS];
 static int parseValTop[PARSER_LEVELS];
 static char nivelParse = -1;
+
+typedef struct
+{
+    unsigned char used;
+    unsigned char mode;
+    unsigned char dirty;
+    char name[32];
+    unsigned long dirCluster;
+    unsigned long pos;
+    unsigned long size;
+    unsigned long bufStart;
+    unsigned short bufLen;
+    unsigned char buffer[BASIC_FILE_BUFFER_SIZE];
+} BASIC_FILE_HANDLE;
+
+static BASIC_FILE_HANDLE basFiles[BASIC_FILE_MAX];
 
 static int basStrCopyLimit(unsigned char *dst, const unsigned char *src, unsigned int maxLen)
 {
@@ -449,6 +478,18 @@ static void basPaintSyncTables(void)
 static void basSpriteResetCache(void)
 {
     memset(spriteHandleCache, 0x00, sizeof(spriteHandleCache));
+    memset(spriteActiveCache, 0x00, sizeof(spriteActiveCache));
+    memset(spritePatternLoadedCache, 0x00, sizeof(spritePatternLoadedCache));
+    memset(spriteXCache, 0x00, sizeof(spriteXCache));
+    memset(spriteYCache, 0x00, sizeof(spriteYCache));
+}
+
+static void basSpriteHideAllSlots(unsigned int attrTable)
+{
+    unsigned int ix;
+
+    for (ix = 0; ix < 32; ix++)
+        basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, attrTable + (ix * 4), 208);
 }
 
 static unsigned int basSpritePatternLimit(void)
@@ -465,6 +506,157 @@ static unsigned int basSpritePatternBytes(void)
         return 32;
 
     return 8;
+}
+
+static unsigned int basSpritePatternAddress(unsigned char spriteNumber)
+{
+    if (spriteSizeSelBas)
+        return BASIC_SPRITE_PATTERN_TABLE + ((unsigned int)spriteNumber * 32);
+
+    return BASIC_SPRITE_PATTERN_TABLE + ((unsigned int)spriteNumber * 8);
+}
+
+static unsigned char basSpritePatternName(unsigned char spriteNumber)
+{
+    if (spriteSizeSelBas)
+        return (unsigned char)(spriteNumber * 4);
+
+    return spriteNumber;
+}
+
+static unsigned int basSpriteSlotHandle(unsigned char slot)
+{
+    return BASIC_SPRITE_ATTRIBUTE_TABLE + ((unsigned int)slot * 4);
+}
+
+static void basSpriteWritePattern(unsigned char spriteNumber, const unsigned char *spriteData)
+{
+    unsigned int ix;
+    unsigned int spriteBytes;
+    unsigned int addr;
+
+    spriteBytes = basSpritePatternBytes();
+    addr = basSpritePatternAddress(spriteNumber);
+
+    for (ix = 0; ix < spriteBytes; ix++)
+        basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr + ix, spriteData[ix]);
+}
+
+static void basSpriteWriteSlot(unsigned char spriteNumber, unsigned char slot, unsigned char x, unsigned char y, unsigned char color)
+{
+    unsigned int addr;
+
+    addr = basSpriteSlotHandle(slot);
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr, y);
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr + 1, x);
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr + 2, basSpritePatternName(spriteNumber));
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr + 3, color & 0x0F);
+}
+
+static void basSpriteWritePosition(unsigned int spriteHandle, unsigned char x, unsigned char y)
+{
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, spriteHandle, y);
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, spriteHandle + 1, x);
+}
+
+static unsigned int basSpriteDisplaySize(void)
+{
+    unsigned int size;
+
+    size = spriteSizeSelBas ? 16 : 8;
+    if (spriteMagSelBas)
+        size <<= 1;
+
+    return size;
+}
+
+static unsigned int basSpriteRowBits(unsigned char spriteNumber, unsigned int row)
+{
+    if (spriteSizeSelBas)
+        return ((unsigned int)spritePatternCache[spriteNumber][row] << 8) |
+               (unsigned int)spritePatternCache[spriteNumber][row + 16];
+
+    return (unsigned int)spritePatternCache[spriteNumber][row] << 8;
+}
+
+static unsigned int basSpriteMaskOverlap(unsigned char spriteNumber1, unsigned char spriteNumber2)
+{
+    unsigned int spriteSize;
+    unsigned int x1;
+    unsigned int y1;
+    unsigned int x2;
+    unsigned int y2;
+    unsigned int top;
+    unsigned int bottom;
+    unsigned int line;
+    unsigned int row1;
+    unsigned int row2;
+    unsigned int bits1;
+    unsigned int bits2;
+    unsigned int delta;
+
+    if (!spriteActiveCache[spriteNumber1] || !spriteActiveCache[spriteNumber2])
+        return 0;
+
+    if (!spritePatternLoadedCache[spriteNumber1] || !spritePatternLoadedCache[spriteNumber2])
+        return 0;
+
+    x1 = spriteXCache[spriteNumber1];
+    y1 = spriteYCache[spriteNumber1];
+    x2 = spriteXCache[spriteNumber2];
+    y2 = spriteYCache[spriteNumber2];
+    spriteSize = basSpriteDisplaySize();
+
+    if (!(x1 < (x2 + spriteSize) &&
+          (x1 + spriteSize) > x2 &&
+          y1 < (y2 + spriteSize) &&
+          (y1 + spriteSize) > y2))
+        return 0;
+
+    top = y1 > y2 ? y1 : y2;
+    bottom = (y1 + spriteSize) < (y2 + spriteSize) ? (y1 + spriteSize) : (y2 + spriteSize);
+
+    for (line = top; line < bottom; line++)
+    {
+        row1 = line - y1;
+        row2 = line - y2;
+
+        if (spriteMagSelBas)
+        {
+            row1 >>= 1;
+            row2 >>= 1;
+        }
+
+        bits1 = basSpriteRowBits(spriteNumber1, row1);
+        bits2 = basSpriteRowBits(spriteNumber2, row2);
+
+        if (!bits1 || !bits2)
+            continue;
+
+        if (spriteMagSelBas)
+        {
+            /* Magnificacao duplica pixels; esta comparacao usa a mascara original
+               como aproximacao estavel em RAM. */
+            delta = (x1 > x2) ? ((x1 - x2) >> 1) : ((x2 - x1) >> 1);
+        }
+        else
+        {
+            delta = (x1 > x2) ? (x1 - x2) : (x2 - x1);
+        }
+
+        if (delta >= 16)
+            continue;
+
+        if (x1 <= x2)
+            bits2 >>= delta;
+        else
+            bits1 >>= delta;
+
+        if (bits1 & bits2)
+            return 1;
+    }
+
+    return 0;
 }
 
 static unsigned int basSpriteResolveHandle(unsigned char spriteNumber)
@@ -492,7 +684,13 @@ static void setVariables(void)
     while_sp = 0;
     basVideoResetDrawArea();
     spriteSizeSelBas = 0;
+    spriteMagSelBas = 0;
     memset(spriteHandleCache, 0, sizeof(spriteHandleCache));
+    memset(spriteActiveCache, 0, sizeof(spriteActiveCache));
+    memset(spritePatternCache, 0, sizeof(spritePatternCache));
+    memset(spritePatternLoadedCache, 0, sizeof(spritePatternLoadedCache));
+    memset(spriteXCache, 0, sizeof(spriteXCache));
+    memset(spriteYCache, 0, sizeof(spriteYCache));
     memset(lastVarCacheName0, 0, sizeof(lastVarCacheName0));
     memset(lastVarCacheName1, 0, sizeof(lastVarCacheName1));
     memset(lastVarCacheAddr, 0, sizeof(lastVarCacheAddr));  
@@ -783,6 +981,12 @@ static int mbasicAppendLine(char *out, unsigned long *outLen, unsigned long outM
     itoa(lineNo, num, 10);
     if (!mbasicAppend(out, outLen, outMax, num)) return 0;
     if (!mbasicAppend(out, outLen, outMax, " ")) return 0;
+    if (!mbasicAppend(out, outLen, outMax, body)) return 0;
+    return mbasicAppend(out, outLen, outMax, "\r\n");
+}
+
+static int mbasicAppendRawLine(char *out, unsigned long *outLen, unsigned long outMax, const char *body)
+{
     if (!mbasicAppend(out, outLen, outMax, body)) return 0;
     return mbasicAppend(out, outLen, outMax, "\r\n");
 }
@@ -1970,13 +2174,19 @@ void main(void)
                     goto mbasic_main_cleanup;
                 }
 
-                if (!mbasicConvertStructuredSource((char *)pStartXBasLoad, (char *)vConvBuf, vMemTotalXBasLoad))
+                if (!mbasicExpandIncludes((char *)pStartXBasLoad, (char *)vConvBuf, vMemTotalXBasLoad))
                 {
                     free(vConvBuf);
                     goto mbasic_main_cleanup;
                 }
 
-                memcpy((void *)pStartXBasLoad, vConvBuf, vMemTotalXBasLoad);
+                memset(pStartXBasLoad, 0x1A, vMemTotalXBasLoad);
+                if (!mbasicConvertStructuredSource((char *)vConvBuf, (char *)pStartXBasLoad, vMemTotalXBasLoad))
+                {
+                    free(vConvBuf);
+                    goto mbasic_main_cleanup;
+                }
+
                 free(vConvBuf);
             }
 
@@ -2730,7 +2940,7 @@ void tokenizeLine(unsigned char *pTokenized)
         }
 
         // Se for quebrador sequencia, verifica se é um token
-        if ((!vTemRem && !vAspas && strchr(" ;,+-<>()/*^=:",*blin)) || !*blin)
+        if ((!vTemRem && !vAspas && strchr(" ;,@+-<>()/*^=:",*blin)) || !*blin)
         {
             // Montar comparacoes "<>", ">=" e "<="
             if (((*blin == 0x3C || *blin == 0x3E) && (!vFirstComp && (*(blin + 1) == 0x3E || *(blin + 1) == 0x3D))) || (vFirstComp && *blin == 0x3D) || (vFirstComp && *blin == 0x3E))
@@ -3430,6 +3640,7 @@ void runProg(unsigned char *pNumber)
     *nextAddrArrayVar = pStartArrayVar;
     *nextAddrString = pStartString;
 
+    basFileCloseAll();
     clearRuntimeData(pForStack);
 
     if (pNumber[0] != 0x00)
@@ -3598,6 +3809,7 @@ writeLongSerial("\r\n");
     }
 
     basVideoResetDrawArea();
+    basFileCloseAll();
 
 #ifndef __TESTE_TOKENIZE__
     if (vdpModeBas != VDP_MODE_TEXT)
@@ -3838,6 +4050,9 @@ int executeToken(unsigned char pToken)
         case 0x8F:  // DIM
             vReta = basDim();
             break;
+        case 0x90:  // OPEN
+            vReta = basOpen();
+            break;
         case 0x91:  // ON
             vReta = basOnVar();
             break;
@@ -3879,6 +4094,9 @@ int executeToken(unsigned char pToken)
             break;
         case 0x9B:  // BUFDRAW
             vReta = basBufDraw();
+            break;
+        case 0x9C:  // CLOSE
+            vReta = basClose();
             break;
         case 0x9D:  // BUFCOPY
             vReta = basBufCopy();
@@ -3933,6 +4151,19 @@ int executeToken(unsigned char pToken)
             break;
         case 0xBE:  // VPOKE
             vReta = basVpoke();
+            break;
+        case 0xBF:  // AS - nao faz nada
+            vReta = 0;
+            break;
+        case 0xC0:  // EOF
+            vReta = basEof();
+            break;
+        case 0xC1:  // SEEK
+            vReta = basSearch();
+            break;
+        case 0xC2:  // OUTPUT - nao faz nada
+        case 0xC3:  // APPEND - nao faz nada
+            vReta = 0;
             break;
         case 0xC4:  // ASC
             vReta = basAsc();
@@ -4110,7 +4341,7 @@ int nextToken(void)
     if ((*vTempPointer == '+' || *vTempPointer == '-' || *vTempPointer == '*' ||
          *vTempPointer == '^' || *vTempPointer == '/' || *vTempPointer == '=' ||
          *vTempPointer == ';' || *vTempPointer == ':' || *vTempPointer == ',' ||
-         *vTempPointer == '>' || *vTempPointer == '<' || *vTempPointer >= 0xF0)) { // delimiter
+         *vTempPointer == '@' || *vTempPointer == '>' || *vTempPointer == '<' || *vTempPointer >= 0xF0)) { // delimiter
         *temp = *vTempPointer;
         *pointerRunProg = *pointerRunProg + 1; // advance to next position
         temp++;
@@ -4307,7 +4538,7 @@ int isdelim(unsigned char c)
     if (c >= 0xF0 || c == 0 || c == '\r' || c == '\t' || c == ' ' ||
         c == ';' || c == ',' || c == '+' || c == '-' || c == '<' ||
         c == '>' || c == '(' || c == ')' || c == '/' || c == '*' ||
-        c == '^' || c == '=' || c == ':')
+        c == '^' || c == '=' || c == ':' || c == '@')
         return 1;
 
     return 0;
@@ -7668,6 +7899,849 @@ int loadBasFile(unsigned char* pArquivo)
     return 0;
 }
 
+static void basFileSetIntResult(int value)
+{
+    int *iVal;
+
+    iVal = (int *)token;
+    *iVal = value;
+    *value_type = '%';
+}
+
+static int basFileReadChannelToken(void)
+{
+    unsigned char answer[20];
+    int *iVal;
+
+    if (*token != '@')
+    {
+        *vErroProc = 14;
+        return -1;
+    }
+
+    nextToken();
+    if (*vErroProc) return -1;
+
+    putback();
+    getExp(answer);
+    if (*vErroProc) return -1;
+
+    if (*value_type == '$')
+    {
+        *vErroProc = 16;
+        return -1;
+    }
+
+    iVal = (int *)answer;
+    if (*value_type == '#')
+        *iVal = fppInt(*iVal);
+
+    if (*iVal < 1 || *iVal > BASIC_FILE_MAX)
+    {
+        *vErroProc = 5;
+        return -1;
+    }
+
+    nextToken();
+    if (*vErroProc) return -1;
+
+    return *iVal - 1;
+}
+
+static int basFileSplitPath(unsigned char *path, char *dirName, char *fileName)
+{
+    int ix;
+    int lastSlash;
+    int pos;
+
+    if (!path || !*path)
+    {
+        *vErroProc = 14;
+        return 0;
+    }
+
+    lastSlash = -1;
+    ix = 0;
+    while (path[ix])
+    {
+        if (path[ix] == '/')
+            lastSlash = ix;
+        ix++;
+    }
+
+    if (lastSlash >= 0)
+    {
+        if (lastSlash == 0)
+            dirName[0] = '/';
+
+        pos = 0;
+        while (pos < lastSlash && pos < 31)
+        {
+            dirName[pos] = basToUpper(path[pos]);
+            pos++;
+        }
+        dirName[pos] = 0x00;
+
+        if (lastSlash == 0)
+        {
+            dirName[0] = '/';
+            dirName[1] = 0x00;
+        }
+
+        ix = lastSlash + 1;
+    }
+    else
+    {
+        dirName[0] = 0x00;
+        ix = 0;
+    }
+
+    if (!path[ix])
+    {
+        *vErroProc = 14;
+        return 0;
+    }
+
+    pos = 0;
+    while (path[ix] && pos < 31)
+    {
+        fileName[pos++] = basToUpper(path[ix++]);
+    }
+    fileName[pos] = 0x00;
+
+    return 1;
+}
+
+static BASIC_FILE_HANDLE *basFileGetOpen(int channel)
+{
+    if (channel < 0 || channel >= BASIC_FILE_MAX || !basFiles[channel].used)
+    {
+        *vErroProc = 27;
+        return 0;
+    }
+
+    return &basFiles[channel];
+}
+
+static int basFileFlush(BASIC_FILE_HANDLE *fh)
+{
+    unsigned long oldDir;
+
+    if (!fh || !fh->used)
+    {
+        *vErroProc = 27;
+        return 0;
+    }
+
+    if (!fh->dirty || fh->bufLen == 0)
+        return 1;
+
+    if (fh->mode == 'I')
+    {
+        *vErroProc = 27;
+        return 0;
+    }
+
+    oldDir = fsGetClusterDir();
+    fsSetClusterDir(fh->dirCluster);
+
+    if (fsWriteFile(fh->name, fh->bufStart, fh->buffer, (unsigned char)fh->bufLen) != RETURN_OK)
+    {
+        fsSetClusterDir(oldDir);
+        *vErroProc = 27;
+        return 0;
+    }
+
+    fsSetClusterDir(oldDir);
+
+    if ((fh->bufStart + fh->bufLen) > fh->size)
+        fh->size = fh->bufStart + fh->bufLen;
+
+    fh->dirty = 0;
+    fh->bufLen = 0;
+
+    return 1;
+}
+
+static int basFileWriteByte(int channel, unsigned char ch)
+{
+    BASIC_FILE_HANDLE *fh;
+
+    fh = basFileGetOpen(channel);
+    if (!fh) return 0;
+
+    if (fh->mode == 'I')
+    {
+        *vErroProc = 27;
+        return 0;
+    }
+
+    if (!fh->dirty || fh->bufLen == 0)
+    {
+        fh->bufStart = fh->pos;
+        fh->bufLen = 0;
+        fh->dirty = 1;
+    }
+
+    if (fh->pos != (fh->bufStart + fh->bufLen) || fh->bufLen >= BASIC_FILE_BUFFER_SIZE)
+    {
+        if (!basFileFlush(fh))
+            return 0;
+
+        fh->bufStart = fh->pos;
+        fh->bufLen = 0;
+        fh->dirty = 1;
+    }
+
+    fh->buffer[fh->bufLen++] = ch;
+    fh->pos++;
+
+    if (fh->pos > fh->size)
+        fh->size = fh->pos;
+
+    if (fh->bufLen >= BASIC_FILE_BUFFER_SIZE)
+        return basFileFlush(fh);
+
+    return 1;
+}
+
+static int basFileWriteString(int channel, unsigned char *s)
+{
+    while (*s)
+    {
+        if (!basFileWriteByte(channel, *s++))
+            return 0;
+    }
+
+    return 1;
+}
+
+static int basFileLoadReadBuffer(BASIC_FILE_HANDLE *fh)
+{
+    unsigned long left;
+    unsigned long oldDir;
+    unsigned short toRead;
+
+    if (!fh || !fh->used)
+    {
+        *vErroProc = 27;
+        return 0;
+    }
+
+    if (fh->dirty && !basFileFlush(fh))
+        return 0;
+
+    if (fh->pos >= fh->size)
+    {
+        fh->bufStart = fh->pos;
+        fh->bufLen = 0;
+        return 1;
+    }
+
+    left = fh->size - fh->pos;
+    toRead = (left > BASIC_FILE_BUFFER_SIZE) ? BASIC_FILE_BUFFER_SIZE : (unsigned short)left;
+
+    oldDir = fsGetClusterDir();
+    fsSetClusterDir(fh->dirCluster);
+    fh->bufLen = fsReadFile(fh->name, fh->pos, fh->buffer, toRead);
+    fsSetClusterDir(oldDir);
+
+    if (fh->bufLen == 0)
+    {
+        *vErroProc = 27;
+        return 0;
+    }
+
+    fh->bufStart = fh->pos;
+
+    return 1;
+}
+
+static int basFileReadByte(int channel, unsigned char *ch)
+{
+    BASIC_FILE_HANDLE *fh;
+    unsigned long off;
+
+    fh = basFileGetOpen(channel);
+    if (!fh) return 0;
+
+    if (fh->pos >= fh->size)
+        return -1;
+
+    off = fh->pos - fh->bufStart;
+    if (fh->dirty || fh->bufLen == 0 || fh->pos < fh->bufStart || off >= fh->bufLen)
+    {
+        if (!basFileLoadReadBuffer(fh))
+            return 0;
+
+        off = fh->pos - fh->bufStart;
+        if (off >= fh->bufLen)
+            return -1;
+    }
+
+    *ch = fh->buffer[off];
+    fh->pos++;
+
+    return 1;
+}
+
+static int basFileReadLine(int channel, unsigned char *out, unsigned int outMax)
+{
+    unsigned int len;
+    unsigned char ch;
+    int ret;
+
+    len = 0;
+    out[0] = 0x00;
+
+    while (len < (outMax - 1))
+    {
+        ret = basFileReadByte(channel, &ch);
+        if (ret <= 0)
+            break;
+
+        if (ch == '\r')
+        {
+            ret = basFileReadByte(channel, &ch);
+            if (ret > 0 && ch != '\n')
+                basFiles[channel].pos--;
+            break;
+        }
+
+        if (ch == '\n')
+            break;
+
+        out[len++] = ch;
+    }
+
+    out[len] = 0x00;
+
+    return 1;
+}
+
+static void basFileCloseAll(void)
+{
+    int ix;
+    unsigned long oldDir;
+
+    oldDir = fsGetClusterDir();
+    for (ix = 0; ix < BASIC_FILE_MAX; ix++)
+    {
+        if (basFiles[ix].used)
+        {
+            basFileFlush(&basFiles[ix]);
+            fsSetClusterDir(basFiles[ix].dirCluster);
+            fsCloseFile(basFiles[ix].name, basFiles[ix].mode == 'I' ? 0 : 1);
+            memset(&basFiles[ix], 0x00, sizeof(BASIC_FILE_HANDLE));
+        }
+    }
+    fsSetClusterDir(oldDir);
+}
+
+//--------------------------------------------------------------------------------------
+// OPEN <file> FOR INPUT|OUTPUT|APPEND AS @<n>
+//--------------------------------------------------------------------------------------
+int basOpen(void)
+{
+    unsigned char answer[BASIC_STRING_EXPR_MAX];
+    char fileName[32];
+    char dirName[32];
+    int ix;
+    int channel;
+    unsigned char mode;
+    unsigned long oldDir;
+    unsigned long targetDir;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type == QUOTE)
+    {
+        basStrCopyLimit((unsigned char *)answer, token, sizeof(answer));
+        if (*vErroProc) return 0;
+        nextToken();
+        if (*vErroProc) return 0;
+    }
+    else
+    {
+        putback();
+        getExp(answer);
+        if (*vErroProc) return 0;
+
+        if (*value_type != '$')
+        {
+            *vErroProc = 16;
+            return 0;
+        }
+    }
+
+    if (*tok != 0x85)
+    {
+        *vErroProc = 9;
+        return 0;
+    }
+
+    *pointerRunProg = *pointerRunProg + 1;
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*tok == 0x92)
+        mode = 'I';
+    else if (*tok == 0xC2)
+        mode = 'O';
+    else if (*tok == 0xC3)
+        mode = 'A';
+    else
+    {
+        *vErroProc = 14;
+        return 0;
+    }
+
+    *pointerRunProg = *pointerRunProg + 1;
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*tok != 0xBF)
+    {
+        *vErroProc = 14;
+        return 0;
+    }
+
+    *pointerRunProg = *pointerRunProg + 1;
+    nextToken();
+    if (*vErroProc) return 0;
+
+    channel = basFileReadChannelToken();
+    if (*vErroProc) return 0;
+
+    if (basFiles[channel].used)
+    {
+        *vErroProc = 27;
+        return 0;
+    }
+
+    oldDir = fsGetClusterDir();
+
+    if (!basFileSplitPath(answer, dirName, fileName))
+        return 0;
+
+    if (dirName[0])
+    {
+        if (fsChangeDir(dirName) != RETURN_OK)
+        {
+            fsSetClusterDir(oldDir);
+            *vErroProc = 27;
+            return 0;
+        }
+
+        targetDir = fsGetClusterDir();
+    }
+    else
+        targetDir = oldDir;
+
+    fsSetClusterDir(targetDir);
+
+    memset(&basFiles[channel], 0x00, sizeof(BASIC_FILE_HANDLE));
+    strcpy(basFiles[channel].name, fileName);
+    basFiles[channel].dirCluster = targetDir;
+    basFiles[channel].mode = mode;
+
+    if (mode == 'O')
+    {
+        if (fsOpenFile(fileName) == RETURN_OK)
+            fsDelFile(fileName);
+
+        if (fsCreateFile(fileName) != RETURN_OK)
+        {
+            fsSetClusterDir(oldDir);
+            *vErroProc = 27;
+            return 0;
+        }
+
+        basFiles[channel].size = 0;
+        basFiles[channel].pos = 0;
+    }
+    else if (mode == 'A')
+    {
+        if (fsOpenFile(fileName) != RETURN_OK)
+        {
+            if (fsCreateFile(fileName) != RETURN_OK)
+            {
+                fsSetClusterDir(oldDir);
+                *vErroProc = 27;
+                return 0;
+            }
+            basFiles[channel].size = 0;
+        }
+        else
+            basFiles[channel].size = fsInfoFile(fileName, INFO_SIZE);
+
+        basFiles[channel].pos = basFiles[channel].size;
+    }
+    else
+    {
+        if (fsOpenFile(fileName) != RETURN_OK)
+        {
+            fsSetClusterDir(oldDir);
+            *vErroProc = 27;
+            return 0;
+        }
+
+        basFiles[channel].size = fsInfoFile(fileName, INFO_SIZE);
+        basFiles[channel].pos = 0;
+    }
+
+    fsSetClusterDir(oldDir);
+    basFiles[channel].used = 1;
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// CLOSE @<n>
+//--------------------------------------------------------------------------------------
+int basClose(void)
+{
+    int channel;
+    unsigned long oldDir;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    channel = basFileReadChannelToken();
+    if (*vErroProc) return 0;
+
+    if (!basFileGetOpen(channel))
+        return 0;
+
+    if (!basFileFlush(&basFiles[channel]))
+        return 0;
+
+    oldDir = fsGetClusterDir();
+    fsSetClusterDir(basFiles[channel].dirCluster);
+    fsCloseFile(basFiles[channel].name, basFiles[channel].mode == 'I' ? 0 : 1);
+    fsSetClusterDir(oldDir);
+    memset(&basFiles[channel], 0x00, sizeof(BASIC_FILE_HANDLE));
+
+    return 0;
+}
+
+static int mbasicParseInclude(char *line, char *fileName, int fileNameMax)
+{
+    char *t;
+    int ix;
+
+    t = mbasicTrimLeft(line);
+    mbasicTrimRight(t);
+
+    if (!mbasicWordEq(t, "INCLUDE"))
+        return 0;
+
+    t += 7;
+    t = mbasicTrimLeft(t);
+
+    if (*t == '"')
+    {
+        t++;
+        ix = 0;
+        while (*t && *t != '"' && ix < fileNameMax - 1)
+            fileName[ix++] = *t++;
+
+        if (*t != '"')
+        {
+            printText("Bad INCLUDE filename\r\n");
+            return -1;
+        }
+
+        fileName[ix] = 0;
+        return 1;
+    }
+
+    ix = 0;
+    while (*t && !mbasicIsSpace(*t) && ix < fileNameMax - 1)
+        fileName[ix++] = *t++;
+
+    fileName[ix] = 0;
+
+    if (!fileName[0])
+    {
+        printText("Bad INCLUDE filename\r\n");
+        return -1;
+    }
+
+    return 1;
+}
+
+static int mbasicExpandIncludesInner(char *src, char *out, unsigned long outMax, int depth, int addEof)
+{
+    char line[256];
+    char fileName[64];
+    char *p;
+    char *incBuf;
+    unsigned long outLen;
+    unsigned long incSize;
+    int inc;
+
+    if (depth > MBASIC_INCLUDE_MAX_DEPTH)
+    {
+        printText("Too many nested INCLUDEs\r\n");
+        return 0;
+    }
+
+    p = src;
+    outLen = 0;
+    out[0] = 0;
+
+    while (mbasicReadSourceLine(&p, line, sizeof(line)))
+    {
+        inc = mbasicParseInclude(line, fileName, sizeof(fileName));
+        if (inc < 0)
+            return 0;
+
+        if (inc)
+        {
+            incBuf = (char *)malloc(vMemTotalXBasLoad);
+            if (!incBuf)
+            {
+                printText("No memory for INCLUDE\r\n");
+                return 0;
+            }
+
+            memset(incBuf, 0x1A, vMemTotalXBasLoad);
+            incSize = loadFile((unsigned char *)fileName, (unsigned long *)incBuf);
+            if (incSize == 0)
+            {
+                free(incBuf);
+                printText("INCLUDE file not found: ");
+                printText((unsigned char *)fileName);
+                printText("\r\n");
+                return 0;
+            }
+
+            if (!mbasicExpandIncludesInner(incBuf, out + outLen, outMax - outLen, depth + 1, 0))
+            {
+                free(incBuf);
+                return 0;
+            }
+
+            outLen += strlen(out + outLen);
+            free(incBuf);
+            continue;
+        }
+
+        if (!mbasicAppendRawLine(out, &outLen, outMax, line))
+            return 0;
+    }
+
+    if (addEof)
+    {
+        if (!mbasicAppend(out, &outLen, outMax, "\x1A"))
+            return 0;
+    }
+
+    return 1;
+}
+
+static int mbasicExpandIncludes(char *src, char *out, unsigned long outMax)
+{
+    return mbasicExpandIncludesInner(src, out, outMax, 0, 1);
+}
+
+//--------------------------------------------------------------------------------------
+// EOF(<n>)
+//--------------------------------------------------------------------------------------
+int basEof(void)
+{
+    unsigned char answer[20];
+    int *iVal;
+    int channel;
+    int ret;
+
+    ret = 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type != OPENPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    putback();
+    getExp(answer);
+    if (*vErroProc) return 0;
+
+    if (*value_type == '$')
+    {
+        *vErroProc = 16;
+        return 0;
+    }
+
+    iVal = (int *)answer;
+    if (*value_type == '#')
+        *iVal = fppInt(*iVal);
+
+    channel = *iVal - 1;
+    if (!basFileGetOpen(channel))
+        return 0;
+
+    if (basFiles[channel].pos >= basFiles[channel].size)
+        ret = 1;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type != CLOSEPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    basFileSetIntResult(ret);
+
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------
+// SEEK(<n>,<byte|string>)
+//--------------------------------------------------------------------------------------
+int basSearch(void)
+{
+    unsigned char answer[BASIC_STRING_EXPR_MAX];
+    unsigned char needle[BASIC_STRING_EXPR_MAX];
+    unsigned char ch;
+    int *iVal;
+    int channel;
+    int ret;
+    unsigned long startPos;
+    unsigned long pos;
+    unsigned int ix;
+    unsigned int len;
+
+    ret = -1;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type != OPENPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    putback();
+    getExp(answer);
+    if (*vErroProc) return 0;
+
+    if (*value_type == '$')
+    {
+        *vErroProc = 16;
+        return 0;
+    }
+
+    iVal = (int *)answer;
+    if (*value_type == '#')
+        *iVal = fppInt(*iVal);
+
+    channel = *iVal - 1;
+    if (!basFileGetOpen(channel))
+        return 0;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token != ',')
+    {
+        *vErroProc = 18;
+        return 0;
+    }
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    putback();
+    getExp(answer);
+    if (*vErroProc) return 0;
+
+    if (*value_type == '$')
+    {
+        basStrCopyLimit(needle, answer, sizeof(needle));
+        if (*vErroProc) return 0;
+        len = strlen((char *)needle);
+    }
+    else
+    {
+        iVal = (int *)answer;
+        if (*value_type == '#')
+            *iVal = fppInt(*iVal);
+
+        if (*iVal < 0 || *iVal > 255)
+        {
+            *vErroProc = 5;
+            return 0;
+        }
+
+        needle[0] = (unsigned char)*iVal;
+        needle[1] = 0x00;
+        len = 1;
+    }
+
+    if (len == 0)
+    {
+        *vErroProc = 5;
+        return 0;
+    }
+
+    startPos = basFiles[channel].pos;
+    pos = startPos;
+
+    while (pos < basFiles[channel].size)
+    {
+        basFiles[channel].pos = pos;
+
+        for (ix = 0; ix < len; ix++)
+        {
+            if (basFileReadByte(channel, &ch) <= 0)
+                break;
+
+            if (ch != needle[ix])
+                break;
+        }
+
+        if (ix == len)
+        {
+            ret = (int)pos;
+            basFiles[channel].pos = pos;
+            break;
+        }
+
+        pos++;
+    }
+
+    if (ret < 0)
+        basFiles[channel].pos = startPos;
+
+    nextToken();
+    if (*vErroProc) return 0;
+
+    if (*token_type != CLOSEPARENT)
+    {
+        *vErroProc = 15;
+        return 0;
+    }
+
+    basFileSetIntResult(ret);
+
+    return 0;
+}
+
 /*****************************************************************************/
 /* FUNCOES BASIC                                                             */
 /*****************************************************************************/
@@ -7702,6 +8776,8 @@ int basPrint(void)
     int len=0, spaces;
     char last_delim = 0, last_token_type = 0;
     unsigned char sqtdtam[10];
+    int fileChannel = -1;
+    int fileOutput = 0;
 
     do {
         nextToken();
@@ -7710,8 +8786,43 @@ int basPrint(void)
         if (*tok == EOL || *tok == FINISHED)
             break;
 
+        if (!fileOutput && *token == '@')
+        {
+            fileChannel = basFileReadChannelToken();
+            if (*vErroProc) return 0;
+
+            if (!basFileGetOpen(fileChannel))
+                return 0;
+
+            fileOutput = 1;
+            last_delim = *token;
+
+            if (*tok == EOL || *tok == FINISHED || *token == ':')
+                break;
+
+            if (*token != ',' && *token != ';')
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+
+            nextToken();
+            if (*vErroProc) return 0;
+
+            if (*tok == EOL || *tok == FINISHED || *token == ':')
+                break;
+        }
+
         if (*token_type == QUOTE) { // is string
-            printText(token);
+            if (fileOutput)
+            {
+                if (!basFileWriteString(fileChannel, token))
+                    return 0;
+            }
+            else
+                printText(token);
+
+            len += strlen((char *)token);
 
             nextToken();
             if (*vErroProc) return 0;
@@ -7739,7 +8850,15 @@ int basPrint(void)
                 }
             }
 
-            printText(answer);
+            if (fileOutput)
+            {
+                if (!basFileWriteString(fileChannel, answer))
+                    return 0;
+            }
+            else
+                printText(answer);
+
+            len += strlen((char *)answer);
 
             nextToken();
             if (*vErroProc) return 0;
@@ -7751,7 +8870,14 @@ int basPrint(void)
             // compute number of spaces to move to next tab
             spaces = 8 - (len % 8);
             while(spaces) {
-                printChar(' ',1);
+                if (fileOutput)
+                {
+                    if (!basFileWriteByte(fileChannel, ' '))
+                        return 0;
+                }
+                else
+                    printChar(' ',1);
+                len++;
                 spaces--;
             }
         }
@@ -7770,7 +8896,15 @@ int basPrint(void)
 
     if (*tok == EOL || *tok == FINISHED || *token==':') {
         if (last_delim != ';' && last_delim!=',')
-            basPrintNewLine();
+        {
+            if (fileOutput)
+            {
+                if (!basFileWriteString(fileChannel, (unsigned char *)"\r\n"))
+                    return 0;
+            }
+            else
+                basPrintNewLine();
+        }
     }
 
     return 0;
@@ -9329,6 +10463,8 @@ int basInputGet(unsigned char pSize)
     unsigned char varTipo;
     char vArray = 0;
     unsigned char *vTempPointer;
+    int fileChannel = -1;
+    int fileInput = 0;
 
     do {
         nextToken();
@@ -9337,8 +10473,43 @@ int basInputGet(unsigned char pSize)
         if (*tok == EOL || *tok == FINISHED)
             break;
 
+        vArray = 0;
+        fileInput = 0;
+
+        if (*token == '@')
+        {
+            if (pSize == 1)
+            {
+                *vErroProc = 27;
+                return 0;
+            }
+
+            fileChannel = basFileReadChannelToken();
+            if (*vErroProc) return 0;
+
+            if (!basFileGetOpen(fileChannel))
+                return 0;
+
+            if (*token != ',')
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+
+            nextToken();
+            if (*vErroProc) return 0;
+
+            fileInput = 1;
+        }
+
         if (*token_type == QUOTE) /* is string */
         {
+            if (fileInput)
+            {
+                *vErroProc = 4;
+                return 0;
+            }
+
             if (vTemTexto)
             {
                 *vErroProc = 14;
@@ -9419,11 +10590,17 @@ int basInputGet(unsigned char pSize)
             else
             {
                 // INPUT
-                vtec = inputLineBasic(255,varTipo);
+                if (fileInput)
+                    basFileReadLine(fileChannel, answer, sizeof(answer));
+                else
+                    vtec = inputLineBasic(255,varTipo);
 
-                if (vbufInput[0] != 0x00 && (vtec == 0x0D || vtec == 0x0A))
+                if (*vErroProc) return 0;
+
+                if (!fileInput && vbufInput[0] != 0x00 && (vtec == 0x0D || vtec == 0x0A))
                 {
                     ix = 0;
+                    buffptr = &vbufInput;
 
                     while (*buffptr)
                     {
@@ -9432,19 +10609,20 @@ int basInputGet(unsigned char pSize)
                     }
                 }
 
-                printText("\r\n");
+                if (!fileInput)
+                    printText("\r\n");
             }
 
             if (varTipo!='$')
             {
                 if (varTipo=='#')  // verifica se eh numero inteiro ou real
                 {
-                    iVal=floatStringToFpp(answer);
+                    *iVal=floatStringToFpp(answer);
                     if (*vErroProc) return 0;
                 }
                 else
                 {
-                    iVal=atoi(answer);
+                    *iVal=atoi(answer);
                 }
 
                 answer[0]=((int)(*iVal & 0xFF000000) >> 24);
@@ -10845,7 +12023,9 @@ int basScreen(void)
                 vdpMaxRows = 47;
                 vdpModeBas = VDP_MODE_MULTICOLOR;
                 spriteSizeSelBas = vSpriteSize;
+                spriteMagSelBas = vSpriteMag;
                 basSpriteResetCache();
+                basSpriteHideAllSlots(BASIC_SPRITE_ATTRIBUTE_TABLE);
             }
             break;
         case 2:
@@ -10858,8 +12038,10 @@ int basScreen(void)
                 vdp_set_bdcolor(VDP_BLACK);
                 bgcolorBas = VDP_BLACK;
                 spriteSizeSelBas = vSpriteSize;
+                spriteMagSelBas = vSpriteMag;
                 basPaintSyncTables();
                 basSpriteResetCache();
+                basSpriteHideAllSlots(BASIC_SPRITE_ATTRIBUTE_TABLE);
             }
             else
             {
@@ -10881,6 +12063,7 @@ int basText(void)
     vdpMaxRows = 23;
     vdpModeBas = VDP_MODE_TEXT;
     spriteSizeSelBas = 0;
+    spriteMagSelBas = 0;
     basSpriteResetCache();
     clearScr();
     return 0;
@@ -11986,16 +13169,16 @@ int basFill (void)
 //--------------------------------------------------------------------------------------
 // Carrega dados do sprite para a tabela de padroes.
 // Syntaxe:
-//          SPRITESET <number>,<var$>
+//          SPRITESET <number>,<byte0>,<byte1>...<byteN>
 //--------------------------------------------------------------------------------------
 int basSpriteSet(void)
 {
     int spriteNumber = 0;
-    unsigned char answer[256];
+    int byteValue = 0;
     unsigned char spriteData[32];
     unsigned int spriteLimit;
     unsigned int spriteBytes;
-    unsigned int copyBytes;
+    unsigned int ix;
 
     if (vdpModeBas == VDP_MODE_TEXT)
     {
@@ -12037,33 +13220,38 @@ int basSpriteSet(void)
     memset(spriteData, 0x00, sizeof(spriteData));
     spriteBytes = basSpritePatternBytes();
 
-    if (*token_type == QUOTE)
+    for (ix = 0; ix < spriteBytes; ix++)
     {
-        copyBytes = strlen((char *)token);
-        if (copyBytes > spriteBytes)
-            copyBytes = spriteBytes;
-        memcpy(spriteData, token, copyBytes);
-    }
-    else
-    {
-        putback();
-
-        getExp(&answer);
+        basReadNumericArg(&byteValue);
         if (*vErroProc) return 0;
 
-        if (*value_type != '$')
+        if (byteValue < 0 || byteValue > 255)
         {
-            *vErroProc = 16;
+            *vErroProc = 5;
             return 0;
         }
 
-        copyBytes = strlen((char *)answer);
-        if (copyBytes > spriteBytes)
-            copyBytes = spriteBytes;
-        memcpy(spriteData, answer, copyBytes);
+        spriteData[ix] = (unsigned char)byteValue;
+
+        if ((ix + 1) < spriteBytes)
+        {
+            nextToken();
+            if (*vErroProc) return 0;
+
+            if (*token != ',')
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+
+            nextToken();
+            if (*vErroProc) return 0;
+        }
     }
 
-    vdp_set_sprite_pattern((unsigned char)spriteNumber, spriteData);
+    basSpriteWritePattern((unsigned char)spriteNumber, spriteData);
+    memcpy(spritePatternCache[(unsigned char)spriteNumber], spriteData, sizeof(spriteData));
+    spritePatternLoadedCache[(unsigned char)spriteNumber] = 1;
     *value_type = '%';
 
     return 0;
@@ -12181,9 +13369,12 @@ int basSpritePut(void)
         return 0;
     }
 
-    spriteHandle = vdp_sprite_init((unsigned char)spriteNumber, (unsigned char)plane, (unsigned char)colorValue);
+    spriteHandle = basSpriteSlotHandle((unsigned char)plane);
     spriteHandleCache[(unsigned char)spriteNumber] = spriteHandle;
-    vdp_sprite_set_position(spriteHandle, (unsigned int)xValue, (unsigned char)yValue);
+    basSpriteWriteSlot((unsigned char)spriteNumber, (unsigned char)plane, (unsigned char)xValue, (unsigned char)yValue, (unsigned char)colorValue);
+    spriteActiveCache[(unsigned char)spriteNumber] = 1;
+    spriteXCache[(unsigned char)spriteNumber] = (unsigned char)xValue;
+    spriteYCache[(unsigned char)spriteNumber] = (unsigned char)yValue;
 
     *value_type = '%';
 
@@ -12330,7 +13521,10 @@ int basSpritePos(void)
         return 0;
     }
 
-    vdp_sprite_set_position(spriteHandle, (unsigned int)xValue, (unsigned char)yValue);
+    basSpriteWritePosition(spriteHandle, (unsigned char)xValue, (unsigned char)yValue);
+    spriteActiveCache[(unsigned char)spriteNumber] = 1;
+    spriteXCache[(unsigned char)spriteNumber] = (unsigned char)xValue;
+    spriteYCache[(unsigned char)spriteNumber] = (unsigned char)yValue;
     *value_type = '%';
 
     return 0;
@@ -12348,10 +13542,6 @@ int basSpriteOver(void)
     unsigned int spriteLimit;
     unsigned int spriteHandle1;
     unsigned int spriteHandle2;
-    Sprite_attributes spritePos1;
-    Sprite_attributes spritePos2;
-    unsigned char collision1;
-    unsigned char collision2;
     unsigned int result = 0;
 
     if (vdpModeBas == VDP_MODE_TEXT)
@@ -12428,16 +13618,7 @@ int basSpriteOver(void)
     }
 
     if (spriteHandle1 != spriteHandle2)
-    {
-        spritePos1 = vdp_sprite_get_position(spriteHandle1);
-        spritePos2 = vdp_sprite_get_position(spriteHandle2);
-
-        collision1 = (vdp_sprite_set_position(spriteHandle1, (unsigned int)spritePos1.x, (unsigned char)spritePos1.y) & VDP_FLAG_COIN) ? 1 : 0;
-        collision2 = (vdp_sprite_set_position(spriteHandle2, (unsigned int)spritePos2.x, (unsigned char)spritePos2.y) & VDP_FLAG_COIN) ? 1 : 0;
-
-
-        result = (collision1 && collision2) ? 1 : 0;
-    }
+        result = basSpriteMaskOverlap((unsigned char)spriteNumber1, (unsigned char)spriteNumber2);
 
     *value_type = '%';
 

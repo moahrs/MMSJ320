@@ -98,8 +98,29 @@ static int mftpReadLine(char *buf, int max)
         if (c == 13 || c == 10)
         {
             buf[pos] = 0;
+
+            if (pos == 0)
+                continue;
+
+            if (!strncmp(buf, "EVT;", 4))
+            {
+                pos = 0;
+                continue;
+            }
+
             mftpPuts((unsigned char*)"\r\n");
             return pos;
+        }
+
+        if (c == X_EOT)
+        {
+            if (pos >= 4)
+            {
+                buf[pos] = 0;
+                if (!strncmp(buf, "EVT;", 4))
+                    pos = 0;
+            }
+            continue;
         }
 
         if (c == 8)
@@ -587,6 +608,7 @@ static int mftpSendFile(char *fileName)
     mprintf("MFTP-XFER GET %s SIZE %ld\r\n", sendName, fileSize);
     MFTP_STATUS_XFER("Waiting receiver");
     MFTP_STATUS_BYTES("Sent", 0);
+    delayms(100);
 
     retry = 0;
     while (1)
@@ -781,7 +803,7 @@ static void readResponseProc(unsigned char *s)
         else if (c == '\n' || c == 0x04)
         {
             line[pos] = 0;
-            if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERROR", 5))
+            if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERR;", 4) || !strncmp(line, "ERROR", 5))
             {
                 strcpy(s, line);
                 return;
@@ -801,6 +823,6 @@ static void readResponseProc(unsigned char *s)
     }
 
     line[pos] = 0;
-    if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERROR", 5))
+    if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERR;", 4) || !strncmp(line, "ERROR", 5))
         strcpy(s, line);
 }
