@@ -34,6 +34,34 @@ static MMSJ_CONSOLE mftpOldConsole;
 static unsigned char mftpConsoleInstalled = 0;
 static unsigned char mftpXBlock[1024];
 
+typedef struct
+{
+    unsigned long cluster;
+    unsigned char dirPath[128];
+} MFTP_DIR_STATE;
+
+static void mftpSaveDirState(MFTP_DIR_STATE *state)
+{
+    state->cluster = fsGetClusterDir();
+    state->dirPath[0] = 0;
+    fsPwdDir(state->dirPath);
+}
+
+static void mftpRestoreDirState(MFTP_DIR_STATE *state)
+{
+    unsigned char cmd[132];
+
+    if (state->dirPath[0])
+    {
+        strcpy((char *)cmd, "CD ");
+        strncat((char *)cmd, (char *)state->dirPath, sizeof(cmd) - 4);
+        cmd[sizeof(cmd) - 1] = 0;
+        fsOsCommand(cmd);
+    }
+
+    fsSetClusterDir(state->cluster);
+}
+
 int serialBufGet(unsigned char *c)
 {
     if (serRxHead == serRxTail)

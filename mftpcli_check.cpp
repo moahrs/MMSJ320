@@ -35,6 +35,7 @@
 #define X_RETRY_MAX   10
 
 #define NET_TIMEOUT_SHORT_MS   100
+#define NET_CONNECT_TIMEOUT_MS 8000
 #define X_TIMEOUT_FIRST_MS     90000
 #define X_TIMEOUT_CHAR_MS      9000
 #define X_TIMEOUT_ACK_MS       90000
@@ -134,6 +135,14 @@ static int tcpConnect(const char *host, unsigned short port)
     struct sockaddr_in addr;
     struct hostent *he;
     unsigned long ip;
+    unsigned long nonBlock;
+    fd_set writeSet;
+    fd_set exceptSet;
+    struct timeval tv;
+    int r;
+    int sel;
+    int err;
+    int errLen;
 
     gSock = socket(AF_INET, SOCK_STREAM, 0);
     if (gSock == INVALID_SOCKET)
@@ -162,11 +171,46 @@ static int tcpConnect(const char *host, unsigned short port)
         addr.sin_addr.s_addr = ip;
     }
 
-    if (connect(gSock, (struct sockaddr *)&addr, sizeof(addr)) != 0)
+    nonBlock = 1;
+    ioctlsocket(gSock, FIONBIO, &nonBlock);
+
+    r = connect(gSock, (struct sockaddr *)&addr, sizeof(addr));
+    if (r != 0)
     {
-        printf("Erro conectando em %s:%u.\n", host, port);
-        return 0;
+        err = WSAGetLastError();
+        if (err != WSAEWOULDBLOCK)
+        {
+            printf("Erro conectando em %s:%u.\n", host, port);
+            return 0;
+        }
+
+        FD_ZERO(&writeSet);
+        FD_ZERO(&exceptSet);
+        FD_SET(gSock, &writeSet);
+        FD_SET(gSock, &exceptSet);
+
+        tv.tv_sec = NET_CONNECT_TIMEOUT_MS / 1000;
+        tv.tv_usec = (NET_CONNECT_TIMEOUT_MS % 1000) * 1000;
+
+        sel = select(0, NULL, &writeSet, &exceptSet, &tv);
+        if (sel <= 0 || FD_ISSET(gSock, &exceptSet))
+        {
+            printf("Timeout conectando em %s:%u.\n", host, port);
+            return 0;
+        }
+
+        err = 0;
+        errLen = sizeof(err);
+        getsockopt(gSock, SOL_SOCKET, SO_ERROR, (char *)&err, &errLen);
+        if (err != 0)
+        {
+            printf("Erro conectando em %s:%u.\n", host, port);
+            return 0;
+        }
     }
+
+    nonBlock = 0;
+    ioctlsocket(gSock, FIONBIO, &nonBlock);
 
     return 1;
 }

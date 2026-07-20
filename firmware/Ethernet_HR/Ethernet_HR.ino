@@ -23,7 +23,6 @@
 #define LAN_POLL_MS   1000
 #define PLUS_TIMEOUT_MS 1000
 #define ETH_MAINTAIN_MS 1000
-#define ETH_RETRY_MS    5000
 
 byte mac[] = { 0x02, 0x68, 0x00, 0x00, 0x00, 0x45 };
 
@@ -52,7 +51,6 @@ unsigned long ledActUntil = 0;
 unsigned long lanPollLast = 0;
 unsigned long plusLastMs = 0;
 unsigned long ethMaintainLast = 0;
-unsigned long ethRetryLast = 0;
 
 #define TCP_RXBUF_SIZE 4096
 
@@ -169,6 +167,23 @@ void endResponse()
   Serial2.flush();
 }
 
+bool ethernetUsable()
+{
+  IPAddress ip;
+
+  if (!ethernetReady)
+    return false;
+
+  if (Ethernet.linkStatus() == LinkOFF)
+    return false;
+
+  ip = Ethernet.localIP();
+  if (ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0)
+    return false;
+
+  return true;
+}
+
 void printNetInfo()
 {
   Serial2.print("IP: ");
@@ -223,6 +238,14 @@ void cmdTcpListen(char *arg)
     return;
   }
 
+  if (!ethernetUsable())
+  {
+    tcpResetState(false);
+    Serial2.print("ERR;NOETH");
+    endResponse();
+    return;
+  }
+
   tcpResetState(false);
   tcpListenPort = 23;
   tcpListenMode = true;
@@ -241,6 +264,14 @@ void cmdTcpConnect(char *arg)
   if (!parseHostPort(arg, host, &port))
   {
     Serial2.println("ERR;BADADDR");
+    endResponse();
+    return;
+  }
+
+  if (!ethernetUsable())
+  {
+    tcpResetState(false);
+    Serial2.println("ERR;NOETH");
     endResponse();
     return;
   }
@@ -475,14 +506,8 @@ void ethernetPoll()
     return;
   }
 
-  if (!ethernetReady && (long)(now - ethRetryLast) >= ETH_RETRY_MS)
-  {
-    ethRetryLast = now;
-    initEthernet();
-
-    if (ethernetReady && tcpListenMode)
-      tcpServer.begin();
-  }
+  if (!ethernetReady && Ethernet.linkStatus() != LinkOFF)
+    digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
 }
 
 bool parseIpPort(char *s, IPAddress &ip, uint16_t &port)
@@ -562,6 +587,10 @@ Serial.println(cmd);
   {
     Serial2.print("OK;");
     Serial2.print(vStatusAux);
+    Serial2.print(";");
+    Serial2.print(ethernetUsable() ? "NETOK" : "NOETH");
+    Serial2.print(";");
+    Serial2.print(Ethernet.localIP());
     endResponse();
   }
   else if (strncmp(cmd, "ATUDP=", 6) == 0)
@@ -584,6 +613,16 @@ Serial.println(cmd);
   }
   else if (strcmp(cmd, "ATLISTEN?") == 0)
   {
+    if (!ethernetUsable())
+    {
+      tcpResetState(false);
+      Serial2.print("OK;");
+      Serial2.print("OFF");
+      Serial2.print(";NOETH");
+      endResponse();
+      return;
+    }
+
     Serial2.print("OK;");
     Serial2.print(tcpListenMode ? "LISTEN" : "OFF");
     Serial2.print(";");
@@ -630,6 +669,22 @@ Serial.println(cmd);
       Serial2.read();
 
     Serial2.println("OK;RESETTCP");
+    endResponse();
+  }
+  else if (strcmp(cmd, "ATRESETNET") == 0)
+  {
+    udpOpen = false;
+    tcpResetState(false);
+    ethernetReady = false;
+    digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
+
+    while (Serial2.available())
+      Serial2.read();
+
+    initEthernet();
+
+    Serial2.print(ethernetReady ? "OK;RESETNET;" : "ERR;RESETNET;");
+    Serial2.print(vStatusAux);
     endResponse();
   }
   else
@@ -714,16 +769,16 @@ void setup()
 
 void loop()
 {
-  ethernetPoll();
-  ledsPoll();
-
   if (tcpMode)
   {
+    ledsPoll();
     tcpBridgePoll();
     return;
   }
 
-  tcpListenPoll();
   serialPoll();
+  ethernetPoll();
+  ledsPoll();
+  tcpListenPoll();
   udpPoll();
 }

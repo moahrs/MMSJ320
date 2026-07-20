@@ -53,6 +53,9 @@ int main(void)
     long vTimeOut = 8;
     unsigned char cCmd[128];
     char listenOn = 0;
+    MFTP_DIR_STATE dirState;
+
+    mftpSaveDirState(&dirState);
 
     printText("Enabling Comm...\r\n");
     netCommEnable();
@@ -61,7 +64,6 @@ int main(void)
     netCommResetInput();
     writeLongSerial("+++");
     writeSerial('\r');
-    readResponseProc(&cCmd);
     delayms(50);
 
     netCommResetInput();
@@ -80,6 +82,9 @@ int main(void)
         
         readResponseProc(&cCmd);
 
+        if (!strncmp(cCmd, "OK;OFF;NOETH", 12) || !strncmp(cCmd, "ERR;NOETH", 9))
+            break;
+
         if (!strncmp(cCmd,"OK;",3))
         {
             if (!strncmp(cCmd,"OK;OFF",6))  // se bater, nao esta no Listen
@@ -89,6 +94,9 @@ int main(void)
                 writeLongSerial("ATLISTEN");
                 writeSerial('\r');                    
                 readResponseProc(&cCmd);
+
+                if (!strncmp(cCmd, "OK;OFF;NOETH", 12) || !strncmp(cCmd, "ERR;NOETH", 9))
+                    break;
             }
             else
             {
@@ -103,6 +111,7 @@ int main(void)
         if (*startBasic == 1)
             mprintf("Unable to set Listen");
 
+        mftpRestoreDirState(&dirState);
         return 1;
     }
 
@@ -201,5 +210,6 @@ int main(void)
 
     printText("Bye\r\n");
 
+    mftpRestoreDirState(&dirState);
     return 0;
 }

@@ -184,6 +184,9 @@ void procFtpd(void)
     long vTimeOut = 8;
     unsigned char cCmd[128];
     char listenOn = 0;
+    MFTP_DIR_STATE dirState;
+
+    mftpSaveDirState(&dirState);
 
     wftpStatus((unsigned char *)"Enabling Comm's");
     netCommEnable();
@@ -192,7 +195,6 @@ void procFtpd(void)
     netCommResetInput();
     writeLongSerial("+++");
     writeSerial('\r');
-    readResponseProc(&cCmd);
     delayms(50);
 
     netCommResetInput();
@@ -211,6 +213,9 @@ void procFtpd(void)
         
         readResponseProc(&cCmd);
 
+        if (!strncmp(cCmd, "OK;OFF;NOETH", 12) || !strncmp(cCmd, "ERR;NOETH", 9))
+            break;
+
         if (!strncmp(cCmd,"OK;",3))
         {
             if (!strncmp(cCmd,"OK;OFF",6))  // se bater, nao esta no Listen
@@ -221,6 +226,9 @@ void procFtpd(void)
                 writeLongSerial("ATLISTEN");
                 writeSerial('\r');                    
                 readResponseProc(&cCmd);
+
+                if (!strncmp(cCmd, "OK;OFF;NOETH", 12) || !strncmp(cCmd, "ERR;NOETH", 9))
+                    break;
             }
             else
             {
@@ -236,6 +244,7 @@ void procFtpd(void)
         if (*startBasic == 1)
             mprintf("Unable to set Listen");
 
+        mftpRestoreDirState(&dirState);
         return 1;
     }
 
@@ -335,7 +344,8 @@ void procFtpd(void)
         }
     }
 
-    mftpConsoleUninstall();    
+    mftpConsoleUninstall();
+    mftpRestoreDirState(&dirState);
 }
 
 int main(void)
