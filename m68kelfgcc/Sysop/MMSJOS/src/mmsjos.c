@@ -1093,6 +1093,7 @@ void inputFunc(void *pdata)
     unsigned char vbufptr = 0;
     MMSJ_KEYEVENT k;
     int histPos = -1;
+    unsigned char telnetWasEnabled;
     
     while (1)
     {
@@ -1199,7 +1200,13 @@ void inputFunc(void *pdata)
                 consoleWriteText("\r\n\0");
 
                 mmsjosHistoryAdd(vbuf);
+                if (!telnetConsoleActive())
+                    telnetWasEnabled = telnetPauseLocalCommand();
+                else
+                    telnetWasEnabled = 0;
+
                 vRetProcCmd = fsOsCommand("\0");
+                telnetResumeLocalCommand(telnetWasEnabled);
 
                 vbuf[0] = '\0';
                 vbufptr = 0x00;

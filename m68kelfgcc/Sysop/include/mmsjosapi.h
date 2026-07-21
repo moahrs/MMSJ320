@@ -86,6 +86,9 @@ typedef void (*fillinType)(unsigned char id, unsigned char* vvar, unsigned short
 typedef void (*getColorDataType)(MGUI_COLOR *pColor);
 typedef unsigned char (*buttonType)(unsigned char id, unsigned char* title, unsigned short xib, unsigned short yib, unsigned short pwidth, unsigned short height, unsigned char vtipo);
 typedef void (*comboboxType)(unsigned char id, unsigned char* vopt, unsigned char *vvar, unsigned short x, unsigned short y, unsigned short pwidth, unsigned char vtipo);
+typedef int (*rtcSetDateTimeType)(DateTimeData *dt);
+typedef int (*rtcReadDateTimeType)(DateTimeData *dt);
+typedef int (*rtcInitWithSqwType)(void);
 
 // MMSJOS UCOSII Struct for Functions
 
@@ -169,6 +172,9 @@ typedef void (*comboboxType)(unsigned char id, unsigned char* vopt, unsigned cha
 #define button ((buttonType *)(unsigned long)MGUI_FUNC_TABLE)[31] // Índice da função
 
 #define combobox ((comboboxType *)(unsigned long)MGUI_FUNC_TABLE)[32] // Indice da funcao
+#define rtc_set_datetime ((rtcSetDateTimeType *)(unsigned long)MGUI_FUNC_TABLE)[33] // Indice da funcao
+#define rtc_read_datetime ((rtcReadDateTimeType *)(unsigned long)MGUI_FUNC_TABLE)[34] // Indice da funcao
+#define rtc_init_with_sqw ((rtcInitWithSqwType *)(unsigned long)MGUI_FUNC_TABLE)[35] // Indice da funcao
 
 // MMSJOS UCOSII define Functions
 

@@ -12,6 +12,8 @@ unsigned char telnetIsEnabled(void);
 unsigned char telnetSetEnabled(unsigned char enabled);
 unsigned char telnetSuspend(void);
 void telnetResume(unsigned char wasEnabled);
+unsigned char telnetPauseLocalCommand(void);
+void telnetResumeLocalCommand(unsigned char wasPaused);
 unsigned char telnetGetKey(MMSJ_KEYEVENT *keyEvent);
 
 #endif

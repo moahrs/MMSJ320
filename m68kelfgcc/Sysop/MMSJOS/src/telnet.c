@@ -50,6 +50,7 @@ static MMSJ_KEYEVENT telnetKeyQueue[TELNET_KEY_QUEUE_SIZE];
 static volatile unsigned char telnetKeyHead;
 static volatile unsigned char telnetKeyTail;
 static unsigned char telnetProgramMode;
+static FILES_DIR telnetListDir[128];
 
 static void telnetQueueKey(unsigned char code, unsigned char ascii,
                            unsigned char flags)
@@ -285,24 +286,170 @@ static unsigned char telnetCommandAllowed(const unsigned char *cmd)
            telnetCommandIs(cmd, "LS") ||
            telnetCommandIs(cmd, "DIR") ||
            telnetCommandIs(cmd, "PWD") ||
-           telnetCommandIs(cmd, "CD") ||
-           telnetCommandIs(cmd, "CAT") ||
-           telnetCommandIs(cmd, "DATE") ||
-           telnetCommandIs(cmd, "TIME") ||
-           telnetCommandIs(cmd, "CP") ||
-           telnetCommandIs(cmd, "RM") ||
-           telnetCommandIs(cmd, "REN") ||
-           telnetCommandIs(cmd, "MD") ||
-           telnetCommandIs(cmd, "RD") ||
-           telnetCommandIs(cmd, "EDIT");
+           telnetCommandIs(cmd, "CD");
 }
 
 static void telnetHelp(void)
 {
     telnetPuts((unsigned char *)
         "Commands: VER, LS, DIR, PWD, CD, CAT, DATE, TIME\r\n"
-        "          CP, RM, REN, MD, RD, EDIT, CLS, CLEAR, EXIT, QUIT\r\n"
-        "External and graphic programs are disabled in Telnet.\r\n");
+        "          CLS, CLEAR, EXIT, QUIT\r\n"
+        "Contingency mode: write/delete/program commands are disabled.\r\n");
+}
+
+static unsigned char *telnetCommandArg(unsigned char *cmd)
+{
+    while (*cmd && *cmd != ' ' && *cmd != '\t')
+        cmd++;
+
+    while (*cmd == ' ' || *cmd == '\t')
+        cmd++;
+
+    return cmd;
+}
+
+static void telnetSaveLocalDir(unsigned long *cluster, unsigned short *dirIndex,
+                               unsigned char *path, RET_PATH *retPath,
+                               RET_PATH *retPath2, FAT32_DIR *dir)
+{
+    *cluster = vclusterdir;
+    *dirIndex = vdiratuidx;
+    strcpy((char *)path, (char *)vdiratu);
+    *retPath = vretpath;
+    *retPath2 = vretpath2;
+    *dir = vdir;
+}
+
+static void telnetRestoreLocalDir(unsigned long cluster, unsigned short dirIndex,
+                                  unsigned char *path, RET_PATH retPath,
+                                  RET_PATH retPath2, FAT32_DIR dir)
+{
+    vclusterdir = cluster;
+    vdiratuidx = dirIndex;
+    strcpy((char *)vdiratu, (char *)path);
+    vretpath = retPath;
+    vretpath2 = retPath2;
+    vdir = dir;
+}
+
+static void telnetUseRemoteDir(void)
+{
+    vclusterdir = telnetDirCluster;
+    vdiratuidx = telnetDirIndex;
+    strcpy((char *)vdiratu, (char *)telnetDirPath);
+}
+
+static void telnetStoreRemoteDir(void)
+{
+    telnetDirCluster = vclusterdir;
+    telnetDirIndex = vdiratuidx;
+    strcpy((char *)telnetDirPath, (char *)vdiratu);
+}
+
+static void telnetPrintVer(void)
+{
+    telnetPuts((unsigned char *)"MMSJ-OS/68K\r\n");
+    telnetPuts((unsigned char *)"CPU      68HC000\r\n");
+    telnetPuts((unsigned char *)"VIDEO    TMS9118\r\n");
+    telnetPuts((unsigned char *)"DISK     FAT32\r\n");
+}
+
+static void telnetPrintPwd(void)
+{
+    telnetPuts(telnetDirPath);
+    telnetPuts((unsigned char *)"\r\n");
+}
+
+static void telnetChangeDir(unsigned char *cmd)
+{
+    unsigned long localCluster;
+    unsigned short localDirIndex;
+    unsigned char localDirPath[128];
+    RET_PATH localRetPath;
+    RET_PATH localRetPath2;
+    FAT32_DIR localDir;
+    unsigned char *arg;
+    unsigned char ret;
+
+    arg = telnetCommandArg(cmd);
+    if (!arg[0])
+    {
+        telnetPrintPwd();
+        return;
+    }
+
+    telnetSaveLocalDir(&localCluster, &localDirIndex, localDirPath,
+                       &localRetPath, &localRetPath2, &localDir);
+    telnetUseRemoteDir();
+
+    ret = fsChangeDir((char *)arg);
+    if (ret == RETURN_OK)
+        telnetStoreRemoteDir();
+    else
+        telnetPuts((unsigned char *)"Directory not found.\r\n");
+
+    telnetRestoreLocalDir(localCluster, localDirIndex, localDirPath,
+                          localRetPath, localRetPath2, localDir);
+}
+
+static void telnetListFiles(unsigned char *cmd)
+{
+    unsigned long localCluster;
+    unsigned short localDirIndex;
+    unsigned char localDirPath[128];
+    RET_PATH localRetPath;
+    RET_PATH localRetPath2;
+    FAT32_DIR localDir;
+    unsigned char *arg;
+    unsigned short ix;
+    char pNameFile[16];
+
+    arg = telnetCommandArg(cmd);
+
+    telnetSaveLocalDir(&localCluster, &localDirIndex, localDirPath,
+                       &localRetPath, &localRetPath2, &localDir);
+    telnetUseRemoteDir();
+
+    fsListDir(telnetListDir, arg);
+
+    ix = 0;
+    while (ix < 128 && telnetListDir[ix].Name[0] != 0)
+    {
+        if (telnetListDir[ix].Attr[1] == 'V')
+        {
+            telnetPuts((unsigned char *)"          Disk name is ");
+            telnetPuts(telnetListDir[ix].Name);
+            telnetPuts(telnetListDir[ix].Ext);
+            telnetPuts((unsigned char *)"\r\n\r\n");
+        }
+        else
+        {
+            strcpy(pNameFile, (char *)telnetListDir[ix].Name);
+            if (telnetListDir[ix].Ext[0] != 0)
+            {
+                strcat(pNameFile, ".");
+                strcat(pNameFile, (char *)telnetListDir[ix].Ext);
+            }
+
+            if (telnetListDir[ix].Attr[1] == 'D')
+                strcat(pNameFile, "/");
+
+            telnetPuts((unsigned char *)"    ");
+            if (telnetListDir[ix].Attr[1] == 'D')
+                telnetPuts((unsigned char *)"     ");
+            else
+                telnetPuts(telnetListDir[ix].Size);
+            telnetPuts((unsigned char *)" ");
+            telnetPuts(telnetListDir[ix].Modify);
+            telnetPuts((unsigned char *)" ");
+            telnetPuts((unsigned char *)pNameFile);
+            telnetPuts((unsigned char *)"\r\n");
+        }
+        ix++;
+    }
+
+    telnetRestoreLocalDir(localCluster, localDirIndex, localDirPath,
+                          localRetPath, localRetPath2, localDir);
 }
 
 static void telnetRunCommand(unsigned char *cmd)
@@ -344,6 +491,33 @@ static void telnetRunCommand(unsigned char *cmd)
         telnetPuts((unsigned char *)"Unauthorized in Telnet.\r\n");
         return;
     }
+
+    if (telnetCommandIs(cmd, "VER"))
+    {
+        telnetPrintVer();
+        return;
+    }
+
+    if (telnetCommandIs(cmd, "PWD"))
+    {
+        telnetPrintPwd();
+        return;
+    }
+
+    if (telnetCommandIs(cmd, "CD"))
+    {
+        telnetChangeDir(cmd);
+        return;
+    }
+
+    if (telnetCommandIs(cmd, "LS") || telnetCommandIs(cmd, "DIR"))
+    {
+        telnetListFiles(cmd);
+        return;
+    }
+
+    telnetPuts((unsigned char *)"Command disabled in Telnet contingency mode.\r\n");
+    return;
 
     if (telnetCommandIs(cmd, "DIR"))
     {
@@ -593,11 +767,15 @@ static void telnetStartListen(void)
         return;
 
     if (telnetContains(response, "OK;LISTEN;"))
+    {
+        telnetRxReset();
         return;
+    }
 
     telnetRxReset();
     writeLongSerial((unsigned char *)"ATLISTEN\r");
     telnetWaitResponse(response, sizeof(response), 800000UL);
+    telnetRxReset();
 }
 
 static void telnetStopListen(void)
@@ -615,7 +793,7 @@ static void telnetStopListen(void)
     }
 
     telnetRxReset();
-    writeLongSerial((unsigned char *)"ATH\r");
+    writeLongSerial((unsigned char *)"ATRESETTCP\r");
     telnetWaitResponse(response, sizeof(response), 800000UL);
     telnetRxReset();
 }
@@ -739,6 +917,41 @@ void telnetResume(unsigned char wasEnabled)
     telnetSuspended = 0;
     telnetNetEnable();
     telnetStartListen();
+    telnetTimerEnable();
+}
+
+unsigned char telnetPauseLocalCommand(void)
+{
+    if (!telnetEnabled || telnetSuspended || telnetConnected)
+        return 0;
+
+    *(vmfp + Reg_IMRA) &= (unsigned char)~TELNET_RX_FULL_BIT;
+    *(vmfp + Reg_IERA) &= (unsigned char)~TELNET_RX_FULL_BIT;
+
+    if (hookTable[HOOK_REC_BUF_FULL].addr == (unsigned long (*)(void))telnetRxHook)
+    {
+        hookTable[HOOK_REC_BUF_FULL].magic = 0;
+        hookTable[HOOK_REC_BUF_FULL].flags = 0;
+        hookTable[HOOK_REC_BUF_FULL].addr = 0;
+    }
+
+    telnetTimerDisable();
+    telnetRxReset();
+    telnetSuspended = 1;
+
+    *(vmfp + Reg_IERA) |= TELNET_RX_FULL_BIT;
+    *(vmfp + Reg_IMRA) |= TELNET_RX_FULL_BIT;
+
+    return 1;
+}
+
+void telnetResumeLocalCommand(unsigned char wasPaused)
+{
+    if (!wasPaused || !telnetEnabled)
+        return;
+
+    telnetSuspended = 0;
+    telnetNetEnable();
     telnetTimerEnable();
 }
 

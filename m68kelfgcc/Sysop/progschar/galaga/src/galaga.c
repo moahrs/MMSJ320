@@ -33,19 +33,23 @@
 #define GALAGA_PLAYER_MAX_X 176
 #define GALAGA_PLAYER_STEP 4
 #define GALAGA_SHOT_STEP 4
-#define GALAGA_ENEMY_SHOT_STEP 4
+#define GALAGA_ENEMY_SHOT_STEP 3
 #define GALAGA_SHOT_X_OFFSET 0
 #define GALAGA_SHOT_Y_OFFSET 18
 #define GALAGA_ENEMY_SHOT_X_OFFSET 0
 #define GALAGA_ENEMY_SHOT_Y_OFFSET 14
 #define GALAGA_SPRITE_SIZE 16
-#define GALAGA_MAX_ENEMIES 10
+#define GALAGA_MAX_ENEMIES 24
+#define GALAGA_MOVING_ENEMY_SLOTS 4
 #define GALAGA_MAX_ENEMY_SHOTS 4
-#define GALAGA_ENEMY_SHOT_FIRST_SLOT (GALAGA_ENEMY_FIRST_SLOT + GALAGA_MAX_ENEMIES)
-#define GALAGA_ENEMY_STEP_DELAY 4
-#define GALAGA_ENEMY_FIRE_DELAY 38
+#define GALAGA_ENEMY_SHOT_FIRST_SLOT (GALAGA_ENEMY_FIRST_SLOT + GALAGA_MOVING_ENEMY_SLOTS)
+#define GALAGA_ENEMY_STEP_DELAY 2
+#define GALAGA_ENEMY_FIRE_DELAY 90
 #define GALAGA_EXPLOSION_DELAY 2500
 #define GALAGA_RESPAWN_DELAY 30000
+#define GALAGA_INPUT_HOLD 6
+#define GALAGA_FIRE_COOLDOWN 8
+#define GALAGA_NO_SLOT 255
 #define GALAGA_G2_PATTERN_TABLE 0x0000
 #define GALAGA_G2_COLOR_TABLE   0x2000
 
@@ -74,10 +78,22 @@ typedef struct
     unsigned char y;
     unsigned char target_x;
     unsigned char target_y;
-    unsigned char start_delay;
+    unsigned int start_delay;
     const unsigned char *image;
     unsigned char color;
 } GalagaEnemyPlan;
+
+typedef struct
+{
+    const GalagaEnemyPlan *enemies;
+    unsigned char enemy_count;
+} GalagaWave;
+
+typedef struct
+{
+    const GalagaWave *waves;
+    unsigned char wave_count;
+} GalagaLevel;
 
 typedef struct
 {
@@ -89,23 +105,84 @@ typedef struct
     unsigned char target_y;
     unsigned char active;
     unsigned char settled;
-    unsigned char start_delay;
+    unsigned char spawned;
+    unsigned int start_delay;
     unsigned char step_tick;
     const unsigned char *image;
     unsigned char color;
 } GalagaEnemy;
 
-static const GalagaEnemyPlan level1[] = {
-    {8, 0, 40, 34, 0, enemyShip01_000, VDP_CYAN},
-    {168, 0, 64, 34, 0, enemyShip02_000, VDP_LIGHT_RED},
-    {32, 0, 88, 34, 0, enemyShip03_000, VDP_LIGHT_YELLOW},
-    {144, 0, 112, 34, 0, enemyShip04_000, VDP_LIGHT_GREEN},
-    {16, 0, 48, 54, 46, enemyShip05_000, VDP_CYAN},
-    {160, 0, 72, 54, 46, enemyShip06_000, VDP_LIGHT_RED},
-    {48, 0, 96, 54, 46, enemyShip07_000, VDP_LIGHT_YELLOW},
-    {128, 0, 120, 54, 46, enemyShip08_000, VDP_LIGHT_GREEN},
-    {24, 0, 72, 74, 92, enemyShip09_000, VDP_CYAN},
-    {152, 0, 96, 74, 92, enemyShip10_000, VDP_LIGHT_RED}
+static const GalagaEnemyPlan level1_wave1[] = {
+    {0, 30, 24, 34, 0, enemyShip01_000, VDP_CYAN},
+    {60, 0, 44, 34, 8, enemyShip02_000, VDP_LIGHT_RED},
+    {0, 30, 64, 34, 16, enemyShip03_000, VDP_LIGHT_YELLOW},
+    {60, 0, 84, 34, 24, enemyShip04_000, VDP_LIGHT_GREEN},
+
+    {176, 30, 104, 34, 54, enemyShip05_000, VDP_CYAN},
+    {120, 0, 124, 34, 62, enemyShip06_000, VDP_LIGHT_RED},
+    {176, 30, 144, 34, 70, enemyShip07_000, VDP_LIGHT_YELLOW},
+    {120, 0, 164, 34, 78, enemyShip08_000, VDP_LIGHT_GREEN},
+
+    {0, 120, 24, 54, 108, enemyShip09_000, VDP_CYAN},
+    {176, 120, 44, 54, 116, enemyShip10_000, VDP_LIGHT_RED},
+    {0, 120, 64, 54, 124, enemyShip01_000, VDP_LIGHT_YELLOW},
+    {176, 120, 84, 54, 132, enemyShip02_000, VDP_LIGHT_GREEN},
+
+    {60, 0, 104, 54, 162, enemyShip03_000, VDP_CYAN},
+    {0, 30, 124, 54, 170, enemyShip04_000, VDP_LIGHT_RED},
+    {60, 0, 144, 54, 178, enemyShip05_000, VDP_LIGHT_YELLOW},
+    {0, 30, 164, 54, 186, enemyShip06_000, VDP_LIGHT_GREEN},
+
+    {120, 0, 24, 74, 216, enemyShip07_000, VDP_CYAN},
+    {176, 30, 44, 74, 224, enemyShip08_000, VDP_LIGHT_RED},
+    {120, 0, 64, 74, 232, enemyShip09_000, VDP_LIGHT_YELLOW},
+    {176, 30, 84, 74, 240, enemyShip10_000, VDP_LIGHT_GREEN},
+
+    {0, 120, 104, 74, 270, enemyShip01_000, VDP_CYAN},
+    {176, 120, 124, 74, 278, enemyShip02_000, VDP_LIGHT_RED},
+    {0, 120, 144, 74, 286, enemyShip03_000, VDP_LIGHT_YELLOW},
+    {176, 120, 164, 74, 294, enemyShip04_000, VDP_LIGHT_GREEN}
+};
+
+static const GalagaEnemyPlan level1_wave2[] = {
+    {176, 30, 24, 34, 0, enemyShip10_000, VDP_LIGHT_RED},
+    {120, 0, 44, 34, 8, enemyShip09_000, VDP_CYAN},
+    {176, 30, 64, 34, 16, enemyShip08_000, VDP_LIGHT_YELLOW},
+    {120, 0, 84, 34, 24, enemyShip07_000, VDP_LIGHT_GREEN},
+
+    {0, 30, 104, 34, 54, enemyShip06_000, VDP_LIGHT_RED},
+    {60, 0, 124, 34, 62, enemyShip05_000, VDP_CYAN},
+    {0, 30, 144, 34, 70, enemyShip04_000, VDP_LIGHT_YELLOW},
+    {60, 0, 164, 34, 78, enemyShip03_000, VDP_LIGHT_GREEN},
+
+    {176, 120, 24, 54, 108, enemyShip02_000, VDP_LIGHT_RED},
+    {0, 120, 44, 54, 116, enemyShip01_000, VDP_CYAN},
+    {176, 120, 64, 54, 124, enemyShip10_000, VDP_LIGHT_YELLOW},
+    {0, 120, 84, 54, 132, enemyShip09_000, VDP_LIGHT_GREEN},
+
+    {120, 0, 104, 54, 162, enemyShip08_000, VDP_LIGHT_RED},
+    {176, 30, 124, 54, 170, enemyShip07_000, VDP_CYAN},
+    {120, 0, 144, 54, 178, enemyShip06_000, VDP_LIGHT_YELLOW},
+    {176, 30, 164, 54, 186, enemyShip05_000, VDP_LIGHT_GREEN},
+
+    {60, 0, 24, 74, 216, enemyShip04_000, VDP_LIGHT_RED},
+    {0, 30, 44, 74, 224, enemyShip03_000, VDP_CYAN},
+    {60, 0, 64, 74, 232, enemyShip02_000, VDP_LIGHT_YELLOW},
+    {0, 30, 84, 74, 240, enemyShip01_000, VDP_LIGHT_GREEN},
+
+    {176, 120, 104, 74, 270, enemyShip05_000, VDP_LIGHT_RED},
+    {0, 120, 124, 74, 278, enemyShip06_000, VDP_CYAN},
+    {176, 120, 144, 74, 286, enemyShip07_000, VDP_LIGHT_YELLOW},
+    {0, 120, 164, 74, 294, enemyShip08_000, VDP_LIGHT_GREEN}
+};
+
+static const GalagaWave level1_waves[] = {
+    {level1_wave1, sizeof(level1_wave1) / sizeof(level1_wave1[0])},
+    {level1_wave2, sizeof(level1_wave2) / sizeof(level1_wave2[0])}
+};
+
+static const GalagaLevel levels[] = {
+    {level1_waves, sizeof(level1_waves) / sizeof(level1_waves[0])}
 };
 
 static void galaga_vram_write(unsigned int addr, unsigned char value)
@@ -463,6 +540,18 @@ static void galaga_clear_panel(void)
     }
 }
 
+static void galaga_clear_playfield(void)
+{
+    unsigned char col;
+    unsigned char y;
+
+    for (y = 0; y < GALAGA_SCREEN_H; y++)
+    {
+        for (col = 0; col < (GALAGA_PANEL_X / 8); col++)
+            galaga_set_byte((unsigned char)(col * 8), y, 0x00, VDP_BLACK);
+    }
+}
+
 static void galaga_clear_hud_value(unsigned char x, unsigned char y, unsigned char cols, unsigned char rows)
 {
     unsigned char col;
@@ -475,7 +564,7 @@ static void galaga_clear_hud_value(unsigned char x, unsigned char y, unsigned ch
     }
 }
 
-static void galaga_draw_hud_static(unsigned char specials)
+static void galaga_draw_hud_static(unsigned char level, unsigned char specials)
 {
     unsigned char y;
 
@@ -483,8 +572,11 @@ static void galaga_draw_hud_static(unsigned char specials)
     for (y = 0; y < GALAGA_SCREEN_H; y++)
         galaga_set_byte(GALAGA_PANEL_X, y, 0x80, VDP_WHITE);
 
-    galaga_draw_text(200, 8, "SCORE", VDP_WHITE);
-    galaga_draw_text(200, 34, "HI", VDP_WHITE);
+    galaga_draw_text(200, 0, "LEVEL", VDP_WHITE);
+    galaga_draw_number(248, 0, level, 1, VDP_LIGHT_YELLOW);
+
+    galaga_draw_text(200, 12, "SCORE", VDP_WHITE);
+    galaga_draw_text(200, 38, "HI", VDP_WHITE);
 
     galaga_draw_bitmap16(200, 66, playerShip_000, VDP_WHITE);
     galaga_draw_char(224, 70, 'X', VDP_WHITE);
@@ -505,19 +597,19 @@ static void galaga_draw_hud_static(unsigned char specials)
 
 static void galaga_draw_hud_values(unsigned long score, unsigned long hiscore, unsigned char lives)
 {
-    galaga_clear_hud_value(200, 18, 6, 7);
-    galaga_draw_number(200, 18, score, 6, VDP_LIGHT_YELLOW);
+    galaga_clear_hud_value(200, 22, 6, 7);
+    galaga_draw_number(200, 22, score, 6, VDP_LIGHT_YELLOW);
 
-    galaga_clear_hud_value(200, 44, 6, 7);
-    galaga_draw_number(200, 44, hiscore, 6, VDP_CYAN);
+    galaga_clear_hud_value(200, 48, 6, 7);
+    galaga_draw_number(200, 48, hiscore, 6, VDP_CYAN);
 
     galaga_clear_hud_value(240, 70, 1, 7);
     galaga_draw_number(240, 70, lives, 1, VDP_WHITE);
 }
 
-static void galaga_draw_hud(unsigned long score, unsigned long hiscore, unsigned char lives, unsigned char specials)
+static void galaga_draw_hud(unsigned char level, unsigned long score, unsigned long hiscore, unsigned char lives, unsigned char specials)
 {
-    galaga_draw_hud_static(specials);
+    galaga_draw_hud_static(level, specials);
     galaga_draw_hud_values(score, hiscore, lives);
 }
 
@@ -622,7 +714,7 @@ static void galaga_enemy_try_fire(GalagaShot *shots, GalagaEnemy *enemies, unsig
         *next_enemy = (unsigned char)((*next_enemy + 1) % GALAGA_MAX_ENEMIES);
         enemy = &enemies[ix];
 
-        if (enemy->active && !enemy->start_delay)
+        if (enemy->active && enemy->spawned)
         {
             galaga_fire_enemy_shot(shots, enemy->x, enemy->y);
             return;
@@ -673,7 +765,32 @@ static unsigned char galaga_check_player_hits(GalagaShot *shots, unsigned char p
     return 0;
 }
 
-static void galaga_init_enemies(GalagaEnemy *enemies)
+static unsigned char galaga_alloc_enemy_slot(GalagaEnemy *enemies)
+{
+    unsigned char slot;
+    unsigned char ix;
+    unsigned char used;
+
+    for (slot = GALAGA_ENEMY_FIRST_SLOT; slot < GALAGA_ENEMY_FIRST_SLOT + GALAGA_MOVING_ENEMY_SLOTS; slot++)
+    {
+        used = 0;
+        for (ix = 0; ix < GALAGA_MAX_ENEMIES; ix++)
+        {
+            if (enemies[ix].active && enemies[ix].spawned && !enemies[ix].settled && enemies[ix].slot == slot)
+            {
+                used = 1;
+                break;
+            }
+        }
+
+        if (!used)
+            return slot;
+    }
+
+    return GALAGA_NO_SLOT;
+}
+
+static void galaga_init_enemies(GalagaEnemy *enemies, const GalagaWave *wave)
 {
     unsigned char ix;
 
@@ -681,21 +798,40 @@ static void galaga_init_enemies(GalagaEnemy *enemies)
 
     for (ix = 0; ix < GALAGA_MAX_ENEMIES; ix++)
     {
-        enemies[ix].slot = GALAGA_ENEMY_FIRST_SLOT + ix;
-        enemies[ix].pattern = GALAGA_ENEMY_FIRST_PATTERN + ix;
-        enemies[ix].x = level1[ix].x;
-        enemies[ix].y = level1[ix].y;
-        enemies[ix].target_x = level1[ix].target_x;
-        enemies[ix].target_y = level1[ix].target_y;
-        enemies[ix].image = level1[ix].image;
-        enemies[ix].color = level1[ix].color;
-        enemies[ix].active = 1;
-        enemies[ix].start_delay = level1[ix].start_delay;
-
-        galaga_create_sprite(enemies[ix].slot, enemies[ix].pattern, enemies[ix].image, enemies[ix].x, enemies[ix].y, enemies[ix].color);
-        if (enemies[ix].start_delay)
-            galaga_hide_sprite_vdp(enemies[ix].slot);
+        enemies[ix].slot = GALAGA_NO_SLOT;
+        enemies[ix].active = 0;
     }
+
+    for (ix = 0; ix < wave->enemy_count && ix < GALAGA_MAX_ENEMIES; ix++)
+    {
+        enemies[ix].slot = GALAGA_NO_SLOT;
+        enemies[ix].pattern = 0;
+        enemies[ix].x = wave->enemies[ix].x;
+        enemies[ix].y = wave->enemies[ix].y;
+        enemies[ix].target_x = wave->enemies[ix].target_x;
+        enemies[ix].target_y = wave->enemies[ix].target_y;
+        enemies[ix].image = wave->enemies[ix].image;
+        enemies[ix].color = wave->enemies[ix].color;
+        enemies[ix].active = 1;
+        enemies[ix].spawned = 0;
+        enemies[ix].start_delay = wave->enemies[ix].start_delay;
+    }
+
+    for (ix = 0; ix < GALAGA_MOVING_ENEMY_SLOTS; ix++)
+        galaga_hide_sprite(GALAGA_ENEMY_FIRST_SLOT + ix);
+}
+
+static unsigned char galaga_wave_done(GalagaEnemy *enemies)
+{
+    unsigned char ix;
+
+    for (ix = 0; ix < GALAGA_MAX_ENEMIES; ix++)
+    {
+        if (enemies[ix].active)
+            return 0;
+    }
+
+    return 1;
 }
 
 static void galaga_update_enemies(GalagaEnemy *enemies)
@@ -710,12 +846,22 @@ static void galaga_update_enemies(GalagaEnemy *enemies)
         if (!e->active || e->settled)
             continue;
 
-        if (e->start_delay)
+        if (!e->spawned)
         {
-            e->start_delay--;
-            if (!e->start_delay)
-                galaga_put_sprite(e->slot, e->pattern, e->x, e->y, e->color);
-            continue;
+            if (e->start_delay)
+            {
+                e->start_delay--;
+                continue;
+            }
+
+            e->slot = galaga_alloc_enemy_slot(enemies);
+            if (e->slot == GALAGA_NO_SLOT)
+                continue;
+
+            e->pattern = (unsigned char)(GALAGA_ENEMY_FIRST_PATTERN + (e->slot - GALAGA_ENEMY_FIRST_SLOT));
+            e->spawned = 1;
+            e->step_tick = 0;
+            galaga_create_sprite(e->slot, e->pattern, e->image, e->x, e->y, e->color);
         }
 
         e->step_tick++;
@@ -737,6 +883,8 @@ static void galaga_update_enemies(GalagaEnemy *enemies)
         {
             e->settled = 1;
             galaga_hide_sprite(e->slot);
+            e->slot = GALAGA_NO_SLOT;
+            e->pattern = 0;
             galaga_draw_bitmap16(e->x, e->y, e->image, e->color);
         }
         else
@@ -746,17 +894,27 @@ static void galaga_update_enemies(GalagaEnemy *enemies)
     }
 }
 
-static void galaga_destroy_enemy(GalagaEnemy *enemy)
+static void galaga_destroy_enemy(GalagaEnemy *enemy, GalagaEnemy *enemies)
 {
+    unsigned char explosion_slot;
+
     if (!enemy->active)
         return;
 
+    explosion_slot = enemy->slot;
     if (enemy->settled)
+    {
         galaga_clear_bitmap16(enemy->x, enemy->y);
+        explosion_slot = galaga_alloc_enemy_slot(enemies);
+    }
 
     enemy->active = 0;
     enemy->settled = 0;
-    galaga_play_explosion(enemy->slot, enemy->x, enemy->y);
+    enemy->spawned = 0;
+    enemy->slot = GALAGA_NO_SLOT;
+
+    if (explosion_slot != GALAGA_NO_SLOT)
+        galaga_play_explosion(explosion_slot, enemy->x, enemy->y);
 }
 
 static unsigned char galaga_check_shot_hits(GalagaShot *shots, GalagaEnemy *enemies)
@@ -777,7 +935,7 @@ static unsigned char galaga_check_shot_hits(GalagaShot *shots, GalagaEnemy *enem
         {
             enemy = &enemies[enemy_ix];
 
-            if (!enemy->active || enemy->start_delay)
+            if (!enemy->active || !enemy->spawned)
                 continue;
 
             if (galaga_bitmap_overlap(shots[shot_ix].x, shots[shot_ix].y, shootShip_000,
@@ -785,7 +943,7 @@ static unsigned char galaga_check_shot_hits(GalagaShot *shots, GalagaEnemy *enem
             {
                 shots[shot_ix].active = 0;
                 galaga_hide_sprite(GALAGA_SHOT_FIRST_SLOT + shot_ix);
-                galaga_destroy_enemy(enemy);
+                galaga_destroy_enemy(enemy, enemies);
                 hits++;
                 break;
             }
@@ -807,10 +965,19 @@ static void galaga_wait_any_key(void)
 static void galaga_show_game_over(void)
 {
     galaga_hide_all_sprites();
-    galaga_clear_screen();
+    galaga_clear_playfield();
     galaga_draw_text(60, 78, "GAME OVER", VDP_LIGHT_RED);
     galaga_draw_text(44, 98, "PRESS ANY KEY", VDP_WHITE);
     galaga_wait_any_key();
+}
+
+static void galaga_show_level_start(unsigned char level)
+{
+    galaga_clear_playfield();
+    galaga_draw_text(72, 86, "LEVEL", VDP_WHITE);
+    galaga_draw_number(120, 86, level, 1, VDP_LIGHT_YELLOW);
+    galaga_wait(50000);
+    galaga_clear_playfield();
 }
 
 static void galaga_respawn_player(GalagaShot *shots, GalagaShot *enemy_shots, unsigned char *player_x, unsigned char player_y)
@@ -835,6 +1002,12 @@ void main(void)
     unsigned char enemy_fire_tick;
     unsigned char next_enemy_fire;
     unsigned char game_over;
+    unsigned char current_level;
+    unsigned char current_wave;
+    unsigned char level_complete;
+    unsigned char move_hold;
+    unsigned char fire_cooldown;
+    signed char move_dir;
     unsigned long score;
     unsigned long hiscore;
     GalagaShot shots[GALAGA_MAX_SHOTS];
@@ -850,35 +1023,70 @@ void main(void)
     enemy_fire_tick = 0;
     next_enemy_fire = 0;
     game_over = 0;
+    current_level = 0;
+    current_wave = 0;
+    level_complete = 0;
+    move_hold = 0;
+    fire_cooldown = 0;
+    move_dir = 0;
 
     galaga_init_video();
-    galaga_draw_hud(score, hiscore, lives, specials);
+    galaga_draw_hud(current_level + 1, score, hiscore, lives, specials);
     galaga_init_shots(shots);
     galaga_init_enemy_shots(enemy_shots);
-    galaga_init_enemies(enemies);
+    galaga_show_level_start(current_level + 1);
+    galaga_init_enemies(enemies, &levels[current_level].waves[current_wave]);
     galaga_create_sprite(GALAGA_PLAYER_SLOT, GALAGA_PLAYER_PATTERN, playerShip_000, x, y, VDP_WHITE);
 
     while (1)
     {
-        key = galaga_get_key();
+        while ((key = galaga_get_key()) != KEY_NONE)
+        {
+            if (key == KEY_ESC)
+                break;
+
+            if (key == 'A' || key == 'a' || key == KEY_LEFT)
+            {
+                move_dir = -1;
+                move_hold = GALAGA_INPUT_HOLD;
+            }
+            else if (key == 'D' || key == 'd' || key == KEY_RIGHT)
+            {
+                move_dir = 1;
+                move_hold = GALAGA_INPUT_HOLD;
+            }
+            else if (key == ' ' && !fire_cooldown)
+            {
+                galaga_fire_shot(shots, x, y);
+                fire_cooldown = GALAGA_FIRE_COOLDOWN;
+            }
+        }
 
         if (key == KEY_ESC)
             break;
 
-        if (key == 'A' || key == 'a')
+        if (move_hold)
         {
-            if (x > GALAGA_PLAYER_MIN_X)
-                x -= GALAGA_PLAYER_STEP;
+            if (move_dir < 0)
+            {
+                if (x > GALAGA_PLAYER_MIN_X + GALAGA_PLAYER_STEP)
+                    x -= GALAGA_PLAYER_STEP;
+                else
+                    x = GALAGA_PLAYER_MIN_X;
+            }
+            else if (move_dir > 0)
+            {
+                if (x < GALAGA_PLAYER_MAX_X - GALAGA_PLAYER_STEP)
+                    x += GALAGA_PLAYER_STEP;
+                else
+                    x = GALAGA_PLAYER_MAX_X;
+            }
+
+            move_hold--;
         }
-        else if (key == 'D' || key == 'd')
-        {
-            if (x < GALAGA_PLAYER_MAX_X)
-                x += GALAGA_PLAYER_STEP;
-        }
-        else if (key == ' ')
-        {
-            galaga_fire_shot(shots, x, y);
-        }
+
+        if (fire_cooldown)
+            fire_cooldown--;
 
         galaga_update_shots(shots);
         galaga_update_enemies(enemies);
@@ -908,7 +1116,45 @@ void main(void)
             }
 
             enemy_fire_tick = 0;
+            move_hold = 0;
+            move_dir = 0;
+            fire_cooldown = 0;
             galaga_respawn_player(shots, enemy_shots, &x, y);
+        }
+
+        if (!level_complete && galaga_wave_done(enemies))
+        {
+            current_wave++;
+            if (current_wave < levels[current_level].wave_count)
+            {
+                galaga_clear_shots(shots, GALAGA_MAX_SHOTS, GALAGA_SHOT_FIRST_SLOT);
+                galaga_clear_shots(enemy_shots, GALAGA_MAX_ENEMY_SHOTS, GALAGA_ENEMY_SHOT_FIRST_SLOT);
+                enemy_fire_tick = 0;
+                next_enemy_fire = 0;
+                galaga_init_enemies(enemies, &levels[current_level].waves[current_wave]);
+            }
+            else
+            {
+                current_level++;
+                if (current_level < (sizeof(levels) / sizeof(levels[0])))
+                {
+                    current_wave = 0;
+                    galaga_clear_shots(shots, GALAGA_MAX_SHOTS, GALAGA_SHOT_FIRST_SLOT);
+                    galaga_clear_shots(enemy_shots, GALAGA_MAX_ENEMY_SHOTS, GALAGA_ENEMY_SHOT_FIRST_SLOT);
+                    enemy_fire_tick = 0;
+                    next_enemy_fire = 0;
+                    galaga_draw_hud(current_level + 1, score, hiscore, lives, specials);
+                    galaga_hide_sprite(GALAGA_PLAYER_SLOT);
+                    galaga_show_level_start(current_level + 1);
+                    galaga_init_enemies(enemies, &levels[current_level].waves[current_wave]);
+                    galaga_set_sprite_pattern(GALAGA_PLAYER_PATTERN, playerShip_000);
+                    galaga_put_sprite(GALAGA_PLAYER_SLOT, GALAGA_PLAYER_PATTERN, x, y, VDP_WHITE);
+                }
+                else
+                {
+                    level_complete = 1;
+                }
+            }
         }
         galaga_move_sprite(GALAGA_PLAYER_SLOT, x, y);
         galaga_wait(2000);
@@ -919,6 +1165,14 @@ void main(void)
     else
         galaga_hide_all_sprites();
 
-    setModeVideoOS(VDP_MODE_TEXT);
-    clearScr();
+    if (*startBasic == 1)
+    {
+        setModeVideoOS(VDP_MODE_TEXT);
+        clearScr();
+    }
+    else
+    {
+        vdp_init(VDP_MODE_G2, VDP_BLACK, 0, 0);
+        vdp_set_bdcolor(VDP_BLACK);
+    }
 }

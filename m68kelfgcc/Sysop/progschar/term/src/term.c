@@ -1327,7 +1327,7 @@ static void readResponseProc(unsigned char *s)
         else if (c == '\n' || c == 0x04)
         {
             line[pos] = 0;
-            if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERROR", 5))
+            if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERR;", 4) || !strncmp(line, "ERROR", 5))
             {
                 strcpy(s, line);
                 return;
@@ -1347,7 +1347,7 @@ static void readResponseProc(unsigned char *s)
     }
 
     line[pos] = 0;
-    if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERROR", 5))
+    if (!strncmp(line, "OK;", 3) || !strncmp(line, "ERR;", 4) || !strncmp(line, "ERROR", 5))
         strcpy(s, line);
 }
 
@@ -1575,8 +1575,6 @@ int main(void)
 {
     unsigned char c;
     unsigned char cCmd[128];
-    long vTimeOut = 8;
-    char listenOn = 1;
 
     if (*paramBasic != 0x00)
     {
@@ -1588,40 +1586,17 @@ int main(void)
         netCommEnable();
         termDiscardPendingSerial();
 
-        // Verifica se esta em modo Listen, se sim, tira
-        while(vTimeOut--)
-        {
-            netCommResetInput();
-            writeLongSerial("ATLISTEN?");
-            writeSerial('\r');
-            
-            readResponseProc(&cCmd);
+        netCommResetInput();
+        writeLongSerial("+++");
+        writeSerial('\r');
+        delayms(50);
+        netCommResetInput();
 
-            if (!strncmp(cCmd,"OK;",3))
-            {
-                if (strncmp(cCmd,"OK;OFF",6))  // se nao bater, esta no Listen
-                {
-                    // Desliga
-                    netCommResetInput();
-                    writeLongSerial("ATLISTEN");
-                    writeSerial('\r');                    
-                    readResponseProc(&cCmd);
-                }
-                else
-                {
-                    listenOn = 0;
-                    break;
-                }
-            }
-        }
-
-        if (listenOn)
-        {
-            if (*startBasic == 1)
-                mprintf("Unable to unset Listen");
-
-            return 1;
-        }
+        writeLongSerial("ATRESETTCP");
+        writeSerial('\r');
+        readResponseProc(&cCmd);
+        delayms(50);
+        termDiscardPendingSerial();
 
         termInitVideoG2();
         termSetColor(VDP_WHITE, VDP_BLACK);
