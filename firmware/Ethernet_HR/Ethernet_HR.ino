@@ -29,6 +29,7 @@
 #define LAN_POLL_MS   1000
 #define PLUS_TIMEOUT_MS 1000
 #define ETH_MAINTAIN_MS 1000
+#define TCP_ACCEPT_IDLE_CLOSE_MS 300000UL
 
 byte mac[] = { 0x02, 0x68, 0x00, 0x00, 0x00, 0x45 };
 
@@ -45,6 +46,7 @@ EthernetServer tcpServer(23);
 
 bool tcpMode = false;
 bool tcpListenMode = false;
+bool tcpAcceptedMode = false;
 uint16_t tcpListenPort = 23;
 char plusBuf[4];
 unsigned char plusPos = 0;
@@ -63,6 +65,7 @@ unsigned long ledActUntil = 0;
 unsigned long lanPollLast = 0;
 unsigned long plusLastMs = 0;
 unsigned long ethMaintainLast = 0;
+unsigned long tcpLastActivityMs = 0;
 
 #define TCP_RXBUF_SIZE 4096
 
@@ -111,6 +114,42 @@ void tcpRxClear()
   tcpRxLost = 0;
 }
 
+void tcpStopListener()
+{
+#if NET_USE_WIFI
+  tcpServer.stop();
+  delay(20);
+#endif
+}
+
+void tcpStartListener()
+{
+#if NET_USE_WIFI
+  tcpServer.stop();
+  delay(20);
+#endif
+  tcpServer.begin();
+}
+
+void tcpMarkActivity()
+{
+  tcpLastActivityMs = millis();
+}
+
+void tcpDropClientKeepListener()
+{
+  tcpClient.stop();
+  tcpRxClear();
+  linePos = 0;
+  tcpMode = false;
+  tcpAcceptedMode = false;
+  plusPos = 0;
+  digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
+
+  if (tcpListenMode)
+    tcpStartListener();
+}
+
 void tcpResetState(bool keepListen)
 {
   tcpClient.stop();
@@ -118,11 +157,15 @@ void tcpResetState(bool keepListen)
   tcpRxClear();
   linePos = 0;
   tcpMode = false;
+  tcpAcceptedMode = false;
   plusPos = 0;
   digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
 
   if (!keepListen)
+  {
     tcpListenMode = false;
+    tcpStopListener();
+  }
 }
 
 void ledsInit()
@@ -303,7 +346,7 @@ void cmdTcpListen(char *arg)
   tcpListenPort = 23;
   tcpListenMode = true;
 
-  tcpServer.begin();
+  tcpStartListener();
 
   Serial2.print("OK;LISTEN;ON;23");
   endResponse();
@@ -334,8 +377,10 @@ void cmdTcpConnect(char *arg)
   if (tcpClient.connect(host, port))
   {
     ledActivity();
+    tcpMarkActivity();
     digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     tcpMode = true;
+    tcpAcceptedMode = false;
     plusPos = 0;
     /*Serial2.println("OK;CONNECT");
     endResponse();*/
@@ -359,8 +404,17 @@ void tcpBridgePoll()
 
   if (!tcpClient.connected())
   {
-    tcpResetState(false);
-    digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
+    if (tcpAcceptedMode && tcpListenMode)
+      tcpDropClientKeepListener();
+    else
+      tcpResetState(false);
+    return;
+  }
+
+  if (tcpAcceptedMode && tcpListenMode &&
+      (long)(millis() - tcpLastActivityMs) >= TCP_ACCEPT_IDLE_CLOSE_MS)
+  {
+    tcpDropClientKeepListener();
     return;
   }
 
@@ -372,6 +426,7 @@ void tcpBridgePoll()
     {
       tcpClient.write('+');
       ledActivity();
+      tcpMarkActivity();
       tcpTx = true;
       plusPos--;
     }
@@ -406,12 +461,14 @@ void tcpBridgePoll()
     {
       tcpClient.write('+');
       ledActivity();
+      tcpMarkActivity();
       tcpTx = true;
       plusPos--;
     }
 
     tcpClient.write((uint8_t)c);
     ledActivity();
+    tcpMarkActivity();
     tcpTx = true;
   }
 
@@ -432,6 +489,7 @@ void tcpBridgePoll()
       {
           tcpRxPut((uint8_t)c);
           ledActivity();
+          tcpMarkActivity();
       }
 
       count++;
@@ -449,6 +507,7 @@ void tcpBridgePoll()
           break;
 
       Serial2.write(b);
+      tcpMarkActivity();
       count++;
   }
 }
@@ -474,6 +533,8 @@ void tcpListenPoll()
     tcpClient = newClient;
     tcpRxClear();
     tcpMode = true;
+    tcpAcceptedMode = true;
+    tcpMarkActivity();
     plusPos = 0;
     digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     ledActivity();

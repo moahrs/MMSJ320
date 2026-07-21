@@ -69,19 +69,25 @@ static void bbsAnsiBright(void)
     bbsPuts("\x1B[1m");
 }
 
-static void bbsAnsiCyan(void)
+static void bbsAnsiColor(unsigned char type, unsigned char color)
 {
-    bbsPuts("\x1B[36m");
-}
+    unsigned char code;
 
-static void bbsAnsiYellow(void)
-{
-    bbsPuts("\x1B[33m");
-}
+    color &= 15;
 
-static void bbsAnsiBlueBg(void)
-{
-    bbsPuts("\x1B[44;37m");
+    if (type)
+        code = (color < 8) ? (40 + color) : (100 + (color - 8));
+    else
+        code = (color < 8) ? (30 + color) : (90 + (color - 8));
+
+    bbsPuts("\x1B[");
+    if (code >= 100) {
+        bbsPutc((unsigned char)('0' + (code / 100)));
+        code %= 100;
+    }
+    bbsPutc((unsigned char)('0' + (code / 10)));
+    bbsPutc((unsigned char)('0' + (code % 10)));
+    bbsPutc('m');
 }
 
 static unsigned char bbsLocalAbort(void)
@@ -572,12 +578,12 @@ static void bbsWelcomeScreen(void)
     bbsAnsiClear();
     bbsAnsiNormal();
     bbsAnsiBright();
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("+--------------------------------------+\r\n");
     bbsPuts("|            MMSJ BBS ONLINE          |\r\n");
     bbsPuts("+--------------------------------------+\r\n");
     bbsAnsiNormal();
-    bbsAnsiCyan();
+    bbsAnsiColor(0, 6);
     bbsPuts(" Motorola 68000 @ 9MHz   MMSJOS 1.0\r\n");
     bbsPuts(" TMS9118 ANSI Terminal   RAM 1280KB\r\n");
     bbsPuts(" Uptime ");
@@ -687,46 +693,70 @@ static void bbsShowMenu(char *currentUser)
 {
     char up[32];
 
-    bbsFormatUptime(up);
+/*
+          1         2         3        3
+0123456789012345678901234567890123456789
+M   M M   M  SS  JJJJ    BBB  BBB   SS
+MM MM MM MM S  S    J    B  B B  B S  S
+M M M M M M S       J -- B  B B  B S
+M   M M   M  SS     J    BBB  BBB   SS
+M   M M   M    S    J    B  B B  B    S
+M   M M   M S  S J  J    B  B B  B S  S
+M   M M   M  SS   JJ     BBB  BBB   SS
+*/
 
+    bbsFormatUptime(up);
     bbsAnsiClear();
-    bbsAnsiBlueBg();
-    bbsPuts(" MMSJ BBS  ");
-    bbsAnsiYellow();
+    bbsPuts("----------------------------------------\r\n");
+    bbsAnsiColor(0, 10);
+    bbsPuts("█   █ █   █  ██  ████    ███  ███   ██ \r\n");
+    bbsPuts("██ ██ ██ ██ █  █    █    █  █ █  █ █  █\r\n");
+    bbsAnsiColor(0, 11);
+    bbsPuts("█ █ █ █ █ █ █       █ ██ █  █ █  █ █   \r\n");
+    bbsPuts("█   █ █   █  ██     █    ███  ███   ██ \r\n");
+    bbsPuts("█   █ █   █    █    █    █  █ █  █    █\r\n");
+    bbsAnsiColor(0, 10);
+    bbsPuts("█   █ █   █ █  █ █  █    █  █ █  █ █  █\r\n");
+    bbsPuts("█   █ █   █  ██   ██     ███  ███   ██ \r\n");
+    bbsAnsiNormal();
+    bbsPuts("----------------------------------------\r\n");
+    bbsAnsiColor(1, 4);
+    bbsAnsiColor(0, 3);
     bbsPuts("Node 1");
-    bbsAnsiBlueBg();
+    bbsAnsiColor(1, 4);
     bbsPuts("  Uptime ");
     bbsPuts(up);
     bbsPuts(" \r\n");
     bbsAnsiNormal();
     bbsPuts("----------------------------------------\r\n");
     bbsPuts(" User: ");
-    bbsAnsiCyan();
+    bbsAnsiColor(0, 6);
     bbsPuts(currentUser);
     bbsAnsiNormal();
     bbsPuts("\r\n----------------------------------------\r\n");
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("[1]");
     bbsAnsiNormal();
     bbsPuts(" Messages       ");
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("[2]");
     bbsAnsiNormal();
     bbsPuts(" Files\r\n");
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("[3]");
     bbsAnsiNormal();
     bbsPuts(" Online Users   ");
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("[4]");
     bbsAnsiNormal();
     bbsPuts(" System Info\r\n");
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("[5]");
     bbsAnsiNormal();
     bbsPuts(" Logout\r\n");
     bbsPuts("----------------------------------------\r\n");
-    bbsAnsiBlueBg();
+    bbsAnsiColor(1, 4);
+    bbsAnsiColor(0, 7);
     bbsPuts(" Select 1-5. No ENTER needed.          ");
     bbsAnsiNormal();
     bbsPuts("\r\n:");
@@ -735,7 +765,7 @@ static void bbsShowMenu(char *currentUser)
 static int bbsMessages(void)
 {
     bbsAnsiClear();
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("+--------------------------------------+\r\n");
     bbsPuts("|              Messages                |\r\n");
     bbsPuts("+--------------------------------------+\r\n\r\n");
@@ -748,7 +778,7 @@ static int bbsMessages(void)
 static int bbsFiles(void)
 {
     bbsAnsiClear();
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("+--------------------------------------+\r\n");
     bbsPuts("|                Files                 |\r\n");
     bbsPuts("+--------------------------------------+\r\n\r\n");
@@ -761,7 +791,7 @@ static int bbsFiles(void)
 static int bbsOnlineUsers(char *currentUser)
 {
     bbsAnsiClear();
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("+--------------------------------------+\r\n");
     bbsPuts("|            Online Users              |\r\n");
     bbsPuts("+--------------------------------------+\r\n\r\n");
@@ -780,7 +810,7 @@ static int bbsSystemInfo(void)
 
     bbsFormatUptime(up);
     bbsAnsiClear();
-    bbsAnsiYellow();
+    bbsAnsiColor(0, 3);
     bbsPuts("+--------------------------------------+\r\n");
     bbsPuts("|         System Information           |\r\n");
     bbsPuts("+--------------------------------------+\r\n\r\n");
