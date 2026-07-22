@@ -728,16 +728,19 @@ static void bbsWelcomeScreen(void)
     bbsPuts("MMC-320, a Homebrew Computer like 80s\r\n\r\n");
     bbsAnsiNormal();
     bbsAnsiColor(0, 6);
-    bbsPuts("Specs:\r\n");
-    bbsPuts("  Motorola 68000 @ 9MHz   MMSJOS 1.0\r\n");
-    bbsPuts("  TMS9118 ANSI Terminal   RAM 1280KB\r\n");
-    bbsPuts("  Located in Brazil\r\n\r\n");
-    bbsPuts("  Uptime ");
+    bbsPuts("SERVER NAME: MMSJ BBS\r\n");
+    bbsPuts("       ADDR: mmc320.ddns.net\r\n");
+    bbsPuts("       NODE: 1 (of 1)\r\n");
+    bbsPuts("       ADMN: Moahrs\r\n");
+    bbsPuts("      LOCAL: Brazil\r\n");
+    bbsPuts("     UPTIME: ");
     bbsPuts(up);
-    bbsPuts("\r\n  Max Perm Users online 1\r\n");
     bbsAnsiNormal();
-    bbsPuts("\r\n");
-    bbsPuts(" New account : type NEW as user\r\n");
+    bbsPuts("\r\n\r\n");
+    bbsPuts("Connections through TELNET protocol are\r\n");
+    bbsPuts("NOT secured or encrypted.\r\n");
+    bbsPuts("D'ont use BBS passwd for other services.\r\n\r\n");
+    bbsPuts("Enter User Name or 'New'\r\n");
  }
 
 static int bbsWaitCaller(void)
@@ -782,7 +785,7 @@ static int bbsLogin(char *currentUser)
 
     while (1) {
         bbsWelcomeScreen();
-        bbsPuts("User: ");
+        bbsPuts("Login: ");
 
         len = bbsReadLine(user, sizeof(user), 0);
         if (len < 0)
@@ -963,11 +966,11 @@ static int bbsSystemInfo(void)
     bbsPuts("│         System Information           │\r\n");
     bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
     bbsAnsiNormal();
-    bbsPuts("CPU       : Motorola 68000\r\n");
-    bbsPuts("Clock     : 9MHz\r\n");
+    bbsPuts("CPU       : Motorola 68HC000 at 9MHz\r\n");
     bbsPuts("RAM       : 1280KB\r\n");
-    bbsPuts("Video     : TMS9118\r\n");
-    bbsPuts("OS        : MMSJOS\r\n");
+    bbsPuts("            System: 256KB  User: 1024KB\r\n");
+    bbsPuts("Video     : TMS9118 VRAM 16KB\r\n");
+    bbsPuts("OS        : MMSJ-OS\r\n");
     bbsPuts("BASIC     : v2.1\r\n");
     bbsPuts("Uptime    : ");
     bbsPuts(up);
