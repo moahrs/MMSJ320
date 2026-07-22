@@ -728,16 +728,19 @@ static void bbsWelcomeScreen(void)
     bbsPuts("MMC-320, a Homebrew Computer like 80s\r\n\r\n");
     bbsAnsiNormal();
     bbsAnsiColor(0, 6);
-    bbsPuts("Specs:\r\n");
-    bbsPuts("  Motorola 68000 @ 9MHz   MMSJOS 1.0\r\n");
-    bbsPuts("  TMS9118 ANSI Terminal   RAM 1280KB\r\n");
-    bbsPuts("  Located in Brazil\r\n\r\n");
-    bbsPuts("  Uptime ");
+    bbsPuts("SERVER NAME: MMSJ BBS\r\n");
+    bbsPuts("       ADDR: mmc320.ddns.net\r\n");
+    bbsPuts("       NODE: 1 (of 1)\r\n");
+    bbsPuts("       ADMN: Moahrs\r\n");
+    bbsPuts("   LOCATION: Brazil\r\n");
+    bbsPuts("     UPTIME: ");
     bbsPuts(up);
-    bbsPuts("\r\n  Max Perm Users online 1\r\n");
     bbsAnsiNormal();
-    bbsPuts("\r\n");
-    bbsPuts(" New account : type NEW as user\r\n");
+    bbsPuts("\r\n\r\n");
+    bbsPuts("Connections through TELNET protocol are\r\n");
+    bbsPuts("NOT secured or encrypted.\r\n");
+    bbsPuts("D'ont use BBS passwd for other services.\r\n\r\n");
+    bbsPuts("Enter User Name or 'New'\r\n");
  }
 
 static int bbsWaitCaller(void)
@@ -782,7 +785,7 @@ static int bbsLogin(char *currentUser)
 
     while (1) {
         bbsWelcomeScreen();
-        bbsPuts("User: ");
+        bbsPuts("Login: ");
 
         len = bbsReadLine(user, sizeof(user), 0);
         if (len < 0)
@@ -923,15 +926,74 @@ static int bbsMessages(void)
     return bbsPause();
 }
 
+/*
+  Today:
+     3 files per row
+     14 rows
+
+  future:
+     Can choice file for download, typing the name, and using xmodem crc
+*/
 static int bbsFiles(void)
 {
+    char pNameFile[13];
+    FILES_DIR *pDir;
+    char ixr = 0, ixc = 0;
+
     bbsAnsiClear();
-    bbsAnsiColor(0, 3);
+    bbsAnsiColor(0, 3);     // FG Amarelo
     bbsPuts("┌──────────────────────────────────────┐\r\n");
     bbsPuts("│                Files                 │\r\n");
     bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
+    bbsAnsiColor(1, 12);    // BG Azul Claro
+    bbsPuts("/DOWNLOAD ─────────────────────────────");
     bbsAnsiNormal();
-    bbsPuts("File area is not implemented yet.");
+
+    pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
+
+    if (pDir <> 0)
+    {
+        fsListDir(pDir, "/DOWNLOAD");
+        ix = 0;
+
+        while (pDir[ix].Name[0] != 0)
+        {
+            if (pDir[ix].Attr[1] != 'V' && pDir[ix].Attr[1] != 'D')
+            {
+                strcpy(pNameFile, pDir[ix].Name);
+
+                if (pDir[ix].Ext[0] != 0)
+                {
+                    strcat(pNameFile, ".");
+                    strcat(pNameFile, pDir[ix].Ext);
+                }
+
+                bbsPuts(pNameFile);
+                bbsPuts(" ");
+                ixc += 1
+
+                if (ixc == 3)
+                {
+                    ixr += 1;
+                    bbsPuts("\r\n");
+                    if (ixr == 14)
+                        break;
+                }
+            }
+            ix++;
+        }
+
+        msfree(pDir);
+    }
+
+    if (pDir == 0 || ix == 0)
+    {
+        bbsAnsiColor(0, 15);    // FG Branco
+        bbsAnsiColor(1, 1);     // BG Vermelho
+        bbsPuts("*** No files found\r\n");
+        bbsAnsiNormal();
+    }
+    
     bbsCrLf();
     return bbsPause();
 }
@@ -963,19 +1025,23 @@ static int bbsSystemInfo(void)
     bbsPuts("│         System Information           │\r\n");
     bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
     bbsAnsiNormal();
-    bbsPuts("CPU       : Motorola 68000\r\n");
-    bbsPuts("Clock     : 9MHz\r\n");
+    bbsPuts("System    : MMC-320 Homebrew Computer\r\n");
+    bbsPuts("CPU       : Motorola 68HC000 at 9MHz\r\n");
     bbsPuts("RAM       : 1280KB\r\n");
-    bbsPuts("Video     : TMS9118\r\n");
-    bbsPuts("OS        : MMSJOS\r\n");
+    bbsPuts("            System: 256KB  User: 1024KB\r\n");
+    bbsPuts("Video     : TMS9118 VRAM 16KB\r\n");
+    bbsPuts("OS        : MMSJ-OS\r\n");
     bbsPuts("BASIC     : v2.1\r\n");
     bbsPuts("Uptime    : ");
     bbsPuts(up);
     bbsCrLf();
+    bbsPuts("Nodes     : 1\r\n");
+    bbsPuts("Operator  : Moahrs\r\n");
     bbsPuts("Users     : ");
     bbsPrintDec((unsigned long)bbsUserCount + 1UL);
     bbsCrLf();
     bbsPuts("Messages  : 42\r\n");
+    bbsPuts("Location  : Belo Horizonte, Brazil\r\n");
     return bbsPause();
 }
 
