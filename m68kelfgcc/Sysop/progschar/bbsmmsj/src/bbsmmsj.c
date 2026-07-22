@@ -866,19 +866,7 @@ static void bbsShowMenu(char *currentUser)
     bbsPuts("█   █ █   █  ██   ██     ███  ███   ██ \r\n\r\n");
     bbsAnsiColor(1, 4);
     bbsPuts("                                        \r\n\r\n");
-    bbsAnsiColor(0, 3);
-    bbsPuts("Node 1");
-    bbsAnsiColor(1, 4);
-    bbsPuts("  Uptime ");
-    bbsPuts(up);
-    bbsPuts(" \r\n");
     bbsAnsiNormal();
-    bbsPuts("┌───────────────────────────────────────\r\n");
-    bbsPuts("│ User: ");
-    bbsAnsiColor(0, 6);
-    bbsPuts(currentUser);
-    bbsAnsiNormal();
-    bbsPuts("\r\n└───────────────────────────────────────\r\n");
     bbsAnsiColor(0, 3);
     bbsPuts("┌─┐                ┌─┐\r\n");
     bbsPuts("│1│");
@@ -938,23 +926,27 @@ static int bbsFiles(void)
 {
     char pNameFile[13];
     FILES_DIR *pDir;
-    char ixr = 0, ixc = 0;
+    char ixr = 0, ixc = 0, ix;
+    char ixn;
+    unsigned char fileCount;
 
     bbsAnsiClear();
     bbsAnsiColor(0, 3);     // FG Amarelo
     bbsPuts("┌──────────────────────────────────────┐\r\n");
     bbsPuts("│                Files                 │\r\n");
     bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
+    bbsAnsiColor(0, 15);    // FG Branco
     bbsAnsiColor(1, 12);    // BG Azul Claro
-    bbsPuts("/DOWNLOAD ─────────────────────────────");
+    bbsPuts("/DOWNLOAD ─────────────────────────────\r\n");
     bbsAnsiNormal();
 
     pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
 
-    if (pDir <> 0)
+    if (pDir != 0)
     {
         fsListDir(pDir, "/DOWNLOAD");
         ix = 0;
+        fileCount = 0;
 
         while (pDir[ix].Name[0] != 0)
         {
@@ -969,12 +961,21 @@ static int bbsFiles(void)
                 }
 
                 bbsPuts(pNameFile);
-                bbsPuts(" ");
-                ixc += 1
+
+                ixn = strlen(pNameFile);
+                while (ixn < 13)
+                {
+                    bbsPuts(" ");
+                    ixn++;
+                }
+
+                ixc += 1;
+                fileCount += 1;
 
                 if (ixc == 3)
                 {
                     ixr += 1;
+                    ixc = 0;
                     bbsPuts("\r\n");
                     if (ixr == 14)
                         break;
@@ -986,7 +987,7 @@ static int bbsFiles(void)
         msfree(pDir);
     }
 
-    if (pDir == 0 || ix == 0)
+    if (pDir == 0 || fileCount == 0)
     {
         bbsAnsiColor(0, 15);    // FG Branco
         bbsAnsiColor(1, 1);     // BG Vermelho
