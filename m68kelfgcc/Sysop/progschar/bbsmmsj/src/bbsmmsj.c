@@ -932,7 +932,7 @@ static int bbsMessages(void)
      14 rows
 
   future:
-     Can choice file for download
+     Can choice file for download, typing the name, and using xmodem crc
 */
 static int bbsFiles(void)
 {
