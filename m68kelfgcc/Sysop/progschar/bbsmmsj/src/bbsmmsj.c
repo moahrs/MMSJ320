@@ -29,10 +29,13 @@
 
 #define BBS_READ_ABORT   -1
 #define BBS_READ_TIMEOUT -2
+#define BBS_USERS_FILE   "/NETWRK/BBSUSER.TXT"
+#define BBS_USERS_MAX    16
+#define BBS_USERS_BUF    2048
 
-static char bbsUser[BBS_USER_MAX + 1];
-static char bbsPass[BBS_PASS_MAX + 1];
-static unsigned char bbsUserValid = 0;
+static char bbsUsers[BBS_USERS_MAX][BBS_USER_MAX + 1];
+static char bbsPasses[BBS_USERS_MAX][BBS_PASS_MAX + 1];
+static unsigned char bbsUserCount = 0;
 static unsigned long bbsLoopTicks = 0;
 static unsigned char bbsPendingByte = 0;
 static unsigned char bbsPendingValid = 0;
@@ -69,6 +72,24 @@ static void bbsAnsiBright(void)
     bbsPuts("\x1B[1m");
 }
 
+/*
+0  preto
+1  vermelho
+2  verde
+3  amarelo / marrom
+4  azul
+5  magenta
+6  ciano
+7  branco / cinza claro
+8  cinza escuro
+9  vermelho claro
+10 verde claro
+11 amarelo claro
+12 azul claro
+13 magenta claro
+14 ciano claro
+15 branco brilhante
+*/
 static void bbsAnsiColor(unsigned char type, unsigned char color)
 {
     unsigned char code;
@@ -355,6 +376,121 @@ static void bbsCopyUpper(char *dst, char *src, int maxLen)
     dst[i] = 0;
 }
 
+static int bbsFindUser(char *user)
+{
+    int i;
+
+    for (i = 0; i < bbsUserCount; i++) {
+        if (bbsStrEqNoCase(user, bbsUsers[i]))
+            return i;
+    }
+
+    return -1;
+}
+
+static unsigned char bbsAddUser(char *user, char *pass)
+{
+    if (bbsUserCount >= BBS_USERS_MAX)
+        return 0;
+
+    if (bbsFindUser(user) >= 0)
+        return 0;
+
+    bbsCopyUpper(bbsUsers[bbsUserCount], user, BBS_USER_MAX + 1);
+    strncpy(bbsPasses[bbsUserCount], pass, BBS_PASS_MAX);
+    bbsPasses[bbsUserCount][BBS_PASS_MAX] = 0;
+    bbsUserCount++;
+
+    return 1;
+}
+
+static unsigned char bbsSaveUsers(void)
+{
+    static unsigned char buf[BBS_USERS_BUF];
+    unsigned short pos;
+    unsigned short len;
+    unsigned char i;
+
+    pos = 0;
+
+    for (i = 0; i < bbsUserCount; i++) {
+        len = (unsigned short)strlen(bbsUsers[i]);
+        if (pos + len + 1 >= BBS_USERS_BUF)
+            return 0;
+        memcpy(buf + pos, bbsUsers[i], len);
+        pos += len;
+        buf[pos++] = ',';
+
+        len = (unsigned short)strlen(bbsPasses[i]);
+        if (pos + len + 2 >= BBS_USERS_BUF)
+            return 0;
+        memcpy(buf + pos, bbsPasses[i], len);
+        pos += len;
+        buf[pos++] = '\r';
+        buf[pos++] = '\n';
+    }
+
+    return saveFile((unsigned char *)BBS_USERS_FILE, buf, (unsigned long)pos) == RETURN_OK;
+}
+
+static void bbsLoadUsers(void)
+{
+    static unsigned char buf[BBS_USERS_BUF + 1];
+    unsigned long size;
+    unsigned short i;
+    unsigned short upos;
+    unsigned short ppos;
+    char user[BBS_USER_MAX + 1];
+    char pass[BBS_PASS_MAX + 1];
+    unsigned char inPass;
+
+    bbsUserCount = 0;
+
+    size = fsInfoFile(BBS_USERS_FILE, INFO_SIZE);
+    if (size == 0 || size >= ERRO_D_START || size > BBS_USERS_BUF)
+        return;
+
+    size = loadFile((unsigned char *)BBS_USERS_FILE, buf);
+    if (size == 0 || size >= ERRO_D_START || size > BBS_USERS_BUF)
+        return;
+
+    buf[size] = 0;
+
+    upos = 0;
+    ppos = 0;
+    inPass = 0;
+    user[0] = 0;
+    pass[0] = 0;
+
+    for (i = 0; i <= size; i++) {
+        if (buf[i] == ',' && !inPass) {
+            user[upos] = 0;
+            inPass = 1;
+            continue;
+        }
+
+        if (buf[i] == '\r' || buf[i] == '\n' || buf[i] == 0) {
+            pass[ppos] = 0;
+            if (user[0] && pass[0])
+                bbsAddUser(user, pass);
+            upos = 0;
+            ppos = 0;
+            inPass = 0;
+            user[0] = 0;
+            pass[0] = 0;
+            continue;
+        }
+
+        if (inPass) {
+            if (ppos < BBS_PASS_MAX)
+                pass[ppos++] = (char)buf[i];
+        } else {
+            if (upos < BBS_USER_MAX)
+                user[upos++] = bbsUpperChar((char)buf[i]);
+        }
+    }
+}
+
 static void bbsAppendDec(char *dst, unsigned long value)
 {
     char tmp[16];
@@ -374,6 +510,15 @@ static void bbsAppendDec(char *dst, unsigned long value)
 
     for (i = p - 1; i >= 0; i--)
         strncat(dst, &tmp[i], 1);
+}
+
+static void bbsPrintDec(unsigned long value)
+{
+    char tmp[16];
+
+    tmp[0] = 0;
+    bbsAppendDec(tmp, value);
+    bbsPuts(tmp);
 }
 
 static void bbsFormatUptime(char *out)
@@ -579,22 +724,21 @@ static void bbsWelcomeScreen(void)
     bbsAnsiNormal();
     bbsAnsiBright();
     bbsAnsiColor(0, 3);
-    bbsPuts("+--------------------------------------+\r\n");
-    bbsPuts("|            MMSJ BBS ONLINE          |\r\n");
-    bbsPuts("+--------------------------------------+\r\n");
+    bbsPuts("Welcome to MMSJ-BBS ONLINE\r\n");
+    bbsPuts("MMC-320, a Homebrew Computer like 80s\r\n\r\n");
     bbsAnsiNormal();
     bbsAnsiColor(0, 6);
-    bbsPuts(" Motorola 68000 @ 9MHz   MMSJOS 1.0\r\n");
-    bbsPuts(" TMS9118 ANSI Terminal   RAM 1280KB\r\n");
-    bbsPuts(" Uptime ");
+    bbsPuts("Specs:\r\n");
+    bbsPuts("  Motorola 68000 @ 9MHz   MMSJOS 1.0\r\n");
+    bbsPuts("  TMS9118 ANSI Terminal   RAM 1280KB\r\n");
+    bbsPuts("  Located in Brazil\r\n\r\n");
+    bbsPuts("  Uptime ");
     bbsPuts(up);
-    bbsPuts("        Users online 1\r\n");
+    bbsPuts("\r\n  Max Perm Users online 1\r\n");
     bbsAnsiNormal();
-    bbsPuts("----------------------------------------\r\n");
-    bbsPuts(" Default user: ADMIN\r\n");
+    bbsPuts("\r\n");
     bbsPuts(" New account : type NEW as user\r\n");
-    bbsPuts("----------------------------------------\r\n\r\n");
-}
+ }
 
 static int bbsWaitCaller(void)
 {
@@ -618,10 +762,13 @@ static int bbsWaitCaller(void)
 
 static unsigned char bbsKnownUser(char *user, char *pass)
 {
+    int ix;
+
     if (bbsStrEqNoCase(user, "ADMIN") && strcmp(pass, "zilog80") == 0)
         return 1;
 
-    if (bbsUserValid && bbsStrEqNoCase(user, bbsUser) && strcmp(pass, bbsPass) == 0)
+    ix = bbsFindUser(user);
+    if (ix >= 0 && strcmp(pass, bbsPasses[ix]) == 0)
         return 1;
 
     return 0;
@@ -652,6 +799,13 @@ static int bbsLogin(char *currentUser)
             if (len == 0)
                 continue;
 
+            if (bbsStrEqNoCase(user, "ADMIN") || bbsFindUser(user) >= 0) {
+                bbsPuts("User already exists.");
+                bbsCrLf();
+                delayms(80);
+                continue;
+            }
+
             bbsPuts("New password : ");
             len = bbsReadLine(pass, sizeof(pass), 1);
             if (len < 0)
@@ -659,12 +813,16 @@ static int bbsLogin(char *currentUser)
             if (len == 0)
                 continue;
 
-            bbsCopyUpper(bbsUser, user, sizeof(bbsUser));
-            strncpy(bbsPass, pass, BBS_PASS_MAX);
-            bbsPass[BBS_PASS_MAX] = 0;
-            bbsUserValid = 1;
+            if (!bbsAddUser(user, pass) || !bbsSaveUsers()) {
+                bbsPuts("Unable to save user file.");
+                bbsCrLf();
+                delayms(80);
+                if (bbsUserCount > 0)
+                    bbsUserCount--;
+                continue;
+            }
 
-            strcpy(currentUser, bbsUser);
+            strcpy(currentUser, bbsUsers[bbsUserCount - 1]);
             bbsCrLf();
             bbsPuts("User created. Welcome to MMSJ BBS.");
             bbsCrLf();
@@ -693,34 +851,18 @@ static void bbsShowMenu(char *currentUser)
 {
     char up[32];
 
-/*
-          1         2         3        3
-0123456789012345678901234567890123456789
-M   M M   M  SS  JJJJ    BBB  BBB   SS
-MM MM MM MM S  S    J    B  B B  B S  S
-M M M M M M S       J -- B  B B  B S
-M   M M   M  SS     J    BBB  BBB   SS
-M   M M   M    S    J    B  B B  B    S
-M   M M   M S  S J  J    B  B B  B S  S
-M   M M   M  SS   JJ     BBB  BBB   SS
-*/
-
     bbsFormatUptime(up);
     bbsAnsiClear();
-    bbsPuts("----------------------------------------\r\n");
-    bbsAnsiColor(0, 10);
+    bbsAnsiColor(0, 4);
     bbsPuts("█   █ █   █  ██  ████    ███  ███   ██ \r\n");
     bbsPuts("██ ██ ██ ██ █  █    █    █  █ █  █ █  █\r\n");
-    bbsAnsiColor(0, 11);
     bbsPuts("█ █ █ █ █ █ █       █ ██ █  █ █  █ █   \r\n");
     bbsPuts("█   █ █   █  ██     █    ███  ███   ██ \r\n");
     bbsPuts("█   █ █   █    █    █    █  █ █  █    █\r\n");
-    bbsAnsiColor(0, 10);
     bbsPuts("█   █ █   █ █  █ █  █    █  █ █  █ █  █\r\n");
-    bbsPuts("█   █ █   █  ██   ██     ███  ███   ██ \r\n");
-    bbsAnsiNormal();
-    bbsPuts("----------------------------------------\r\n");
+    bbsPuts("█   █ █   █  ██   ██     ███  ███   ██ \r\n\r\n");
     bbsAnsiColor(1, 4);
+    bbsPuts("                                        \r\n\r\n");
     bbsAnsiColor(0, 3);
     bbsPuts("Node 1");
     bbsAnsiColor(1, 4);
@@ -728,47 +870,53 @@ M   M M   M  SS   JJ     BBB  BBB   SS
     bbsPuts(up);
     bbsPuts(" \r\n");
     bbsAnsiNormal();
-    bbsPuts("----------------------------------------\r\n");
-    bbsPuts(" User: ");
+    bbsPuts("┌───────────────────────────────────────\r\n");
+    bbsPuts("│ User: ");
     bbsAnsiColor(0, 6);
     bbsPuts(currentUser);
     bbsAnsiNormal();
-    bbsPuts("\r\n----------------------------------------\r\n");
+    bbsPuts("\r\n└───────────────────────────────────────\r\n");
     bbsAnsiColor(0, 3);
-    bbsPuts("[1]");
+    bbsPuts("┌─┐                ┌─┐\r\n");
+    bbsPuts("│1│");
     bbsAnsiNormal();
     bbsPuts(" Messages       ");
     bbsAnsiColor(0, 3);
-    bbsPuts("[2]");
+    bbsPuts("");
+    bbsPuts("│2│");
     bbsAnsiNormal();
     bbsPuts(" Files\r\n");
     bbsAnsiColor(0, 3);
-    bbsPuts("[3]");
+    bbsPuts("│ │                │ │\r\n");
+    bbsPuts("│3│");
     bbsAnsiNormal();
     bbsPuts(" Online Users   ");
     bbsAnsiColor(0, 3);
-    bbsPuts("[4]");
+    bbsPuts("│4│");
     bbsAnsiNormal();
     bbsPuts(" System Info\r\n");
+    bbsPuts("└─┘                └─┘\r\n");
     bbsAnsiColor(0, 3);
-    bbsPuts("[5]");
+    bbsPuts("┌─┐\r\n");
+    bbsPuts("│5│");
     bbsAnsiNormal();
     bbsPuts(" Logout\r\n");
-    bbsPuts("----------------------------------------\r\n");
+    bbsPuts("└─┘\r\n");
+    bbsPuts("────────────────────────────────────────\r\n");
     bbsAnsiColor(1, 4);
     bbsAnsiColor(0, 7);
-    bbsPuts(" Select 1-5. No ENTER needed.          ");
+    bbsPuts(" Select 1-5");
     bbsAnsiNormal();
-    bbsPuts("\r\n:");
+    bbsPuts(":");
 }
 
 static int bbsMessages(void)
 {
     bbsAnsiClear();
     bbsAnsiColor(0, 3);
-    bbsPuts("+--------------------------------------+\r\n");
-    bbsPuts("|              Messages                |\r\n");
-    bbsPuts("+--------------------------------------+\r\n\r\n");
+    bbsPuts("┌──────────────────────────────────────┐\r\n");
+    bbsPuts("│              Messages                │\r\n");
+    bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
     bbsAnsiNormal();
     bbsPuts("Message area is not implemented yet.");
     bbsCrLf();
@@ -779,9 +927,9 @@ static int bbsFiles(void)
 {
     bbsAnsiClear();
     bbsAnsiColor(0, 3);
-    bbsPuts("+--------------------------------------+\r\n");
-    bbsPuts("|                Files                 |\r\n");
-    bbsPuts("+--------------------------------------+\r\n\r\n");
+    bbsPuts("┌──────────────────────────────────────┐\r\n");
+    bbsPuts("│                Files                 │\r\n");
+    bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
     bbsAnsiNormal();
     bbsPuts("File area is not implemented yet.");
     bbsCrLf();
@@ -792,14 +940,14 @@ static int bbsOnlineUsers(char *currentUser)
 {
     bbsAnsiClear();
     bbsAnsiColor(0, 3);
-    bbsPuts("+--------------------------------------+\r\n");
-    bbsPuts("|            Online Users              |\r\n");
-    bbsPuts("+--------------------------------------+\r\n\r\n");
+    bbsPuts("┌──────────────────────────────────────┐\r\n");
+    bbsPuts("│            Online Users              │\r\n");
+    bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
     bbsAnsiNormal();
     bbsPuts(" 1. ");
     bbsPuts(currentUser);
     bbsPuts(" via Telnet\r\n\r\n");
-    bbsPuts("----------------------------------------\r\n");
+    bbsPuts("────────────────────────────────────────\r\n");
     bbsPuts(" Total: 1\r\n");
     return bbsPause();
 }
@@ -811,9 +959,9 @@ static int bbsSystemInfo(void)
     bbsFormatUptime(up);
     bbsAnsiClear();
     bbsAnsiColor(0, 3);
-    bbsPuts("+--------------------------------------+\r\n");
-    bbsPuts("|         System Information           |\r\n");
-    bbsPuts("+--------------------------------------+\r\n\r\n");
+    bbsPuts("┌──────────────────────────────────────┐\r\n");
+    bbsPuts("│         System Information           │\r\n");
+    bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
     bbsAnsiNormal();
     bbsPuts("CPU       : Motorola 68000\r\n");
     bbsPuts("Clock     : 9MHz\r\n");
@@ -824,7 +972,9 @@ static int bbsSystemInfo(void)
     bbsPuts("Uptime    : ");
     bbsPuts(up);
     bbsCrLf();
-    bbsPuts("Users     : 1\r\n");
+    bbsPuts("Users     : ");
+    bbsPrintDec((unsigned long)bbsUserCount + 1UL);
+    bbsCrLf();
     bbsPuts("Messages  : 42\r\n");
     return bbsPause();
 }
@@ -883,6 +1033,8 @@ int main(void)
 
     printText("MMSJ BBS starting...\r\n");
     printText("Press CTRL+ALT+X locally to exit.\r\n");
+
+    bbsLoadUsers();
 
     if (!bbsEnableListen()) {
         printText("BBS stopped: network listener failed.\r\n");

@@ -29,7 +29,8 @@
 #define LAN_POLL_MS   1000
 #define PLUS_TIMEOUT_MS 1000
 #define ETH_MAINTAIN_MS 1000
-#define TCP_ACCEPT_IDLE_CLOSE_MS 300000UL
+#define TCP_ACCEPT_FIRST_BYTE_MS 15000UL
+#define TCP_ACCEPT_IDLE_CLOSE_MS 90000UL
 
 byte mac[] = { 0x02, 0x68, 0x00, 0x00, 0x00, 0x45 };
 
@@ -47,6 +48,7 @@ EthernetServer tcpServer(23);
 bool tcpMode = false;
 bool tcpListenMode = false;
 bool tcpAcceptedMode = false;
+bool tcpRemoteReady = false;
 uint16_t tcpListenPort = 23;
 char plusBuf[4];
 unsigned char plusPos = 0;
@@ -66,6 +68,7 @@ unsigned long lanPollLast = 0;
 unsigned long plusLastMs = 0;
 unsigned long ethMaintainLast = 0;
 unsigned long tcpLastActivityMs = 0;
+unsigned long tcpLastRemoteRxMs = 0;
 
 #define TCP_RXBUF_SIZE 4096
 
@@ -136,6 +139,14 @@ void tcpMarkActivity()
   tcpLastActivityMs = millis();
 }
 
+void tcpMarkRemoteRx()
+{
+  tcpLastRemoteRxMs = millis();
+  tcpRemoteReady = true;
+  digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
+  tcpMarkActivity();
+}
+
 void tcpDropClientKeepListener()
 {
   tcpClient.stop();
@@ -143,6 +154,7 @@ void tcpDropClientKeepListener()
   linePos = 0;
   tcpMode = false;
   tcpAcceptedMode = false;
+  tcpRemoteReady = false;
   plusPos = 0;
   digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
 
@@ -158,6 +170,7 @@ void tcpResetState(bool keepListen)
   linePos = 0;
   tcpMode = false;
   tcpAcceptedMode = false;
+  tcpRemoteReady = false;
   plusPos = 0;
   digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
 
@@ -209,7 +222,7 @@ void ledsPoll()
     else
       digitalWrite(PIN_LED_LAN, LED_OFF_LEVEL);
 
-    if (tcpMode)
+    if (tcpMode && tcpRemoteReady)
       digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     else
       digitalWrite(PIN_LED_CONN, LED_OFF_LEVEL);
@@ -378,9 +391,11 @@ void cmdTcpConnect(char *arg)
   {
     ledActivity();
     tcpMarkActivity();
+    tcpLastRemoteRxMs = tcpLastActivityMs;
     digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     tcpMode = true;
     tcpAcceptedMode = false;
+    tcpRemoteReady = true;
     plusPos = 0;
     /*Serial2.println("OK;CONNECT");
     endResponse();*/
@@ -412,7 +427,15 @@ void tcpBridgePoll()
   }
 
   if (tcpAcceptedMode && tcpListenMode &&
-      (long)(millis() - tcpLastActivityMs) >= TCP_ACCEPT_IDLE_CLOSE_MS)
+      !tcpRemoteReady &&
+      (long)(millis() - tcpLastActivityMs) >= TCP_ACCEPT_FIRST_BYTE_MS)
+  {
+    tcpDropClientKeepListener();
+    return;
+  }
+
+  if (tcpAcceptedMode && tcpListenMode && tcpRemoteReady &&
+      (long)(millis() - tcpLastRemoteRxMs) >= TCP_ACCEPT_IDLE_CLOSE_MS)
   {
     tcpDropClientKeepListener();
     return;
@@ -489,7 +512,7 @@ void tcpBridgePoll()
       {
           tcpRxPut((uint8_t)c);
           ledActivity();
-          tcpMarkActivity();
+          tcpMarkRemoteRx();
       }
 
       count++;
@@ -534,9 +557,10 @@ void tcpListenPoll()
     tcpRxClear();
     tcpMode = true;
     tcpAcceptedMode = true;
+    tcpRemoteReady = false;
     tcpMarkActivity();
+    tcpLastRemoteRxMs = tcpLastActivityMs;
     plusPos = 0;
-    digitalWrite(PIN_LED_CONN, LED_ON_LEVEL);
     ledActivity();
   }
 }
