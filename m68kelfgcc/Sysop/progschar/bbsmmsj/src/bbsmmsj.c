@@ -926,15 +926,74 @@ static int bbsMessages(void)
     return bbsPause();
 }
 
+/*
+  Today:
+     3 files per row
+     14 rows
+
+  future:
+     Can choice file for download
+*/
 static int bbsFiles(void)
 {
+    char pNameFile[13];
+    FILES_DIR *pDir;
+    char ixr = 0, ixc = 0;
+
     bbsAnsiClear();
-    bbsAnsiColor(0, 3);
+    bbsAnsiColor(0, 3);     // FG Amarelo
     bbsPuts("┌──────────────────────────────────────┐\r\n");
     bbsPuts("│                Files                 │\r\n");
     bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
+    bbsAnsiColor(1, 12);    // BG Azul Claro
+    bbsPuts("/DOWNLOAD ─────────────────────────────");
     bbsAnsiNormal();
-    bbsPuts("File area is not implemented yet.");
+
+    pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
+
+    if (pDir <> 0)
+    {
+        fsListDir(pDir, "/DOWNLOAD");
+        ix = 0;
+
+        while (pDir[ix].Name[0] != 0)
+        {
+            if (pDir[ix].Attr[1] != 'V' && pDir[ix].Attr[1] != 'D')
+            {
+                strcpy(pNameFile, pDir[ix].Name);
+
+                if (pDir[ix].Ext[0] != 0)
+                {
+                    strcat(pNameFile, ".");
+                    strcat(pNameFile, pDir[ix].Ext);
+                }
+
+                bbsPuts(pNameFile);
+                bbsPuts(" ");
+                ixc += 1
+
+                if (ixc == 3)
+                {
+                    ixr += 1;
+                    bbsPuts("\r\n");
+                    if (ixr == 14)
+                        break;
+                }
+            }
+            ix++;
+        }
+
+        msfree(pDir);
+    }
+
+    if (pDir == 0 || ix == 0)
+    {
+        bbsAnsiColor(0, 15);    // FG Branco
+        bbsAnsiColor(1, 1);     // BG Vermelho
+        bbsPuts("*** No files found\r\n");
+        bbsAnsiNormal();
+    }
+    
     bbsCrLf();
     return bbsPause();
 }
