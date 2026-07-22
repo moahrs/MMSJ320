@@ -732,7 +732,7 @@ static void bbsWelcomeScreen(void)
     bbsPuts("       ADDR: mmc320.ddns.net\r\n");
     bbsPuts("       NODE: 1 (of 1)\r\n");
     bbsPuts("       ADMN: Moahrs\r\n");
-    bbsPuts("      LOCAL: Brazil\r\n");
+    bbsPuts("   LOCATION: Brazil\r\n");
     bbsPuts("     UPTIME: ");
     bbsPuts(up);
     bbsAnsiNormal();
@@ -966,6 +966,7 @@ static int bbsSystemInfo(void)
     bbsPuts("│         System Information           │\r\n");
     bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
     bbsAnsiNormal();
+    bbsPuts("System    : MMC-320 Homebrew Computer\r\n");
     bbsPuts("CPU       : Motorola 68HC000 at 9MHz\r\n");
     bbsPuts("RAM       : 1280KB\r\n");
     bbsPuts("            System: 256KB  User: 1024KB\r\n");
@@ -975,10 +976,13 @@ static int bbsSystemInfo(void)
     bbsPuts("Uptime    : ");
     bbsPuts(up);
     bbsCrLf();
+    bbsPuts("Nodes     : 1\r\n");
+    bbsPuts("Operator  : Moahrs\r\n");
     bbsPuts("Users     : ");
     bbsPrintDec((unsigned long)bbsUserCount + 1UL);
     bbsCrLf();
     bbsPuts("Messages  : 42\r\n");
+    bbsPuts("Location  : Belo Horizonte, Brazil\r\n");
     return bbsPause();
 }
 
