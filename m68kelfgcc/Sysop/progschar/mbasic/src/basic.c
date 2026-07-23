@@ -10133,6 +10133,15 @@ int basDim(void)
 
     createVariableArray(varName, varTipo, ixDim, vDim);
 
+    while (*(unsigned char *)(*pointerRunProg) == ' ' || *(unsigned char *)(*pointerRunProg) == '\t')
+        *pointerRunProg = *pointerRunProg + 1;
+
+    if (*(unsigned char *)(*pointerRunProg) == ',')
+    {
+        *pointerRunProg = *pointerRunProg + 1;
+        return basDim();
+    }
+
     return 0;
 }
 
@@ -11509,7 +11518,7 @@ int basSign(void)
 int basRnd(void)
 {
     unsigned long vRand;
-    int vReal = 0, vResult = 0;
+    int vReal = 0, vArg = 0;
     unsigned char vTRand[20];
     unsigned char vSRand[20];
 
@@ -11536,6 +11545,11 @@ int basRnd(void)
         return 0;
     }
 
+    if (*value_type == '#')
+        vArg = fppInt(vReal);
+    else
+        vArg = vReal;
+
     nextToken();
     if (*vErroProc) return 0;
 
@@ -11546,24 +11560,23 @@ int basRnd(void)
         return 0;
     }
 
-    if (vReal == 0)
+    if (vArg == 0)
     {
         vRand = *randSeed;
     }
-    else if (vReal >= -1 && vReal < 0)
+    else if (vArg == -1)
     {
         vRand = *(vmfp + Reg_TADR);
-        vRand = (vRand << 3);
-        vRand += 0x466;
-        vRand -= ((*(vmfp + Reg_TADR)) * 3);
+        vRand = (vRand << 8) | *(vmfp + Reg_TADR);
+        vRand ^= 0x5A17UL;
+        *randSeed = vRand;
+
+        vRand = (*randSeed * 25173UL) + 13849UL;
         *randSeed = vRand;
     }
-    else if (vReal > 0 && vReal <= 1)
+    else if (vArg == 1)
     {
-        vRand = *randSeed;
-        vRand = (vRand << 3);
-        vRand += 0x466;
-        vRand -= ((*(vmfp + Reg_TADR)) * 3);
+        vRand = (*randSeed * 25173UL) + 13849UL;
         *randSeed = vRand;
     }
     else
@@ -11572,6 +11585,7 @@ int basRnd(void)
         return 0;
     }
 
+    vRand = (vRand % 999999UL) + 1UL;
     itoa(vRand, vTRand, 10);
     vSRand[0] = '0';
     vSRand[1] = '.';
