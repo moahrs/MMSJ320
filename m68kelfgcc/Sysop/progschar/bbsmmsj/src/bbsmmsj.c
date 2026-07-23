@@ -32,10 +32,14 @@
 #define BBS_USERS_FILE   "/NETWRK/BBSUSER.TXT"
 #define BBS_USERS_MAX    16
 #define BBS_USERS_BUF    2048
+#define BBS_MSG_DIR      "/NETWRK/MSGS"
+#define BBS_MSG_BUF      4096
+#define BBS_MSG_MAX_LIST 20
 
 static char bbsUsers[BBS_USERS_MAX][BBS_USER_MAX + 1];
 static char bbsPasses[BBS_USERS_MAX][BBS_PASS_MAX + 1];
 static unsigned char bbsUserCount = 0;
+static unsigned char bbsMsgBuf[BBS_MSG_BUF + 1];
 static unsigned long bbsLoopTicks = 0;
 static unsigned char bbsPendingByte = 0;
 static unsigned char bbsPendingValid = 0;
@@ -388,6 +392,14 @@ static int bbsFindUser(char *user)
     return -1;
 }
 
+static unsigned char bbsUserExists(char *user)
+{
+    if (bbsStrEqNoCase(user, "ADMIN"))
+        return 1;
+
+    return bbsFindUser(user) >= 0;
+}
+
 static unsigned char bbsAddUser(char *user, char *pass)
 {
     if (bbsUserCount >= BBS_USERS_MAX)
@@ -402,6 +414,202 @@ static unsigned char bbsAddUser(char *user, char *pass)
     bbsUserCount++;
 
     return 1;
+}
+
+static void bbsAppendChar(unsigned char *buf, unsigned short *pos, unsigned short max, unsigned char c)
+{
+    if (*pos < max) {
+        buf[*pos] = c;
+        *pos = *pos + 1;
+        buf[*pos] = 0;
+    }
+}
+
+static void bbsAppendStr(unsigned char *buf, unsigned short *pos, unsigned short max, char *s)
+{
+    while (*s && *pos < max)
+        bbsAppendChar(buf, pos, max, (unsigned char)*s++);
+}
+
+static void bbsMakeMsgName(unsigned short num, char *out)
+{
+    out[0] = (char)('0' + ((num / 100000) % 10));
+    out[1] = (char)('0' + ((num / 10000) % 10));
+    out[2] = (char)('0' + ((num / 1000) % 10));
+    out[3] = (char)('0' + ((num / 100) % 10));
+    out[4] = (char)('0' + ((num / 10) % 10));
+    out[5] = (char)('0' + (num % 10));
+    out[6] = '.';
+    out[7] = 'M';
+    out[8] = 'S';
+    out[9] = 'G';
+    out[10] = 0;
+}
+
+static void bbsMakeMsgPath(unsigned short num, char *out)
+{
+    char name[12];
+
+    bbsMakeMsgName(num, name);
+    strcpy(out, BBS_MSG_DIR);
+    strcat(out, "/");
+    strcat(out, name);
+}
+
+static unsigned short bbsMsgNumFromDir(FILES_DIR *dir)
+{
+    unsigned short num;
+    unsigned char ix;
+
+    if (dir->Ext[0] != 'M' || dir->Ext[1] != 'S' || dir->Ext[2] != 'G')
+        return 0;
+
+    num = 0;
+    for (ix = 0; ix < 6; ix++) {
+        if (dir->Name[ix] < '0' || dir->Name[ix] > '9')
+            return 0;
+        num = (unsigned short)(num * 10 + (dir->Name[ix] - '0'));
+    }
+
+    return num;
+}
+
+static unsigned short bbsNextMsgNumber(void)
+{
+    FILES_DIR *pDir;
+    unsigned char ix;
+    unsigned short num;
+    unsigned short maxNum;
+
+    fsMakeDir(BBS_MSG_DIR);
+
+    pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
+    if (!pDir)
+        return 0;
+
+    fsListDir(pDir, BBS_MSG_DIR);
+    ix = 0;
+    maxNum = 0;
+
+    while (pDir[ix].Name[0] != 0) {
+        num = bbsMsgNumFromDir(&pDir[ix]);
+        if (num > maxNum)
+            maxNum = num;
+        ix++;
+    }
+
+    msfree(pDir);
+    return (unsigned short)(maxNum + 1);
+}
+
+static unsigned char bbsHeaderEquals(char *msg, char *header, char *value)
+{
+    unsigned short hlen;
+    unsigned short vlen;
+
+    hlen = (unsigned short)strlen(header);
+    vlen = (unsigned short)strlen(value);
+
+    while (*msg) {
+        if (!strncmp(msg, header, hlen)) {
+            msg += hlen;
+            while (*msg == ' ')
+                msg++;
+            return strncmp(msg, value, vlen) == 0 &&
+                   (msg[vlen] == '\r' || msg[vlen] == '\n' || msg[vlen] == 0);
+        }
+
+        while (*msg && *msg != '\n')
+            msg++;
+        if (*msg == '\n')
+            msg++;
+    }
+
+    return 0;
+}
+
+static void bbsHeaderCopy(char *msg, char *header, char *out, unsigned char maxLen)
+{
+    unsigned short hlen;
+    unsigned char pos;
+
+    out[0] = 0;
+    hlen = (unsigned short)strlen(header);
+
+    while (*msg) {
+        if (!strncmp(msg, header, hlen)) {
+            msg += hlen;
+            while (*msg == ' ')
+                msg++;
+
+            pos = 0;
+            while (*msg && *msg != '\r' && *msg != '\n' && pos < maxLen - 1)
+                out[pos++] = *msg++;
+            out[pos] = 0;
+            return;
+        }
+
+        while (*msg && *msg != '\n')
+            msg++;
+        if (*msg == '\n')
+            msg++;
+    }
+}
+
+static unsigned char bbsLoadMsg(unsigned short num)
+{
+    char path[32];
+    unsigned long size;
+
+    bbsMakeMsgPath(num, path);
+    size = fsInfoFile(path, INFO_SIZE);
+    if (size == 0 || size >= ERRO_D_START || size > BBS_MSG_BUF)
+        return 0;
+
+    size = loadFile((unsigned char *)path, bbsMsgBuf);
+    if (size == 0 || size >= ERRO_D_START || size > BBS_MSG_BUF)
+        return 0;
+
+    bbsMsgBuf[size] = 0;
+    return 1;
+}
+
+static unsigned char bbsMsgIsToUser(unsigned short num, char *user)
+{
+    if (!bbsLoadMsg(num))
+        return 0;
+
+    return bbsHeaderEquals((char *)bbsMsgBuf, "To:", user);
+}
+
+static unsigned char bbsMsgIsUnreadToUser(unsigned short num, char *user)
+{
+    if (!bbsLoadMsg(num))
+        return 0;
+
+    return bbsHeaderEquals((char *)bbsMsgBuf, "To:", user) &&
+           bbsHeaderEquals((char *)bbsMsgBuf, "Lido:", "Nao");
+}
+
+static void bbsMarkMsgRead(unsigned short num)
+{
+    char path[32];
+    char *p;
+
+    if (!bbsLoadMsg(num))
+        return;
+
+    p = (char *)bbsMsgBuf;
+    while (*p && strncmp(p, "Lido: Nao", 9))
+        p++;
+
+    if (*p) {
+        p[6] = 'S';
+        p[7] = 'i';
+        p[8] = 'm';
+        bbsMakeMsgPath(num, path);
+        saveFile((unsigned char *)path, bbsMsgBuf, (unsigned long)strlen((char *)bbsMsgBuf));
+    }
 }
 
 static unsigned char bbsSaveUsers(void)
@@ -519,6 +727,23 @@ static void bbsPrintDec(unsigned long value)
     tmp[0] = 0;
     bbsAppendDec(tmp, value);
     bbsPuts(tmp);
+}
+
+static void bbsAppend2(char *dst, int value)
+{
+    if (value < 0)
+        value = 0;
+    if (value > 99)
+        value = value % 100;
+
+    dst[0] = (char)('0' + (value / 10));
+    dst[1] = (char)('0' + (value % 10));
+    dst[2] = 0;
+}
+
+static void bbsFormatMsgDate(char *out)
+{
+    strcpy(out, "00/00/00 00:00");
 }
 
 static void bbsFormatUptime(char *out)
@@ -901,7 +1126,275 @@ static void bbsShowMenu(char *currentUser)
     bbsPuts(":");
 }
 
-static int bbsMessages(void)
+static int bbsCreateMessage(char *currentUser)
+{
+    char to[BBS_USER_MAX + 1];
+    char subject[41];
+    char line[81];
+    char date[20];
+    char path[32];
+    unsigned short msgNum;
+    unsigned short pos;
+    int len;
+
+    bbsAnsiClear();
+    bbsAnsiColor(0, 3);
+    bbsPuts("┌──────────────────────────────────────┐\r\n");
+    bbsPuts("│            New Message               │\r\n");
+    bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
+    bbsAnsiNormal();
+
+    bbsPuts("To: ");
+    len = bbsReadLine(to, sizeof(to), 0);
+    if (len < 0)
+        return len;
+    if (len == 0)
+        return 0;
+
+    bbsCopyUpper(to, to, sizeof(to));
+    if (!bbsUserExists(to)) {
+        bbsPuts("User not found.");
+        bbsCrLf();
+        return bbsPause();
+    }
+
+    bbsPuts("Subject: ");
+    len = bbsReadLine(subject, sizeof(subject), 0);
+    if (len < 0)
+        return len;
+
+    msgNum = bbsNextMsgNumber();
+    if (msgNum == 0) {
+        bbsPuts("Unable to create message number.");
+        bbsCrLf();
+        return bbsPause();
+    }
+
+    bbsFormatMsgDate(date);
+    pos = 0;
+    bbsMsgBuf[0] = 0;
+    bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, "From: ");
+    bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, currentUser);
+    bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, "\r\nTo: ");
+    bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, to);
+    bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, "\r\nSubject: ");
+    bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, subject);
+    bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, "\r\nDate: ");
+    bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, date);
+    bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, "\r\nLido: Nao\r\n\r\n");
+
+    bbsPuts("\r\nType message. Single '.' line ends.\r\n\r\n");
+
+    while (1) {
+        len = bbsReadLine(line, sizeof(line), 0);
+        if (len < 0)
+            return len;
+        if (strcmp(line, ".") == 0)
+            break;
+
+        bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, line);
+        bbsAppendStr(bbsMsgBuf, &pos, BBS_MSG_BUF, "\r\n");
+
+        if (pos >= BBS_MSG_BUF - 82) {
+            bbsPuts("Message buffer full.");
+            bbsCrLf();
+            break;
+        }
+    }
+
+    bbsMakeMsgPath(msgNum, path);
+    if (saveFile((unsigned char *)path, bbsMsgBuf, (unsigned long)strlen((char *)bbsMsgBuf)) != RETURN_OK) {
+        bbsPuts("Unable to save message.");
+        bbsCrLf();
+        return bbsPause();
+    }
+
+    bbsPuts("\r\nMessage saved as ");
+    bbsPuts(path);
+    bbsCrLf();
+    return bbsPause();
+}
+
+static int bbsReadMessages(char *currentUser)
+{
+    FILES_DIR *pDir;
+    unsigned short nums[BBS_MSG_MAX_LIST];
+    unsigned char count;
+    unsigned char ix;
+    unsigned short num;
+    char answer[8];
+    char from[18];
+    char subject[42];
+    int len;
+    int choice;
+
+    bbsAnsiClear();
+    bbsAnsiColor(0, 3);
+    bbsPuts("┌──────────────────────────────────────┐\r\n");
+    bbsPuts("│            My Messages               │\r\n");
+    bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
+    bbsAnsiNormal();
+
+    pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
+    if (!pDir) {
+        bbsPuts("Out of memory.");
+        bbsCrLf();
+        return bbsPause();
+    }
+
+    fsMakeDir(BBS_MSG_DIR);
+    fsListDir(pDir, BBS_MSG_DIR);
+
+    ix = 0;
+    count = 0;
+    while (pDir[ix].Name[0] != 0 && count < BBS_MSG_MAX_LIST) {
+        num = bbsMsgNumFromDir(&pDir[ix]);
+        if (num && bbsMsgIsToUser(num, currentUser)) {
+            nums[count] = num;
+            bbsPrintDec((unsigned long)count + 1UL);
+            bbsPuts(") ");
+            bbsPuts(pDir[ix].Name);
+            bbsPuts(".");
+            bbsPuts(pDir[ix].Ext);
+            bbsPuts(" ");
+
+            bbsHeaderCopy((char *)bbsMsgBuf, "From:", from, sizeof(from));
+            bbsHeaderCopy((char *)bbsMsgBuf, "Subject:", subject, sizeof(subject));
+            bbsPuts(from);
+            bbsPuts(" - ");
+            bbsPuts(subject);
+            if (bbsHeaderEquals((char *)bbsMsgBuf, "Lido:", "Nao"))
+                bbsPuts(" *");
+            bbsCrLf();
+            count++;
+        }
+        ix++;
+    }
+
+    msfree(pDir);
+
+    if (count == 0) {
+        bbsPuts("No messages for you.");
+        bbsCrLf();
+        return bbsPause();
+    }
+
+    bbsPuts("\r\nRead number (0 back): ");
+    len = bbsReadLine(answer, sizeof(answer), 0);
+    if (len < 0)
+        return len;
+
+    choice = atoi(answer);
+    if (choice <= 0 || choice > count)
+        return 0;
+
+    num = nums[choice - 1];
+    if (!bbsLoadMsg(num)) {
+        bbsPuts("Unable to load message.");
+        bbsCrLf();
+        return bbsPause();
+    }
+
+    bbsAnsiClear();
+    bbsAnsiColor(0, 3);
+    bbsPuts("Message ");
+    bbsPrintDec(num);
+    bbsPuts("\r\n────────────────────────────────────────\r\n");
+    bbsAnsiNormal();
+    bbsPuts((char *)bbsMsgBuf);
+    bbsCrLf();
+    bbsMarkMsgRead(num);
+    return bbsPause();
+}
+
+static int bbsMessages(char *currentUser)
+{
+    int sel;
+    int st;
+
+    while (1) {
+        bbsAnsiClear();
+        bbsAnsiColor(0, 3);
+        bbsPuts("┌──────────────────────────────────────┐\r\n");
+        bbsPuts("│              Messages                │\r\n");
+        bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
+        bbsAnsiNormal();
+        bbsPuts("┌─┐\r\n");
+        bbsPuts("│C│ Create message\r\n");
+        bbsPuts("│ │\r\n");
+        bbsPuts("│R│ Read messages\r\n");
+        bbsPuts("│ │\r\n");
+        bbsPuts("│Q│ Back\r\n\r\n:");
+        bbsPuts("└─┘\r\n");
+
+        sel = bbsReadMenuKey();
+        if (sel < 0)
+            return sel;
+
+        if (sel == 'C') {
+            st = bbsCreateMessage(currentUser);
+            if (st < 0)
+                return st;
+        } else if (sel == 'R') {
+            st = bbsReadMessages(currentUser);
+            if (st < 0)
+                return st;
+        } else if (sel == 'Q') {
+            return 0;
+        }
+    }
+}
+
+static unsigned char bbsUnreadCount(char *currentUser)
+{
+    FILES_DIR *pDir;
+    unsigned char ix;
+    unsigned char count;
+    unsigned short num;
+
+    fsMakeDir(BBS_MSG_DIR);
+
+    pDir = (FILES_DIR*)msmalloc(sizeof(FILES_DIR) * 128);
+    if (!pDir)
+        return 0;
+
+    fsListDir(pDir, BBS_MSG_DIR);
+    ix = 0;
+    count = 0;
+
+    while (pDir[ix].Name[0] != 0) {
+        num = bbsMsgNumFromDir(&pDir[ix]);
+        if (num && bbsMsgIsUnreadToUser(num, currentUser))
+            count++;
+        ix++;
+    }
+
+    msfree(pDir);
+    return count;
+}
+
+static int bbsShowUnreadNotice(char *currentUser)
+{
+    unsigned char count;
+
+    count = bbsUnreadCount(currentUser);
+    if (count == 0)
+        return 0;
+
+    bbsAnsiClear();
+    bbsAnsiColor(0, 3);
+    bbsPuts("┌──────────────────────────────────────┐\r\n");
+    bbsPuts("│              Mailbox                 │\r\n");
+    bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
+    bbsAnsiNormal();
+    bbsPuts("You have ");
+    bbsPrintDec(count);
+    bbsPuts(" unread message(s).\r\n");
+    bbsPuts("Use Messages / Read to open them.\r\n");
+    return bbsPause();
+}
+
+static int bbsMessagesOld(void)
 {
     bbsAnsiClear();
     bbsAnsiColor(0, 3);
@@ -1058,7 +1551,7 @@ static int bbsMenu(char *currentUser)
             return sel;
 
         if (sel == '1') {
-            st = bbsMessages();
+            st = bbsMessages(currentUser);
             if (st < 0)
                 return st;
         }
@@ -1122,6 +1615,18 @@ int main(void)
             break;
         if (st == BBS_READ_TIMEOUT) {
             printText("BBS: login idle timeout.\r\n");
+            if (!bbsResetSessionAndListen()) {
+                printText("BBS stopped: unable to rearm listener.\r\n");
+                break;
+            }
+            continue;
+        }
+
+        st = bbsShowUnreadNotice(currentUser);
+        if (st == BBS_READ_ABORT)
+            break;
+        if (st == BBS_READ_TIMEOUT) {
+            printText("BBS: session idle timeout.\r\n");
             if (!bbsResetSessionAndListen()) {
                 printText("BBS stopped: unable to rearm listener.\r\n");
                 break;
