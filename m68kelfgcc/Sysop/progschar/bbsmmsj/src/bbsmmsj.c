@@ -743,7 +743,29 @@ static void bbsAppend2(char *dst, int value)
 
 static void bbsFormatMsgDate(char *out)
 {
-    strcpy(out, "00/00/00 00:00");
+    DateTimeData dt;
+    char tmp[4];
+
+    if (rtc_read_datetime(&dt) != 0) {
+        strcpy(out, "00/00/00 00:00");
+        return;
+    }
+
+    out[0] = 0;
+    bbsAppend2(tmp, dt.day);
+    strcat(out, tmp);
+    strcat(out, "/");
+    bbsAppend2(tmp, dt.month);
+    strcat(out, tmp);
+    strcat(out, "/");
+    bbsAppend2(tmp, dt.year);
+    strcat(out, tmp);
+    strcat(out, " ");
+    bbsAppend2(tmp, dt.hours);
+    strcat(out, tmp);
+    strcat(out, ":");
+    bbsAppend2(tmp, dt.minutes);
+    strcat(out, tmp);
 }
 
 static void bbsFormatUptime(char *out)
@@ -1318,14 +1340,16 @@ static int bbsMessages(char *currentUser)
         bbsPuts("┌──────────────────────────────────────┐\r\n");
         bbsPuts("│              Messages                │\r\n");
         bbsPuts("└──────────────────────────────────────┘\r\n\r\n");
-        bbsAnsiNormal();
         bbsPuts("┌─┐\r\n");
         bbsPuts("│C│ Create message\r\n");
         bbsPuts("│ │\r\n");
         bbsPuts("│R│ Read messages\r\n");
         bbsPuts("│ │\r\n");
-        bbsPuts("│Q│ Back\r\n\r\n:");
-        bbsPuts("└─┘\r\n");
+        bbsPuts("│Q│ Back\r\n");
+        bbsPuts("└─┘\r\n\r\n");
+        bbsPuts("Option:");
+
+        bbsAnsiNormal();
 
         sel = bbsReadMenuKey();
         if (sel < 0)

@@ -68,6 +68,7 @@ mmsjos_func_table:
             dc.l _setColorVideoG2
             dc.l _loadMbinResident
             dc.l _runMbinResident
+            dc.l _rtc_read_datetime
             
 __exit:
 _exit:

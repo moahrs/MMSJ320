@@ -136,6 +136,7 @@ typedef int (*rtcInitWithSqwType)(void);
 #define setColorVideoG2 ((setColorVideoG2Type *)(unsigned long)MMSJOS_FUNC_TABLE)[40] // Índice da função
 #define loadMbinResident ((loadMbinResidentType *)(unsigned long)MMSJOS_FUNC_TABLE)[41] // Índice da função
 #define runMbinResident ((runMbinResidentType *)(unsigned long)MMSJOS_FUNC_TABLE)[42] // Índice da função
+#define rtc_read_datetime ((rtcReadDateTimeType *)(unsigned long)MMSJOS_FUNC_TABLE)[43] // Indice da funcao
 
 // MGUI define functions
 #define writesxy ((writesxyType *)(unsigned long)MGUI_FUNC_TABLE)[0] // Índice da função
@@ -173,7 +174,7 @@ typedef int (*rtcInitWithSqwType)(void);
 
 #define combobox ((comboboxType *)(unsigned long)MGUI_FUNC_TABLE)[32] // Indice da funcao
 #define rtc_set_datetime ((rtcSetDateTimeType *)(unsigned long)MGUI_FUNC_TABLE)[33] // Indice da funcao
-#define rtc_read_datetime ((rtcReadDateTimeType *)(unsigned long)MGUI_FUNC_TABLE)[34] // Indice da funcao
+#define mgui_rtc_read_datetime ((rtcReadDateTimeType *)(unsigned long)MGUI_FUNC_TABLE)[34] // Indice da funcao
 #define rtc_init_with_sqw ((rtcInitWithSqwType *)(unsigned long)MGUI_FUNC_TABLE)[35] // Indice da funcao
 
 // MMSJOS UCOSII define Functions

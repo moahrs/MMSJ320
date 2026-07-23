@@ -51,6 +51,7 @@ typedef void (*setModeVideoOSType)(unsigned char mode);
 typedef unsigned char (*getModeVideoOSType)(void);
 typedef void (*setColorVideoG2Type)(unsigned char fgcolor, unsigned char bgcolor);
 typedef int (*runMbinResidentType)(unsigned long residentBuf);
+typedef int (*rtcReadDateTimeType)(DateTimeData *dt);
 
 // MGUI Struct for Functions
 typedef void (*writesxyType)(unsigned short x, unsigned short y, unsigned char sizef, unsigned char *msgs, unsigned short pcolor, unsigned short pbcolor);
@@ -133,6 +134,7 @@ typedef void (*comboboxType)(unsigned char id, unsigned char* vopt, unsigned cha
 #define setColorVideoG2 ((setColorVideoG2Type *)(unsigned long)MMSJOS_FUNC_TABLE)[40] // Índice da função
 #define loadMbinResident ((loadMbinResidentType *)(unsigned long)MMSJOS_FUNC_TABLE)[41] // Índice da função
 #define runMbinResident ((runMbinResidentType *)(unsigned long)MMSJOS_FUNC_TABLE)[42] // Índice da função
+#define rtc_read_datetime ((rtcReadDateTimeType *)(unsigned long)MMSJOS_FUNC_TABLE)[43] // Indice da funcao
 
 // MGUI define functions
 #define writesxy ((writesxyType *)(unsigned long)MGUI_FUNC_TABLE)[0] // Índice da função
