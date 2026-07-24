@@ -17,7 +17,7 @@
 #define CURSOR_CHAR  254
 #define CURSOR_DELAY 8000
 
-#define ED_HELP_LINES 5
+#define ED_HELP_LINES 6
 
 #define ED_INPUT_MAX 30
 
@@ -90,6 +90,7 @@ void edClearToEndLine(int used);
 int edSaveFile(void);
 int edSaveFileAs(unsigned char* vParamName);
 int edOpenFile(unsigned char* vParamName);
+int edNewFile(unsigned char* vParamName);
 int edCanExit(void);
 void edSetMessage(char *msg);
 void edClearLine(int y);

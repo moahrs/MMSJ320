@@ -80,6 +80,8 @@
 #define BASIC_VDP_BUF_COUNT 6
 #define BASIC_VDP_BUF_AREA_SIZE 0x3000
 #define BASIC_VDP_BUF_TOTAL_SIZE (BASIC_VDP_BUF_COUNT * BASIC_VDP_BUF_AREA_SIZE)
+#define BASIC_SPRITE_PATTERN_TABLE 0x1800
+#define BASIC_SPRITE_ATTRIBUTE_TABLE 0x3B00
 
 //#define BASIC_DEBUG_ON 0
 
@@ -154,7 +156,13 @@ static unsigned char basicVdpDrawArea;
 static unsigned char *while_ptr_stack[MAX_WHILE_STACK];
 static int while_sp;
 static unsigned int spriteHandleCache[256];
+static unsigned char spriteActiveCache[256];
+static unsigned char spritePatternCache[256][32];
+static unsigned char spritePatternLoadedCache[256];
+static unsigned char spriteXCache[256];
+static unsigned char spriteYCache[256];
 static unsigned char spriteSizeSelBas;
+static unsigned char spriteMagSelBas;
 unsigned char verro;
 
 static unsigned char parseValStack[PARSER_LEVELS][PARSER_STACK_SIZE][BASIC_STRING_EXPR_MAX];
@@ -449,6 +457,18 @@ static void basPaintSyncTables(void)
 static void basSpriteResetCache(void)
 {
     memset(spriteHandleCache, 0x00, sizeof(spriteHandleCache));
+    memset(spriteActiveCache, 0x00, sizeof(spriteActiveCache));
+    memset(spritePatternLoadedCache, 0x00, sizeof(spritePatternLoadedCache));
+    memset(spriteXCache, 0x00, sizeof(spriteXCache));
+    memset(spriteYCache, 0x00, sizeof(spriteYCache));
+}
+
+static void basSpriteHideAllSlots(unsigned int attrTable)
+{
+    unsigned int ix;
+
+    for (ix = 0; ix < 32; ix++)
+        basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, attrTable + (ix * 4), 208);
 }
 
 static unsigned int basSpritePatternLimit(void)
@@ -465,6 +485,151 @@ static unsigned int basSpritePatternBytes(void)
         return 32;
 
     return 8;
+}
+
+static unsigned int basSpritePatternAddress(unsigned char spriteNumber)
+{
+    if (spriteSizeSelBas)
+        return BASIC_SPRITE_PATTERN_TABLE + ((unsigned int)spriteNumber * 32);
+
+    return BASIC_SPRITE_PATTERN_TABLE + ((unsigned int)spriteNumber * 8);
+}
+
+static unsigned char basSpritePatternName(unsigned char spriteNumber)
+{
+    if (spriteSizeSelBas)
+        return (unsigned char)(spriteNumber * 4);
+
+    return spriteNumber;
+}
+
+static unsigned int basSpriteSlotHandle(unsigned char slot)
+{
+    return BASIC_SPRITE_ATTRIBUTE_TABLE + ((unsigned int)slot * 4);
+}
+
+static void basSpriteWritePattern(unsigned char spriteNumber, const unsigned char *spriteData)
+{
+    unsigned int ix;
+    unsigned int spriteBytes;
+    unsigned int addr;
+
+    spriteBytes = basSpritePatternBytes();
+    addr = basSpritePatternAddress(spriteNumber);
+
+    for (ix = 0; ix < spriteBytes; ix++)
+        basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr + ix, spriteData[ix]);
+}
+
+static void basSpriteWriteSlot(unsigned char spriteNumber, unsigned char slot, unsigned char x, unsigned char y, unsigned char color)
+{
+    unsigned int addr;
+
+    addr = basSpriteSlotHandle(slot);
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr, y);
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr + 1, x);
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr + 2, basSpritePatternName(spriteNumber));
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, addr + 3, color & 0x0F);
+}
+
+static void basSpriteWritePosition(unsigned int spriteHandle, unsigned char x, unsigned char y)
+{
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, spriteHandle, y);
+    basVideoWriteByte(BASIC_VDP_BUFFER_VRAM, spriteHandle + 1, x);
+}
+
+static unsigned int basSpriteDisplaySize(void)
+{
+    unsigned int size;
+
+    size = spriteSizeSelBas ? 16 : 8;
+    if (spriteMagSelBas)
+        size <<= 1;
+
+    return size;
+}
+
+static unsigned int basSpriteRowBits(unsigned char spriteNumber, unsigned int row)
+{
+    if (spriteSizeSelBas)
+        return ((unsigned int)spritePatternCache[spriteNumber][row] << 8) |
+               (unsigned int)spritePatternCache[spriteNumber][row + 16];
+
+    return (unsigned int)spritePatternCache[spriteNumber][row] << 8;
+}
+
+static unsigned int basSpriteMaskOverlap(unsigned char spriteNumber1, unsigned char spriteNumber2)
+{
+    unsigned int spriteSize;
+    unsigned int x1;
+    unsigned int y1;
+    unsigned int x2;
+    unsigned int y2;
+    unsigned int top;
+    unsigned int bottom;
+    unsigned int line;
+    unsigned int row1;
+    unsigned int row2;
+    unsigned int bits1;
+    unsigned int bits2;
+    unsigned int delta;
+
+    if (!spriteActiveCache[spriteNumber1] || !spriteActiveCache[spriteNumber2])
+        return 0;
+
+    if (!spritePatternLoadedCache[spriteNumber1] || !spritePatternLoadedCache[spriteNumber2])
+        return 0;
+
+    x1 = spriteXCache[spriteNumber1];
+    y1 = spriteYCache[spriteNumber1];
+    x2 = spriteXCache[spriteNumber2];
+    y2 = spriteYCache[spriteNumber2];
+    spriteSize = basSpriteDisplaySize();
+
+    if (!(x1 < (x2 + spriteSize) &&
+          (x1 + spriteSize) > x2 &&
+          y1 < (y2 + spriteSize) &&
+          (y1 + spriteSize) > y2))
+        return 0;
+
+    top = y1 > y2 ? y1 : y2;
+    bottom = (y1 + spriteSize) < (y2 + spriteSize) ? (y1 + spriteSize) : (y2 + spriteSize);
+
+    for (line = top; line < bottom; line++)
+    {
+        row1 = line - y1;
+        row2 = line - y2;
+
+        if (spriteMagSelBas)
+        {
+            row1 >>= 1;
+            row2 >>= 1;
+        }
+
+        bits1 = basSpriteRowBits(spriteNumber1, row1);
+        bits2 = basSpriteRowBits(spriteNumber2, row2);
+
+        if (!bits1 || !bits2)
+            continue;
+
+        if (spriteMagSelBas)
+            delta = (x1 > x2) ? ((x1 - x2) >> 1) : ((x2 - x1) >> 1);
+        else
+            delta = (x1 > x2) ? (x1 - x2) : (x2 - x1);
+
+        if (delta >= 16)
+            continue;
+
+        if (x1 <= x2)
+            bits2 >>= delta;
+        else
+            bits1 >>= delta;
+
+        if (bits1 & bits2)
+            return 1;
+    }
+
+    return 0;
 }
 
 static unsigned int basSpriteResolveHandle(unsigned char spriteNumber)
@@ -492,7 +657,13 @@ static void setVariables(void)
     while_sp = 0;
     basVideoResetDrawArea();
     spriteSizeSelBas = 0;
+    spriteMagSelBas = 0;
     memset(spriteHandleCache, 0, sizeof(spriteHandleCache));
+    memset(spriteActiveCache, 0, sizeof(spriteActiveCache));
+    memset(spritePatternCache, 0, sizeof(spritePatternCache));
+    memset(spritePatternLoadedCache, 0, sizeof(spritePatternLoadedCache));
+    memset(spriteXCache, 0, sizeof(spriteXCache));
+    memset(spriteYCache, 0, sizeof(spriteYCache));
     memset(lastVarCacheName0, 0, sizeof(lastVarCacheName0));
     memset(lastVarCacheName1, 0, sizeof(lastVarCacheName1));
     memset(lastVarCacheAddr, 0, sizeof(lastVarCacheAddr));  
@@ -599,6 +770,8 @@ void main(void)
     *lastHgrX = 0;
     *lastHgrY = 0;
     spriteSizeSelBas = 0;
+    spriteMagSelBas = 0;
+    basSpriteResetCache();
     basVideoResetBufferState();
     //vdpcolor = vdp_get_color();
     vdpcolor.fg = VDP_WHITE;
@@ -7692,6 +7865,15 @@ int basDim(void)
 
     createVariableArray(varName, varTipo, ixDim, vDim);
 
+    while (*(unsigned char *)(*pointerRunProg) == ' ' || *(unsigned char *)(*pointerRunProg) == '\t')
+        *pointerRunProg = *pointerRunProg + 1;
+
+    if (*(unsigned char *)(*pointerRunProg) == ',')
+    {
+        *pointerRunProg = *pointerRunProg + 1;
+        return basDim();
+    }
+
     return 0;
 }
 
@@ -9024,7 +9206,7 @@ int basSign(void)
 int basRnd(void)
 {
     unsigned long vRand;
-    int vReal = 0, vResult = 0;
+    int vReal = 0, vArg = 0;
     unsigned char vTRand[20];
     unsigned char vSRand[20];
 
@@ -9051,6 +9233,11 @@ int basRnd(void)
         return 0;
     }
 
+    if (*value_type == '#')
+        vArg = fppInt(vReal);
+    else
+        vArg = vReal;
+
     nextToken();
     if (*vErroProc) return 0;
 
@@ -9061,24 +9248,23 @@ int basRnd(void)
         return 0;
     }
 
-    if (vReal == 0)
+    if (vArg == 0)
     {
         vRand = *randSeed;
     }
-    else if (vReal >= -1 && vReal < 0)
+    else if (vArg == -1)
     {
         vRand = *(vmfp + Reg_TADR);
-        vRand = (vRand << 3);
-        vRand += 0x466;
-        vRand -= ((*(vmfp + Reg_TADR)) * 3);
+        vRand = (vRand << 8) | *(vmfp + Reg_TADR);
+        vRand ^= 0x5A17UL;
+        *randSeed = vRand;
+
+        vRand = (*randSeed * 25173UL) + 13849UL;
         *randSeed = vRand;
     }
-    else if (vReal > 0 && vReal <= 1)
+    else if (vArg == 1)
     {
-        vRand = *randSeed;
-        vRand = (vRand << 3);
-        vRand += 0x466;
-        vRand -= ((*(vmfp + Reg_TADR)) * 3);
+        vRand = (*randSeed * 25173UL) + 13849UL;
         *randSeed = vRand;
     }
     else
@@ -9087,6 +9273,7 @@ int basRnd(void)
         return 0;
     }
 
+    vRand = (vRand % 999999UL) + 1UL;
     itoa(vRand, vTRand, 10);
     vSRand[0] = '0';
     vSRand[1] = '.';
@@ -9538,7 +9725,9 @@ int basScreen(void)
                 vdpMaxRows = 47;
                 vdpModeBas = VDP_MODE_MULTICOLOR;
                 spriteSizeSelBas = vSpriteSize;
+                spriteMagSelBas = vSpriteMag;
                 basSpriteResetCache();
+                basSpriteHideAllSlots(BASIC_SPRITE_ATTRIBUTE_TABLE);
             }
             break;
         case 2:
@@ -9551,8 +9740,10 @@ int basScreen(void)
                 vdp_set_bdcolor(VDP_BLACK);
                 bgcolorBas = VDP_BLACK;
                 spriteSizeSelBas = vSpriteSize;
+                spriteMagSelBas = vSpriteMag;
                 basPaintSyncTables();
                 basSpriteResetCache();
+                basSpriteHideAllSlots(BASIC_SPRITE_ATTRIBUTE_TABLE);
             }
             else
             {
@@ -9574,6 +9765,7 @@ int basText(void)
     vdpMaxRows = 23;
     vdpModeBas = VDP_MODE_TEXT;
     spriteSizeSelBas = 0;
+    spriteMagSelBas = 0;
     basSpriteResetCache();
     clearScr();
     return 0;
@@ -10684,11 +10876,11 @@ int basFill (void)
 int basSpriteSet(void)
 {
     int spriteNumber = 0;
-    unsigned char answer[256];
+    int byteValue = 0;
     unsigned char spriteData[32];
     unsigned int spriteLimit;
     unsigned int spriteBytes;
-    unsigned int copyBytes;
+    unsigned int ix;
 
     if (vdpModeBas == VDP_MODE_TEXT)
     {
@@ -10730,33 +10922,38 @@ int basSpriteSet(void)
     memset(spriteData, 0x00, sizeof(spriteData));
     spriteBytes = basSpritePatternBytes();
 
-    if (*token_type == QUOTE)
+    for (ix = 0; ix < spriteBytes; ix++)
     {
-        copyBytes = strlen((char *)token);
-        if (copyBytes > spriteBytes)
-            copyBytes = spriteBytes;
-        memcpy(spriteData, token, copyBytes);
-    }
-    else
-    {
-        putback();
-
-        getExp(&answer);
+        basReadNumericArg(&byteValue);
         if (*vErroProc) return 0;
 
-        if (*value_type != '$')
+        if (byteValue < 0 || byteValue > 255)
         {
-            *vErroProc = 16;
+            *vErroProc = 5;
             return 0;
         }
 
-        copyBytes = strlen((char *)answer);
-        if (copyBytes > spriteBytes)
-            copyBytes = spriteBytes;
-        memcpy(spriteData, answer, copyBytes);
+        spriteData[ix] = (unsigned char)byteValue;
+
+        if ((ix + 1) < spriteBytes)
+        {
+            nextToken();
+            if (*vErroProc) return 0;
+
+            if (*token != ',')
+            {
+                *vErroProc = 18;
+                return 0;
+            }
+
+            nextToken();
+            if (*vErroProc) return 0;
+        }
     }
 
-    vdp_set_sprite_pattern((unsigned char)spriteNumber, spriteData);
+    basSpriteWritePattern((unsigned char)spriteNumber, spriteData);
+    memcpy(spritePatternCache[(unsigned char)spriteNumber], spriteData, sizeof(spriteData));
+    spritePatternLoadedCache[(unsigned char)spriteNumber] = 1;
     *value_type = '%';
 
     return 0;
@@ -10874,9 +11071,12 @@ int basSpritePut(void)
         return 0;
     }
 
-    spriteHandle = vdp_sprite_init((unsigned char)spriteNumber, (unsigned char)plane, (unsigned char)colorValue);
+    spriteHandle = basSpriteSlotHandle((unsigned char)plane);
     spriteHandleCache[(unsigned char)spriteNumber] = spriteHandle;
-    vdp_sprite_set_position(spriteHandle, (unsigned int)xValue, (unsigned char)yValue);
+    basSpriteWriteSlot((unsigned char)spriteNumber, (unsigned char)plane, (unsigned char)xValue, (unsigned char)yValue, (unsigned char)colorValue);
+    spriteActiveCache[(unsigned char)spriteNumber] = 1;
+    spriteXCache[(unsigned char)spriteNumber] = (unsigned char)xValue;
+    spriteYCache[(unsigned char)spriteNumber] = (unsigned char)yValue;
 
     *value_type = '%';
 
@@ -11023,7 +11223,10 @@ int basSpritePos(void)
         return 0;
     }
 
-    vdp_sprite_set_position(spriteHandle, (unsigned int)xValue, (unsigned char)yValue);
+    basSpriteWritePosition(spriteHandle, (unsigned char)xValue, (unsigned char)yValue);
+    spriteActiveCache[(unsigned char)spriteNumber] = 1;
+    spriteXCache[(unsigned char)spriteNumber] = (unsigned char)xValue;
+    spriteYCache[(unsigned char)spriteNumber] = (unsigned char)yValue;
     *value_type = '%';
 
     return 0;
@@ -11041,10 +11244,6 @@ int basSpriteOver(void)
     unsigned int spriteLimit;
     unsigned int spriteHandle1;
     unsigned int spriteHandle2;
-    Sprite_attributes spritePos1;
-    Sprite_attributes spritePos2;
-    unsigned char collision1;
-    unsigned char collision2;
     unsigned int result = 0;
 
     if (vdpModeBas == VDP_MODE_TEXT)
@@ -11121,16 +11320,7 @@ int basSpriteOver(void)
     }
 
     if (spriteHandle1 != spriteHandle2)
-    {
-        spritePos1 = vdp_sprite_get_position(spriteHandle1);
-        spritePos2 = vdp_sprite_get_position(spriteHandle2);
-
-        collision1 = (vdp_sprite_set_position(spriteHandle1, (unsigned int)spritePos1.x, (unsigned char)spritePos1.y) & VDP_FLAG_COIN) ? 1 : 0;
-        collision2 = (vdp_sprite_set_position(spriteHandle2, (unsigned int)spritePos2.x, (unsigned char)spritePos2.y) & VDP_FLAG_COIN) ? 1 : 0;
-
-
-        result = (collision1 && collision2) ? 1 : 0;
-    }
+        result = basSpriteMaskOverlap((unsigned char)spriteNumber1, (unsigned char)spriteNumber2);
 
     *value_type = '%';
 

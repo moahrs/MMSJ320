@@ -1404,19 +1404,23 @@ void edDrawCommandHelp(void)
 
         edClearLine(1);
         vdp_set_cursor(0, 1);
-        printText(" S=Save   A=SaveAs  |  B=Begin   K=End ");
+        printText(" N=New    O=Open    |  B=Begin   K=End ");
 
         edClearLine(2);
         vdp_set_cursor(0, 2);
-        printText(" Q=Abandon  O=Open  |  C=Copy    V=Move");
+        printText(" S=Save   A=SaveAs  |  C=Copy    V=Move");
 
         edClearLine(3);
         vdp_set_cursor(0, 3);
+        printText(" Q=Abandon          |  P=Paste   D=Del ");
+
+        edClearLine(4);
+        vdp_set_cursor(0, 4);
 
         if (my_strstr(edFileName, ".BAS") != NULL)
-            printText(" X=Save&Exit R=Run  |  P=Paste   D=Del ");
+            printText(" X=Save&Exit R=Run  |");
         else
-            printText(" X=Save&Exit        |  P=Paste   D=Del ");
+            printText(" X=Save&Exit        |");
     }
     if (edCmdModeQ)
     {
@@ -1434,9 +1438,13 @@ void edDrawCommandHelp(void)
         edClearLine(3);
         vdp_set_cursor(0, 3);
         printText("                   |");
+
+        edClearLine(4);
+        vdp_set_cursor(0, 4);
+        printText("                   |");
     }
 
-    edDrawLine(4, '=');
+    edDrawLine(5, '=');
 }
 
 //-------------------------------------------------------------------
@@ -1531,7 +1539,12 @@ void edLoop(char *filename)
             {
                 if (edCmdModeK)
                 {
-                    if (key == 'S' || key == 's')   // Save
+                    if (key == 'N' || key == 'n')   // New
+                    {
+                        if (edCanExit())
+                            edNewFile((unsigned char*)filename);
+                    }
+                    else if (key == 'S' || key == 's')   // Save
                     {
                         if (strcmp(filename, "NONAME.TXT") == 0)
                             edSaveFileAs((unsigned char*)filename);
@@ -1894,6 +1907,36 @@ int edOpenFile(unsigned char* vParamName)
     edHScroll = 0;
 
     edBuildLines();
+
+    return 1;
+}
+
+//-------------------------------------------------------------------
+int edNewFile(unsigned char* vParamName)
+{
+    strcpy((char*)vParamName, "NONAME.TXT");
+    strcpy((char*)edFileName, "NONAME.TXT");
+
+    memset(edFileBuf, 0, EDIT_MAX_FILE);
+    edFileSize = 0;
+    edDirty = 0;
+
+    edCurLine = 0;
+    edCurCol = 0;
+    edVScroll = 0;
+    edHScroll = 0;
+
+    edBlockMode = ED_BLOCK_NONE;
+    edBlockStartLine = 0;
+    edBlockStartCol = 0;
+    edBlockEndLine = 0;
+    edBlockEndCol = 0;
+
+    textToFind[0] = 0;
+    textToChange[0] = 0;
+
+    edBuildLines();
+    edSetMessage("New File");
 
     return 1;
 }
